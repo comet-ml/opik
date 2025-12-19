@@ -170,7 +170,6 @@ def _patch_openai_audio_speech(
             openai_client.audio.speech.create
         )
 
-        
         # Track audio.speech.with_streaming_response.create
         if hasattr(openai_client.audio.speech, "with_streaming_response"):
             speech_stream_decorator = audio_speech_decorator_factory.track(
@@ -178,7 +177,8 @@ def _patch_openai_audio_speech(
                 name="audio_speech_with_streaming_response_create",
                 project_name=project_name,
             )
-            openai_client.audio.speech.with_streaming_response.create = speech_stream_decorator(
-                openai_client.audio.speech.with_streaming_response.create
+            openai_client.audio.speech.with_streaming_response.create = (
+                speech_stream_decorator(
+                    openai_client.audio.speech.with_streaming_response.create
+                )
             )
-

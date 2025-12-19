@@ -1,8 +1,8 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.domain.model.ModelPrice;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.comet.opik.domain.model.ModelPrice;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -30,15 +30,15 @@ class CostServiceTest {
         // Inject tts-1 price using Reflection
         Field field = CostService.class.getDeclaredField("modelProviderPrices");
         field.setAccessible(true);
-        
+
         Field modifiersField = Field.class.getDeclaredField("modifiers");
         modifiersField.setAccessible(true);
         modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
 
         originalModelPrices = (Map<String, ModelPrice>) field.get(null);
-        
+
         Map<String, ModelPrice> newPrices = new HashMap<>(originalModelPrices);
-        
+
         ModelPrice ttsPrice = ModelPrice.builder()
                 .inputPrice(new BigDecimal("0.000015"))
                 .outputPrice(BigDecimal.ZERO)
@@ -49,10 +49,10 @@ class CostServiceTest {
                 .build();
 
         newPrices.put("tts-1", ttsPrice);
-        
+
         field.set(null, Collections.unmodifiableMap(newPrices));
     }
-    
+
     @AfterAll
     static void tearDown() throws Exception {
         if (originalModelPrices != null) {
@@ -61,11 +61,10 @@ class CostServiceTest {
             Field modifiersField = Field.class.getDeclaredField("modifiers");
             modifiersField.setAccessible(true);
             modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-            
+
             field.set(null, originalModelPrices);
         }
     }
-
 
     @Test
     void calculateCostForVideoGenerationUsesDuration() {
@@ -171,12 +170,11 @@ class CostServiceTest {
 
                 // Audio speech positive
                 Arguments.of("tts-1", "openai", Map.of("prompt_tokens", 1000), new BigDecimal("0.015")),
-                
+
                 // Audio speech zero chars
                 Arguments.of("tts-1", "openai", Map.of("prompt_tokens", 0), BigDecimal.ZERO),
                 // Audio speech negative chars
-                Arguments.of("tts-1", "openai", Map.of("prompt_tokens", -10), BigDecimal.ZERO)
-        );
+                Arguments.of("tts-1", "openai", Map.of("prompt_tokens", -10), BigDecimal.ZERO));
     }
 
 }

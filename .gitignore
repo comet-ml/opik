@@ -97,3 +97,6 @@ response.txt
 
 # Playwright
 .playwright-mcp/
+
+# Virtual Environment
+venv

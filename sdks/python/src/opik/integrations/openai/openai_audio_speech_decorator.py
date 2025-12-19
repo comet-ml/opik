@@ -8,18 +8,15 @@ from typing import (
     Optional,
     Tuple,
     Iterator,
-    Union,
 )
 from typing_extensions import override
 
-import openai
 
 from opik.types import LLMProvider
 import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span, attachment
 from opik.decorator import arguments_helpers, base_track_decorator, generator_wrappers
-from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,17 +82,18 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        
         # Calculate usage based on input text length (character count)
-        input_text = current_span_data.input.get("input", "") if current_span_data.input else ""
+        input_text = (
+            current_span_data.input.get("input", "") if current_span_data.input else ""
+        )
         char_count = len(str(input_text))
-        
+
         usage = {
             "prompt_tokens": char_count,
             "completion_tokens": 0,
-            "total_tokens": char_count
+            "total_tokens": char_count,
         }
-        
+
         opik_usage = llm_usage.try_build_opik_usage_or_log_error(
             provider=LLMProvider.OPENAI,
             usage=usage,
@@ -107,7 +105,7 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
         # If output is the binary content (HttpxBinaryResponseContent)
         # We can try to access .content if available
         if hasattr(output, "content"):
-             try:
+            try:
                 audio_content = output.content
                 if isinstance(audio_content, bytes):
                     attachments = [
@@ -115,24 +113,22 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
                             data=audio_content,
                             name="audio_response",
                             # We could try to guess mime type from response format, but default to octet-stream works or infer from metadata
-                            type="audio/mpeg" # Default for TTS, but could be opus/aac/flac depending on response_format
+                            type="audio/mpeg",  # Default for TTS, but could be opus/aac/flac depending on response_format
                         )
                     ]
-             except Exception as e:
-                 LOGGER.warning("Failed to extract audio content for attachment: %s", e)
-        
+            except Exception as e:
+                LOGGER.warning("Failed to extract audio content for attachment: %s", e)
+
         # If output is bytes (from our stream aggregator)
         elif isinstance(output, bytes):
-             attachments = [
+            attachments = [
                 attachment.Attachment(
-                    data=output,
-                    name="audio_response",
-                    type="audio/mpeg" 
+                    data=output, name="audio_response", type="audio/mpeg"
                 )
-             ]
+            ]
 
         return arguments_helpers.EndSpanParameters(
-            output=None, # Don't log binary audio as output JSON
+            output=None,  # Don't log binary audio as output JSON
             usage=opik_usage,
             metadata=None,
             model=current_span_data.model,
@@ -147,40 +143,39 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Optional[Any]:
-        
         # Handle context manager returned by with_streaming_response.create
-        
+
         # Sync context manager
         if hasattr(output, "__enter__") and hasattr(output, "__exit__"):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            
+
             original_enter = output.__enter__
 
-            def enter_wrapper(*args, **kwargs):
+            def enter_wrapper(*args: Any, **kwargs: Any) -> Any:
                 stream = original_enter(*args, **kwargs)
                 return patch_binary_stream(
                     stream=stream,
                     span_to_end=span_to_end,
                     trace_to_end=trace_to_end,
-                    finally_callback=self._after_call
+                    finally_callback=self._after_call,
                 )
 
             output.__enter__ = enter_wrapper
             return output
-            
+
         # Async context manager
         if hasattr(output, "__aenter__") and hasattr(output, "__aexit__"):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            
+
             original_aenter = output.__aenter__
 
-            async def aenter_wrapper(*args, **kwargs):
+            async def aenter_wrapper(*args: Any, **kwargs: Any) -> Any:
                 stream = await original_aenter(*args, **kwargs)
                 return patch_async_binary_stream(
                     stream=stream,
                     span_to_end=span_to_end,
                     trace_to_end=trace_to_end,
-                    finally_callback=self._after_call
+                    finally_callback=self._after_call,
                 )
 
             output.__aenter__ = aenter_wrapper
@@ -188,10 +183,11 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return None
 
+
 def patch_binary_stream(
-    stream: Any, # StreamedBinaryAPIResponse
+    stream: Any,  # StreamedBinaryAPIResponse
     span_to_end: span.SpanData,
-    trace_to_end: Optional[span.SpanData], # Actually TraceData
+    trace_to_end: Optional[span.SpanData],  # Actually TraceData
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> Any:
     """
@@ -205,7 +201,7 @@ def patch_binary_stream(
     def iter_bytes_wrapper(chunk_size: Optional[int] = None) -> Iterator[bytes]:
         accumulated_bytes = bytearray()
         error_info = None
-        
+
         try:
             for chunk in original_iter_bytes(chunk_size=chunk_size):
                 accumulated_bytes.extend(chunk)
@@ -220,17 +216,18 @@ def patch_binary_stream(
                 error_info=error_info,
                 capture_output=True,
                 generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end
+                generators_trace_to_end=trace_to_end,
             )
 
     stream.iter_bytes = iter_bytes_wrapper
-    
+
     return stream
 
+
 def patch_async_binary_stream(
-    stream: Any, # AsyncStreamedBinaryAPIResponse
+    stream: Any,  # AsyncStreamedBinaryAPIResponse
     span_to_end: span.SpanData,
-    trace_to_end: Optional[span.SpanData], # Actually TraceData
+    trace_to_end: Optional[span.SpanData],  # Actually TraceData
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> Any:
     """
@@ -241,10 +238,10 @@ def patch_async_binary_stream(
 
     original_aiter_bytes = stream.aiter_bytes
 
-    async def aiter_bytes_wrapper(chunk_size: Optional[int] = None):
+    async def aiter_bytes_wrapper(chunk_size: Optional[int] = None) -> Any:
         accumulated_bytes = bytearray()
         error_info = None
-        
+
         try:
             async for chunk in original_aiter_bytes(chunk_size=chunk_size):
                 accumulated_bytes.extend(chunk)
@@ -259,9 +256,9 @@ def patch_async_binary_stream(
                 error_info=error_info,
                 capture_output=True,
                 generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end
+                generators_trace_to_end=trace_to_end,
             )
 
     stream.aiter_bytes = aiter_bytes_wrapper
-    
+
     return stream
