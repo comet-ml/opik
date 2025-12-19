@@ -167,20 +167,18 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
         }
       }}
     >
-      <div className="flex min-w-0 flex-1 items-center self-stretch">
-        <div className="flex h-full items-center justify-center pl-2">
-          <span
-            className={cn(
-              "truncate text-sm leading-5",
-              isTitle ? "font-medium text-foreground" : "text-foreground",
-              !value && "text-muted-slate",
-            )}
-          >
-            {displayValue}
-          </span>
-        </div>
+      <div className="min-w-0 flex-1 pl-2">
+        <span
+          className={cn(
+            "block truncate text-sm leading-5",
+            isTitle ? "font-medium text-foreground" : "text-foreground",
+            !value && "text-muted-slate",
+          )}
+        >
+          {displayValue}
+        </span>
       </div>
-      <div className="flex h-full items-center pr-2 opacity-0 group-hover/inline-edit:opacity-100">
+      <div className="hidden h-full items-center pr-2 group-hover/inline-edit:flex">
         <div className="flex size-7 items-center justify-center rounded">
           <Pencil className="size-3.5 text-foreground" />
         </div>
