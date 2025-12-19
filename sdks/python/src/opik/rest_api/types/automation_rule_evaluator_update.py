@@ -21,7 +21,16 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
-    project_id: str
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Primary project ID (legacy field, maintained for backwards compatibility)
+    """
+
+    project_ids: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Multiple project IDs (new field for multi-project support)
+    """
+
     action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:
