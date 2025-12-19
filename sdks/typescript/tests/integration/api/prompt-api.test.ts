@@ -93,6 +93,20 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       createdPromptIds.length = 0;
     }, 30000); // 30s timeout for API operations
 
+    it("should create prompt with tags", async () => {
+      const promptName = `test-tags-${Date.now()}`;
+      const tags = ["production", "v1", "baseline"];
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Hello {{name}}!",
+        tags,
+      });
+      createdPromptIds.push(prompt.id);
+
+      expect(prompt.tags).toEqual(tags);
+    }, 30000);
+
     it("should handle prompt with complex metadata", async () => {
       const promptName = `test-metadata-${Date.now()}`;
 
@@ -722,6 +736,142 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       );
 
       expect(results).toEqual([]);
+    }, 30000);
+  });
+
+  describe("Tags Functionality", () => {
+    it("should update prompt version tags in replace mode", async () => {
+      const promptName = `test-tags-replace-${Date.now()}`;
+      const initialTags = ["tag1", "tag2"];
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Test template",
+        tags: initialTags,
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Update tags (replace mode)
+      const newTags = ["tag3", "tag4"];
+      await client.updatePromptVersionTags(
+        [prompt.versionId],
+        newTags,
+        false
+      );
+
+      // Fetch the prompt again to verify tags were updated
+      const updated = await client.getPrompt({ name: promptName });
+      expect(updated?.tags).toEqual(newTags);
+    }, 30000);
+
+    it("should update prompt version tags in merge mode", async () => {
+      const promptName = `test-tags-merge-${Date.now()}`;
+      const initialTags = ["tag1", "tag2"];
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Test template",
+        tags: initialTags,
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Update tags (merge mode)
+      const additionalTags = ["tag3", "tag4"];
+      await client.updatePromptVersionTags(
+        [prompt.versionId],
+        additionalTags,
+        true
+      );
+
+      // Fetch the prompt again to verify tags were merged
+      const updated = await client.getPrompt({ name: promptName });
+      // Tags should be merged (union of both sets)
+      expect(updated?.tags).toEqual(
+        expect.arrayContaining([...initialTags, ...additionalTags])
+      );
+      expect(updated?.tags?.length).toBe(4);
+    }, 30000);
+
+    it("should update multiple version tags at once", async () => {
+      const promptName = `test-multi-tags-${Date.now()}`;
+
+      // Create two versions
+      const version1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Template v1",
+        tags: ["v1"],
+      });
+      createdPromptIds.push(version1.id);
+
+      const version2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Template v2",
+        tags: ["v2"],
+      });
+
+      // Update both versions with the same tags
+      const newTags = ["production", "tested"];
+      await client.updatePromptVersionTags(
+        [version1.versionId, version2.versionId],
+        newTags,
+        false
+      );
+
+      // Verify both versions have the new tags
+      const versions = await version1.getVersions();
+      for (const version of versions) {
+        expect(version.tags).toEqual(newTags);
+      }
+    }, 30000);
+
+    it("should preserve tags in version history", async () => {
+      const promptName = `test-tags-history-${Date.now()}`;
+
+      // Create version 1 with tags
+      const version1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Template v1",
+        tags: ["v1", "baseline"],
+      });
+      createdPromptIds.push(version1.id);
+
+      // Create version 2 with different tags
+      const version2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Template v2",
+        tags: ["v2", "experimental"],
+      });
+
+      // Get history and verify tags are preserved
+      const history = await version1.getVersions();
+
+      expect(history.length).toBe(2);
+
+      // Find versions in history
+      const v1InHistory = history.find((v) => v.commit === version1.commit);
+      const v2InHistory = history.find((v) => v.commit === version2.commit);
+
+      expect(v1InHistory?.tags).toEqual(["v1", "baseline"]);
+      expect(v2InHistory?.tags).toEqual(["v2", "experimental"]);
+    }, 30000);
+
+    it("should return tags as readonly property", async () => {
+      const promptName = `test-tags-readonly-${Date.now()}`;
+      const tags = ["tag1", "tag2"];
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Test template",
+        tags,
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Verify tags property exists and matches
+      expect(prompt.tags).toEqual(tags);
+
+      // Get versions and verify tags are included
+      const versions = await prompt.getVersions();
+      expect(versions[0].tags).toEqual(tags);
     }, 30000);
   });
 });

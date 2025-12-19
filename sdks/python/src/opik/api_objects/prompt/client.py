@@ -29,6 +29,7 @@ class PromptClient:
         metadata: Optional[Dict[str, Any]],
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         template_structure: str = "text",
+        tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -39,6 +40,7 @@ class PromptClient:
         - metadata: Optional metadata for the prompt.
         - type: The template type (MUSTACHE or JINJA2).
         - template_structure: Either "text" (default) or "chat".
+        - tags: Optional list of tags for categorization and filtering.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -76,6 +78,7 @@ class PromptClient:
         # - Template content has changed
         # - Metadata has changed
         # - Type has changed
+        # Note: Tags are mutable and can be updated after version creation, so they don't trigger new versions
         # Note: template_structure is immutable and used by the backend only if it is the first prompt version.
         if (
             prompt_version is None
@@ -89,6 +92,7 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 template_structure=template_structure,
+                tags=tags,
             )
 
         return prompt_version
@@ -100,11 +104,13 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         template_structure: str = "text",
+        tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
             template=prompt,
             metadata=metadata,
             type=type,
+            tags=tags,
         )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
@@ -171,13 +177,20 @@ class PromptClient:
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
     def get_all_prompt_versions(
-        self, name: str
+        self,
+        name: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            sorting: Optional sorting specification (e.g., JSON array of sort criteria).
+            filters: Optional filter specification (e.g., JSON array of filter criteria).
 
         Returns:
             List[Prompt]: A list of prompts for the given name.
@@ -199,7 +212,9 @@ class PromptClient:
                 raise ValueError("No prompts found for name: " + name)
 
             prompt_id = filtered_prompt_list[0]
-            return self._get_prompt_versions_by_id_paginated(prompt_id)
+            return self._get_prompt_versions_by_id_paginated(
+                prompt_id, search=search, sorting=sorting, filters=filters
+            )
 
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
@@ -208,14 +223,23 @@ class PromptClient:
         return []
 
     def _get_prompt_versions_by_id_paginated(
-        self, prompt_id: str
+        self,
+        prompt_id: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         page = 1
         size = 100
         prompts: List[prompt_version_detail.PromptVersionDetail] = []
         while True:
             prompt_versions_page = self._rest_client.prompts.get_prompt_versions(
-                id=prompt_id, page=page, size=size
+                id=prompt_id,
+                page=page,
+                size=size,
+                search=search,
+                sorting=sorting,
+                filters=filters,
             ).content
 
             versions = prompt_versions_page or []
@@ -232,6 +256,7 @@ class PromptClient:
                         commit=version.commit,
                         created_at=version.created_at,
                         created_by=version.created_by,
+                        tags=version.tags,
                     )
                     for version in versions
                 ]

@@ -5,6 +5,7 @@ import opik
 from opik.api_objects.prompt import PromptType
 from . import verifiers
 import opik.exceptions
+from typing import List
 
 
 def test_prompt__create__happyflow(opik_client: opik.Opik):
@@ -700,3 +701,212 @@ def test_prompt__format_playground_chat_prompt__invalid_json__returns_string(
     # Should return the formatted string (not parsed) because JSON is invalid
     assert isinstance(result, str)
     assert result == '[{"role": "system", "content": "test content"}'
+
+
+def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+    tags = ["production", "v1", "baseline"]
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        tags=tags,
+    )
+
+    assert prompt.tags == tags
+    verifiers.verify_prompt_version(
+        prompt,
+        name=prompt_name,
+        template=prompt_template,
+        type=PromptType.MUSTACHE,
+        version_id=prompt.__internal_api__version_id__,
+        prompt_id=prompt.__internal_api__prompt_id__,
+        commit=prompt.commit,
+    )
+
+
+def test_prompt__create_with_empty_tags__happyflow(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        tags=[],
+    )
+
+    assert prompt.tags == []
+
+
+def test_prompt__tags_property_returns_copy(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+    tags = ["tag1", "tag2"]
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        tags=tags,
+    )
+
+    # Modify the returned tags list
+    returned_tags = prompt.tags
+    returned_tags.append("tag3")
+
+    # Original tags should not be modified
+    assert prompt.tags == ["tag1", "tag2"]
+
+
+def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+    initial_tags = ["tag1", "tag2"]
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        tags=initial_tags,
+    )
+
+    # Update tags (replace mode)
+    new_tags = ["tag3", "tag4"]
+    opik_client.update_prompt_version_tags(
+        version_ids=[prompt.__internal_api__version_id__],
+        tags=new_tags,
+        merge=False,
+    )
+
+    # Fetch the prompt again to verify tags were updated
+    updated_prompt = opik_client.get_prompt(name=prompt_name)
+    assert updated_prompt.tags == new_tags
+
+
+def test_prompt__update_version_tags__merge_mode(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+    initial_tags = ["tag1", "tag2"]
+
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        tags=initial_tags,
+    )
+
+    # Update tags (merge mode)
+    additional_tags = ["tag3", "tag4"]
+    opik_client.update_prompt_version_tags(
+        version_ids=[prompt.__internal_api__version_id__],
+        tags=additional_tags,
+        merge=True,
+    )
+
+    # Fetch the prompt again to verify tags were merged
+    updated_prompt = opik_client.get_prompt(name=prompt_name)
+    # Tags should be merged (union of both sets)
+    assert set(updated_prompt.tags) == {"tag1", "tag2", "tag3", "tag4"}
+
+
+def test_prompt__update_multiple_version_tags(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template_1 = f"some-prompt-text-1-{unique_identifier}"
+    prompt_template_2 = f"some-prompt-text-2-{unique_identifier}"
+
+    # Create two versions
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template_1,
+        tags=["v1"],
+    )
+
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template_2,
+        tags=["v2"],
+    )
+
+    # Update both versions with the same tags
+    new_tags = ["production", "tested"]
+    opik_client.update_prompt_version_tags(
+        version_ids=[
+            version1.__internal_api__version_id__,
+            version2.__internal_api__version_id__,
+        ],
+        tags=new_tags,
+        merge=False,
+    )
+
+    # Verify both versions have the new tags
+    history = opik_client.get_prompt_history(name=prompt_name)
+    for prompt_version in history:
+        assert prompt_version.tags == new_tags
+
+
+def test_chat_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-chat-prompt-name-{unique_identifier}"
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello {{name}}!"},
+    ]
+    tags = ["chat", "production"]
+
+    chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=messages,
+        tags=tags,
+    )
+
+    assert chat_prompt.tags == tags
+    assert chat_prompt.name == prompt_name
+
+
+def test_prompt__get_history_preserves_tags(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    
+    # Create version 1 with tags
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"template-1-{unique_identifier}",
+        tags=["v1", "baseline"],
+    )
+
+    # Create version 2 with different tags
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"template-2-{unique_identifier}",
+        tags=["v2", "experimental"],
+    )
+
+    # Get history and verify tags are preserved
+    history = opik_client.get_prompt_history(name=prompt_name)
+    
+    assert len(history) == 2
+    
+    # Find versions in history (order may vary)
+    v1_in_history = next(
+        (v for v in history if v.commit == version1.commit), None
+    )
+    v2_in_history = next(
+        (v for v in history if v.commit == version2.commit), None
+    )
+
+    assert v1_in_history is not None
+    assert v2_in_history is not None
+    assert v1_in_history.tags == ["v1", "baseline"]
+    assert v2_in_history.tags == ["v2", "experimental"]

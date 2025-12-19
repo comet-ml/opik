@@ -1385,6 +1385,7 @@ class Opik:
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        tags: Optional[List[str]] = None,
     ) -> prompt_module.Prompt:
         """
         Creates a new text prompt with the given name and template.
@@ -1395,6 +1396,7 @@ class Opik:
             prompt: The template content of the prompt.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            tags: Optional list of tags for categorization and filtering.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -1405,7 +1407,7 @@ class Opik:
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         prompt_version = prompt_client_.create_prompt(
-            name=name, prompt=prompt, metadata=metadata, type=type
+            name=name, prompt=prompt, metadata=metadata, type=type, tags=tags
         )
         return prompt_module.Prompt.from_fern_prompt_version(name, prompt_version)
 
@@ -1415,6 +1417,7 @@ class Opik:
         messages: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        tags: Optional[List[str]] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
@@ -1425,6 +1428,7 @@ class Opik:
             messages: List of message dictionaries with 'role' and 'content' fields.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            tags: Optional list of tags for categorization and filtering.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -1434,7 +1438,7 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt.
         """
         return prompt_module.ChatPrompt(
-            name=name, messages=messages, metadata=metadata, type=type
+            name=name, messages=messages, metadata=metadata, type=type, tags=tags
         )
 
     def get_prompt(
@@ -1499,12 +1503,21 @@ class Opik:
             name, fern_prompt_version
         )
 
-    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+    def get_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            sorting: Optional sorting specification (e.g., JSON array of sort criteria).
+            filters: Optional filter specification (e.g., JSON array of filter criteria).
 
         Returns:
             List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
@@ -1524,7 +1537,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a text prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, sorting=sorting, filters=filters
+        )
 
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
@@ -1532,12 +1547,21 @@ class Opik:
         ]
         return result
 
-    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+    def get_chat_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            sorting: Optional sorting specification (e.g., JSON array of sort criteria).
+            filters: Optional filter specification (e.g., JSON array of filter criteria).
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
@@ -1557,13 +1581,51 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a chat prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, sorting=sorting, filters=filters
+        )
 
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
+
+    def update_prompt_version_tags(
+        self,
+        version_ids: List[str],
+        tags: List[str],
+        merge: bool = False,
+    ) -> None:
+        """
+        Update tags for one or more prompt versions in a single batch operation.
+
+        Parameters:
+            version_ids: List of prompt version IDs to update.
+            tags: Tags to set. Behavior depends on merge parameter.
+            merge: If True, adds new tags to existing tags (union). If False, replaces all existing tags (default).
+
+        Example:
+            # Replace tags
+            client.update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"],
+                merge=False
+            )
+
+            # Merge tags
+            client.update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=["new-tag"],
+                merge=True
+            )
+        """
+        from opik.rest_api.types import prompt_version_update
+
+        update = prompt_version_update.PromptVersionUpdate(tags=tags)
+        self._rest_client.prompts.update_prompt_versions(
+            ids=version_ids, update=update, merge_tags=merge
+        )
 
     def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
         """

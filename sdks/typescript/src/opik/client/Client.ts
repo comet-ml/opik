@@ -602,6 +602,7 @@ export class OpikClient {
               template: options.prompt,
               metadata: options.metadata,
               type: normalizedType,
+              tags: options.tags,
             },
           },
           this.api.requestOptions
@@ -919,6 +920,64 @@ export class OpikClient {
       logger.error("Error during flush operation:", {
         error: error instanceof Error ? error.message : error,
       });
+    }
+  };
+
+  /**
+   * Updates tags for one or more prompt versions in a single batch operation.
+   *
+   * @param versionIds - Array of prompt version IDs to update
+   * @param tags - Tags to set. Behavior depends on mergeTags parameter
+   * @param mergeTags - If true, adds new tags to existing tags (union). If false, replaces all existing tags (default)
+   * @returns Promise that resolves when update is complete
+   * @throws OpikApiError if update fails
+   *
+   * @example
+   * ```typescript
+   * // Replace tags
+   * await client.updatePromptVersionTags(
+   *   ["version-id-1", "version-id-2"],
+   *   ["production", "v2"],
+   *   false
+   * );
+   *
+   * // Merge tags
+   * await client.updatePromptVersionTags(
+   *   ["version-id-1"],
+   *   ["new-tag"],
+   *   true
+   * );
+   * ```
+   */
+  public updatePromptVersionTags = async (
+    versionIds: string[],
+    tags: string[],
+    mergeTags?: boolean
+  ): Promise<void> => {
+    logger.debug("Updating prompt version tags", {
+      count: versionIds.length,
+      mergeTags,
+    });
+
+    try {
+      await this.api.prompts.updatePromptVersions(
+        {
+          ids: versionIds,
+          update: { tags },
+          mergeTags,
+        },
+        this.api.requestOptions
+      );
+
+      logger.debug("Successfully updated prompt version tags", {
+        count: versionIds.length,
+      });
+    } catch (error) {
+      logger.error("Failed to update prompt version tags", {
+        count: versionIds.length,
+        error,
+      });
+      throw error;
     }
   };
 }
