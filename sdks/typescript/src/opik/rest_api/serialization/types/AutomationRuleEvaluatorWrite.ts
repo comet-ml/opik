@@ -13,7 +13,11 @@ import { AutomationRuleEvaluatorSpanLlmAsJudgeWrite } from "./AutomationRuleEval
 import { AutomationRuleEvaluatorSpanUserDefinedMetricPythonWrite } from "./AutomationRuleEvaluatorSpanUserDefinedMetricPythonWrite";
 
 const _Base = core.serialization.object({
-    projectId: core.serialization.property("project_id", core.serialization.string()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+    projectIds: core.serialization.property(
+        "project_ids",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     enabled: core.serialization.boolean().optional(),
@@ -73,7 +77,8 @@ export declare namespace AutomationRuleEvaluatorWrite {
     }
 
     export interface _Base {
-        project_id: string;
+        project_id?: string | null;
+        project_ids?: string[] | null;
         name: string;
         sampling_rate?: number | null;
         enabled?: boolean | null;
