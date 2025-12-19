@@ -18,7 +18,16 @@ from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWr
 
 
 class Base(UniversalBaseModel):
-    project_id: str
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Primary project ID (legacy field for backwards compatibility)
+    """
+
+    project_ids: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Project IDs for write operations (used when creating/updating rules)
+    """
+
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None

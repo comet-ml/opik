@@ -41,7 +41,10 @@ export namespace AutomationRuleEvaluatorWrite {
     }
 
     export interface _Base {
-        projectId: string;
+        /** Primary project ID (legacy field for backwards compatibility) */
+        projectId?: string;
+        /** Project IDs for write operations (used when creating/updating rules) */
+        projectIds?: string[];
         name: string;
         samplingRate?: number;
         enabled?: boolean;

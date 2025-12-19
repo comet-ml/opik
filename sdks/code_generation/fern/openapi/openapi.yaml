@@ -1018,7 +1018,7 @@ paths:
               style: simple
               schema:
                 type: string
-              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
+              example: "${basePath}/v1/private/automations/evaluators/{evaluatorId}"
   /v1/private/automations/evaluators/delete:
     post:
       tags:
@@ -6712,7 +6712,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -6722,10 +6721,30 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference"
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Project IDs for write operations (used when creating/updating
+            rules)
+          items:
+            type: string
+            description: Project IDs for write operations (used when creating/updating
+              rules)
+            format: uuid
         name:
           minLength: 1
           type: string
@@ -6775,7 +6794,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6793,7 +6811,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6811,7 +6828,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6829,7 +6845,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6847,7 +6862,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6865,7 +6879,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6982,6 +6995,21 @@ components:
           - DOUBLE
         description:
           type: string
+    ProjectReference:
+      required:
+      - project_id
+      - project_name
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+        project_name:
+          type: string
+          description: Project name
+      description: Project reference with ID and name
+      readOnly: true
     SpanFilter:
       type: object
       properties:
@@ -7145,7 +7173,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7163,7 +7190,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7181,7 +7207,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7199,7 +7224,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7217,7 +7241,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7235,7 +7258,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7252,13 +7274,23 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Project IDs for write operations (used when creating/updating
+            rules)
+          items:
+            type: string
+            description: Project IDs for write operations (used when creating/updating
+              rules)
+            format: uuid
         name:
           minLength: 1
           type: string
@@ -7556,7 +7588,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7573,7 +7604,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -7583,10 +7613,20 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference_Public"
         name:
           minLength: 1
           type: string
@@ -7656,7 +7696,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7674,7 +7713,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7692,7 +7730,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7710,7 +7747,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7728,7 +7764,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7845,6 +7880,21 @@ components:
           - DOUBLE
         description:
           type: string
+    ProjectReference_Public:
+      required:
+      - project_id
+      - project_name
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+        project_name:
+          type: string
+          description: Project name
+      description: Project reference with ID and name
+      readOnly: true
     SpanFilter_Public:
       type: object
       properties:
@@ -8000,7 +8050,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -8010,10 +8059,20 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference_Public"
         name:
           minLength: 1
           type: string
@@ -8107,7 +8166,6 @@ components:
       required:
       - action
       - name
-      - project_id
       type: object
       properties:
         name:
@@ -8120,7 +8178,17 @@ components:
           type: boolean
         project_id:
           type: string
+          description: "Primary project ID (legacy field, maintained for backwards\
+            \ compatibility)"
           format: uuid
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Multiple project IDs (new field for multi-project support)
+          items:
+            type: string
+            description: Multiple project IDs (new field for multi-project support)
+            format: uuid
         type:
           type: string
           enum:
@@ -8148,7 +8216,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8165,7 +8232,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8182,7 +8248,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8199,7 +8264,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8216,7 +8280,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8233,7 +8296,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
