@@ -104,6 +104,12 @@ class Prompt(base_prompt.BasePrompt):
 
     @property
     @override
+    def version_id(self) -> str:
+        """The unique identifier of the prompt version."""
+        return self.__internal_api__version_id__
+
+    @property
+    @override
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)

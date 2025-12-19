@@ -230,16 +230,54 @@ class PromptClient:
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
     def get_all_prompt_versions(
-        self, name: str
+        self,
+        name: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            sorting: Optional sorting specification as JSON array. Format: '[{"field": "FIELD_NAME", "direction": "ASC|DESC"}]'
+            filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
 
         Returns:
             List[Prompt]: A list of prompts for the given name.
+
+        Example:
+            # Get all versions of a prompt
+            versions = prompt_client.get_all_prompt_versions(name="my-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            import json
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+            )
+
+            # Sort by template (lexicographically descending)
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+            )
+
+            # Search for specific text in template or change description fields
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                search="customer"
+            )
+
+            # Combine search, filtering, and sorting
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                search="customer",
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}]),
+                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+            )
         """
         try:
             prompts_matching_name_string = self._rest_client.prompts.get_prompts(
@@ -258,7 +296,9 @@ class PromptClient:
                 raise ValueError("No prompts found for name: " + name)
 
             prompt_id = filtered_prompt_list[0]
-            return self._get_prompt_versions_by_id_paginated(prompt_id)
+            return self._get_prompt_versions_by_id_paginated(
+                prompt_id, search=search, sorting=sorting, filters=filters
+            )
 
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
@@ -267,14 +307,23 @@ class PromptClient:
         return []
 
     def _get_prompt_versions_by_id_paginated(
-        self, prompt_id: str
+        self,
+        prompt_id: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         page = 1
         size = 100
         prompts: List[prompt_version_detail.PromptVersionDetail] = []
         while True:
             prompt_versions_page = self._rest_client.prompts.get_prompt_versions(
-                id=prompt_id, page=page, size=size
+                id=prompt_id,
+                page=page,
+                size=size,
+                search=search,
+                sorting=sorting,
+                filters=filters,
             ).content
 
             versions = prompt_versions_page or []
@@ -291,6 +340,7 @@ class PromptClient:
                         commit=version.commit,
                         created_at=version.created_at,
                         created_by=version.created_by,
+                        tags=version.tags,
                     )
                     for version in versions
                 ]

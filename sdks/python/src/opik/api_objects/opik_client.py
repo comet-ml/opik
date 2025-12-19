@@ -51,7 +51,7 @@ from ..message_processing import (
 )
 from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
-from ..rest_api import client as rest_api_client
+from ..rest_api import client as rest_api_client, PromptVersionUpdate
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
     dataset_public,
@@ -1582,18 +1582,58 @@ class Opik:
             name, fern_prompt_version
         )
 
-    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+    def get_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            sorting: Optional sorting specification as JSON array. Format: '[{"field": "FIELD_NAME", "direction": "ASC|DESC"}]'
+            filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
 
         Returns:
             List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a prompt
+            versions = client.get_prompt_history(name="my-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            import json
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+            )
+
+            # Sort by template (lexicographically descending)
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer"
+            )
+
+            # Combine search, filtering, and sorting
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer",
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}]),
+                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1607,7 +1647,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a text prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, sorting=sorting, filters=filters
+        )
 
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
@@ -1615,18 +1657,58 @@ class Opik:
         ]
         return result
 
-    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+    def get_chat_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            sorting: Optional sorting specification as JSON array. Format: '[{"field": "FIELD_NAME", "direction": "ASC|DESC"}]'
+            filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a chat prompt
+            versions = client.get_chat_prompt_history(name="my-chat-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            import json
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+            )
+
+            # Sort by template (lexicographically descending)
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant"
+            )
+
+            # Combine search, filtering, and sorting
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant",
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}]),
+                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1640,13 +1722,61 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a chat prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, sorting=sorting, filters=filters
+        )
 
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
+
+    def update_prompt_version_tags(
+        self,
+        version_ids: List[str],
+        tags: Optional[List[str]] = None,
+        merge: Optional[bool] = None,
+    ) -> None:
+        """
+        Update tags for one or more prompt versions in a single batch operation.
+
+        Parameters:
+            version_ids: List of prompt version IDs to update.
+            tags: Tags to set or merge. Semantics:
+                - None: No change to tags (preserves existing tags).
+                - []: Clear all tags (when merge is False or None).
+                - ['tag1', 'tag2']: Set or merge tags (based on merge parameter).
+            merge: Controls tag update behavior. Semantics:
+                - None: Use backend default behavior (replace mode).
+                - False: Replace all existing tags (replace mode).
+                - True: Merge new tags with existing tags (union).
+
+        Example:
+            # Replace tags on multiple versions (default behavior)
+            client.update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+
+            # Merge new tags with existing tags
+            client.update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=["hotfix"],
+                merge=True
+            )
+
+            # Clear all tags
+            client.update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=[]
+            )
+        """
+
+        update = PromptVersionUpdate(tags=tags)
+        self._rest_client.prompts.update_prompt_versions(
+            ids=version_ids, update=update, merge_tags=merge
+        )
 
     def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
         """
