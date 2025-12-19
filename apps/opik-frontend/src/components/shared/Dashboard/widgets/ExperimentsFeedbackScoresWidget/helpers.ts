@@ -3,11 +3,18 @@ import {
   EXPERIMENT_DATA_SOURCE,
   ExperimentsFeedbackScoresWidgetType,
 } from "@/types/dashboard";
+import { Groups } from "@/types/groups";
+import { COLUMN_DATASET_ID, COLUMN_METADATA_ID } from "@/types/shared";
 
 const DEFAULT_TITLE = "Experiment metrics";
 const EXPERIMENTS_BASE_LABEL = "Experiments";
 const TITLE_SEPARATOR = " - ";
 const TITLE_PART_SEPARATOR = " ";
+
+const GROUP_FIELD_LABELS: Record<string, string> = {
+  [COLUMN_DATASET_ID]: "Dataset",
+  [COLUMN_METADATA_ID]: "Configuration",
+};
 
 const buildSelectedExperimentsTitle = (
   experimentIds: string[] | undefined,
@@ -41,18 +48,23 @@ const buildSelectedExperimentsTitle = (
 const buildFilterAndGroupTitle = (
   hasFilters: boolean,
   hasGroups: boolean,
-  groupsLength: number,
+  groups: Groups | undefined,
   feedbackScores: string[] | undefined,
 ): string => {
   const parts: string[] = [EXPERIMENTS_BASE_LABEL];
+  const groupsLength = groups?.length || 0;
 
   if (hasFilters && hasGroups) {
     parts.push("filtered & grouped");
   } else if (hasFilters) {
     parts.push("filtered");
   } else if (hasGroups) {
-    const fieldLabel = groupsLength > 1 ? "fields" : "field";
-    parts.push(`grouped by ${groupsLength} ${fieldLabel}`);
+    if (groupsLength === 1 && groups?.[0]?.field) {
+      const fieldLabel = GROUP_FIELD_LABELS[groups[0].field] || groups[0].field;
+      parts.push(`grouped by ${fieldLabel}`);
+    } else {
+      parts.push(`grouped by ${groupsLength} fields`);
+    }
   }
 
   const hasFeedbackScores = feedbackScores && feedbackScores.length > 0;
@@ -91,7 +103,7 @@ const calculateExperimentsFeedbackScoresTitle = (
   return buildFilterAndGroupTitle(
     Boolean(hasFilters),
     Boolean(hasGroups),
-    groups?.length || 0,
+    groups,
     feedbackScores,
   );
 };
