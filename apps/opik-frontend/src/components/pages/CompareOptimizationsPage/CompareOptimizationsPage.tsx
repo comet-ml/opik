@@ -49,6 +49,7 @@ import OptimizationLogs from "@/components/pages-shared/optimizations/Optimizati
 import CompareOptimizationsToolbar from "./CompareOptimizationsToolbar";
 import CompareOptimizationsTrialsControls from "./CompareOptimizationsTrialsControls";
 import CompareOptimizationsTrialsTable from "./CompareOptimizationsTrialsTable";
+import CompareOptimizationsParams from "./CompareOptimizationsParams";
 
 const REFETCH_INTERVAL = 30000;
 const ACTIVE_REFETCH_INTERVAL = 3000;
@@ -338,6 +339,8 @@ const CompareOptimizationsPage: React.FC = () => {
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
   const showLogsView =
     isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.LOGS;
+  const showParamsView =
+    isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.PARAMS;
 
   return (
     <PageBodyScrollContainer>
@@ -406,9 +409,15 @@ const CompareOptimizationsPage: React.FC = () => {
         limitWidth
       >
         <div className="flex min-w-0 flex-1">
-          {showLogsView ? (
+          {showLogsView && (
             <OptimizationLogs optimization={optimization!} />
-          ) : (
+          )}
+          {showParamsView && optimization?.studio_config && (
+            <CompareOptimizationsParams
+              studioConfig={optimization.studio_config}
+            />
+          )}
+          {showTrialsView && (
             <CompareOptimizationsTrialsTable
               columns={columns}
               rows={rows}

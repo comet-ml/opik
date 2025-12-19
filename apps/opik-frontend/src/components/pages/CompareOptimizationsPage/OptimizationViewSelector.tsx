@@ -1,10 +1,11 @@
 import React from "react";
-import { ScrollText, Table } from "lucide-react";
+import { ScrollText, Settings, Table } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export enum OPTIMIZATION_VIEW_TYPE {
   LOGS = "logs",
   TRIALS = "trials",
+  PARAMS = "params",
 }
 
 interface OptimizationViewSelectorProps {
@@ -39,6 +40,14 @@ const OptimizationViewSelector: React.FC<OptimizationViewSelectorProps> = ({
       >
         <Table className="size-3" />
         Trials
+      </ToggleGroupItem>
+      <ToggleGroupItem
+        value={OPTIMIZATION_VIEW_TYPE.PARAMS}
+        size="sm"
+        className="gap-2"
+      >
+        <Settings className="size-3" />
+        Params
       </ToggleGroupItem>
     </ToggleGroup>
   );

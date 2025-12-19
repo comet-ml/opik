@@ -19,18 +19,23 @@ const CompareOptimizationsToolbar: React.FC<CompareOptimizationsToolbarProps> = 
   search,
   onSearchChange,
 }) => {
+  const showSearch =
+    !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
+
   return (
     <>
       {isStudioOptimization && (
         <OptimizationViewSelector value={view} onChange={onViewChange} />
       )}
-      <SearchInput
-        searchText={search}
-        setSearchText={onSearchChange}
-        placeholder="Search by name"
-        className="w-[320px]"
-        dimension="sm"
-      />
+      {showSearch && (
+        <SearchInput
+          searchText={search}
+          setSearchText={onSearchChange}
+          placeholder="Search by name"
+          className="w-[320px]"
+          dimension="sm"
+        />
+      )}
     </>
   );
 };
