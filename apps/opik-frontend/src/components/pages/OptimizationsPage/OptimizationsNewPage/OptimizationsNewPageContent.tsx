@@ -14,7 +14,7 @@ import {
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import useAppStore from "@/store/AppStore";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
+import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
 import { OptimizationConfigFormType } from "@/components/pages-shared/optimizations/OptimizationConfigForm/schema";
 import { convertFormDataToStudioConfig } from "@/components/pages-shared/optimizations/OptimizationConfigForm/schema";
@@ -54,7 +54,6 @@ const OptimizationsNewPageContent: React.FC = () => {
   const { setLastSessionRunId } = useLastOptimizationRun();
   const { mutateAsync: createOptimization, isPending: isCreatingOptimization } = useOptimizationCreateMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [name, setName] = useState("Optimization studio run");
 
   const form = useFormContext<OptimizationConfigFormType>();
 
@@ -75,22 +74,9 @@ const OptimizationsNewPageContent: React.FC = () => {
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
-  const { data: datasetItemsData } = useDatasetItemsList(
-    {
-      datasetId: datasetId || "",
-      page: 1,
-      size: 1,
-      truncate: true,
-    },
-    {
-      enabled: Boolean(datasetId),
-    },
-  );
-
-  const datasetSample = useMemo(() => {
-    if (!datasetItemsData?.content?.[0]) return null;
-    return datasetItemsData.content[0].data;
-  }, [datasetItemsData]);
+  const { datasetSample, variablesHint } = useDatasetSamplePreview({
+    datasetId,
+  });
 
   const { calculateModelProvider } = useLLMProviderModelsData();
 
@@ -247,7 +233,7 @@ const OptimizationsNewPageContent: React.FC = () => {
 
       const result = await createOptimization({
         optimization: {
-          name: name || undefined,
+          name: formData.name || undefined,
           studio_config: studioConfig,
           dataset_name: datasetNameValue,
           objective_name: studioConfig.evaluation.metrics[0].type,
@@ -272,7 +258,6 @@ const OptimizationsNewPageContent: React.FC = () => {
   }, [
     form,
     datasets,
-    name,
     createOptimization,
     navigate,
     workspaceName,
@@ -306,15 +291,23 @@ const OptimizationsNewPageContent: React.FC = () => {
 
       <div className="flex gap-6">
         <div className="flex-1 space-y-6">
-          <div>
-            <Label className="comet-body-s-accented mb-2 block">Name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter optimization name"
-              className="h-10"
-            />
-          </div>
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="comet-body-s-accented">Name</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder="Enter optimization name"
+                    className="h-10"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -350,13 +343,6 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="messages"
               render={({ field }) => {
                 const messages = field.value;
-                const hintMessage = datasetSample
-                  ? `Use {{variable_name}} syntax to reference dataset variables in your prompt: ${Object.keys(
-                      datasetSample,
-                    )
-                      .map((key) => `{{${key}}}`)
-                      .join(", ")}`
-                  : "";
 
                 return (
                   <FormItem>
@@ -365,7 +351,7 @@ const OptimizationsNewPageContent: React.FC = () => {
                       possibleTypes={OPTIMIZATION_MESSAGE_TYPE_OPTIONS}
                       hidePromptActions
                       disableMedia
-                      hint={hintMessage}
+                      hint={variablesHint}
                       onChange={(messages: LLMMessage[]) => {
                         field.onChange(messages);
                       }}

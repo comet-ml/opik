@@ -98,6 +98,7 @@ const isMessageEmpty = (message: LLMMessage): boolean => {
 };
 
 const BaseOptimizationConfigSchema = z.object({
+  name: z.string().optional(),
   datasetId: z.string().min(1, "Dataset is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
@@ -191,6 +192,7 @@ export const convertOptimizationStudioToFormData = (
     : defaultConfig;
 
   return {
+    name: optimization?.name || "Optimization studio run",
     datasetId: optimization?.dataset_id || "",
     optimizerType,
     optimizerParams:

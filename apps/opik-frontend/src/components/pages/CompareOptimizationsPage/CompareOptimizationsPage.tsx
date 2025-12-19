@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
-import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
+import { ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
-import { RotateCw } from "lucide-react";
 import get from "lodash/get";
 import isArray from "lodash/isArray";
 import isObject from "lodash/isObject";
@@ -31,24 +30,13 @@ import { toString } from "@/lib/utils";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
 import { useOptimizationScores } from "@/components/pages-shared/experiments/useOptimizationScores";
-import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
-import { Card } from "@/components/ui/card";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import Loader from "@/components/shared/Loader/Loader";
-import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
-import DataTable from "@/components/shared/DataTable/DataTable";
-import { DataTableWrapperProps } from "@/components/shared/DataTable/DataTableWrapper";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
@@ -56,16 +44,15 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import { BestPrompt } from "@/components/pages-shared/experiments/BestPromptCard";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import OptimizationViewSelector, {
-  OPTIMIZATION_VIEW_TYPE,
-} from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
+import { OPTIMIZATION_VIEW_TYPE } from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
 import OptimizationLogs from "@/components/pages-shared/optimizations/OptimizationLogs/OptimizationLogs";
+import CompareOptimizationsToolbar from "./CompareOptimizationsToolbar";
+import CompareOptimizationsTrialsControls from "./CompareOptimizationsTrialsControls";
+import CompareOptimizationsTrialsTable from "./CompareOptimizationsTrialsTable";
 
 const REFETCH_INTERVAL = 30000;
 const ACTIVE_REFETCH_INTERVAL = 3000;
 const MAX_EXPERIMENTS_LOADED = 1000;
-
-export const getRowId = (e: Experiment) => e.id;
 
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
@@ -73,31 +60,11 @@ const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
 const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort";
 const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 
-export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID],
-  right: [],
-};
-
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
+const DEFAULT_SELECTED_COLUMNS: string[] = [
   "prompt",
   "objective_name",
   COLUMN_CREATED_AT_ID,
 ];
-
-const StickyTableWrapperWithBorder: React.FC<DataTableWrapperProps> = ({
-  children,
-}) => {
-  return (
-    <div
-      className="comet-sticky-table comet-compare-optimizations-table overflow-x-auto overflow-y-hidden rounded-md"
-      {...{
-        [TABLE_WRAPPER_ATTRIBUTE]: "",
-      }}
-    >
-      {children}
-    </div>
-  );
-};
 
 const CompareOptimizationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -340,24 +307,6 @@ const CompareOptimizationsPage: React.FC = () => {
     ];
   }, [columnsDef, columnsOrder, selectedColumns, sortableBy, optimizationId]);
 
-  const sortConfig = useMemo(
-    () => ({
-      enabled: true,
-      sorting: sortedColumns,
-      setSorting: setSortedColumns,
-    }),
-    [setSortedColumns, sortedColumns],
-  );
-
-  const resizeConfig = useMemo(
-    () => ({
-      enabled: true,
-      columnSizing: columnsWidth,
-      onColumnResize: setColumnsWidth,
-    }),
-    [columnsWidth, setColumnsWidth],
-  );
-
   const handleRowClick = useCallback(
     (row: Experiment) => {
       navigate({
@@ -375,136 +324,122 @@ const CompareOptimizationsPage: React.FC = () => {
     [navigate, workspaceName, optimizationId],
   );
 
+  const handleRefresh = useCallback(() => {
+    refetchOptimization();
+    refetchExperiments();
+  }, [refetchOptimization, refetchExperiments]);
+
   if (isOptimizationPending || isExperimentsPending) {
     return <Loader />;
   }
 
+  const isStudioOptimization = Boolean(optimization?.studio_config);
+  const showTrialsView =
+    !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
+  const showLogsView =
+    isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.LOGS;
+
   return (
-    <>
-      <PageBodyScrollContainer>
-        <PageBodyStickyContainer
-          className="pb-4 pt-6"
-          direction="horizontal"
-          limitWidth
-        >
-          <div className="mb-4 flex min-h-8 flex-nowrap items-center gap-2">
-            <h1 className="comet-title-l truncate break-words">{title}</h1>
-            {optimization?.status && (
-              <Tag
-                variant={STATUS_TO_VARIANT_MAP[optimization.status]}
-                size="md"
-                className="capitalize"
-              >
-                {optimization.status}
-              </Tag>
-            )}
-          </div>
-        </PageBodyStickyContainer>
-        <PageBodyStickyContainer
-          className="pb-6"
-          direction="horizontal"
-          limitWidth
-        >
-          <OptimizationProgressChartContainer
-            experiments={experiments}
-            bestEntityId={bestExperiment?.id}
-            objectiveName={optimization?.objective_name}
-          />
-        </PageBodyStickyContainer>
-        <PageBodyStickyContainer
-          className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
-          direction="bidirectional"
-          limitWidth
-        >
-          <div className="flex items-center gap-2">
-            {optimization?.studio_config ? (
-              <OptimizationViewSelector value={view} onChange={setView} />
-            ) : (
-              <SearchInput
-                searchText={search!}
-                setSearchText={setSearch}
-                placeholder="Search by name"
-                className="w-[320px]"
-                dimension="sm"
-              ></SearchInput>
-            )}
-          </div>
-          {(!optimization?.studio_config ||
-            view === OPTIMIZATION_VIEW_TYPE.TRIALS) && (
-            <div className="flex items-center gap-2">
-              <TooltipWrapper content={`Refresh trials list`}>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  className="shrink-0"
-                  onClick={() => {
-                    refetchOptimization();
-                    refetchExperiments();
-                  }}
-                >
-                  <RotateCw />
-                </Button>
-              </TooltipWrapper>
-              <DataTableRowHeightSelector
-                type={height as ROW_HEIGHT}
-                setType={setHeight}
-              />
-              <ColumnsButton
-                columns={columnsDef}
-                selectedColumns={selectedColumns}
-                onSelectionChange={setSelectedColumns}
-                order={columnsOrder}
-                onOrderChange={setColumnsOrder}
-              ></ColumnsButton>
-            </div>
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="pb-4 pt-6"
+        direction="horizontal"
+        limitWidth
+      >
+        <div className="mb-4 flex min-h-8 flex-nowrap items-center gap-2">
+          <h1 className="comet-title-l truncate break-words">{title}</h1>
+          {optimization?.status && (
+            <Tag
+              variant={STATUS_TO_VARIANT_MAP[optimization.status]}
+              size="md"
+              className="capitalize"
+            >
+              {optimization.status}
+            </Tag>
           )}
-        </PageBodyStickyContainer>
-        <PageBodyStickyContainer
-          className="flex flex-row gap-x-4 pb-6"
-          direction="horizontal"
-          limitWidth
-        >
-          <div className="flex min-w-0 flex-1">
-            {optimization?.studio_config &&
-            view === OPTIMIZATION_VIEW_TYPE.LOGS ? (
-              <OptimizationLogs optimization={optimization} />
-            ) : (
-              <Card className="h-full flex-1 overflow-hidden">
-                <DataTable
-                  columns={columns}
-                  data={rows}
-                  onRowClick={handleRowClick}
-                  sortConfig={sortConfig}
-                  resizeConfig={resizeConfig}
-                  getRowId={getRowId}
-                  rowHeight={height}
-                  columnPinning={DEFAULT_COLUMN_PINNING}
-                  noData={<DataTableNoData title={noDataText} />}
-                  TableWrapper={StickyTableWrapperWithBorder}
-                  TableBody={DataTableVirtualBody}
-                  stickyHeader
-                />
-              </Card>
-            )}
-          </div>
-          <div className="w-2/5 shrink-0">
-            {bestExperiment && optimization ? (
-              <BestPrompt
-                experiment={bestExperiment}
-                optimization={optimization}
-                scoreMap={scoreMap}
-                baselineExperiment={baselineExperiment}
-              ></BestPrompt>
-            ) : null}
-          </div>
-        </PageBodyStickyContainer>
-        <PageBodyStickyContainer
-          className="h-4"
-          direction="horizontal"
-          limitWidth
-        ></PageBodyStickyContainer>
-      </PageBodyScrollContainer>
-    </>
+        </div>
+      </PageBodyStickyContainer>
+
+      <PageBodyStickyContainer
+        className="pb-6"
+        direction="horizontal"
+        limitWidth
+      >
+        <OptimizationProgressChartContainer
+          experiments={experiments}
+          bestEntityId={bestExperiment?.id}
+          objectiveName={optimization?.objective_name}
+        />
+      </PageBodyStickyContainer>
+
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        direction="bidirectional"
+        limitWidth
+      >
+        <div className="flex items-center gap-2">
+          <CompareOptimizationsToolbar
+            isStudioOptimization={isStudioOptimization}
+            view={view}
+            onViewChange={setView}
+            search={search!}
+            onSearchChange={setSearch}
+          />
+        </div>
+        {showTrialsView && (
+          <CompareOptimizationsTrialsControls
+            onRefresh={handleRefresh}
+            rowHeight={height}
+            onRowHeightChange={setHeight}
+            columnsDef={columnsDef}
+            selectedColumns={selectedColumns}
+            onSelectedColumnsChange={setSelectedColumns}
+            columnsOrder={columnsOrder}
+            onColumnsOrderChange={setColumnsOrder}
+          />
+        )}
+      </PageBodyStickyContainer>
+
+      <PageBodyStickyContainer
+        className="flex flex-row gap-x-4 pb-6"
+        direction="horizontal"
+        limitWidth
+      >
+        <div className="flex min-w-0 flex-1">
+          {showLogsView ? (
+            <OptimizationLogs optimization={optimization!} />
+          ) : (
+            <CompareOptimizationsTrialsTable
+              columns={columns}
+              rows={rows}
+              onRowClick={handleRowClick}
+              rowHeight={height}
+              noDataText={noDataText}
+              sortedColumns={sortedColumns}
+              onSortChange={setSortedColumns}
+              columnsWidth={columnsWidth}
+              onColumnsWidthChange={setColumnsWidth}
+            />
+          )}
+        </div>
+        <div className="w-2/5 shrink-0">
+          {bestExperiment && optimization && (
+            <BestPrompt
+              experiment={bestExperiment}
+              optimization={optimization}
+              scoreMap={scoreMap}
+              baselineExperiment={baselineExperiment}
+            />
+          )}
+        </div>
+      </PageBodyStickyContainer>
+
+      <PageBodyStickyContainer
+        className="h-4"
+        direction="horizontal"
+        limitWidth
+      />
+    </PageBodyScrollContainer>
   );
 };
 
