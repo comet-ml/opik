@@ -4,7 +4,7 @@ from opik.evaluation.metrics import base_metric, score_result
 import opik.exceptions as exceptions
 
 from typing import Dict, Any, Optional, TYPE_CHECKING
-
+import opik.opik_context as opik_context
 if TYPE_CHECKING:
     from ragas import metrics as ragas_metrics
     from ragas import dataset_schema as ragas_dataset_schema
@@ -36,16 +36,6 @@ class RagasMetricWrapper(base_metric.BaseMetric):
         self._required_fields = ragas_metric.required_columns[
             ragas_metrics.MetricType.SINGLE_TURN.name
         ]
-
-        self._opik_tracer = None
-        if self.track:
-            from opik.integrations.langchain import OpikTracer
-
-            self._opik_tracer = OpikTracer()
-
-            self.callbacks = [self._opik_tracer]
-        else:
-            self.callbacks = []
 
     def _create_ragas_single_turn_sample(
         self, input_dict: Dict[str, Any]
@@ -88,5 +78,27 @@ class RagasMetricWrapper(base_metric.BaseMetric):
     def score(self, **kwargs: Any) -> score_result.ScoreResult:
         sample = self._create_ragas_single_turn_sample(kwargs)
 
-        score = self.ragas_metric.single_turn_score(sample, callbacks=self.callbacks)
+        if self.track:
+            from opik.integrations.langchain import OpikTracer
+
+            current_span_data = opik_context.get_current_span_data()
+            current_trace_data = opik_context.get_current_trace_data()
+            project_name = None
+
+            if current_span_data is not None:
+                project_name = (
+                    current_trace_data.project_name
+                    if current_trace_data is not None
+                    else current_span_data.project_name
+                )
+
+            opik_tracer = OpikTracer(
+                context_modification_enabled=False,
+                project_name=project_name,
+            )
+            callbacks = [opik_tracer]
+        else:
+            callbacks = []
+
+        score = self.ragas_metric.single_turn_score(sample, callbacks=callbacks)
         return score_result.ScoreResult(value=score, name=self.name)
