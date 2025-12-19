@@ -44,7 +44,10 @@ export namespace AutomationRuleEvaluatorUpdate {
         name: string;
         samplingRate?: number;
         enabled?: boolean;
-        projectId: string;
+        /** Primary project ID (legacy field, maintained for backwards compatibility) */
+        projectId?: string;
+        /** Multiple project IDs (new field for multi-project support) */
+        projectIds?: string[];
         action: "evaluator";
     }
 }
