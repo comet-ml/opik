@@ -23,6 +23,7 @@ import {
   OPTIMIZATION_PROMPT_KEY,
   STATUS_TO_VARIANT_MAP,
 } from "@/constants/experiments";
+import { getOptimizerLabel } from "@/lib/optimizations";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { formatDate } from "@/lib/date";
@@ -230,9 +231,14 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
         size: 200,
         accessorFn: (row) => {
-          const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
-
-          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+          const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
+          if (metadataVal) {
+            return isObject(metadataVal)
+              ? JSON.stringify(metadataVal, null, 2)
+              : toString(metadataVal);
+          }
+          const studioVal = optimization?.studio_config?.optimizer?.type;
+          return studioVal ? getOptimizerLabel(studioVal) : "-";
         },
       },
       {

@@ -3,18 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { OptimizationStudioConfig } from "@/types/optimizations";
 import { MessagesList } from "@/components/pages-shared/prompts/PromptMessageDisplay";
-import {
-  OPTIMIZER_OPTIONS,
-  OPTIMIZATION_METRIC_OPTIONS,
-} from "@/constants/optimizations";
+import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
+import { getOptimizerLabel } from "@/lib/optimizations";
 
 interface CompareOptimizationsParamsProps {
   studioConfig: OptimizationStudioConfig;
 }
-
-const getOptimizerLabel = (type: string): string => {
-  return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
-};
 
 const getMetricLabel = (type: string): string => {
   return (

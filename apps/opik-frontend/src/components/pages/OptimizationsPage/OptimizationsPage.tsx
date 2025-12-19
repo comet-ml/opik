@@ -72,6 +72,7 @@ import {
 import { checkIsGroupRowType } from "@/lib/groups";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
+import { getOptimizerLabel } from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
@@ -114,9 +115,16 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     type: COLUMN_TYPE.string,
     size: 200,
     accessorFn: (row) => {
-      const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
+      const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
+      if (metadataVal) {
+        return isObject(metadataVal)
+          ? JSON.stringify(metadataVal, null, 2)
+          : toString(metadataVal);
+      }
 
-      return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+      console.log(row, "ROW");
+      const studioVal = row.studio_config?.optimizer?.type;
+      return studioVal ? getOptimizerLabel(studioVal) : "-";
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
   },
