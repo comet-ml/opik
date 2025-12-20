@@ -47,7 +47,7 @@ export interface ProjectMetricsWidget {
 
 export interface TextMarkdownWidget {
   type: WIDGET_TYPE.TEXT_MARKDOWN;
-  config?: {
+  config: {
     content?: string;
   } & Record<string, unknown>;
 }
@@ -75,50 +75,7 @@ export interface ExperimentsFeedbackScoresWidgetType {
   } & Record<string, unknown>;
 }
 
-// Unified widget config type
-export type AddWidgetConfig = {
-  title: string;
-  subtitle?: string;
-} & (
-  | ProjectMetricsWidget
-  | TextMarkdownWidget
-  | ProjectStatsCardWidget
-  | ExperimentsFeedbackScoresWidgetType
-);
-
-// Update config with optional fields
-export type UpdateWidgetConfig = {
-  title?: string;
-  subtitle?: string;
-} & (
-  | {
-      type: WIDGET_TYPE.PROJECT_METRICS;
-      config?: Partial<ProjectMetricsWidget["config"]>;
-    }
-  | {
-      type: WIDGET_TYPE.TEXT_MARKDOWN;
-      config?: Partial<NonNullable<TextMarkdownWidget["config"]>>;
-    }
-  | {
-      type: WIDGET_TYPE.PROJECT_STATS_CARD;
-      config?: Partial<ProjectStatsCardWidget["config"]>;
-    }
-  | {
-      type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES;
-      config?: Partial<ExperimentsFeedbackScoresWidgetType["config"]>;
-    }
-  | {
-      type?: undefined;
-      config?: Record<string, unknown>;
-    }
-);
-
-// DashboardWidget extends AddWidgetConfig with id
-export type DashboardWidget = {
-  id: string;
-  title: string;
-  subtitle?: string;
-} & (
+type WidgetConfigUnion =
   | ProjectMetricsWidget
   | TextMarkdownWidget
   | ProjectStatsCardWidget
@@ -126,8 +83,14 @@ export type DashboardWidget = {
   | {
       type: string;
       config: Record<string, unknown>;
-    }
-);
+    };
+
+export type DashboardWidget = {
+  id: string;
+  title: string;
+  generatedTitle?: string;
+  subtitle?: string;
+} & WidgetConfigUnion;
 
 export type WidgetSize = {
   w: number;
@@ -198,13 +161,8 @@ export interface WidgetEditorHandle {
   isValid: boolean;
 }
 
-export type WidgetEditorProps = AddWidgetConfig & {
-  onChange: (data: Partial<AddWidgetConfig>) => void;
-  onValidationChange?: (isValid: boolean) => void;
-};
-
 export type WidgetEditorComponent = React.ForwardRefExoticComponent<
-  WidgetEditorProps & React.RefAttributes<WidgetEditorHandle>
+  React.RefAttributes<WidgetEditorHandle>
 >;
 
 export interface WidgetMetadata {
@@ -236,7 +194,7 @@ export interface WidgetConfigDialogProps {
   onOpenChange: (open: boolean) => void;
   sectionId: string;
   widgetId?: string;
-  onSave: (widgetData: Partial<DashboardWidget>) => void;
+  onSave: (widget: DashboardWidget) => void;
 }
 
 export interface DashboardTemplate {

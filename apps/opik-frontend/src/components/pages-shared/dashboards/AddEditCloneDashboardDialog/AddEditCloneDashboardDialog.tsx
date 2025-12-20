@@ -347,6 +347,9 @@ const AddEditCloneDashboardDialog: React.FC<
               >
                 <DashboardDialogDetailsStep
                   control={form.control}
+                  templateType={
+                    isCreateMode ? form.watch("templateType") : undefined
+                  }
                   showProjectSelect={
                     isCreateMode &&
                     !defaultProjectId &&
@@ -366,7 +369,7 @@ const AddEditCloneDashboardDialog: React.FC<
           )}
         </DialogAutoScrollBody>
 
-        <DialogFooter className="flex flex-row justify-between gap-2 border-t pt-4 sm:flex-row sm:justify-between">
+        <DialogFooter className="flex flex-row justify-between gap-2 sm:flex-row sm:justify-between">
           <div>
             {isCreateMode && currentStep === DialogStep.DETAILS && (
               <Button variant="outline" onClick={handleBack}>
@@ -377,11 +380,13 @@ const AddEditCloneDashboardDialog: React.FC<
           </div>
 
           <div className="flex gap-2">
-            <DialogClose asChild>
-              <Button variant="outline" disabled={isPending}>
-                Cancel
-              </Button>
-            </DialogClose>
+            {currentStep === DialogStep.DETAILS && (
+              <DialogClose asChild>
+                <Button variant="outline" disabled={isPending}>
+                  Cancel
+                </Button>
+              </DialogClose>
+            )}
 
             {currentStep === DialogStep.DETAILS && (
               <Button type="submit" form="dashboard-form" disabled={isPending}>
