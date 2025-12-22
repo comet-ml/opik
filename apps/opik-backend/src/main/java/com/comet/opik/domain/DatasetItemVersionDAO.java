@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -14,9 +15,14 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -44,6 +50,27 @@ public interface DatasetItemVersionDAO {
      * @return the number of items copied
      */
     Mono<Long> copyVersionItems(UUID datasetId, UUID sourceVersionId, UUID targetVersionId, List<UUID> uuids);
+
+    /**
+     * Applies delta changes (add, edit, delete) from a base version to create a new version.
+     * <p>
+     * This operation:
+     * <ul>
+     *   <li>Copies items from baseVersion that are NOT in deletedIds and NOT in editedItems</li>
+     *   <li>Inserts editedItems (with updated data but same datasetItemId)</li>
+     *   <li>Inserts addedItems (with new datasetItemIds)</li>
+     * </ul>
+     *
+     * @param datasetId the dataset ID
+     * @param baseVersionId the base version to apply changes from
+     * @param newVersionId the new version ID to create
+     * @param addedItems new items to add
+     * @param editedItems existing items with updated data
+     * @param deletedIds item IDs (datasetItemId) to exclude from the new version
+     * @return the total number of items in the new version
+     */
+    Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+            List<VersionedDatasetItem> addedItems, List<VersionedDatasetItem> editedItems, Set<UUID> deletedIds);
 }
 
 @Singleton
@@ -344,6 +371,223 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 copiedCount, sourceVersionId, targetVersionId, datasetId))
                         .doFinally(signalType -> endSegment(segment));
             });
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
+            @NonNull UUID newVersionId, @NonNull List<VersionedDatasetItem> addedItems,
+            @NonNull List<VersionedDatasetItem> editedItems, @NonNull Set<UUID> deletedIds) {
+
+        log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
+                "added='{}', edited='{}', deleted='{}'",
+                datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(), deletedIds.size());
+
+        // Collect all item IDs that are being edited (so we don't copy them from base)
+        Set<UUID> editedItemIds = editedItems.stream()
+                .map(VersionedDatasetItem::datasetItemId)
+                .collect(Collectors.toSet());
+
+        // Combine deleted and edited IDs for exclusion when copying
+        Set<UUID> excludedIds = new HashSet<>(deletedIds);
+        excludedIds.addAll(editedItemIds);
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            // Step 1: Copy unchanged items from base version (excluding deleted and edited)
+            Mono<Long> copyUnchanged = copyUnchangedItems(datasetId, baseVersionId, newVersionId,
+                    excludedIds, workspaceId, userName);
+
+            // Step 2: Insert edited items
+            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
+
+            // Step 3: Insert added items
+            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
+
+            // Execute all operations and sum the results
+            return copyUnchanged
+                    .zipWith(insertEdited, Long::sum)
+                    .zipWith(insertAdded, Long::sum)
+                    .doOnSuccess(total -> log.info("Applied delta for dataset '{}': total items in new version '{}'",
+                            datasetId, total));
+        });
+    }
+
+    private Mono<Long> copyUnchangedItems(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+            Set<UUID> excludedIds, String workspaceId, String userName) {
+
+        if (excludedIds.isEmpty()) {
+            // Simple copy - no exclusions needed
+            List<UUID> uuids = IntStream.range(0, 10000)
+                    .mapToObj(i -> UUID.randomUUID())
+                    .toList();
+            return copyVersionItems(datasetId, baseVersionId, newVersionId, uuids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName));
+        }
+
+        String copyWithExclusionsQuery = """
+                INSERT INTO dataset_item_versions (
+                    id,
+                    dataset_item_id,
+                    dataset_id,
+                    dataset_version_id,
+                    data,
+                    metadata,
+                    source,
+                    trace_id,
+                    span_id,
+                    tags,
+                    item_created_at,
+                    item_last_updated_at,
+                    item_created_by,
+                    item_last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    workspace_id
+                )
+                SELECT
+                    generateUUIDv4() as new_id,
+                    src.dataset_item_id,
+                    src.dataset_id,
+                    :newVersionId as dataset_version_id,
+                    src.data,
+                    src.metadata,
+                    src.source,
+                    src.trace_id,
+                    src.span_id,
+                    src.tags,
+                    src.item_created_at,
+                    src.item_last_updated_at,
+                    src.item_created_by,
+                    src.item_last_updated_by,
+                    now64(9) as created_at,
+                    now64(9) as last_updated_at,
+                    :user_name as created_by,
+                    :user_name as last_updated_by,
+                    src.workspace_id
+                FROM dataset_item_versions AS src
+                WHERE src.dataset_id = :datasetId
+                AND src.dataset_version_id = :baseVersionId
+                AND src.workspace_id = :workspace_id
+                AND src.dataset_item_id NOT IN (:excludedIds)
+                ORDER BY (src.workspace_id, src.dataset_id, src.dataset_version_id, src.id) DESC, src.last_updated_at DESC
+                LIMIT 1 BY src.id
+                """;
+
+        return asyncTemplate.nonTransaction(connection -> {
+            String[] excludedIdStrings = excludedIds.stream()
+                    .map(UUID::toString)
+                    .toArray(String[]::new);
+
+            var statement = connection.createStatement(copyWithExclusionsQuery)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("baseVersionId", baseVersionId.toString())
+                    .bind("newVersionId", newVersionId.toString())
+                    .bind("excludedIds", excludedIdStrings)
+                    .bind("workspace_id", workspaceId)
+                    .bind("user_name", userName);
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_unchanged_items");
+
+            return Flux.from(statement.execute())
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum)
+                    .doOnSuccess(count -> log.debug("Copied '{}' unchanged items", count))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    private Mono<Long> insertItems(UUID datasetId, UUID newVersionId,
+            List<VersionedDatasetItem> items, String workspaceId, String userName) {
+
+        if (items.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        String insertQuery = """
+                INSERT INTO dataset_item_versions (
+                    id,
+                    dataset_item_id,
+                    dataset_id,
+                    dataset_version_id,
+                    data,
+                    metadata,
+                    source,
+                    trace_id,
+                    span_id,
+                    tags,
+                    item_created_at,
+                    item_last_updated_at,
+                    item_created_by,
+                    item_last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    workspace_id
+                ) VALUES (
+                    :id,
+                    :dataset_item_id,
+                    :dataset_id,
+                    :dataset_version_id,
+                    :data,
+                    :metadata,
+                    :source,
+                    :trace_id,
+                    :span_id,
+                    :tags,
+                    :item_created_at,
+                    :item_last_updated_at,
+                    :item_created_by,
+                    :item_last_updated_by,
+                    now64(9),
+                    now64(9),
+                    :created_by,
+                    :last_updated_by,
+                    :workspace_id
+                )
+                """;
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
+
+            return Flux.fromIterable(items)
+                    .flatMap(item -> {
+                        UUID rowId = UUID.randomUUID();
+                        Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
+                        var statement = connection.createStatement(insertQuery)
+                                .bind("id", rowId.toString())
+                                .bind("dataset_item_id", item.datasetItemId().toString())
+                                .bind("dataset_id", datasetId.toString())
+                                .bind("dataset_version_id", newVersionId.toString())
+                                .bind("data", dataAsStrings)
+                                .bind("metadata", Map.<String, String>of())
+                                .bind("source", item.source() != null ? item.source().getValue() : "sdk")
+                                .bind("trace_id", DatasetItemResultMapper.getOrDefault(item.traceId()))
+                                .bind("span_id", DatasetItemResultMapper.getOrDefault(item.spanId()))
+                                .bind("tags", item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
+                                .bind("item_created_at", Instant.now())
+                                .bind("item_last_updated_at", Instant.now())
+                                .bind("item_created_by", userName)
+                                .bind("item_last_updated_by", userName)
+                                .bind("created_by", userName)
+                                .bind("last_updated_by", userName)
+                                .bind("workspace_id", workspaceId);
+
+                        return Flux.from(statement.execute())
+                                .flatMap(Result::getRowsUpdated)
+                                .reduce(0L, Long::sum);
+                    })
+                    .reduce(0L, Long::sum)
+                    .doOnSuccess(count -> log.debug("Inserted '{}' items", count))
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 }
