@@ -37,7 +37,9 @@ describe("validateAndParseJson", () => {
 
   describe("non-array inputs", () => {
     it("should return invalid for JSON object", () => {
-      const result = validateAndParseJson('{"role": "user", "content": "hello"}');
+      const result = validateAndParseJson(
+        '{"role": "user", "content": "hello"}',
+      );
       expect(result.isValid).toBe(false);
       expect(result.messages).toBeUndefined();
     });
@@ -83,9 +85,7 @@ describe("validateAndParseJson", () => {
 
   describe("invalid message objects", () => {
     it("should return invalid for message missing role", () => {
-      const result = validateAndParseJson(
-        '[{"content": "hello"}]',
-      );
+      const result = validateAndParseJson('[{"content": "hello"}]');
       expect(result.isValid).toBe(false);
       expect(result.messages).toBeUndefined();
     });
@@ -99,9 +99,7 @@ describe("validateAndParseJson", () => {
     });
 
     it("should return invalid for message missing content", () => {
-      const result = validateAndParseJson(
-        '[{"role": "user"}]',
-      );
+      const result = validateAndParseJson('[{"role": "user"}]');
       expect(result.isValid).toBe(false);
       expect(result.messages).toBeUndefined();
     });
@@ -115,9 +113,7 @@ describe("validateAndParseJson", () => {
     });
 
     it("should return invalid for message with number content", () => {
-      const result = validateAndParseJson(
-        '[{"role": "user", "content": 123}]',
-      );
+      const result = validateAndParseJson('[{"role": "user", "content": 123}]');
       expect(result.isValid).toBe(false);
       expect(result.messages).toBeUndefined();
     });
@@ -247,9 +243,7 @@ describe("validateAndParseJson", () => {
     });
 
     it("should return valid for message with empty string content", () => {
-      const result = validateAndParseJson(
-        '[{"role": "user", "content": ""}]',
-      );
+      const result = validateAndParseJson('[{"role": "user", "content": ""}]');
       expect(result.isValid).toBe(true);
       expect(result.messages).toEqual([
         {
@@ -360,6 +354,4 @@ describe("validateAndParseJson", () => {
       ]);
     });
   });
-
 });
-
