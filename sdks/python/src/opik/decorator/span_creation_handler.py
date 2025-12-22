@@ -113,6 +113,7 @@ def create_span_respecting_context(
             metadata=start_span_arguments.metadata,
             tags=start_span_arguments.tags,
             project_name=start_span_arguments.project_name,
+            thread_id=start_span_arguments.thread_id,
         )
 
         current_span_data = arguments_helpers.create_span_data(
