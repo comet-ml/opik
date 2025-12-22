@@ -1,14 +1,22 @@
 import { useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import { UserPlus } from "lucide-react";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import useWorkspaceEmailInvites from "@/plugins/comet/useWorkspaceEmailInvites";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import Loader from "@/components/shared/Loader/Loader";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import InviteUsersPopover from "./InviteUsersPopover";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -24,6 +32,8 @@ import {
   WorkspaceMember,
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
+import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -32,6 +42,7 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     id: "userName",
     label: "Name / User name",
     type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.userName || "-",
   },
   {
     id: "email",
@@ -64,13 +75,15 @@ const CollaboratorsTab = () => {
   });
 
   const [search, setSearch] = useState("");
+  const [inviteSearchQuery, setInviteSearchQuery] = useState("");
+  const [isInvitePopoverOpen, setIsInvitePopoverOpen] = useState(false);
 
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
 
   const currentOrganization = useCurrentOrganization();
 
-  const { data: workspaceMembers, isPending } = useAllWorkspaceMembers(
+  const { data: workspaceMembers = [], isPending } = useAllWorkspaceMembers(
     { workspaceId: workspaceId || "" },
     {
       enabled: Boolean(workspaceId),
@@ -89,11 +102,24 @@ const CollaboratorsTab = () => {
     organizationId: currentOrganization?.id || "",
   });
 
-  const columns = useMemo(() => {
-    return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
-      DEFAULT_COLUMNS,
-      {},
+  const { data: invitedMembers = [], isPending: isInvitedMembersPending } =
+    useWorkspaceEmailInvites(
+      { workspaceId: workspaceId || "" },
+      {
+        enabled: Boolean(workspaceId),
+      },
     );
+
+  const columns = useMemo(() => {
+    return [
+      ...convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
+        DEFAULT_COLUMNS,
+        {},
+      ),
+      generateActionsColumDef({
+        cell: WorkspaceMemberActionsCell,
+      }),
+    ];
   }, []);
 
   const resizeConfig = useMemo(
@@ -106,13 +132,14 @@ const CollaboratorsTab = () => {
   );
 
   const tableData = useMemo(() => {
-    if (!workspaceMembers) return [];
+    const allUsers = [...workspaceMembers, ...invitedMembers];
 
     const searchLower = search.toLowerCase();
 
-    const mappedMembers = workspaceMembers.map((member): WorkspaceMember => {
+    const mappedMembers = allUsers.map((member): WorkspaceMember => {
+      const userName = (member as WorkspaceMember).userName;
       const userPermissions = permissionsData?.find(
-        (permission) => permission.userName === member.userName,
+        (permission) => permission.userName === userName,
       )?.permissions;
 
       const permissionByType = getPermissionByType(
@@ -124,7 +151,7 @@ const CollaboratorsTab = () => {
         ? WORKSPACE_ROLE_TYPE.owner
         : WORKSPACE_ROLE_TYPE.member;
 
-      const uniqueName = member.userName || member.email;
+      const uniqueName = userName || member.email;
 
       const memberInOrganization = organizationMembers?.find(
         (memberInOrg) =>
@@ -132,10 +159,10 @@ const CollaboratorsTab = () => {
       );
 
       return {
-        id: member.userName,
+        id: uniqueName,
         role,
         isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
-        permissions: userPermissions,
+        permissions: userPermissions || [],
         ...member,
       };
     });
@@ -143,16 +170,22 @@ const CollaboratorsTab = () => {
     return search
       ? mappedMembers.filter((member) => {
           return (
-            member.userName.toLowerCase().includes(searchLower) ||
+            member.userName?.toLowerCase().includes(searchLower) ||
             member.email.toLowerCase().includes(searchLower) ||
             member.role?.toLowerCase().includes(searchLower)
           );
         })
       : mappedMembers;
-  }, [workspaceMembers, permissionsData, organizationMembers, search]);
+  }, [
+    workspaceMembers,
+    invitedMembers,
+    permissionsData,
+    organizationMembers,
+    search,
+  ]);
 
   const renderTable = () => {
-    if (isPending || isPermissionsPending) {
+    if (isPending || isPermissionsPending || isInvitedMembersPending) {
       return <Loader />;
     }
 
@@ -171,13 +204,36 @@ const CollaboratorsTab = () => {
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_the_collaborators_tab]}
       />
-      <SearchInput
-        searchText={search}
-        setSearchText={setSearch}
-        placeholder="Search by name, email, or role"
-        className="mb-4 w-[320px]"
-        dimension="sm"
-      />
+      <div className="mb-4 flex items-center justify-between">
+        <SearchInput
+          searchText={search}
+          setSearchText={setSearch}
+          placeholder="Search by name, email, or role"
+          className="w-[320px]"
+          dimension="sm"
+        />
+        <DropdownMenu
+          open={isInvitePopoverOpen}
+          onOpenChange={(open) => {
+            setIsInvitePopoverOpen(open);
+            if (!open) {
+              setInviteSearchQuery("");
+            }
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button variant="default" size="sm">
+              <UserPlus className="mr-1.5 size-3.5" />
+              Add users
+            </Button>
+          </DropdownMenuTrigger>
+          <InviteUsersPopover
+            searchQuery={inviteSearchQuery}
+            setSearchQuery={setInviteSearchQuery}
+            onClose={() => setIsInvitePopoverOpen(false)}
+          />
+        </DropdownMenu>
+      </div>
       {renderTable()}
     </>
   );

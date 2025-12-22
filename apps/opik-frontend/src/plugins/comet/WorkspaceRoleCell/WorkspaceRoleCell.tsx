@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { getKeyForChangingRole } from "@/plugins/comet/lib/permissions";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
@@ -19,6 +20,7 @@ import useManageUsersRolePopover from "./useManageUsersRolePopover";
 const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();
   const row = context.row.original;
+  const isInvitedByEmail = !row.isMember;
 
   const currentUserName = useLoggedInUserName();
 
@@ -94,6 +96,22 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     setPermissions,
   );
 
+  const button = (
+    <button
+      className="-ml-1 flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (isInvitedByEmail) {
+          e.preventDefault();
+        }
+      }}
+      disabled={isInvitedByEmail}
+    >
+      <span className="min-w-0 truncate">{value}</span>
+      <ChevronDown className="size-4 shrink-0" />
+    </button>
+  );
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -101,21 +119,19 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     >
       <DropdownMenu
         onOpenChange={(open) => {
-          if (open) {
+          if (open && !isInvitedByEmail) {
             setPopoverData(row);
           }
         }}
       >
-        <DropdownMenuTrigger asChild>
-          <button
-            className="-ml-1 flex items-center gap-1 rounded-sm px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <span>{value}</span>
-            <ChevronDown className="size-4" />
-          </button>
+        <DropdownMenuTrigger asChild disabled={isInvitedByEmail}>
+          {isInvitedByEmail ? (
+            <TooltipWrapper content="Cannot change roles for users invited by email">
+              {button}
+            </TooltipWrapper>
+          ) : (
+            button
+          )}
         </DropdownMenuTrigger>
         <WorkspaceRolePopover {...decisionTreeProps} />
       </DropdownMenu>

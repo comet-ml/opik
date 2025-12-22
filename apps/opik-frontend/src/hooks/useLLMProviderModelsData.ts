@@ -514,6 +514,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-2.5-pro-preview-05-06",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW,
+      label: "google/gemini-3-flash-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_PREVIEW,
+      label: "google/gemini-3-pro-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -1424,6 +1432,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      label: "Gemini 3 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
       label: "Gemini 3 Pro",
