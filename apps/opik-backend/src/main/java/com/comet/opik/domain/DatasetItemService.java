@@ -16,6 +16,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -111,6 +112,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull TransactionTemplate template;
+    private final @NonNull OpikConfiguration config;
 
     @Override
     @WithSpan
@@ -418,14 +420,40 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
                         .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
             });
+        } else if (isVersioningEnabled()) {
+            // Versioning toggle is ON: fetch items from the latest version
+            log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
+                    datasetItemSearchCriteria, page, size);
+
+            return getItemsFromLatestVersion(datasetItemSearchCriteria, page, size);
         } else {
-            // Fetch draft (current) items from dataset_items table
+            // Versioning toggle is OFF: fetch draft (current) items from dataset_items table
             log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
                     datasetItemSearchCriteria, page, size);
 
             return dao.getItems(datasetItemSearchCriteria, page, size)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         }
+    }
+
+    private boolean isVersioningEnabled() {
+        return config.getServiceToggles().isDatasetVersioningEnabled();
+    }
+
+    private Mono<DatasetItemPage> getItemsFromLatestVersion(DatasetItemSearchCriteria criteria, int page, int size) {
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId());
+
+        if (latestVersion.isEmpty()) {
+            // No versions exist yet - return empty page
+            log.info("No versions found for dataset '{}', returning empty page", criteria.datasetId());
+            return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        }
+
+        UUID versionId = latestVersion.get().id();
+        log.info("Fetching items from latest version '{}' for dataset '{}'", versionId, criteria.datasetId());
+
+        return versionDao.getItems(criteria, page, size, versionId)
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
