@@ -109,6 +109,12 @@ class OpikTracer(BaseTracer):
                 Please note that in traces/spans where errors are intentionally skipped,
                 the output will be replaced with `ERROR_SKIPPED_OUTPUTS`. You can provide
                 the output manually using `opik_context.get_current_span_data().update(output=...)`.
+            opik_context_read_only_mode: Whether to adding/popping spans/traces to/from the context storage.
+                * If False (default), OpikTracer will add created spans/traces to the opik context, so if there is a @track-decorated
+                  function called inside the LangChain runnable, it will be attached to it's parent span from LangChain automatically.
+                * If True, OpikTracer will not modify the context storage and only create spans/traces from LangChain's Run objects.
+                  This might be useful when the environment doesn't support proper context isolation for concurrent operations and you
+                  want to avoid modifying the Opik context stack due to unsafety.
             **kwargs: Additional arguments passed to the parent class constructor.
         """
         validator = parameters_validator.create_validator(
