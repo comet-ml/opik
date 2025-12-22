@@ -134,8 +134,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
   // Filter scores to only those from selected rules
   const relevantScores = useMemo(
-    () =>
-      feedbackScores.filter((score) => score.name in scoreNameToRuleName),
+    () => feedbackScores.filter((score) => score.name in scoreNameToRuleName),
     [feedbackScores, scoreNameToRuleName],
   );
 
@@ -179,8 +178,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
         selectedRuleNames.map((ruleName) => {
           const variant = generateTagVariant(ruleName);
           const color =
-            (variant && TAG_VARIANTS_COLOR_MAP[variant]) ||
-            "#64748b"; // fallback color if variant is null/undefined or not mapped
+            (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b"; // fallback color if variant is null/undefined or not mapped
           return (
             <div
               key={ruleName}
