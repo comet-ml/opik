@@ -193,7 +193,7 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments"};
+            "lastUpdatedBy", "comments", "datasetVersionId"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -5745,6 +5745,300 @@ class ExperimentsResourceTest {
                     .metadata(thirdUpdateMetadata)
                     .build();
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+    }
+
+    @Test
+    @DisplayName("Create experiment with dataset version hash - should link to specific version")
+    void createExperimentWithDatasetVersionHash() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Commit dataset version
+        var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Test version")
+                .build();
+
+        var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+        UUID versionId = version.id();
+
+        // Create experiment with version ID
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionId(versionId)
+                .build();
+
+        var experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Verify experiment is linked to the correct version
+        var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+        assertThat(createdExperiment.datasetVersionId()).isEqualTo(versionId);
+
+        // Verify getDatasetItems returns the correct datasetVersionId
+        var datasetItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetItemsPage.datasetVersionId()).isEqualTo(versionId);
+    }
+
+    @Test
+    @DisplayName("Create experiment without version ID - should use latest version")
+    void createExperimentWithoutVersionId__shouldUseLatesVersion() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Commit dataset version
+        var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Test version")
+                .build();
+
+        var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+        UUID versionId = version.id();
+
+        // Create experiment without specifying version ID - should use latest
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .build();
+
+        var experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Verify experiment is linked to the latest version
+        var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+        assertThat(createdExperiment.datasetVersionId()).isEqualTo(versionId);
+
+        // Verify getDatasetItems returns the correct datasetVersionId (latest version)
+        var datasetItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetItemsPage.datasetVersionId()).isEqualTo(versionId);
+    }
+
+    @Test
+    @DisplayName("Experiment linked to version should only show dataset items from that version, not draft items added later")
+    void experimentLinkedToVersionShouldOnlyShowVersionItems() {
+        // Step 1: Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Step 2: Create 1 dataset item (will be part of the version)
+        var versionItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                .id(null)
+                .build();
+        var batch1 = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(List.of(versionItem))
+                .build();
+        datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+        // Get the created item to know its ID
+        var itemsBeforeVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(itemsBeforeVersion.content()).hasSize(1);
+        var versionItemId = itemsBeforeVersion.content().getFirst().id();
+
+        // Step 3: Commit a version (snapshot of the 1 item)
+        var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Version with 1 item")
+                .build();
+        var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+        // Step 4: Add 1 more item to the draft (after version was created)
+        var draftItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                .id(null)
+                .build();
+        var batch2 = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(List.of(draftItem))
+                .build();
+        datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+        // Verify draft now has 2 items (using the draft items endpoint)
+        var itemsAfterDraftAdd = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
+        assertThat(itemsAfterDraftAdd.content()).hasSize(2);
+        var draftItemId = itemsAfterDraftAdd.content().stream()
+                .filter(item -> !item.id().equals(versionItemId))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        // Step 5: Create experiment linked to the version
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionId(version.id())
+                .build();
+        var experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Verify experiment is linked to the version
+        var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+        assertThat(createdExperiment.datasetVersionId()).isEqualTo(version.id());
+
+        // Step 6: Get the version item IDs (not draft item IDs!)
+        // When an experiment is linked to a version, experiment items must reference version item IDs
+        var versionItems = datasetResourceClient.getDatasetItems(
+                datasetId, 1, 10, version.versionHash(), API_KEY, TEST_WORKSPACE);
+        assertThat(versionItems.content()).hasSize(1);
+        var versionItemIdFromVersion = versionItems.content().getFirst().id();
+
+        // Step 7: Create experiment items for BOTH dataset items (simulating SDK behavior)
+        // The SDK creates experiment items with version item IDs when experiment is linked to a version
+        String projectName = RandomStringUtils.randomAlphanumeric(10);
+        var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+        traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
+
+        // Create experiment item with version item ID (this should be included in results)
+        var experimentItemForVersionItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .datasetItemId(versionItemIdFromVersion)
+                .traceId(trace1.id())
+                .build();
+        // Create experiment item with draft item ID (this should be filtered out)
+        var experimentItemForDraftItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .datasetItemId(draftItemId)
+                .traceId(trace2.id())
+                .build();
+
+        experimentResourceClient.createExperimentItem(
+                Set.of(experimentItemForVersionItem, experimentItemForDraftItem),
+                API_KEY, TEST_WORKSPACE);
+
+        // Step 8: Query dataset items with experiment items
+        // Should only return the item from the version, NOT the draft item
+        var datasetItemsWithExperimentItems = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                datasetId, List.of(experimentId), API_KEY, TEST_WORKSPACE);
+
+        // ASSERTION: Should only return 1 item (the one from the version)
+        // The draft item should be filtered out because it's not part of the version
+        assertThat(datasetItemsWithExperimentItems.content()).hasSize(1);
+        // The returned ID should be the version item ID (for immutability)
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().id()).isEqualTo(versionItemIdFromVersion);
+
+        // Verify the experiment item is properly associated with the version item ID
+        assertThat(datasetItemsWithExperimentItems.content()).hasSize(1);
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems()).hasSize(1);
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems().getFirst().datasetItemId())
+                .isEqualTo(versionItemIdFromVersion);
+
+        // Verify getDatasetItems returns the correct datasetVersionId
+        assertThat(datasetItemsWithExperimentItems.datasetVersionId()).isEqualTo(version.id());
+
+        // CRITICAL: Verify that the dataset item has actual data (not empty)
+        // This assertion would have caught the bug where the join was using wrong IDs
+        var returnedItem = datasetItemsWithExperimentItems.content().getFirst();
+        assertThat(returnedItem.data()).isNotNull();
+        assertThat(returnedItem.data()).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("Get dataset items without version - should return null datasetVersionId for draft items")
+    void getDatasetItems__whenNoVersionExists__shouldReturnNullDatasetVersionId() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items (draft only, no version committed)
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Get dataset items - should return draft items with null datasetVersionId
+        var datasetItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+
+        assertThat(datasetItemsPage.content()).hasSize(2);
+        assertThat(datasetItemsPage.datasetVersionId()).isNull();
+    }
+
+    @Test
+    @DisplayName("List experiments with mixed version states - some with version, some without")
+    void listExperiments__whenMixedVersionStates__shouldReturnCorrectVersionIds() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Create first experiment WITHOUT version (old behavior)
+        var experiment1 = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionId(null) // Explicitly no version
+                .build();
+        UUID experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+
+        // Commit a version
+        var versionRequest = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Initial version")
+                .build();
+        var version = datasetResourceClient.commitVersion(datasetId, versionRequest, API_KEY, TEST_WORKSPACE);
+
+        // Create second experiment WITH version (new behavior)
+        var experiment2 = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionId(version.id())
+                .build();
+        UUID experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+
+        // Fetch experiments by ID to verify their dataset_version_id
+        try (var response1 = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path(experimentId1.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .get()) {
+
+            assertThat(response1.getStatus()).isEqualTo(200);
+            var exp1 = response1.readEntity(Experiment.class);
+
+            // CRITICAL ASSERTION: Experiment 1 should have NULL dataset_version_id
+            assertThat(exp1.datasetVersionId()).isNull();
+        }
+
+        try (var response2 = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path(experimentId2.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .get()) {
+
+            assertThat(response2.getStatus()).isEqualTo(200);
+            var exp2 = response2.readEntity(Experiment.class);
+
+            // CRITICAL ASSERTION: Experiment 2 should have the version ID
+            assertThat(exp2.datasetVersionId()).isEqualTo(version.id());
         }
     }
 }

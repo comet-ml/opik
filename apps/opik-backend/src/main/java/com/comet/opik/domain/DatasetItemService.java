@@ -25,7 +25,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -63,6 +62,8 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
+    Mono<DatasetItemPage> getDraftItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
+
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
@@ -80,6 +81,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService versionService;
+    private final @NonNull ExperimentDAO experimentDao;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -265,11 +267,28 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
             Visibility visibility) {
-        log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        return Mono
-                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
+        log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+
+        return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
+                .flatMapMany(dataset -> versionService.resolveVersionIdFromHashOrTagWithFallback(dataset.id(),
+                        request.version(), workspaceId)
+                        .flatMapMany(versionIdOpt -> {
+                            if (versionIdOpt.isPresent()) {
+                                // Version specified or latest version exists - stream from version
+                                UUID versionId = versionIdOpt.get();
+                                log.info("Streaming dataset items from version '{}' for dataset '{}'",
+                                        versionId, dataset.id());
+                                return versionDao.getItems(dataset.id(), versionId,
+                                        request.steamLimit(), request.lastRetrievedId());
+                            } else {
+                                // No version specified and no latest version - stream draft items
+                                log.info("No version exists for dataset '{}', streaming draft items",
+                                        dataset.id());
+                                return dao.getItems(dataset.id(), request.steamLimit(),
+                                        request.lastRetrievedId());
+                            }
+                        }));
     }
 
     @Override
@@ -375,34 +394,47 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
-            // Fetch versioned (immutable) items from dataset_item_versions table
-            log.info("Finding versioned dataset items by '{}', page '{}', size '{}'", datasetItemSearchCriteria, page,
-                    size);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.deferContextual(ctx -> {
-                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return versionService.resolveVersionIdFromHashOrTagWithFallback(datasetItemSearchCriteria.datasetId(),
+                    datasetItemSearchCriteria.versionHashOrTag(), workspaceId)
+                    .flatMap(versionIdOpt -> {
+                        if (versionIdOpt.isPresent()) {
+                            // Version specified or latest version exists - fetch from version
+                            UUID versionId = versionIdOpt.get();
+                            log.info("Finding dataset items from version '{}' for dataset '{}', page '{}', size '{}'",
+                                    versionId, datasetItemSearchCriteria.datasetId(), page, size);
 
-                // Resolve version hash/tag to version ID
-                UUID versionId = versionService.resolveVersionId(workspaceId,
-                        datasetItemSearchCriteria.datasetId(),
-                        datasetItemSearchCriteria.versionHashOrTag());
-                log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
-                        datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+                            return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
+                                    .map(itemPage -> itemPage.toBuilder().datasetVersionId(versionId).build())
+                                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                        } else {
+                            // No version specified and no latest version - fetch draft items
+                            log.info("No version exists for dataset '{}', fetching draft items, page '{}', size '{}'",
+                                    datasetItemSearchCriteria.datasetId(), page, size);
 
-                // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
-                return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
-                        .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-            });
-        } else {
-            // Fetch draft (current) items from dataset_items table
-            log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, page, size);
+                            return dao.getItems(datasetItemSearchCriteria, page, size)
+                                    .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(),
+                                            itemPage))
+                                    .defaultIfEmpty(
+                                            DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                        }
+                    });
+        });
+    }
 
-            return dao.getItems(datasetItemSearchCriteria, page, size)
-                    .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
-                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-        }
+    @Override
+    @WithSpan
+    public Mono<DatasetItemPage> getDraftItems(int page, int size,
+            @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        log.info("Finding draft dataset items for dataset '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria.datasetId(), page, size);
+
+        // Always fetch draft items regardless of version existence
+        return dao.getItems(datasetItemSearchCriteria, page, size)
+                .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
     private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {
