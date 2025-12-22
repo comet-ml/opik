@@ -338,7 +338,6 @@ class OpikTracer(BaseTracer):
             new_span_data=span_creation_result.span_data,
         )
 
-
     def _process_start_span(self, run: Run, allow_duplicating_root_span: bool) -> None:
         try:
             self._process_start_span_unsafe(run, allow_duplicating_root_span)
