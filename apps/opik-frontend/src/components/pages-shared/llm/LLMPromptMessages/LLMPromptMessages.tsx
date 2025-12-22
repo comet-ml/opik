@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
 import { arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import keyBy from "lodash/keyBy";
 import { Plus } from "lucide-react";
@@ -12,12 +12,18 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 
-import { generateDefaultLLMPromptMessage } from "@/lib/llm";
-import LLMPromptMessage from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
+import {
+  generateDefaultLLMPromptMessage,
+  getTextFromMessageContent,
+} from "@/lib/llm";
+import LLMPromptMessage, {
+  LLMPromptMessageHandle,
+} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
 import { Button } from "@/components/ui/button";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { DropdownOption } from "@/types/shared";
 import { ImprovePromptConfig } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
+import PromptVariablesList from "@/components/pages-shared/llm/PromptVariablesList/PromptVariablesList";
 
 interface MessageValidationError {
   content?: {
@@ -32,7 +38,7 @@ interface LLMPromptMessagesProps {
   hidePromptActions?: boolean;
   onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
-  hint?: string;
+  promptVariables?: string[];
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
   hideAddButton?: boolean;
@@ -46,12 +52,15 @@ const LLMPromptMessages = ({
   hidePromptActions = true,
   onChange,
   onAddMessage,
-  hint = "",
+  promptVariables = [],
   disableMedia = false,
   improvePromptConfig,
   hideAddButton = false,
   disabled = false,
 }: LLMPromptMessagesProps) => {
+  const lastFocusedMessageIdRef = useRef<string | null>(null);
+  const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
+
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -132,6 +141,47 @@ const LLMPromptMessages = ({
     [onChange, messages],
   );
 
+  const handleMessageFocus = useCallback((messageId: string) => {
+    lastFocusedMessageIdRef.current = messageId;
+  }, []);
+
+  const handleVariableClick = useCallback(
+    (variable: string) => {
+      if (messages.length === 0) return;
+
+      const variableText = `{{${variable}}}`;
+      const lastMessageId = messages[messages.length - 1].id;
+
+      // use last focused message if it still exists, otherwise fall back to last message
+      const focusedMessageExists =
+        lastFocusedMessageIdRef.current &&
+        messages.some((m) => m.id === lastFocusedMessageIdRef.current);
+
+      const targetMessageId = focusedMessageExists
+        ? lastFocusedMessageIdRef.current!
+        : lastMessageId;
+
+      const messageRef = messageRefsMap.current.get(targetMessageId);
+      if (messageRef) {
+        messageRef.insertAtCursor(variableText);
+        return;
+      }
+
+      // fallback: append to message content
+      const targetMessage = messages.find((m) => m.id === targetMessageId);
+      if (targetMessage) {
+        const currentText = getTextFromMessageContent(targetMessage.content);
+        const newText = currentText + variableText;
+        onChange(
+          messages.map((m) =>
+            m.id === targetMessageId ? { ...m, content: newText } : m,
+          ),
+        );
+      }
+    },
+    [messages, onChange],
+  );
+
   return (
     <DndContext
       sensors={sensors}
@@ -147,6 +197,11 @@ const LLMPromptMessages = ({
             {messages.map((message, messageIdx) => (
               <LLMPromptMessage
                 key={message.id}
+                ref={(handle) =>
+                  handle
+                    ? messageRefsMap.current.set(message.id, handle)
+                    : messageRefsMap.current.delete(message.id)
+                }
                 possibleTypes={possibleTypes}
                 errorText={validationErrors?.[messageIdx]?.content?.message}
                 hideRemoveButton={messages?.length === 1}
@@ -164,8 +219,10 @@ const LLMPromptMessages = ({
                 onClearOtherPromptLinks={handleClearOtherPromptLinks(
                   message.id,
                 )}
+                onFocus={() => handleMessageFocus(message.id)}
                 message={message}
                 disableMedia={disableMedia}
+                promptVariables={promptVariables}
                 improvePromptConfig={improvePromptConfig}
                 disabled={disabled}
               />
@@ -173,7 +230,17 @@ const LLMPromptMessages = ({
           </div>
         </SortableContext>
 
-        {hint && <p className="comet-body-s mt-2 text-light-slate">{hint}</p>}
+        {promptVariables.length > 0 && (
+          <p className="comet-body-s mt-2 text-light-slate">
+            Use {"{{variable_name}}"} syntax to reference dataset variables in
+            your prompt:{" "}
+            <PromptVariablesList
+              variables={promptVariables}
+              onVariableClick={handleVariableClick}
+              tooltipContent="Click to insert into prompt"
+            />
+          </p>
+        )}
 
         {!hideAddButton && (
           <Button

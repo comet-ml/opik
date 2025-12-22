@@ -93,3 +93,4 @@ const CompareOptimizationsConfiguration: React.FC<CompareOptimizationsConfigurat
 };
 
 export default CompareOptimizationsConfiguration;
+

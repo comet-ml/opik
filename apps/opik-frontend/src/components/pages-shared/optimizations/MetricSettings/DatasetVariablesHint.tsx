@@ -1,4 +1,5 @@
 import React from "react";
+import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface DatasetVariablesHintProps {
@@ -20,13 +21,14 @@ const DatasetVariablesHint: React.FC<DatasetVariablesHintProps> = ({
       {datasetVariables.map((variable, index) => (
         <span key={variable}>
           <TooltipWrapper content="Click to use">
-            <button
-              type="button"
-              className="font-medium text-muted-gray hover:text-foreground"
+            <Button
+              variant="minimal"
+              size="3xs"
               onClick={() => onSelect(variable)}
+              className="px-0 underline"
             >
               {variable}
-            </button>
+            </Button>
           </TooltipWrapper>
           {index < datasetVariables.length - 1 && ", "}
         </span>

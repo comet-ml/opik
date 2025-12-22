@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
@@ -54,6 +54,10 @@ const MESSAGE_TYPE_OPTIONS = [
   },
 ];
 
+export interface LLMPromptMessageHandle {
+  insertAtCursor: (text: string) => void;
+}
+
 interface LLMPromptMessageProps {
   message: LLMMessage;
   hideRemoveButton: boolean;
@@ -71,54 +75,76 @@ interface LLMPromptMessageProps {
     promptVersionId: string,
   ) => void;
   onClearOtherPromptLinks?: () => void;
+  onFocus?: () => void;
   disableMedia?: boolean;
+  promptVariables?: string[];
   improvePromptConfig?: ImprovePromptConfig;
   disabled?: boolean;
 }
 
-const LLMPromptMessage = ({
-  message,
-  hideRemoveButton,
-  hideDragButton,
-  hidePromptActions,
-  showAlwaysActionsPanel = false,
-  errorText,
-  possibleTypes = MESSAGE_TYPE_OPTIONS,
-  onChangeMessage,
-  onReplaceWithChatPrompt,
-  onClearOtherPromptLinks,
-  onDuplicateMessage,
-  onRemoveMessage,
-  disableMedia = true,
-  improvePromptConfig,
-  disabled = false,
-}: LLMPromptMessageProps) => {
-  const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const { id, role, content } = message;
+const LLMPromptMessage = forwardRef<LLMPromptMessageHandle, LLMPromptMessageProps>(
+  (
+    {
+      message,
+      hideRemoveButton,
+      hideDragButton,
+      hidePromptActions,
+      showAlwaysActionsPanel = false,
+      errorText,
+      possibleTypes = MESSAGE_TYPE_OPTIONS,
+      onChangeMessage,
+      onReplaceWithChatPrompt,
+      onClearOtherPromptLinks,
+      onFocus,
+      onDuplicateMessage,
+      onRemoveMessage,
+      disableMedia = true,
+      promptVariables,
+      improvePromptConfig,
+      disabled = false,
+    },
+    ref,
+  ) => {
+    const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const { id, role, content } = message;
 
-  const { active, attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
+    const { active, attributes, listeners, setNodeRef, transform, transition } =
+      useSortable({ id });
 
-  const editorViewRef = useRef<EditorView | null>(null);
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+    const editorViewRef = useRef<EditorView | null>(null);
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+    };
 
-  const {
-    localText,
-    images,
-    videos,
-    audios,
-    setImages,
-    setVideos,
-    setAudios,
-    handleContentChange,
-  } = useMessageContent({
-    content,
-    onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
-  });
+    const {
+      localText,
+      images,
+      videos,
+      audios,
+      setImages,
+      setVideos,
+      setAudios,
+      handleContentChange,
+    } = useMessageContent({
+      content,
+      onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
+    });
+
+    useImperativeHandle(ref, () => ({
+      insertAtCursor: (text: string) => {
+        const view = editorViewRef.current;
+        if (view) {
+          const cursorPos = view.state.selection.main.head;
+          view.dispatch({
+            changes: { from: cursorPos, insert: text },
+            selection: { anchor: cursorPos + text.length },
+          });
+          view.focus();
+        }
+      },
+    }));
 
   const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
     if (
@@ -244,6 +270,7 @@ const LLMPromptMessage = ({
                 onCreateEditor={(view) => {
                   editorViewRef.current = view;
                 }}
+                onFocus={onFocus}
                 theme={codeMirrorPromptTheme}
                 value={localText}
                 onChange={handleContentChange}
@@ -265,6 +292,7 @@ const LLMPromptMessage = ({
                   setImages={setImages}
                   setVideos={setVideos}
                   setAudios={setAudios}
+                  promptVariables={promptVariables}
                   disabled={disabled}
                 />
               )}
@@ -275,6 +303,9 @@ const LLMPromptMessage = ({
       {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
     </>
   );
-};
+  },
+);
+
+LLMPromptMessage.displayName = "LLMPromptMessage";
 
 export default LLMPromptMessage;

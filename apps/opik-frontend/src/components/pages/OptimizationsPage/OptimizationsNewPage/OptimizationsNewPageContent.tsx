@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useFormContext } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/form";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import useAppStore from "@/store/AppStore";
+import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
@@ -57,8 +58,16 @@ const OptimizationsNewPageContent: React.FC = () => {
   const { setLastSessionRunId } = useLastOptimizationRun();
   const { mutateAsync: createOptimization, isPending: isCreatingOptimization } = useOptimizationCreateMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const form = useFormContext<OptimizationConfigFormType>();
+  const name = form.watch("name");
+
+  useEffect(() => {
+    const breadcrumbTitle = name ? `${name} (new)` : "... (new)";
+    setBreadcrumbParam("optimizationsNew", "new", breadcrumbTitle);
+    return () => setBreadcrumbParam("optimizationsNew", "new", "");
+  }, [name, setBreadcrumbParam]);
 
   const { data: datasetsData } = useDatasetsList({
     workspaceName,
@@ -77,7 +86,7 @@ const OptimizationsNewPageContent: React.FC = () => {
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
-  const { datasetSample, datasetVariables, variablesHint } = useDatasetSamplePreview({
+  const { datasetSample, datasetVariables } = useDatasetSamplePreview({
     datasetId,
   });
 
@@ -307,7 +316,7 @@ const OptimizationsNewPageContent: React.FC = () => {
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder="Enter optimization name"
+                    placeholder="Enter optimization name, or the name will be generated automatically"
                     className="h-10"
                   />
                 </FormControl>
@@ -358,7 +367,7 @@ const OptimizationsNewPageContent: React.FC = () => {
                       possibleTypes={OPTIMIZATION_MESSAGE_TYPE_OPTIONS}
                       hidePromptActions
                       disableMedia
-                      hint={variablesHint}
+                      promptVariables={datasetVariables}
                       onChange={(messages: LLMMessage[]) => {
                         field.onChange(messages);
                       }}

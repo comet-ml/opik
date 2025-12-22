@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import PromptVariablesList from "@/components/pages-shared/llm/PromptVariablesList/PromptVariablesList";
 
 export type MediaType = "image" | "video" | "audio";
 
@@ -17,6 +18,7 @@ export interface AddMediaPopoverProps {
   maxItems?: number;
   align?: "start" | "end";
   onOpenChange?: (open: boolean) => void;
+  promptVariables?: string[];
   children: React.ReactNode;
 }
 
@@ -53,11 +55,13 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
   maxItems,
   align = "start",
   onOpenChange,
+  promptVariables = [],
   children,
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [newItem, setNewItem] = useState<string>("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const resolvedMaxItems = maxItems ?? DEFAULT_MAX_ITEMS[type];
 
@@ -81,15 +85,6 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
     return "Enter audio URL or template variable";
   }, [type]);
 
-  const helperText = useMemo(() => {
-    if (type === "image") {
-      return "You can add an image URL or template variable. ";
-    }
-    if (type === "video") {
-      return "You can add a video URL or template variable. ";
-    }
-    return "You can add an audio URL or template variable. ";
-  }, [type]);
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
@@ -98,6 +93,12 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
     if (!isOpen) {
       setNewItem("");
     }
+  };
+
+  const handleVariableClick = (variable: string) => {
+    const variableText = `{{${variable}}}`;
+    setNewItem(variableText);
+    inputRef.current?.focus();
   };
 
   const handleAddItem = () => {
@@ -150,9 +151,11 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
+                ref={inputRef}
                 placeholder={placeholder}
                 value={newItem}
                 onChange={(e) => setNewItem(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     handleAddItem();
@@ -164,10 +167,15 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
               Add
             </Button>
           </div>
-          <p className="comet-body-xs text-muted-foreground">
-            {helperText}
-            <code>{`{{${type}}}`}</code>
-          </p>
+          {promptVariables.length > 0 && (
+            <p className="comet-body-xs text-light-slate">
+              Available variables:{" "}
+              <PromptVariablesList
+                variables={promptVariables}
+                onVariableClick={handleVariableClick}
+              />
+            </p>
+          )}
         </div>
       </PopoverContent>
     </Popover>
