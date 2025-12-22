@@ -32,6 +32,18 @@ public interface DatasetItemVersionDAO {
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria searchCriteria, int page, int size, UUID versionId);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
+
+    /**
+     * Copies items from a source version to a new target version directly within dataset_item_versions.
+     * Each copied item gets a new unique ID but retains the same dataset_item_id.
+     *
+     * @param datasetId the dataset ID
+     * @param sourceVersionId the source version to copy from
+     * @param targetVersionId the new version ID to copy to
+     * @param uuids pre-generated UUIDs for the new rows
+     * @return the number of items copied
+     */
+    Mono<Long> copyVersionItems(UUID datasetId, UUID sourceVersionId, UUID targetVersionId, List<UUID> uuids);
 }
 
 @Singleton
@@ -132,6 +144,56 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
+            """;
+
+    private static final String COPY_VERSION_ITEMS = """
+            INSERT INTO dataset_item_versions (
+                id,
+                dataset_item_id,
+                dataset_id,
+                dataset_version_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at,
+                item_last_updated_at,
+                item_created_by,
+                item_last_updated_by,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            )
+            SELECT
+                arrayElement(:uuids, row_number() OVER ()) as new_id,
+                src.dataset_item_id,
+                src.dataset_id,
+                :targetVersionId as dataset_version_id,
+                src.data,
+                src.metadata,
+                src.source,
+                src.trace_id,
+                src.span_id,
+                src.tags,
+                src.item_created_at,
+                src.item_last_updated_at,
+                src.item_created_by,
+                src.item_last_updated_by,
+                now64(9) as created_at,
+                now64(9) as last_updated_at,
+                :user_name as created_by,
+                :user_name as last_updated_by,
+                src.workspace_id
+            FROM dataset_item_versions AS src
+            WHERE src.dataset_id = :datasetId
+            AND src.dataset_version_id = :sourceVersionId
+            AND src.workspace_id = :workspace_id
+            ORDER BY (src.workspace_id, src.dataset_id, src.dataset_version_id, src.id) DESC, src.last_updated_at DESC
+            LIMIT 1 BY src.id
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -243,6 +305,45 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
                     .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> copyVersionItems(@NonNull UUID datasetId, @NonNull UUID sourceVersionId,
+            @NonNull UUID targetVersionId, @NonNull List<UUID> uuids) {
+        log.info("Copying items from version '{}' to version '{}' for dataset '{}' using '{}' pre-generated UUIDs",
+                sourceVersionId, targetVersionId, datasetId, uuids.size());
+
+        return asyncTemplate.nonTransaction(connection -> {
+            // Convert UUIDs to String array for ClickHouse binding
+            String[] uuidStrings = uuids.stream()
+                    .map(UUID::toString)
+                    .toArray(String[]::new);
+
+            var statement = connection.createStatement(COPY_VERSION_ITEMS)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("sourceVersionId", sourceVersionId.toString())
+                    .bind("targetVersionId", targetVersionId.toString())
+                    .bind("uuids", uuidStrings);
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+                statement.bind("user_name", userName);
+                log.debug("Copying items: datasetId='{}', sourceVersionId='{}', targetVersionId='{}', " +
+                        "workspaceId='{}', userName='{}'",
+                        datasetId, sourceVersionId, targetVersionId, workspaceId, userName);
+
+                return Flux.from(statement.execute())
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .doOnSuccess(copiedCount -> log.info(
+                                "Copied '{}' items from version '{}' to version '{}' for dataset '{}'",
+                                copiedCount, sourceVersionId, targetVersionId, datasetId))
+                        .doFinally(signalType -> endSegment(segment));
+            });
         });
     }
 }

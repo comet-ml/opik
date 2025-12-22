@@ -1215,4 +1215,142 @@ class DatasetVersionResourceTest {
             assertThat(diff2.statistics().itemsAdded()).isEqualTo(1);
         }
     }
+
+    @Nested
+    @DisplayName("Restore Dataset Version:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RestoreVersion {
+
+        @Test
+        @DisplayName("Success: Restore to previous version creates new version")
+        void restoreVersion__whenNotLatest__thenCreateNewVersion() {
+            // Given - Create dataset with 3 items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(3);
+
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Commit version 1
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft: delete 1 item
+            var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            var createdItems = createdItemsPage.content();
+            var itemToDelete = createdItems.get(0);
+            datasetResourceClient.deleteDatasetItems(List.of(itemToDelete.id()), API_KEY, TEST_WORKSPACE);
+
+            // Commit version 2 (now has 2 items)
+            var version2 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(version2.itemsTotal()).isEqualTo(2);
+
+            // When - Restore to v1
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then - Should have created a new version with 3 items
+            assertThat(restoredVersion.id()).isNotEqualTo(version1.id()).isNotEqualTo(version2.id());
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(3);
+            assertThat(restoredVersion.changeDescription()).contains("Restored from version: v1");
+
+            // Verify the items in the latest version
+            var latestItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10,
+                    DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE);
+            assertThat(latestItems.content()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Success: Restore to latest version returns it as-is (no-op)")
+        void restoreVersion__whenLatest__thenNoOp() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(2);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit version
+            var version = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Restore to v1 (which is already latest)
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then - Should return the same version (no-op)
+            assertThat(restoredVersion.id()).isEqualTo(version.id());
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Success: Restore version by hash instead of tag")
+        void restoreVersion__whenByHash__thenSuccess() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(2);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit version 1
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add more items and commit version 2
+            var newItems = generateDatasetItems(1);
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Restore to v1 by hash
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, version1.versionHash(),
+                    API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify restore succeeded
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Failure: Restore to non-existent version returns 404")
+        void restoreVersion__whenVersionNotFound__then404() {
+            // Given - Create dataset
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // When/Then - Restore to non-existent version
+            try (var response = datasetResourceClient.callRestoreVersion(datasetId, "non-existent", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+    }
 }
