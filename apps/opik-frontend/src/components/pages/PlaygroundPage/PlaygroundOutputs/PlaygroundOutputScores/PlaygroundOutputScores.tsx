@@ -176,7 +176,6 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
       {/* Render loading tags for pending scores (only when no scores loaded yet) */}
       {isWaitingForScores &&
-        relevantScores.length === 0 &&
         selectedRuleNames.map((ruleName) => {
           const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(ruleName)!];
           return (
