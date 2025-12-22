@@ -1,7 +1,7 @@
 import React from "react";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import { ColumnDef } from "@tanstack/react-table";
-import { ROW_HEIGHT } from "@/types/shared";
+import { ROW_HEIGHT, OnChangeFn } from "@/types/shared";
 import { Experiment } from "@/types/datasets";
 import { Card } from "@/components/ui/card";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -39,9 +39,9 @@ interface CompareOptimizationsTrialsTableProps {
   rowHeight: ROW_HEIGHT;
   noDataText: string;
   sortedColumns: ColumnSort[];
-  onSortChange: (sorting: ColumnSort[]) => void;
+  onSortChange: OnChangeFn<ColumnSort[]>;
   columnsWidth: Record<string, number>;
-  onColumnsWidthChange: (width: Record<string, number>) => void;
+  onColumnsWidthChange: OnChangeFn<Record<string, number>>;
 }
 
 const CompareOptimizationsTrialsTable: React.FC<
