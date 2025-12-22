@@ -89,7 +89,7 @@ class OpikTracer(BaseTracer):
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
         thread_id: Optional[str] = None,
         skip_error_callback: Optional[SkipErrorCallback] = None,
-        context_modification_enabled: bool = True,
+        opik_context_read_only_mode: bool = False,
         **kwargs: Any,
     ) -> None:
         """
@@ -162,7 +162,7 @@ class OpikTracer(BaseTracer):
 
         self._skip_error_callback = skip_error_callback
 
-        self._context_modification_enabled = context_modification_enabled
+        self._opik_context_read_only_mode = opik_context_read_only_mode
 
     def set_graph(self, graph: "Graph") -> None:
         """
@@ -210,7 +210,7 @@ class OpikTracer(BaseTracer):
                 langchain_helpers.split_big_langgraph_outputs(outputs)
             )
 
-        if self._context_modification_enabled:
+        if not self._opik_context_read_only_mode:
             self._ensure_no_hanging_opik_tracer_spans()
 
         span_data = self._span_data_map.get(run.id)
@@ -253,7 +253,7 @@ class OpikTracer(BaseTracer):
 
         assert trace_ is not None
         self._created_traces.append(trace_)
-        if self._context_modification_enabled:
+        if not self._opik_context_read_only_mode:
             self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
@@ -485,7 +485,7 @@ class OpikTracer(BaseTracer):
         # This is the first run for the chain.
         root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
         if root_run_result.new_trace_data is not None:
-            if self._context_modification_enabled:
+            if not self._opik_context_read_only_mode:
                 self._opik_context_storage.set_trace_data(
                     root_run_result.new_trace_data
                 )
@@ -522,7 +522,7 @@ class OpikTracer(BaseTracer):
                 trace_data=root_run_result.new_trace_data,
             )
 
-            if self._context_modification_enabled:
+            if not self._opik_context_read_only_mode:
                 self._opik_context_storage.add_span_data(root_run_result.new_span_data)
 
             if (
@@ -572,7 +572,7 @@ class OpikTracer(BaseTracer):
                 parent_run_id
             ]
 
-        if self._context_modification_enabled:
+        if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
 
         if (
@@ -637,7 +637,7 @@ class OpikTracer(BaseTracer):
             trace_data=None,
         )
 
-        if self._context_modification_enabled:
+        if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
 
         if (
@@ -694,7 +694,7 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
-            if span_data is not None and self._context_modification_enabled:
+            if span_data is not None and not self._opik_context_read_only_mode:
                 self._opik_context_storage.trim_span_data_stack_to_certain_span(
                     span_id=span_data.id
                 )
@@ -740,7 +740,7 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
-            if span_data is not None and self._context_modification_enabled:
+            if span_data is not None and not self._opik_context_read_only_mode:
                 self._opik_context_storage.trim_span_data_stack_to_certain_span(
                     span_id=span_data.id
                 )

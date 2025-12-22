@@ -91,14 +91,14 @@ def _get_opik_tracer_instance() -> "OpikTracer":
             else current_span_data.project_name
         )
 
-    # OPIK-3505: Why context_modification_enabled=False?
+    # OPIK-3505: Why opik_context_read_only_mode=True?
     #
     # Problem: Ragas runs metrics concurrently under the hood with a manual management
     # of the event loop. It was discovered that these metrics share the same context and so
     # ContextVar used in Opik context storage can't be modified safely by them because concurrent
     # operations share the same span stack.
     #
-    # Solution: Disable context modification (context_modification_enabled=False).
+    # Solution: Disable context modification (opik_context_read_only_mode=True).
     # OpikTracer will still create spans/traces and track parent-child relationships
     # using LangChain's Run IDs, but won't modify the shared ContextVar storage.
     #
@@ -106,7 +106,7 @@ def _get_opik_tracer_instance() -> "OpikTracer":
     # to the Ragas spans. This is acceptable since Ragas metrics are self-contained
     # and don't typically call user-defined tracked functions.
     opik_tracer = OpikTracer(
-        context_modification_enabled=False,
+        opik_context_read_only_mode=True,
         project_name=project_name,
     )
     return opik_tracer
