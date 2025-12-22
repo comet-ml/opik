@@ -49,6 +49,7 @@ import {
 } from "@/constants/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import DatasetSamplePreview from "./DatasetSamplePreview";
 
 const getBreadcrumbTitle = (name: string) =>
@@ -396,13 +397,14 @@ const OptimizationsNewPageContent: React.FC = () => {
             name="optimizerType"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="comet-body-s-accented">
+                <FormLabel className="comet-body-s-accented flex items-center gap-1">
                   Algorithm
+                  <ExplainerIcon
+                    {...EXPLAINERS_MAP[
+                      EXPLAINER_ID.whats_the_algorithm_section
+                    ]}
+                  />
                 </FormLabel>
-                <p className="text-xs text-muted-slate">
-                  Choose how the optimizer explores and improves prompt
-                  variations
-                </p>
                 <FormControl>
                   <div className="flex items-center gap-2">
                     <SelectBox
@@ -439,12 +441,14 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="datasetId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="comet-body-s-accented">
+                  <FormLabel className="comet-body-s-accented flex items-center gap-1">
                     Dataset
+                    <ExplainerIcon
+                      {...EXPLAINERS_MAP[
+                        EXPLAINER_ID.whats_the_dataset_section
+                      ]}
+                    />
                   </FormLabel>
-                  <p className="text-xs text-muted-slate">
-                    Data used to evaluate prompt variations
-                  </p>
                   <FormControl>
                     <DatasetSelectBox
                       value={field.value}
@@ -470,12 +474,12 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="metricType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="comet-body-s-accented">
+                  <FormLabel className="comet-body-s-accented flex items-center gap-1">
                     Metric
+                    <ExplainerIcon
+                      {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_metric_section]}
+                    />
                   </FormLabel>
-                  <p className="text-xs text-muted-slate">
-                    How to measure and compare prompt performance
-                  </p>
                   <FormControl>
                     <SelectBox
                       value={field.value}

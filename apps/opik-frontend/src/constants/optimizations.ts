@@ -76,12 +76,12 @@ export const OPTIMIZER_OPTIONS = [
   {
     value: OPTIMIZER_TYPE.GEPA,
     label: "GEPA optimizer",
-    description: "Tries many prompt variations, keeps the best",
+    description: "Tries many prompt variations and keeps the best ones.",
   },
   {
     value: OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE,
     label: "Hierarchical Reflective",
-    description: "Analyzes outputs and rewrites to fix issues",
+    description: "Analyzes failures and rewrites prompts to fix issues.",
   },
 ];
 
@@ -89,22 +89,22 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
   {
     value: METRIC_TYPE.EQUALS,
     label: "Equals",
-    description: "Exact string match between output and expected value",
+    description: "Checks for an exact match with the expected output.",
   },
   {
     value: METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
     label: "JSON Schema Validator",
-    description: "Validates output structure against a JSON schema",
+    description: "Validates output structure against a JSON schema.",
   },
   {
     value: METRIC_TYPE.G_EVAL,
     label: "Custom (G-Eval)",
-    description: "LLM-based evaluation with custom criteria and scoring",
+    description: "Uses an LLM to score outputs with custom criteria.",
   },
   {
     value: METRIC_TYPE.LEVENSHTEIN,
     label: "Levenshtein",
-    description: "Measures edit distance between output and expected text",
+    description: "Measures edit distance between output and expected text.",
   },
 ];
 

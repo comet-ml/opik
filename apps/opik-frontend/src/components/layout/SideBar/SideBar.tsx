@@ -25,8 +25,6 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
-import { OPTIMIZATION_STATUS } from "@/types/optimizations";
-import { COLUMN_TYPE } from "@/types/shared";
 import useAlertsList from "@/api/alerts/useAlertsList";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import { OnChangeFn } from "@/types/shared";
