@@ -117,7 +117,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
         const data = query.state.data;
         const hasScores =
           data?.feedback_scores && data.feedback_scores.length > 0;
-        const firstFetchTime = query.state.dataUpdatedAt || Date.now();
+        const firstFetchTime = query.state.dataFetchedAt || Date.now();
         const elapsedTime = Date.now() - firstFetchTime;
 
         if (hasScores || elapsedTime > MAX_REFETCH_TIME) {
