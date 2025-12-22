@@ -46,6 +46,9 @@ import {
   OPTIMIZER_OPTIONS,
   OPTIMIZATION_METRIC_OPTIONS,
 } from "@/constants/optimizations";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import DatasetSamplePreview from "./DatasetSamplePreview";
 
 const OptimizationsNewPageContent: React.FC = () => {
@@ -74,7 +77,7 @@ const OptimizationsNewPageContent: React.FC = () => {
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
-  const { datasetSample, variablesHint } = useDatasetSamplePreview({
+  const { datasetSample, datasetVariables, variablesHint } = useDatasetSamplePreview({
     datasetId,
   });
 
@@ -273,7 +276,7 @@ const OptimizationsNewPageContent: React.FC = () => {
 
   return (
     <div className="py-6 w-full">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <h1 className="comet-title-l">Optimize a prompt</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleCancel}>
@@ -288,6 +291,10 @@ const OptimizationsNewPageContent: React.FC = () => {
           </Button>
         </div>
       </div>
+      <ExplainerDescription
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimization_config]}
+        className="mb-6"
+      />
 
       <div className="flex gap-6">
         <div className="flex-1 space-y-6">
@@ -378,9 +385,14 @@ const OptimizationsNewPageContent: React.FC = () => {
             name="optimizerType"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="comet-body-s-accented">
-                  Algorithm
-                </FormLabel>
+                <div className="flex items-center gap-1">
+                  <FormLabel className="comet-body-s-accented">
+                    Algorithm
+                  </FormLabel>
+                  <ExplainerIcon
+                    {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_algorithm_settings]}
+                  />
+                </div>
                 <FormControl>
                   <div className="flex items-center gap-2">
                     <SelectBox
@@ -417,9 +429,14 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="datasetId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="comet-body-s-accented">
-                    Dataset
-                  </FormLabel>
+                  <div className="flex items-center gap-1">
+                    <FormLabel className="comet-body-s-accented">
+                      Dataset
+                    </FormLabel>
+                    <ExplainerIcon
+                      {...EXPLAINERS_MAP[EXPLAINER_ID.whats_a_dataset]}
+                    />
+                  </div>
                   <FormControl>
                     <DatasetSelectBox
                       value={field.value}
@@ -445,9 +462,14 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="metricType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="comet-body-s-accented">
-                    Metric
-                  </FormLabel>
+                  <div className="flex items-center gap-1">
+                    <FormLabel className="comet-body-s-accented">
+                      Metric
+                    </FormLabel>
+                    <ExplainerIcon
+                      {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_metric_settings]}
+                    />
+                  </div>
                   <FormControl>
                     <SelectBox
                       value={field.value}
@@ -472,6 +494,7 @@ const OptimizationsNewPageContent: React.FC = () => {
                     metricType={metricType}
                     configs={paramsField.value as Partial<MetricParameters>}
                     onChange={handleMetricParamsChange}
+                    datasetVariables={datasetVariables}
                   />
                   {form.formState.errors.metricParams && (
                     <p className="mt-2 text-sm text-destructive">

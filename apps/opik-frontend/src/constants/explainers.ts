@@ -83,6 +83,7 @@ export enum EXPLAINER_ID {
   whats_an_alert = "whats_an_alert",
   what_are_dashboards = "what_are_dashboards",
   whats_the_optimization_studio = "whats_the_optimization_studio",
+  whats_the_optimization_config = "whats_the_optimization_config",
   whats_the_metric_settings = "whats_the_metric_settings",
   whats_the_algorithm_settings = "whats_the_algorithm_settings",
   // Metric config explainers
@@ -595,6 +596,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_the_optimization_studio,
     description:
       "Test multiple variations for your agent or prompt to find the best one based on your metrics.",
+    docLink: "/agent_optimization/overview",
+  },
+  [EXPLAINER_ID.whats_the_optimization_config]: {
+    id: EXPLAINER_ID.whats_the_optimization_config,
+    description:
+      "Configure your prompt, dataset, evaluation metric, and optimization algorithm to automatically find the best prompt variation.",
     docLink: "/agent_optimization/overview",
   },
   [EXPLAINER_ID.whats_the_metric_settings]: {

@@ -73,18 +73,39 @@ export const OPTIMIZATION_MESSAGE_TYPE_OPTIONS = [
 ];
 
 export const OPTIMIZER_OPTIONS = [
-  { value: OPTIMIZER_TYPE.GEPA, label: "GEPA optimizer" },
+  {
+    value: OPTIMIZER_TYPE.GEPA,
+    label: "GEPA optimizer",
+    description: "Tries many prompt variations, keeps the best",
+  },
   {
     value: OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE,
     label: "Hierarchical Reflective",
+    description: "Analyzes outputs and rewrites to fix issues",
   },
 ];
 
 export const OPTIMIZATION_METRIC_OPTIONS = [
-  { value: METRIC_TYPE.EQUALS, label: "Equals" },
-  { value: METRIC_TYPE.JSON_SCHEMA_VALIDATOR, label: "JSON Schema Validator" },
-  { value: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" },
-  { value: METRIC_TYPE.LEVENSHTEIN, label: "Levenshtein" },
+  {
+    value: METRIC_TYPE.EQUALS,
+    label: "Equals",
+    description: "Exact string match between output and expected value",
+  },
+  {
+    value: METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
+    label: "JSON Schema Validator",
+    description: "Validates output structure against a JSON schema",
+  },
+  {
+    value: METRIC_TYPE.G_EVAL,
+    label: "Custom (G-Eval)",
+    description: "LLM-based evaluation with custom criteria and scoring",
+  },
+  {
+    value: METRIC_TYPE.LEVENSHTEIN,
+    label: "Levenshtein",
+    description: "Measures edit distance between output and expected text",
+  },
 ];
 
 // Type for demo dataset items - keys should match template variables

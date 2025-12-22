@@ -29,6 +29,7 @@ interface MetricConfigsProps {
   size?: ButtonProps["size"];
   disabled?: boolean;
   inline?: boolean;
+  datasetVariables?: string[];
 }
 
 const MetricConfigs = ({
@@ -38,6 +39,7 @@ const MetricConfigs = ({
   size = "icon-sm",
   disabled: disabledProp = false,
   inline = false,
+  datasetVariables = [],
 }: MetricConfigsProps) => {
   const getMetricForm = () => {
     if (metricType === METRIC_TYPE.EQUALS) {
@@ -45,6 +47,7 @@ const MetricConfigs = ({
         <EqualsMetricConfigs
           configs={configs as Partial<EqualsMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }
@@ -54,6 +57,7 @@ const MetricConfigs = ({
         <JsonSchemaValidatorMetricConfigs
           configs={configs as Partial<JsonSchemaValidatorMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }
@@ -72,6 +76,7 @@ const MetricConfigs = ({
         <LevenshteinMetricConfigs
           configs={configs as Partial<LevenshteinMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }

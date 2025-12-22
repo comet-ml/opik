@@ -1,7 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, {
   OPTIMIZATION_KEY,
-  OPTIMIZATIONS_STUDIO_REST_ENDPOINT,
+  OPTIMIZATIONS_REST_ENDPOINT,
   QueryConfig,
 } from "@/api/api";
 import { Optimization } from "@/types/optimizations";
@@ -11,7 +11,7 @@ export const getOptimizationById = async (
   { optimizationId }: UseOptimizationByIdParams,
 ) => {
   const { data } = await api.get(
-    OPTIMIZATIONS_STUDIO_REST_ENDPOINT + optimizationId,
+    OPTIMIZATIONS_REST_ENDPOINT + optimizationId,
     {
       signal,
     },

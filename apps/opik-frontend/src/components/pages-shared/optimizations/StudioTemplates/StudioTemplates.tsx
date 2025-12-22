@@ -21,7 +21,6 @@ const StudioTemplates: React.FC = () => {
         Run an optimization
       </h2>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Start from scratch card */}
         <Card className="cursor-pointer transition-shadow hover:shadow-md">
           <Link
             to="/$workspaceName/optimizations/new"
@@ -45,7 +44,6 @@ const StudioTemplates: React.FC = () => {
           </Link>
         </Card>
 
-        {/* Template cards */}
         {OPTIMIZATION_DEMO_TEMPLATES.map((template) => (
           <Card
             key={template.id}

@@ -3,7 +3,7 @@ import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
   OptimizationStudioConfig,
-  OptimizationStudio,
+  Optimization,
 } from "@/types/optimizations";
 import { LLMMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
@@ -158,7 +158,7 @@ const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
 };
 
 export const convertOptimizationStudioToFormData = (
-  optimization?: Partial<OptimizationStudio> | null,
+  optimization?: Partial<Optimization> | null,
 ): OptimizationConfigFormType => {
   const existingConfig = optimization?.studio_config?.llm_model?.parameters as
     | LLMPromptConfigsType
