@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.56](https://img.shields.io/badge/Version-1.9.56-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.56](https://img.shields.io/badge/AppVersion-1.9.56-informational?style=flat-square)
+![Version: 1.9.61](https://img.shields.io/badge/Version-1.9.61-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.61](https://img.shields.io/badge/AppVersion-1.9.61-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -86,7 +86,7 @@ Call opik api on http://localhost:5173/api
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.5.6 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.7 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.8 |
 
 ## Values
 
@@ -285,9 +285,6 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.enabled | bool | `false` |  |
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
-| component.frontend.logFormat | string | `"logger-json"` |  |
-| component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
-| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
@@ -301,12 +298,6 @@ Call opik api on http://localhost:5173/api
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
-| component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/conf.d/"` |  |
-| component.frontend.volumeMounts[0].name | string | `"opik-frontend-nginx"` |  |
-| component.frontend.volumes[0].configMap.items[0].key | string | `"default.conf"` |  |
-| component.frontend.volumes[0].configMap.items[0].path | string | `"default.conf"` |  |
-| component.frontend.volumes[0].configMap.name | string | `"opik-frontend-nginx"` |  |
-| component.frontend.volumes[0].name | string | `"opik-frontend-nginx"` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
@@ -408,6 +399,8 @@ Call opik api on http://localhost:5173/api
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
 | zookeeper.extraEnvVars[0].value | string | `"512M"` |  |
+| zookeeper.extraEnvVars[1].name | string | `"ZOO_DATA_DIR"` |  |
+| zookeeper.extraEnvVars[1].value | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |
 | zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
@@ -420,6 +413,7 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
+| zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------
 Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)
