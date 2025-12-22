@@ -590,6 +590,9 @@ clickhouse:
 zookeeper:
   enabled: true
   fullnameOverride: opik-zookeeper
+  # Server ID offset for Zookeeper cluster. Default is 1 for compatibility with
+  # previous Bitnami-based installations. Set to 0 only for fresh installs.
+  serverIdOffset: 1
   image:
     registry: docker.io
     repository: zookeeper
@@ -616,3 +619,4 @@ zookeeper:
     #     memory: 1500Mi
     #   limits:
     #     memory: 2Gi
+
