@@ -177,7 +177,10 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
       {/* Render loading tags for pending scores (only when no scores loaded yet) */}
       {isWaitingForScores &&
         selectedRuleNames.map((ruleName) => {
-          const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(ruleName)!];
+          const variant = generateTagVariant(ruleName);
+          const color =
+            (variant && TAG_VARIANTS_COLOR_MAP[variant]) ||
+            "#64748b"; // fallback color if variant is null/undefined or not mapped
           return (
             <div
               key={ruleName}
