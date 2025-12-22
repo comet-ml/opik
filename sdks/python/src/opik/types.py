@@ -79,6 +79,41 @@ class FeedbackScoreDict(TypedDict):
     """An optional explanation or justification for the given score."""
 
 
+class BatchFeedbackScoreDict(TypedDict):
+    """
+    A TypedDict representing a feedback score for batch operations.
+
+    This class defines the structure for feedback scores used in batch logging
+    operations, with a required id field and optional per-score project_name.
+    """
+
+    id: Required[str]
+    """
+    A unique identifier for the object this score should be assigned to.
+    Refers to either the trace_id, span_id or thread_id depending on how the score is logged.
+    Required for batch operations.
+    """
+
+    name: Required[str]
+    """The name of the feedback metric or criterion."""
+
+    value: Required[float]
+    """The numerical value of the feedback score."""
+
+    project_name: NotRequired[str]
+    """
+    The name of the project for this specific score.
+    If not provided, falls back to the project_name parameter in the method call,
+    or the default project name configured in the Opik instance.
+    """
+
+    category_name: NotRequired[Optional[str]]
+    """An optional category name for the given score."""
+
+    reason: NotRequired[Optional[str]]
+    """An optional explanation or justification for the given score."""
+
+
 class ErrorInfoDict(TypedDict):
     """
     A TypedDict representing the information about the error occurred.

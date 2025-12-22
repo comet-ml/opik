@@ -55,7 +55,13 @@ from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
 )
-from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
+from ..types import (
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+    FeedbackScoreDict,
+    LLMProvider,
+    SpanType,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -629,16 +635,17 @@ class Opik:
         )
 
     def log_spans_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for spans.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
             project_name: The name of the project in which the spans are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
 
         Returns:
             None
@@ -667,16 +674,17 @@ class Opik:
             self._streamer.put(add_span_feedback_scores_batch_message)
 
     def log_traces_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for traces.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
             project_name: The name of the project in which the traces are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
 
         Returns:
             None
@@ -706,16 +714,17 @@ class Opik:
             self._streamer.put(add_trace_feedback_scores_batch_message)
 
     def log_threads_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for threads.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a thread id via `id` key for each score is mandatory.
             project_name: The name of the project in which the threads are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
 
         Returns:
             None
