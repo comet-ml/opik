@@ -486,7 +486,9 @@ class OpikTracer(BaseTracer):
         root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
         if root_run_result.new_trace_data is not None:
             if self._context_modification_enabled:
-                self._opik_context_storage.set_trace_data(root_run_result.new_trace_data)
+                self._opik_context_storage.set_trace_data(
+                    root_run_result.new_trace_data
+                )
 
             if (
                 self._opik_client.config.log_start_trace_span

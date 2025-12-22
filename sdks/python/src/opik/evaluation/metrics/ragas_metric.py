@@ -1,20 +1,13 @@
-import asyncio
-
 from opik.evaluation.metrics import base_metric, score_result
 import opik.exceptions as exceptions
 
 from typing import Dict, Any, Optional, TYPE_CHECKING
 import opik.opik_context as opik_context
+
 if TYPE_CHECKING:
     from ragas import metrics as ragas_metrics
     from ragas import dataset_schema as ragas_dataset_schema
-
-
-def get_or_create_asyncio_loop() -> asyncio.AbstractEventLoop:
-    try:
-        return asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.new_event_loop()
+    from opik.integrations.langchain import OpikTracer
 
 
 class RagasMetricWrapper(base_metric.BaseMetric):
@@ -70,35 +63,49 @@ class RagasMetricWrapper(base_metric.BaseMetric):
     async def ascore(self, **kwargs: Any) -> score_result.ScoreResult:
         sample = self._create_ragas_single_turn_sample(kwargs)
 
-        score = await self.ragas_metric.single_turn_ascore(
-            sample, callbacks=self.callbacks
-        )
+        callbacks = [_get_opik_tracer_instance()] if self.track else []
+
+        score = await self.ragas_metric.single_turn_ascore(sample, callbacks=callbacks)
         return score_result.ScoreResult(value=score, name=self.name)
 
     def score(self, **kwargs: Any) -> score_result.ScoreResult:
         sample = self._create_ragas_single_turn_sample(kwargs)
 
-        if self.track:
-            from opik.integrations.langchain import OpikTracer
-
-            current_span_data = opik_context.get_current_span_data()
-            current_trace_data = opik_context.get_current_trace_data()
-            project_name = None
-
-            if current_span_data is not None:
-                project_name = (
-                    current_trace_data.project_name
-                    if current_trace_data is not None
-                    else current_span_data.project_name
-                )
-
-            opik_tracer = OpikTracer(
-                context_modification_enabled=False,
-                project_name=project_name,
-            )
-            callbacks = [opik_tracer]
-        else:
-            callbacks = []
+        callbacks = [_get_opik_tracer_instance()] if self.track else []
 
         score = self.ragas_metric.single_turn_score(sample, callbacks=callbacks)
         return score_result.ScoreResult(value=score, name=self.name)
+
+
+def _get_opik_tracer_instance() -> "OpikTracer":
+    from opik.integrations.langchain import OpikTracer
+
+    current_span_data = opik_context.get_current_span_data()
+    current_trace_data = opik_context.get_current_trace_data()
+    project_name = None
+
+    if current_span_data is not None:
+        project_name = (
+            current_trace_data.project_name
+            if current_trace_data is not None
+            else current_span_data.project_name
+        )
+
+    # OPIK-3505: Why context_modification_enabled=False?
+    #
+    # Problem: Ragas runs metrics concurrently under the hood with a manual management
+    # of the event loop. It was discovered that these metrics share the same context and so
+    # ContextVar used in Opik context storage can't be modified safely by them.
+    #
+    # Solution: Disable context modification (context_modification_enabled=False).
+    # OpikTracer will still create spans/traces and track parent-child relationships
+    # using LangChain's Run IDs, but won't modify the shared ContextVar storage.
+    #
+    # Trade-off: @track-decorated functions called within Ragas won't be attached
+    # to the Ragas spans. This is acceptable since Ragas metrics are self-contained
+    # and don't typically call user-defined tracked functions.
+    opik_tracer = OpikTracer(
+        context_modification_enabled=False,
+        project_name=project_name,
+    )
+    return opik_tracer
