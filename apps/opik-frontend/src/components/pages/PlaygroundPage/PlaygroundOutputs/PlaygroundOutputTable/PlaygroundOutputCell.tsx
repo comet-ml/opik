@@ -7,10 +7,12 @@ import {
   useOutputLoadingByPromptDatasetItemId,
   useOutputStaleStatusByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
+  useSelectedRuleIds,
   useTraceIdByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import PlaygroundOutputScores from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScores";
 import { cn } from "@/lib/utils";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useAppStore from "@/store/AppStore";
@@ -55,6 +57,8 @@ const PlaygroundOutputCell: React.FunctionComponent<
     promptId,
     originalRow.dataItemId,
   );
+
+  const selectedRuleIds = useSelectedRuleIds();
 
   const { data: playgroundProject } = useProjectByName(
     {
@@ -113,7 +117,13 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </Button>
           </TooltipWrapper>
         )}
-        <div className="h-[var(--cell-top-height)]" />
+        <div className="h-[var(--cell-top-height)] overflow-x-auto">
+          <PlaygroundOutputScores
+            traceId={traceId}
+            selectedRuleIds={selectedRuleIds}
+            stale={stale}
+          />
+        </div>
         <div className="h-[calc(100%-var(--cell-top-height))] overflow-y-auto">
           {renderContent()}
         </div>
