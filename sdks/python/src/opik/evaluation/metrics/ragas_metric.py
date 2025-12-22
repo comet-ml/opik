@@ -95,7 +95,8 @@ def _get_opik_tracer_instance() -> "OpikTracer":
     #
     # Problem: Ragas runs metrics concurrently under the hood with a manual management
     # of the event loop. It was discovered that these metrics share the same context and so
-    # ContextVar used in Opik context storage can't be modified safely by them.
+    # ContextVar used in Opik context storage can't be modified safely by them because concurrent
+    # operations share the same span stack.
     #
     # Solution: Disable context modification (context_modification_enabled=False).
     # OpikTracer will still create spans/traces and track parent-child relationships
