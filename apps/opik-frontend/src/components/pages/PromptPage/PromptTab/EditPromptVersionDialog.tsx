@@ -168,25 +168,32 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
     : template?.length && (templateHasChanges || metadataHasChanges);
 
   const originalText = promptTemplate;
-  const { images: originalImages, videos: originalVideos } =
-    parseLLMMessageContent(
-      parsePromptVersionContent({
-        template: promptTemplate,
-        metadata: promptMetadata,
-      }),
-    );
+  const {
+    images: originalImages,
+    videos: originalVideos,
+    audios: originalAudios,
+  } = parseLLMMessageContent(
+    parsePromptVersionContent({
+      template: promptTemplate,
+      metadata: promptMetadata,
+    }),
+  );
 
   const currentText = template;
-  const { images: currentImages, videos: currentVideos } =
-    parseLLMMessageContent(
-      parsePromptVersionContent({
-        template: localText,
-        metadata: promptMetadata,
-      }),
-    );
+  const {
+    images: currentImages,
+    videos: currentVideos,
+    audios: currentAudios,
+  } = parseLLMMessageContent(
+    parsePromptVersionContent({
+      template: localText,
+      metadata: promptMetadata,
+    }),
+  );
 
   const imagesHaveChanges = !isEqual(originalImages, currentImages);
   const videosHaveChanges = !isEqual(originalVideos, currentVideos);
+  const audiosHaveChanges = !isEqual(originalAudios, currentAudios);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -335,7 +342,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                   <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
                     <TextDiff content1={originalText} content2={currentText} />
                   </div>
-                  {(imagesHaveChanges || videosHaveChanges) && (
+                  {(imagesHaveChanges ||
+                    videosHaveChanges ||
+                    audiosHaveChanges) && (
                     <div className="flex flex-col gap-3 rounded-md border p-4">
                       <div className="comet-body-s-accented text-muted-foreground">
                         Media comparison
@@ -388,6 +397,30 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                           </div>
                         </div>
                       )}
+                      {audiosHaveChanges && (
+                        <div className="flex gap-6">
+                          <div className="flex flex-1 flex-col gap-2">
+                            <div className="comet-body-xs text-muted-foreground">
+                              Audios before:
+                            </div>
+                            <MediaTagsList
+                              type="audio"
+                              items={originalAudios}
+                              editable={false}
+                            />
+                          </div>
+                          <div className="flex flex-1 flex-col gap-2">
+                            <div className="comet-body-xs text-muted-foreground">
+                              Audios after:
+                            </div>
+                            <MediaTagsList
+                              type="audio"
+                              items={currentAudios}
+                              editable={false}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -413,6 +446,17 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                   <MediaTagsList
                     type="video"
                     items={currentVideos}
+                    editable={false}
+                    preview={true}
+                  />
+                </div>
+              )}
+              {currentAudios.length > 0 && (
+                <div className="flex flex-col gap-2 pb-4">
+                  <Label>Audios</Label>
+                  <MediaTagsList
+                    type="audio"
+                    items={currentAudios}
                     editable={false}
                     preview={true}
                   />

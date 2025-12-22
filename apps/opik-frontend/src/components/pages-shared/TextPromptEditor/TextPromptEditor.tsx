@@ -16,6 +16,7 @@ interface TextPromptEditorProps {
   showDescription?: boolean;
   currentImages?: string[];
   currentVideos?: string[];
+  currentAudios?: string[];
 }
 
 const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
@@ -26,6 +27,7 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
   showDescription = true,
   currentImages = [],
   currentVideos = [],
+  currentAudios = [],
 }) => {
   const [showPrettyView, setShowPrettyView] = useState(false);
 
@@ -91,6 +93,17 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
           <MediaTagsList
             type="video"
             items={currentVideos}
+            editable={false}
+            preview={true}
+          />
+        </div>
+      )}
+      {!showPrettyView && currentAudios.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <Label>Audios</Label>
+          <MediaTagsList
+            type="audio"
+            items={currentAudios}
             editable={false}
             preview={true}
           />
