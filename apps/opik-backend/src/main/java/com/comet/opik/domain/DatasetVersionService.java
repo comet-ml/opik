@@ -142,6 +142,19 @@ public interface DatasetVersionService {
 @Slf4j
 class DatasetVersionServiceImpl implements DatasetVersionService {
 
+    /**
+     * Minimum number of UUIDs to pre-generate for version snapshots.
+     * This ensures we have enough UUIDs even for new datasets or when the dataset
+     * has grown significantly since the last version.
+     */
+    private static final int MIN_UUID_POOL_SIZE = 1_000;
+
+    /**
+     * Multiplier applied to the item count when generating UUIDs.
+     * Using 10x provides a large safety buffer to handle dataset growth between versions.
+     */
+    private static final int UUID_POOL_MULTIPLIER = 2;
+
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -169,12 +182,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         int latestVersionItemCount = latestVersion.map(DatasetVersion::itemsTotal).orElse(0);
         log.info("Dataset '{}' latest version has '{}' items", datasetId, latestVersionItemCount);
 
-        // Generate UUIDs in Java (double the count for safety, with minimum pool size)
-        int uuidCount = Math.max(latestVersionItemCount * 2, 1000);
-        List<UUID> uuids = IntStream.range(0, uuidCount)
-                .mapToObj(i -> idGenerator.generateId())
-                .toList();
-        log.info("Generated '{}' UUIDs for dataset '{}' snapshot", uuidCount, datasetId);
+        List<UUID> uuids = generateUuidPool(latestVersionItemCount);
+        log.info("Generated '{}' UUIDs for dataset '{}' snapshot", uuids.size(), datasetId);
 
         // Create snapshot in ClickHouse using pre-generated UUIDs
         Long snapshotCount = datasetItemVersionDAO.makeSnapshot(datasetId, versionId, uuids)
@@ -265,6 +274,19 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     private Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
+    }
+
+    /**
+     * Generates a pool of UUIDs for version snapshot operations.
+     *
+     * @param itemCount number of items to generate UUIDs for
+     * @return list of pre-generated UUIDs
+     */
+    private List<UUID> generateUuidPool(int itemCount) {
+        int uuidCount = Math.max(itemCount * UUID_POOL_MULTIPLIER, MIN_UUID_POOL_SIZE);
+        return IntStream.range(0, uuidCount)
+                .mapToObj(i -> idGenerator.generateId())
+                .toList();
     }
 
     /**
