@@ -5,6 +5,7 @@ import { OptimizationStudioConfig } from "@/types/optimizations";
 import { MessagesList } from "@/components/pages-shared/prompts/PromptMessageDisplay";
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 import { getOptimizerLabel } from "@/lib/optimizations";
+import { extractDisplayMessages } from "@/lib/llm";
 
 interface CompareOptimizationsConfigurationProps {
   studioConfig: OptimizationStudioConfig;
@@ -37,10 +38,7 @@ const CompareOptimizationsConfiguration: React.FC<
     studioConfig;
   const metric = evaluation?.metrics?.[0];
 
-  const messages = prompt?.messages?.map((msg) => ({
-    role: msg.role,
-    content: msg.content,
-  }));
+  const messages = extractDisplayMessages(prompt?.messages);
 
   return (
     <Card className="w-full">

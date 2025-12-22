@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useFormContext } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -57,6 +51,9 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import DatasetSamplePreview from "./DatasetSamplePreview";
 
+const getBreadcrumbTitle = (name: string) =>
+  name?.trim() ? `${name} (new)` : "... (new)";
+
 const OptimizationsNewPageContent: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -66,13 +63,6 @@ const OptimizationsNewPageContent: React.FC = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const form = useFormContext<OptimizationConfigFormType>();
-  const name = form.watch("name");
-
-  useEffect(() => {
-    const breadcrumbTitle = name?.trim() ? `${name} (new)` : "... (new)";
-    setBreadcrumbParam("optimizationsNew", "new", breadcrumbTitle);
-    return () => setBreadcrumbParam("optimizationsNew", "new", "");
-  }, [name, setBreadcrumbParam]);
 
   const { data: datasetsData } = useDatasetsList({
     workspaceName,
@@ -97,47 +87,43 @@ const OptimizationsNewPageContent: React.FC = () => {
 
   const { calculateModelProvider } = useLLMProviderModelsData();
 
-  const optimizerConfigsCache = useRef<
-    Record<OPTIMIZER_TYPE, Partial<OptimizerParameters>>
-  >({
-    [OPTIMIZER_TYPE.GEPA]: {},
-    [OPTIMIZER_TYPE.EVOLUTIONARY]: {},
-    [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {},
-  });
-
   const handleDatasetChange = useCallback(
     (id: string | null) => {
       form.setValue("datasetId", id || "", { shouldValidate: true });
+
+      const currentMetricType = form.getValues("metricType");
+      const currentMetricParams = form.getValues("metricParams");
+
+      const metricsWithReferenceKey = [
+        METRIC_TYPE.EQUALS,
+        METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
+        METRIC_TYPE.LEVENSHTEIN,
+      ];
+
+      if (metricsWithReferenceKey.includes(currentMetricType)) {
+        form.setValue(
+          "metricParams",
+          {
+            ...currentMetricParams,
+            reference_key: "",
+          } as OptimizationConfigFormType["metricParams"],
+          { shouldValidate: true },
+        );
+      }
     },
     [form],
   );
 
   const handleOptimizerTypeChange = useCallback(
     (newOptimizerType: OPTIMIZER_TYPE) => {
-      const currentOptimizerType = form.getValues("optimizerType");
-      const currentParams = form.getValues("optimizerParams");
-
-      if (currentOptimizerType && currentParams) {
-        optimizerConfigsCache.current[currentOptimizerType] = currentParams;
-      }
-
       form.setValue("optimizerType", newOptimizerType, {
         shouldValidate: true,
       });
 
-      const cachedConfig = optimizerConfigsCache.current[newOptimizerType];
-
-      if (Object.keys(cachedConfig).length > 0) {
-        form.setValue("optimizerParams", cachedConfig, {
-          shouldValidate: true,
-        });
-      } else {
-        const defaultConfig = getDefaultOptimizerConfig(newOptimizerType);
-        form.setValue("optimizerParams", defaultConfig, {
-          shouldValidate: true,
-        });
-        optimizerConfigsCache.current[newOptimizerType] = defaultConfig;
-      }
+      const defaultConfig = getDefaultOptimizerConfig(newOptimizerType);
+      form.setValue("optimizerParams", defaultConfig, {
+        shouldValidate: true,
+      });
     },
     [form],
   );
@@ -145,11 +131,8 @@ const OptimizationsNewPageContent: React.FC = () => {
   const handleOptimizerParamsChange = useCallback(
     (newParams: Partial<OptimizerParameters>) => {
       form.setValue("optimizerParams", newParams);
-      if (optimizerType) {
-        optimizerConfigsCache.current[optimizerType] = newParams;
-      }
     },
-    [form, optimizerType],
+    [form],
   );
 
   const handleMetricTypeChange = useCallback(
@@ -228,17 +211,10 @@ const OptimizationsNewPageContent: React.FC = () => {
     if (!isValid) return;
 
     const formData = form.getValues();
+    const selectedDs = datasets.find((ds) => ds.id === formData.datasetId);
+    const datasetNameValue = selectedDs?.name || "";
 
-    let datasetNameValue = "";
-    if (formData.datasetId) {
-      const selectedDs = datasets.find((ds) => ds.id === formData.datasetId);
-      datasetNameValue = selectedDs?.name || "";
-    }
-
-    if (!datasetNameValue) {
-      form.setError("datasetId", { message: "Dataset is required" });
-      return;
-    }
+    if (!datasetNameValue) return;
 
     setIsSubmitting(true);
 
@@ -288,6 +264,26 @@ const OptimizationsNewPageContent: React.FC = () => {
     });
   }, [navigate, workspaceName]);
 
+  const handleNameChange = useCallback(
+    (value: string) => {
+      form.setValue("name", value);
+      setBreadcrumbParam("optimizationsNew", "new", getBreadcrumbTitle(value));
+    },
+    [form, setBreadcrumbParam],
+  );
+
+  useEffect(() => {
+    const initialName = form.getValues("name") ?? "";
+    setBreadcrumbParam(
+      "optimizationsNew",
+      "new",
+      getBreadcrumbTitle(initialName),
+    );
+
+    return () => setBreadcrumbParam("optimizationsNew", "new", "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="w-full py-6">
       <div className="mb-2 flex items-center justify-between">
@@ -321,6 +317,7 @@ const OptimizationsNewPageContent: React.FC = () => {
                 <FormControl>
                   <Input
                     {...field}
+                    onChange={(e) => handleNameChange(e.target.value)}
                     placeholder="Enter optimization name, or the name will be generated automatically"
                     className="h-10"
                   />

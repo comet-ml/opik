@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { UnfoldVertical, FoldVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CodeHighlighter, {
@@ -13,6 +13,11 @@ const DatasetSamplePreview: React.FC<DatasetSamplePreviewProps> = ({
   datasetSample,
 }) => {
   const [isSampleExpanded, setIsSampleExpanded] = useState(false);
+
+  const formattedSample = useMemo(
+    () => JSON.stringify(datasetSample, null, 2),
+    [datasetSample],
+  );
 
   return (
     <div>
@@ -41,7 +46,7 @@ const DatasetSamplePreview: React.FC<DatasetSamplePreviewProps> = ({
             <span className="comet-body-s text-muted-slate">Payload</span>
           </div>
           <CodeHighlighter
-            data={JSON.stringify(datasetSample, null, 2)}
+            data={formattedSample}
             language={SUPPORTED_LANGUAGE.json}
           />
         </div>

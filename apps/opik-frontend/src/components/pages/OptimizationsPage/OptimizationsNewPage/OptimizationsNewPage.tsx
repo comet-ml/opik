@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryParam, StringParam } from "use-query-params";
+import useAppStore from "@/store/AppStore";
 import useGetOrCreateDemoDataset from "@/api/datasets/useGetOrCreateDemoDataset";
 import {
   OptimizationConfigFormType,
@@ -13,6 +14,7 @@ import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
 import Loader from "@/components/shared/Loader/Loader";
 
 const OptimizationsNewPage: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [templateId] = useQueryParam("template", StringParam);
   const { getOrCreateDataset } = useGetOrCreateDemoDataset();
   const datasetCreationRef = useRef<string | null>(null);
@@ -45,7 +47,7 @@ const OptimizationsNewPage: React.FC = () => {
 
   // Create demo dataset when template with dataset_items is selected
   useEffect(() => {
-    const createDataset = async () => {
+    const internalCreateOrGetDataset = async () => {
       const templateIdToCreate = templateData?.id;
       if (
         templateData?.dataset_items &&
@@ -56,7 +58,7 @@ const OptimizationsNewPage: React.FC = () => {
         setIsPreparingDataset(true);
 
         try {
-          const dataset = await getOrCreateDataset(templateData);
+          const dataset = await getOrCreateDataset(templateData, workspaceName);
           if (dataset?.id) {
             form.setValue("datasetId", dataset.id, { shouldValidate: true });
           }
@@ -66,8 +68,8 @@ const OptimizationsNewPage: React.FC = () => {
       }
     };
 
-    createDataset();
-  }, [templateData, getOrCreateDataset, form]);
+    internalCreateOrGetDataset();
+  }, [templateData, getOrCreateDataset, form, workspaceName]);
 
   if (isPreparingDataset) {
     return <Loader message="Preparing a dataset..." />;

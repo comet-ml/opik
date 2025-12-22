@@ -9,6 +9,7 @@ import {
 import { OptimizationStudioConfig } from "@/types/optimizations";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import { MessagesList } from "@/components/pages-shared/prompts/PromptMessageDisplay";
+import { extractDisplayMessages } from "@/lib/llm";
 
 interface BestPromptPlaceholderProps {
   objectiveName: string;
@@ -19,10 +20,7 @@ const BestPromptPlaceholder: React.FC<BestPromptPlaceholderProps> = ({
   objectiveName,
   studioConfig,
 }) => {
-  const messages = studioConfig.prompt?.messages?.map((msg) => ({
-    role: msg.role,
-    content: msg.content,
-  }));
+  const messages = extractDisplayMessages(studioConfig.prompt?.messages);
 
   return (
     <Card className="size-full">

@@ -13,8 +13,8 @@ import {
 import { SortableContext } from "@dnd-kit/sortable";
 
 import {
+  appendTextToMessageContent,
   generateDefaultLLMPromptMessage,
-  getTextFromMessageContent,
 } from "@/lib/llm";
 import LLMPromptMessage, {
   LLMPromptMessageHandle,
@@ -167,14 +167,16 @@ const LLMPromptMessages = ({
         return;
       }
 
-      // fallback: append to message content
+      // fallback: append to message content while preserving structure
       const targetMessage = messages.find((m) => m.id === targetMessageId);
       if (targetMessage) {
-        const currentText = getTextFromMessageContent(targetMessage.content);
-        const newText = currentText + variableText;
+        const newContent = appendTextToMessageContent(
+          targetMessage.content,
+          variableText,
+        );
         onChange(
           messages.map((m) =>
-            m.id === targetMessageId ? { ...m, content: newText } : m,
+            m.id === targetMessageId ? { ...m, content: newContent } : m,
           ),
         );
       }

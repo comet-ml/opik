@@ -15,7 +15,10 @@ const useGetOrCreateDemoDataset = () => {
   const queryClient = useQueryClient();
 
   const getOrCreateDataset = useCallback(
-    async (template: OptimizationTemplate): Promise<Dataset | null> => {
+    async (
+      template: OptimizationTemplate,
+      workspaceName: string,
+    ): Promise<Dataset | null> => {
       const datasetName = template.studio_config?.dataset_name;
       const datasetItems = template.dataset_items;
 
@@ -39,7 +42,7 @@ const useGetOrCreateDemoDataset = () => {
 
         // Get dataset by name to get the ID (works whether we just created it or it existed)
         const { data: datasets } = await api.get(DATASETS_REST_ENDPOINT, {
-          params: { name: datasetName, size: 1 },
+          params: { workspace_name: workspaceName, name: datasetName, size: 1 },
         });
 
         const dataset = newDataset || datasets?.content?.[0];
