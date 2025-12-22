@@ -382,6 +382,7 @@ const CompareOptimizationsPage: React.FC = () => {
           experiments={experiments}
           bestEntityId={bestExperiment?.id}
           objectiveName={optimization?.objective_name}
+          status={optimization?.status}
         />
       </PageBodyStickyContainer>
 
