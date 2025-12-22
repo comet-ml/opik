@@ -1,11 +1,7 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { ChevronDown } from "lucide-react";
 import debounce from "lodash/debounce";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useUserPermission from "@/plugins/comet/useUserPermission";
@@ -29,6 +25,8 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const workspace = useWorkspace();
 
   const [popoverData, setPopoverData] = useState<WorkspaceMember | null>(null);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
+  const shouldKeepOpenRef = useRef(false);
 
   const { mutate: updateWorkspaceUsersPermissions } =
     useUpdateWorkspaceUsersPermissionsMutation();
@@ -61,6 +59,12 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
       debouncedUpdatePermissions.cancel();
     };
   }, [debouncedUpdatePermissions]);
+
+  useEffect(() => {
+    if (!popoverData) {
+      setPopoverData(row);
+    }
+  }, [row, popoverData]);
 
   const ifChangeWsRoleDisabled =
     !currentUserName ||
@@ -96,9 +100,9 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     setPermissions,
   );
 
-  const button = (
-    <button
-      className="-ml-1 flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+  const trigger = (
+    <SelectTrigger
+      className="-ml-1 h-auto min-w-0 border-none bg-transparent px-1 py-0.5 shadow-none hover:bg-transparent focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
       onClick={(e) => {
         e.stopPropagation();
         if (isInvitedByEmail) {
@@ -107,9 +111,10 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
       }}
       disabled={isInvitedByEmail}
     >
-      <span className="min-w-0 truncate">{value}</span>
-      <ChevronDown className="size-4 shrink-0" />
-    </button>
+      <SelectValue>
+        <span className="min-w-0 truncate">{value}</span>
+      </SelectValue>
+    </SelectTrigger>
   );
 
   return (
@@ -117,24 +122,37 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <DropdownMenu
+      <Select
+        value={decisionTreeProps.controlValue || ""}
+        open={isSelectOpen}
         onOpenChange={(open) => {
+          if (!open && shouldKeepOpenRef.current) {
+            shouldKeepOpenRef.current = false;
+            return;
+          }
+          setIsSelectOpen(open);
           if (open && !isInvitedByEmail) {
             setPopoverData(row);
           }
         }}
+        onValueChange={(newValue) => {
+          const syntheticEvent = {
+            target: { value: newValue },
+          } as React.ChangeEvent<HTMLInputElement>;
+          decisionTreeProps.onChange(syntheticEvent);
+          shouldKeepOpenRef.current = true;
+        }}
+        disabled={isInvitedByEmail}
       >
-        <DropdownMenuTrigger asChild disabled={isInvitedByEmail}>
-          {isInvitedByEmail ? (
-            <TooltipWrapper content="Cannot change roles for users invited by email">
-              {button}
-            </TooltipWrapper>
-          ) : (
-            button
-          )}
-        </DropdownMenuTrigger>
+        {isInvitedByEmail ? (
+          <TooltipWrapper content="Cannot change roles for users invited by email">
+            {trigger}
+          </TooltipWrapper>
+        ) : (
+          trigger
+        )}
         <WorkspaceRolePopover {...decisionTreeProps} />
-      </DropdownMenu>
+      </Select>
     </CellWrapper>
   );
 };
