@@ -27,6 +27,7 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import useAlertsList from "@/api/alerts/useAlertsList";
+import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -76,6 +77,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: ChartLine,
         label: "Dashboards",
+        count: "dashboards",
         featureFlag: FeatureToggleKeys.DASHBOARDS_ENABLED,
       },
     ],
@@ -209,6 +211,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const isOptimizationStudioEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
   );
+  const isDashboardsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DASHBOARDS_ENABLED,
+  );
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -330,6 +335,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: dashboardsData } = useDashboardsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded && isDashboardsEnabled,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -339,6 +356,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     optimizations: optimizationsData?.total,
     annotation_queues: annotationQueuesData?.total,
     alerts: alertsData?.total,
+    dashboards: dashboardsData?.total,
   };
 
   const indicatorDataMap: Record<string, boolean> = {
