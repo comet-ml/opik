@@ -377,7 +377,7 @@ const JSON_OUTPUT_DATASET_ITEMS: DemoDatasetItem[] = [
 export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   {
     id: "opik-chatbot",
-    title: "Demo - Opik Chatbot",
+    title: "Demo template - Opik Chatbot",
     description:
       "Train a chatbot to answer Opik questions and decline off-topic ones",
     dataset_id: "",
@@ -423,7 +423,7 @@ export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   },
   {
     id: "json-output",
-    title: "Demo - Ensure JSON output",
+    title: "Demo template - Ensure JSON output",
     description:
       "Generate valid JSON without markdown formatting based on descriptions",
     dataset_id: "",

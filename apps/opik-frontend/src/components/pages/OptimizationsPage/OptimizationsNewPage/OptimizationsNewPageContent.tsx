@@ -64,7 +64,7 @@ const OptimizationsNewPageContent: React.FC = () => {
   const name = form.watch("name");
 
   useEffect(() => {
-    const breadcrumbTitle = name ? `${name} (new)` : "... (new)";
+    const breadcrumbTitle = name?.trim() ? `${name} (new)` : "... (new)";
     setBreadcrumbParam("optimizationsNew", "new", breadcrumbTitle);
     return () => setBreadcrumbParam("optimizationsNew", "new", "");
   }, [name, setBreadcrumbParam]);
