@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
@@ -34,6 +34,39 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     },
   );
 
+  const workspacePermissions = useMemo(
+    () =>
+      find(
+        userPermissions || [],
+        (permission) => permission?.workspaceName === workspaceName,
+      )?.permissions || [],
+    [userPermissions, workspaceName],
+  );
+
+  const isWorkspaceOwner = useMemo(
+    () =>
+      isAdmin ||
+      isUserPermissionValid(
+        getPermissionByType(
+          workspacePermissions,
+          ManagementPermissionsNames.MANAGEMENT,
+        )?.permissionValue,
+      ),
+    [workspacePermissions, isAdmin],
+  );
+
+  const canInviteMembers = useMemo(
+    () =>
+      isWorkspaceOwner ||
+      isUserPermissionValid(
+        getPermissionByType(
+          workspacePermissions,
+          ManagementPermissionsNames.INVITE_USERS,
+        )?.permissionValue,
+      ),
+    [workspacePermissions, isWorkspaceOwner],
+  );
+
   const getPermissionStatus = useCallback(
     (permissionKey: MANAGEMENT_PERMISSION) => {
       if (!currentOrganization) return false;
@@ -47,42 +80,29 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
       if (isAdmin) return true;
 
-      if (!userPermissions?.length) return false;
-
-      const workspacePermissions =
-        find(
-          userPermissions || [],
-          (permission) => permission?.workspaceName === workspaceName,
-        )?.permissions || [];
-
-      if (!workspacePermissions?.length) return false;
-
-      const inviteUsersStatus = isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.INVITE_USERS,
-        )?.permissionValue,
-      );
-
-      const managementStatus = isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.MANAGEMENT,
-        )?.permissionValue,
-      );
+      if (!userPermissions?.length || !workspacePermissions?.length) {
+        return false;
+      }
 
       return getPermissionStatusByKey({
         permissionKey,
-        inviteUsersStatus,
+        inviteUsersStatus: canInviteMembers,
         onlyAdminsCanInviteOutsideOrganizationStatus:
           currentOrganization?.onlyAdminsInviteByEmail,
-        managementStatus,
+        managementStatus: isWorkspaceOwner,
       });
     },
-    [userPermissions, currentOrganization, isAdmin, workspaceName],
+    [
+      canInviteMembers,
+      isWorkspaceOwner,
+      isAdmin,
+      currentOrganization,
+      userPermissions?.length,
+      workspacePermissions?.length,
+    ],
   );
 
-  return { getPermissionStatus };
+  return { canInviteMembers, isWorkspaceOwner, getPermissionStatus };
 };
 
 export default useUserPermission;

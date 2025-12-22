@@ -52,6 +52,7 @@ class StartSpanParameters(BaseArguments):
     project_name: Optional[str] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    thread_id: Optional[str] = None  # used for traces only
 
 
 @dataclasses.dataclass
