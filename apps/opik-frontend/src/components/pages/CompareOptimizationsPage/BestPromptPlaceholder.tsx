@@ -49,7 +49,9 @@ const BestPromptPlaceholder: React.FC<BestPromptPlaceholderProps> = ({
         {messages && messages.length > 0 ? (
           <MessagesList messages={messages} />
         ) : (
-          <div className="comet-body-s text-muted-slate">No prompt messages</div>
+          <div className="comet-body-s text-muted-slate">
+            No prompt messages
+          </div>
         )}
       </CardContent>
     </Card>
@@ -57,4 +59,3 @@ const BestPromptPlaceholder: React.FC<BestPromptPlaceholderProps> = ({
 };
 
 export default BestPromptPlaceholder;
-

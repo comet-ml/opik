@@ -288,7 +288,11 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
       },
     ];
-  }, [optimization?.objective_name, scoreMap]);
+  }, [
+    optimization?.objective_name,
+    scoreMap,
+    optimization?.studio_config?.optimizer?.type,
+  ]);
 
   const columns = useMemo(() => {
     return [

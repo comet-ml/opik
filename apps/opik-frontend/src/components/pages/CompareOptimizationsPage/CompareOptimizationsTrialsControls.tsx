@@ -58,4 +58,3 @@ const CompareOptimizationsTrialsControls: React.FC<
 };
 
 export default CompareOptimizationsTrialsControls;
-

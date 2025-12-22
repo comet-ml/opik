@@ -20,7 +20,9 @@ const OptimizationsNewPage: React.FC = () => {
 
   const templateData = useMemo(() => {
     if (templateId) {
-      return OPTIMIZATION_DEMO_TEMPLATES.find((t) => t.id === templateId) || null;
+      return (
+        OPTIMIZATION_DEMO_TEMPLATES.find((t) => t.id === templateId) || null
+      );
     }
     return null;
   }, [templateId]);

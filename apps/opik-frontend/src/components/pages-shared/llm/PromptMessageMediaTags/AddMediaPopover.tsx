@@ -85,7 +85,6 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
     return "Enter audio URL or template variable";
   }, [type]);
 
-
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     onOpenChange?.(isOpen);

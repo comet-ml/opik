@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useFormContext } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -49,14 +55,13 @@ import {
 } from "@/constants/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import DatasetSamplePreview from "./DatasetSamplePreview";
 
 const OptimizationsNewPageContent: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const { setLastSessionRunId } = useLastOptimizationRun();
-  const { mutateAsync: createOptimization, isPending: isCreatingOptimization } = useOptimizationCreateMutation();
+  const { mutateAsync: createOptimization } = useOptimizationCreateMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
@@ -284,7 +289,7 @@ const OptimizationsNewPageContent: React.FC = () => {
   }, [navigate, workspaceName]);
 
   return (
-    <div className="py-6 w-full">
+    <div className="w-full py-6">
       <div className="mb-2 flex items-center justify-between">
         <h1 className="comet-title-l">Optimize a prompt</h1>
         <div className="flex gap-2">
@@ -394,7 +399,9 @@ const OptimizationsNewPageContent: React.FC = () => {
             name="optimizerType"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="comet-body-s-accented">Algorithm</FormLabel>
+                <FormLabel className="comet-body-s-accented">
+                  Algorithm
+                </FormLabel>
                 <p className="text-xs text-muted-slate">
                   Choose how the optimizer explores and improves prompt
                   variations
@@ -435,7 +442,9 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="datasetId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="comet-body-s-accented">Dataset</FormLabel>
+                  <FormLabel className="comet-body-s-accented">
+                    Dataset
+                  </FormLabel>
                   <p className="text-xs text-muted-slate">
                     Data used to evaluate prompt variations
                   </p>
@@ -464,7 +473,9 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="metricType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="comet-body-s-accented">Metric</FormLabel>
+                  <FormLabel className="comet-body-s-accented">
+                    Metric
+                  </FormLabel>
                   <p className="text-xs text-muted-slate">
                     How to measure and compare prompt performance
                   </p>
@@ -510,4 +521,3 @@ const OptimizationsNewPageContent: React.FC = () => {
 };
 
 export default OptimizationsNewPageContent;
-

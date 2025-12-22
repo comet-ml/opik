@@ -17,9 +17,7 @@ const getMetricLabel = (type: string): string => {
 };
 
 const formatParamName = (key: string): string => {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
 const ConfigItem: React.FC<{ label: string; value: React.ReactNode }> = ({
@@ -32,9 +30,9 @@ const ConfigItem: React.FC<{ label: string; value: React.ReactNode }> = ({
   </div>
 );
 
-const CompareOptimizationsConfiguration: React.FC<CompareOptimizationsConfigurationProps> = ({
-  studioConfig,
-}) => {
+const CompareOptimizationsConfiguration: React.FC<
+  CompareOptimizationsConfigurationProps
+> = ({ studioConfig }) => {
   const { prompt, optimizer, evaluation, dataset_name, llm_model } =
     studioConfig;
   const metric = evaluation?.metrics?.[0];
@@ -60,23 +58,22 @@ const CompareOptimizationsConfiguration: React.FC<CompareOptimizationsConfigurat
           label="Metric"
           value={metric?.type ? getMetricLabel(metric.type) : "-"}
         />
-        {metric?.parameters &&
-          Object.keys(metric.parameters).length > 0 && (
-            <div className="ml-4 flex flex-col gap-1">
-              {Object.entries(metric.parameters).map(([key, value]) => (
-                <ConfigItem
-                  key={key}
-                  label={formatParamName(key)}
-                  value={String(value)}
-                />
-              ))}
-            </div>
-          )}
+        {metric?.parameters && Object.keys(metric.parameters).length > 0 && (
+          <div className="ml-4 flex flex-col gap-1">
+            {Object.entries(metric.parameters).map(([key, value]) => (
+              <ConfigItem
+                key={key}
+                label={formatParamName(key)}
+                value={String(value)}
+              />
+            ))}
+          </div>
+        )}
       </CardContent>
 
       <Separator className="my-2" />
 
-      <CardHeader className="pb-2 pt-2">
+      <CardHeader className="p-2">
         <CardTitle className="text-sm">Initial prompt</CardTitle>
       </CardHeader>
       <CardContent>
@@ -93,4 +90,3 @@ const CompareOptimizationsConfiguration: React.FC<CompareOptimizationsConfigurat
 };
 
 export default CompareOptimizationsConfiguration;
-

@@ -1,6 +1,10 @@
 import React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { SquareDashedMousePointer, MessageSquare, FileJson } from "lucide-react";
+import {
+  SquareDashedMousePointer,
+  MessageSquare,
+  FileJson,
+} from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import OptimizationTemplateCard from "./OptimizationTemplateCard";
@@ -62,7 +66,9 @@ const StudioTemplates: React.FC = () => {
 
           <div className="flex flex-col items-center gap-2">
             <div className="w-px flex-1 bg-slate-200" />
-            <p className="comet-body-xs whitespace-nowrap text-light-slate">or</p>
+            <p className="comet-body-xs whitespace-nowrap text-light-slate">
+              or
+            </p>
             <div className="w-px flex-1 bg-slate-200" />
           </div>
 

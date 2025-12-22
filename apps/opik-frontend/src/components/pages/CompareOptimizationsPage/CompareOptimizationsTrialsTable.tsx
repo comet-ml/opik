@@ -86,4 +86,3 @@ const CompareOptimizationsTrialsTable: React.FC<
 };
 
 export default CompareOptimizationsTrialsTable;
-

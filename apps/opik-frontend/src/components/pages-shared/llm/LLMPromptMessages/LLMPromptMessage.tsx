@@ -1,4 +1,9 @@
-import React, { useRef, useState, useImperativeHandle, forwardRef } from "react";
+import React, {
+  useRef,
+  useState,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
@@ -82,7 +87,10 @@ interface LLMPromptMessageProps {
   disabled?: boolean;
 }
 
-const LLMPromptMessage = forwardRef<LLMPromptMessageHandle, LLMPromptMessageProps>(
+const LLMPromptMessage = forwardRef<
+  LLMPromptMessageHandle,
+  LLMPromptMessageProps
+>(
   (
     {
       message,
@@ -146,163 +154,163 @@ const LLMPromptMessage = forwardRef<LLMPromptMessageHandle, LLMPromptMessageProp
       },
     }));
 
-  const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
-    if (
-      !isMediaAllowedForRole(newRole) &&
-      (hasImagesInContent(content) ||
-        hasVideosInContent(content) ||
-        hasAudiosInContent(content))
-    ) {
-      const textOnlyContent = getTextFromMessageContent(content);
-      onChangeMessage({ role: newRole, content: textOnlyContent });
-    } else {
-      onChangeMessage({ role: newRole });
-    }
-  };
+    const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
+      if (
+        !isMediaAllowedForRole(newRole) &&
+        (hasImagesInContent(content) ||
+          hasVideosInContent(content) ||
+          hasAudiosInContent(content))
+      ) {
+        const textOnlyContent = getTextFromMessageContent(content);
+        onChangeMessage({ role: newRole, content: textOnlyContent });
+      } else {
+        onChangeMessage({ role: newRole });
+      }
+    };
 
-  return (
-    <>
-      <Card
-        key={id}
-        style={style}
-        ref={setNodeRef}
-        onClick={() => {
-          editorViewRef.current?.focus();
-        }}
-        {...attributes}
-        className={cn("group py-2 px-3 [&:focus-within]:border-primary", {
-          "z-10": id === active?.id,
-          "border-destructive": Boolean(errorText),
-        })}
-      >
-        <CardContent className="p-0">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))] dark:bg-accent-background dark:shadow-none">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="minimal"
-                  size="sm"
-                  className="min-w-4 p-0"
-                  disabled={disabled}
-                >
-                  {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
-                  <ChevronDown className="ml-1 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {possibleTypes.map(({ label, value }) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={value}
-                      onSelect={() => handleRoleChange(value)}
-                      checked={role === value}
+    return (
+      <>
+        <Card
+          key={id}
+          style={style}
+          ref={setNodeRef}
+          onClick={() => {
+            editorViewRef.current?.focus();
+          }}
+          {...attributes}
+          className={cn("group py-2 px-3 [&:focus-within]:border-primary", {
+            "z-10": id === active?.id,
+            "border-destructive": Boolean(errorText),
+          })}
+        >
+          <CardContent className="p-0">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))] dark:bg-accent-background dark:shadow-none">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="minimal"
+                    size="sm"
+                    className="min-w-4 p-0"
+                    disabled={disabled}
+                  >
+                    {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
+                    <ChevronDown className="ml-1 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {possibleTypes.map(({ label, value }) => {
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={value}
+                        onSelect={() => handleRoleChange(value)}
+                        checked={role === value}
+                      >
+                        {label}
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div
+                className={cn(
+                  "gap-2 group-hover:flex",
+                  showAlwaysActionsPanel || isHoldActionsVisible
+                    ? "flex"
+                    : "hidden",
+                )}
+              >
+                {!hidePromptActions && (
+                  <LLMPromptMessageActions
+                    message={message}
+                    onChangeMessage={onChangeMessage}
+                    onReplaceWithChatPrompt={onReplaceWithChatPrompt}
+                    onClearOtherPromptLinks={onClearOtherPromptLinks}
+                    setIsLoading={setIsLoading}
+                    setIsHoldActionsVisible={setIsHoldActionsVisible}
+                    improvePromptConfig={improvePromptConfig}
+                    disabled={disabled}
+                  />
+                )}
+                {!hideRemoveButton && (
+                  <TooltipWrapper content="Delete a message">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={onRemoveMessage}
+                      type="button"
+                      disabled={disabled}
                     >
-                      {label}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <div
-              className={cn(
-                "gap-2 group-hover:flex",
-                showAlwaysActionsPanel || isHoldActionsVisible
-                  ? "flex"
-                  : "hidden",
-              )}
-            >
-              {!hidePromptActions && (
-                <LLMPromptMessageActions
-                  message={message}
-                  onChangeMessage={onChangeMessage}
-                  onReplaceWithChatPrompt={onReplaceWithChatPrompt}
-                  onClearOtherPromptLinks={onClearOtherPromptLinks}
-                  setIsLoading={setIsLoading}
-                  setIsHoldActionsVisible={setIsHoldActionsVisible}
-                  improvePromptConfig={improvePromptConfig}
-                  disabled={disabled}
-                />
-              )}
-              {!hideRemoveButton && (
-                <TooltipWrapper content="Delete a message">
+                      <Trash />
+                    </Button>
+                  </TooltipWrapper>
+                )}
+                <TooltipWrapper content="Duplicate a message">
                   <Button
                     variant="outline"
                     size="icon-sm"
-                    onClick={onRemoveMessage}
+                    onClick={onDuplicateMessage}
                     type="button"
                     disabled={disabled}
                   >
-                    <Trash />
+                    <CopyPlus />
                   </Button>
                 </TooltipWrapper>
-              )}
-              <TooltipWrapper content="Duplicate a message">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={onDuplicateMessage}
-                  type="button"
-                  disabled={disabled}
-                >
-                  <CopyPlus />
-                </Button>
-              </TooltipWrapper>
-              {!hideDragButton && (
-                <Button
-                  variant="outline"
-                  className="cursor-move"
-                  size="icon-sm"
-                  type="button"
-                  disabled={disabled}
-                  {...listeners}
-                >
-                  <GripHorizontal />
-                </Button>
-              )}
+                {!hideDragButton && (
+                  <Button
+                    variant="outline"
+                    className="cursor-move"
+                    size="icon-sm"
+                    type="button"
+                    disabled={disabled}
+                    {...listeners}
+                  >
+                    <GripHorizontal />
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {isLoading ? (
-            <Loader className="min-h-32" />
-          ) : (
-            <>
-              <CodeMirror
-                onCreateEditor={(view) => {
-                  editorViewRef.current = view;
-                }}
-                onFocus={onFocus}
-                theme={codeMirrorPromptTheme}
-                value={localText}
-                onChange={handleContentChange}
-                placeholder="Type your message"
-                editable={!disabled}
-                basicSetup={{
-                  foldGutter: false,
-                  allowMultipleSelections: false,
-                  lineNumbers: false,
-                  highlightActiveLine: false,
-                }}
-                extensions={[EditorView.lineWrapping, mustachePlugin]}
-              />
-              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <PromptMessageMediaSection
-                  images={images}
-                  videos={videos}
-                  audios={audios}
-                  setImages={setImages}
-                  setVideos={setVideos}
-                  setAudios={setAudios}
-                  promptVariables={promptVariables}
-                  disabled={disabled}
+            {isLoading ? (
+              <Loader className="min-h-32" />
+            ) : (
+              <>
+                <CodeMirror
+                  onCreateEditor={(view) => {
+                    editorViewRef.current = view;
+                  }}
+                  onFocus={onFocus}
+                  theme={codeMirrorPromptTheme}
+                  value={localText}
+                  onChange={handleContentChange}
+                  placeholder="Type your message"
+                  editable={!disabled}
+                  basicSetup={{
+                    foldGutter: false,
+                    allowMultipleSelections: false,
+                    lineNumbers: false,
+                    highlightActiveLine: false,
+                  }}
+                  extensions={[EditorView.lineWrapping, mustachePlugin]}
                 />
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-      {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
-    </>
-  );
+                {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
+                  <PromptMessageMediaSection
+                    images={images}
+                    videos={videos}
+                    audios={audios}
+                    setImages={setImages}
+                    setVideos={setVideos}
+                    setAudios={setAudios}
+                    promptVariables={promptVariables}
+                    disabled={disabled}
+                  />
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+        {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
+      </>
+    );
   },
 );
 

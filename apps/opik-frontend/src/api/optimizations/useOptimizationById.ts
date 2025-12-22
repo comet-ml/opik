@@ -10,12 +10,9 @@ export const getOptimizationById = async (
   { signal }: QueryFunctionContext,
   { optimizationId }: UseOptimizationByIdParams,
 ) => {
-  const { data } = await api.get(
-    OPTIMIZATIONS_REST_ENDPOINT + optimizationId,
-    {
-      signal,
-    },
-  );
+  const { data } = await api.get(OPTIMIZATIONS_REST_ENDPOINT + optimizationId, {
+    signal,
+  });
 
   return data;
 };

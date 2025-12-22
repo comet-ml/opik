@@ -12,13 +12,9 @@ interface CompareOptimizationsToolbarProps {
   onSearchChange: (search: string) => void;
 }
 
-const CompareOptimizationsToolbar: React.FC<CompareOptimizationsToolbarProps> = ({
-  isStudioOptimization,
-  view,
-  onViewChange,
-  search,
-  onSearchChange,
-}) => {
+const CompareOptimizationsToolbar: React.FC<
+  CompareOptimizationsToolbarProps
+> = ({ isStudioOptimization, view, onViewChange, search, onSearchChange }) => {
   const showSearch =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
 
@@ -41,4 +37,3 @@ const CompareOptimizationsToolbar: React.FC<CompareOptimizationsToolbarProps> = 
 };
 
 export default CompareOptimizationsToolbar;
-
