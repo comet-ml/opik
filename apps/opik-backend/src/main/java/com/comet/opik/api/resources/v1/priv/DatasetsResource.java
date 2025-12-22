@@ -11,9 +11,11 @@ import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
@@ -58,6 +60,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PATCH;
@@ -535,6 +538,56 @@ public class DatasetsResource {
                 workspaceId);
 
         return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    @POST
+    @Path("/{id}/items/changes")
+    @Operation(operationId = "applyDatasetItemChanges", summary = "Apply changes to dataset items", description = """
+            Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+            This endpoint:
+            - Creates a new version with the applied changes
+            - Validates that baseVersion matches the latest version (unless override=true)
+            - Returns 409 Conflict if baseVersion is stale and override is not set
+
+            Use `override=true` query parameter to force version creation even with stale baseVersion.
+            """, responses = {
+            @ApiResponse(responseCode = "200", description = "Changes applied successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Dataset or version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Version conflict - baseVersion is not the latest", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response applyDatasetItemChanges(
+            @PathParam("id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemChanges.class))) @JsonView(DatasetItemChanges.View.Write.class) @NotNull @Valid DatasetItemChanges changes,
+            @QueryParam("override") @DefaultValue("false") boolean override) {
+
+        checkVersioningFeatureEnabled();
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Applying dataset item changes for dataset '{}', baseVersion '{}', override '{}' on workspaceId '{}'",
+                datasetId, changes.baseVersion(), override, workspaceId);
+
+        DatasetVersion newVersion = itemService.applyDeltaChanges(datasetId, changes, override)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+
+        log.info("Applied changes to dataset '{}', created version '{}' on workspaceId '{}'",
+                datasetId, newVersion.versionHash(), workspaceId);
+
+        return Response.ok(newVersion).build();
+    }
+
+    private void checkVersioningFeatureEnabled() {
+        if (!config.getServiceToggles().isDatasetVersioningEnabled()) {
+            log.warn("Dataset versioning feature is disabled, returning 403");
+            throw new ForbiddenException("Dataset versioning feature is not enabled");
+        }
     }
 
     @POST

@@ -138,6 +138,38 @@ public interface DatasetVersionService {
     DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag, String toHashOrTag);
 
     /**
+     * Gets the latest version for a dataset.
+     *
+     * @param datasetId the dataset ID
+     * @return Optional containing the latest version, or empty if no versions exist
+     */
+    Optional<DatasetVersion> getLatestVersion(UUID datasetId);
+
+    /**
+     * Checks if the given version ID is the latest version for the dataset.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to check
+     * @return true if versionId is the latest version, false otherwise
+     */
+    boolean isLatestVersion(UUID datasetId, UUID versionId);
+
+    /**
+     * Creates a new version from the result of applying delta changes.
+     * This is called after items have been written to the versions table.
+     *
+     * @param datasetId the dataset ID
+     * @param newVersionId the ID for the new version
+     * @param itemsTotal total number of items in the new version
+     * @param baseVersionId the base version ID (for diff calculation)
+     * @param tags optional tags for the new version
+     * @param changeDescription optional description of the changes
+     * @return the created version
+     */
+    DatasetVersion createVersionFromDelta(UUID datasetId, UUID newVersionId, int itemsTotal,
+            UUID baseVersionId, List<String> tags, String changeDescription);
+
+    /**
      * Restores a dataset to a previous version state by creating a new version.
      * <p>
      * This operation copies items directly from the source version to a new version
@@ -197,7 +229,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
 
         // Get item count from the latest version to determine how many UUIDs we need
-        Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId, workspaceId);
+        Optional<DatasetVersion> latestVersion = getLatestVersionInternal(datasetId, workspaceId);
         int latestVersionItemCount = latestVersion.map(DatasetVersion::itemsTotal).orElse(0);
         log.info("Dataset '{}' latest version has '{}' items", datasetId, latestVersionItemCount);
 
@@ -291,8 +323,78 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    private Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
+    private Optional<DatasetVersion> getLatestVersionInternal(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
+    }
+
+    @Override
+    public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        return getLatestVersionInternal(datasetId, workspaceId);
+    }
+
+    @Override
+    public boolean isLatestVersion(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        return getLatestVersion(datasetId)
+                .map(latest -> latest.id().equals(versionId))
+                .orElse(false);
+    }
+
+    @Override
+    public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
+            int itemsTotal, @NonNull UUID baseVersionId, List<String> tags, String changeDescription) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}'",
+                datasetId, newVersionId, itemsTotal);
+
+        String versionHash = CommitUtils.getCommit(newVersionId);
+
+        return template.inTransaction(WRITE, handle -> {
+            var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
+
+            // Calculate diff statistics against the base version
+            DatasetVersionDiffStats diffStats = calculateDiffStatistics(datasetId, baseVersionId, newVersionId,
+                    workspaceId, userName);
+
+            log.info("Delta diff for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
+                    datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
+                    diffStats.itemsDeleted(), diffStats.itemsUnchanged());
+
+            // Create version record
+            var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
+                    newVersionId, datasetId, versionHash,
+                    itemsTotal,
+                    diffStats.itemsAdded(),
+                    diffStats.itemsModified(),
+                    diffStats.itemsDeleted(),
+                    DatasetVersionCreate.builder()
+                            .tags(tags)
+                            .changeDescription(changeDescription)
+                            .build(),
+                    userName);
+
+            EntityConstraintHandler.handle(() -> {
+                datasetVersionDAO.insert(version, workspaceId);
+                return version;
+            }).withError(() -> new EntityAlreadyExistsException(
+                    new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
+
+            log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
+
+            // Remove 'latest' tag from previous version (if exists)
+            datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
+
+            // Always add 'latest' tag to the new version
+            datasetVersionDAO.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
+            log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
+
+            // Add custom tags from the request
+            insertTags(datasetVersionDAO, datasetId, newVersionId, tags, userName, workspaceId);
+
+            return datasetVersionDAO.findById(newVersionId, workspaceId).orElseThrow();
+        });
     }
 
     /**
@@ -588,12 +690,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     () -> new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(versionRef, datasetId)));
         });
 
-        Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId, workspaceId);
-        boolean isLatestVersion = latestVersion.isPresent()
+        Optional<DatasetVersion> latestVersion = getLatestVersionInternal(datasetId, workspaceId);
+        boolean isLatestVersionFlag = latestVersion.isPresent()
                 && latestVersion.get().id().equals(sourceVersionId);
 
         return new RestoreContext(sourceVersionId, sourceVersion, latestVersion.orElse(null),
-                isLatestVersion, workspaceId, userName);
+                isLatestVersionFlag, workspaceId, userName);
     }
 
     private Mono<DatasetVersion> createRestoredVersion(UUID datasetId, String versionRef, RestoreContext context) {
