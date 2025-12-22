@@ -146,7 +146,7 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
         />
       </div>
       {!isValid && (
-        <p className="text-sm text-destructive mt-2">
+        <p className="mt-2 text-sm text-destructive">
           Message format is invalid.
         </p>
       )}
