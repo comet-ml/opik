@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
+import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
@@ -189,6 +190,33 @@ public class DatasetVersionsResource {
                 diff.statistics());
 
         return Response.ok(diff).build();
+    }
+
+    @POST
+    @Path("/restore")
+    @Operation(operationId = "restoreDatasetVersion", summary = "Restore dataset to a previous version", description = "Restores the dataset to a previous version state by creating a new version with items copied from the specified version. If the version is already the latest, returns it as-is (no-op).", responses = {
+            @ApiResponse(responseCode = "200", description = "Version restored successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response restoreVersion(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionRestore.class))) @Valid @NotNull DatasetVersionRestore request) {
+
+        checkFeatureEnabled();
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Restoring dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
+                workspaceId);
+        DatasetVersion version = versionService.restoreVersion(datasetId, request.versionRef())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+        log.info("Restored dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
+                workspaceId);
+
+        return Response.ok(version).build();
     }
 
     private void checkFeatureEnabled() {
