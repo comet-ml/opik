@@ -151,7 +151,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     /**
      * Multiplier applied to the item count when generating UUIDs.
-     * Using 10x provides a large safety buffer to handle dataset growth between versions.
+     * Using 2x provides a safety buffer to handle dataset growth between versions.
      */
     private static final int UUID_POOL_MULTIPLIER = 2;
 
