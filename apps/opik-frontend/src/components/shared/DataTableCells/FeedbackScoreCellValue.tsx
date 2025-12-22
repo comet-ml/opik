@@ -4,6 +4,7 @@ import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { TraceFeedbackScore } from "@/types/traces";
 import { useState } from "react";
 import FeedbackScoreEditDropdown from "./FeedbackScoreEditDropdown";
+import CellTooltipWrapper from "./CellTooltipWrapper";
 
 const FeedbackScoreCellValue = ({
   isUserFeedbackColumn = false,
@@ -26,7 +27,7 @@ const FeedbackScoreCellValue = ({
   // If no feedback score, show only dash with optional edit button
   if (!feedbackScore) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1 overflow-hidden">
         {shouldShowEditDropdown && (
           <FeedbackScoreEditDropdown
             feedbackScore={feedbackScore}
@@ -46,8 +47,10 @@ const FeedbackScoreCellValue = ({
   const value = feedbackScore.value;
   const category = feedbackScore.category_name;
 
+  const displayText = category ? `${category} (${value})` : String(value);
+
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
       {shouldShowEditDropdown && (
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
@@ -63,9 +66,9 @@ const FeedbackScoreCellValue = ({
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        <div className="truncate">
-          {category ? `${category} (${value})` : value}
-        </div>
+        <CellTooltipWrapper content={displayText}>
+          <div className="truncate">{displayText}</div>
+        </CellTooltipWrapper>
       </MultiValueFeedbackScoreHoverCard>
     </div>
   );
