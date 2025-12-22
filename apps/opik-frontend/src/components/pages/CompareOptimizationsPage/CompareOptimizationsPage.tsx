@@ -50,7 +50,7 @@ import OptimizationLogs from "@/components/pages-shared/optimizations/Optimizati
 import CompareOptimizationsToolbar from "./CompareOptimizationsToolbar";
 import CompareOptimizationsTrialsControls from "./CompareOptimizationsTrialsControls";
 import CompareOptimizationsTrialsTable from "./CompareOptimizationsTrialsTable";
-import CompareOptimizationsParams from "./CompareOptimizationsParams";
+import CompareOptimizationsConfiguration from "./CompareOptimizationsConfiguration";
 import BestPromptPlaceholder from "./BestPromptPlaceholder";
 
 const REFETCH_INTERVAL = 30000;
@@ -231,7 +231,10 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
         size: 200,
         accessorFn: (row) => {
-          const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
+          const metadataVal = get(
+            row.metadata ?? {},
+            OPTIMIZATION_OPTIMIZER_KEY,
+          );
           if (metadataVal) {
             return isObject(metadataVal)
               ? JSON.stringify(metadataVal, null, 2)
@@ -346,8 +349,8 @@ const CompareOptimizationsPage: React.FC = () => {
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
   const showLogsView =
     isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.LOGS;
-  const showParamsView =
-    isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.PARAMS;
+  const showConfigurationView =
+    isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.CONFIGURATION;
 
   return (
     <PageBodyScrollContainer>
@@ -416,14 +419,7 @@ const CompareOptimizationsPage: React.FC = () => {
         limitWidth
       >
         <div className="flex min-w-0 flex-1">
-          {showLogsView && (
-            <OptimizationLogs optimization={optimization!} />
-          )}
-          {showParamsView && optimization?.studio_config && (
-            <CompareOptimizationsParams
-              studioConfig={optimization.studio_config}
-            />
-          )}
+          {showLogsView && <OptimizationLogs optimization={optimization!} />}
           {showTrialsView && (
             <CompareOptimizationsTrialsTable
               columns={columns}
@@ -435,6 +431,11 @@ const CompareOptimizationsPage: React.FC = () => {
               onSortChange={setSortedColumns}
               columnsWidth={columnsWidth}
               onColumnsWidthChange={setColumnsWidth}
+            />
+          )}
+          {showConfigurationView && optimization?.studio_config && (
+            <CompareOptimizationsConfiguration
+              studioConfig={optimization.studio_config}
             />
           )}
         </div>

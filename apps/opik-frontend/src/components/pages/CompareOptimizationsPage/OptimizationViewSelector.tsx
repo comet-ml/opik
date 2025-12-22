@@ -5,7 +5,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 export enum OPTIMIZATION_VIEW_TYPE {
   LOGS = "logs",
   TRIALS = "trials",
-  PARAMS = "params",
+  CONFIGURATION = "configuration",
 }
 
 interface OptimizationViewSelectorProps {
@@ -42,12 +42,12 @@ const OptimizationViewSelector: React.FC<OptimizationViewSelectorProps> = ({
         Trials
       </ToggleGroupItem>
       <ToggleGroupItem
-        value={OPTIMIZATION_VIEW_TYPE.PARAMS}
+        value={OPTIMIZATION_VIEW_TYPE.CONFIGURATION}
         size="sm"
         className="gap-2"
       >
         <Settings className="size-3" />
-        Params
+        Configuration
       </ToggleGroupItem>
     </ToggleGroup>
   );

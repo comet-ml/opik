@@ -400,7 +400,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       {isOptimizationStudioEnabled && <StudioTemplates />}
       <div className="pt-6">
         <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-          Past runs
+          Optimization runs
         </h2>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
           <div className="flex items-center gap-2">

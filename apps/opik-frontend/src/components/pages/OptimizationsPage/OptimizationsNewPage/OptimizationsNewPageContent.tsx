@@ -385,14 +385,11 @@ const OptimizationsNewPageContent: React.FC = () => {
             name="optimizerType"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center gap-1">
-                  <FormLabel className="comet-body-s-accented">
-                    Algorithm
-                  </FormLabel>
-                  <ExplainerIcon
-                    {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_algorithm_settings]}
-                  />
-                </div>
+                <FormLabel className="comet-body-s-accented">Algorithm</FormLabel>
+                <p className="text-xs text-muted-slate">
+                  Choose how the optimizer explores and improves prompt
+                  variations
+                </p>
                 <FormControl>
                   <div className="flex items-center gap-2">
                     <SelectBox
@@ -429,14 +426,10 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="datasetId"
               render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center gap-1">
-                    <FormLabel className="comet-body-s-accented">
-                      Dataset
-                    </FormLabel>
-                    <ExplainerIcon
-                      {...EXPLAINERS_MAP[EXPLAINER_ID.whats_a_dataset]}
-                    />
-                  </div>
+                  <FormLabel className="comet-body-s-accented">Dataset</FormLabel>
+                  <p className="text-xs text-muted-slate">
+                    Data used to evaluate prompt variations
+                  </p>
                   <FormControl>
                     <DatasetSelectBox
                       value={field.value}
@@ -462,14 +455,10 @@ const OptimizationsNewPageContent: React.FC = () => {
               name="metricType"
               render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center gap-1">
-                    <FormLabel className="comet-body-s-accented">
-                      Metric
-                    </FormLabel>
-                    <ExplainerIcon
-                      {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_metric_settings]}
-                    />
-                  </div>
+                  <FormLabel className="comet-body-s-accented">Metric</FormLabel>
+                  <p className="text-xs text-muted-slate">
+                    How to measure and compare prompt performance
+                  </p>
                   <FormControl>
                     <SelectBox
                       value={field.value}

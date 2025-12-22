@@ -6,7 +6,7 @@ import { MessagesList } from "@/components/pages-shared/prompts/PromptMessageDis
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 import { getOptimizerLabel } from "@/lib/optimizations";
 
-interface CompareOptimizationsParamsProps {
+interface CompareOptimizationsConfigurationProps {
   studioConfig: OptimizationStudioConfig;
 }
 
@@ -32,7 +32,7 @@ const ConfigItem: React.FC<{ label: string; value: React.ReactNode }> = ({
   </div>
 );
 
-const CompareOptimizationsParams: React.FC<CompareOptimizationsParamsProps> = ({
+const CompareOptimizationsConfiguration: React.FC<CompareOptimizationsConfigurationProps> = ({
   studioConfig,
 }) => {
   const { prompt, optimizer, evaluation, dataset_name, llm_model } =
@@ -47,7 +47,7 @@ const CompareOptimizationsParams: React.FC<CompareOptimizationsParamsProps> = ({
   return (
     <Card className="w-full">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Parameters</CardTitle>
+        <CardTitle className="text-sm">Configuration</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
         <ConfigItem label="Dataset" value={dataset_name} />
@@ -92,4 +92,4 @@ const CompareOptimizationsParams: React.FC<CompareOptimizationsParamsProps> = ({
   );
 };
 
-export default CompareOptimizationsParams;
+export default CompareOptimizationsConfiguration;
