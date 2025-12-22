@@ -4,16 +4,19 @@ import {
   WidgetComponents,
   WIDGET_CATEGORY,
 } from "@/types/dashboard";
-import { CHART_TYPE } from "@/constants/chart";
+import { WIDGET_TYPES } from "@/lib/dashboard/utils";
 import ProjectMetricsWidget from "./ProjectMetricsWidget/ProjectMetricsWidget";
 import ProjectMetricsEditor from "./ProjectMetricsWidget/ProjectMetricsEditor";
+import { widgetHelpers as projectMetricsHelpers } from "./ProjectMetricsWidget/helpers";
 import TextMarkdownWidget from "./TextMarkdownWidget/TextMarkdownWidget";
 import TextMarkdownEditor from "./TextMarkdownWidget/TextMarkdownEditor";
+import { widgetHelpers as textMarkdownHelpers } from "./TextMarkdownWidget/helpers";
 import ProjectStatsCardWidget from "./ProjectStatsCardWidget/ProjectStatsCardWidget";
 import ProjectStatsCardEditor from "./ProjectStatsCardWidget/ProjectStatsCardEditor";
+import { widgetHelpers as projectStatsCardHelpers } from "./ProjectStatsCardWidget/helpers";
 import ExperimentsFeedbackScoresWidget from "./ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidget";
 import ExperimentsFeedbackScoresWidgetEditor from "./ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor";
-import { WIDGET_TYPES } from "@/lib/dashboard/utils";
+import { widgetHelpers as experimentsFeedbackScoresHelpers } from "./ExperimentsFeedbackScoresWidget/helpers";
 
 export const widgetResolver: WidgetResolver = (
   type: string,
@@ -23,10 +26,8 @@ export const widgetResolver: WidgetResolver = (
       return {
         Widget: ProjectMetricsWidget,
         Editor: ProjectMetricsEditor,
-        getDefaultConfig: () => ({
-          chartType: CHART_TYPE.line,
-        }),
-        calculateTitle: () => "",
+        getDefaultConfig: projectMetricsHelpers.getDefaultConfig,
+        calculateTitle: projectMetricsHelpers.calculateTitle,
         metadata: {
           title: "Project metrics",
           description:
@@ -41,8 +42,8 @@ export const widgetResolver: WidgetResolver = (
       return {
         Widget: TextMarkdownWidget,
         Editor: TextMarkdownEditor,
-        getDefaultConfig: () => ({}),
-        calculateTitle: () => "",
+        getDefaultConfig: textMarkdownHelpers.getDefaultConfig,
+        calculateTitle: textMarkdownHelpers.calculateTitle,
         metadata: {
           title: "Markdown text",
           description:
@@ -57,10 +58,8 @@ export const widgetResolver: WidgetResolver = (
       return {
         Widget: ProjectStatsCardWidget,
         Editor: ProjectStatsCardEditor,
-        getDefaultConfig: () => ({
-          source: "traces" as const,
-        }),
-        calculateTitle: () => "",
+        getDefaultConfig: projectStatsCardHelpers.getDefaultConfig,
+        calculateTitle: projectStatsCardHelpers.calculateTitle,
         metadata: {
           title: "Project statistics",
           description:
@@ -75,12 +74,8 @@ export const widgetResolver: WidgetResolver = (
       return {
         Widget: ExperimentsFeedbackScoresWidget,
         Editor: ExperimentsFeedbackScoresWidgetEditor,
-        getDefaultConfig: () => ({
-          filters: [],
-          groups: [],
-          chartType: CHART_TYPE.line,
-        }),
-        calculateTitle: () => "",
+        getDefaultConfig: experimentsFeedbackScoresHelpers.getDefaultConfig,
+        calculateTitle: experimentsFeedbackScoresHelpers.calculateTitle,
         metadata: {
           title: "Experiments metrics",
           description:
@@ -95,8 +90,8 @@ export const widgetResolver: WidgetResolver = (
       return {
         Widget: TextMarkdownWidget,
         Editor: TextMarkdownEditor,
-        getDefaultConfig: () => ({}),
-        calculateTitle: () => "",
+        getDefaultConfig: textMarkdownHelpers.getDefaultConfig,
+        calculateTitle: textMarkdownHelpers.calculateTitle,
         metadata: {
           title: "Markdown text",
           description:

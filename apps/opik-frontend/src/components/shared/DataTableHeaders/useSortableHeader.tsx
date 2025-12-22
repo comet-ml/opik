@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
 import { Column } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -23,7 +23,10 @@ export const useSortableHeader = <TData,>({
 
     if (!direction && !nextDirection) return null;
 
-    const Icon = (direction || nextDirection) === "asc" ? ArrowUp : ArrowDown;
+    const Icon =
+      (direction || nextDirection) === "asc"
+        ? ArrowUpNarrowWide
+        : ArrowDownWideNarrow;
     return (
       <>
         {withSeparator && (
@@ -37,8 +40,8 @@ export const useSortableHeader = <TData,>({
         )}
         <Icon
           className={cn(
-            "shrink-0 hidden size-3.5 group-hover:inline",
-            direction && "inline",
+            "hidden size-3.5 shrink-0 group-hover:inline",
+            direction && "inline text-foreground-secondary",
           )}
         />
       </>

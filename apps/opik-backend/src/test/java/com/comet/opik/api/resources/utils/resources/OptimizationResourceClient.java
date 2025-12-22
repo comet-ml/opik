@@ -176,61 +176,6 @@ public class OptimizationResourceClient {
         }
     }
 
-    public Optimization.OptimizationPage findStudio(String apiKey, String workspaceName, int page, int size,
-            UUID datasetId, String name, List<? extends Filter> filters, int expectedStatus) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("studio")
-                .queryParam("page", page)
-                .queryParam("size", size);
-
-        if (datasetId != null) {
-            webTarget = webTarget.queryParam("dataset_id", datasetId);
-        }
-
-        if (name != null) {
-            webTarget = webTarget.queryParam("name", name);
-        }
-
-        if (CollectionUtils.isNotEmpty(filters)) {
-            webTarget = webTarget.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
-        }
-
-        try (var response = webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-            return response.readEntity(Optimization.OptimizationPage.class);
-        }
-    }
-
-    // Overloaded method without filters for backward compatibility
-    public Optimization.OptimizationPage findStudio(String apiKey, String workspaceName, int page, int size,
-            UUID datasetId, String name, int expectedStatus) {
-        return findStudio(apiKey, workspaceName, page, size, datasetId, name, null, expectedStatus);
-    }
-
-    public Optimization getStudio(UUID id, String apiKey, String workspaceName, int expectedStatus) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("studio")
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-            if (expectedStatus == HttpStatus.SC_OK) {
-                return response.readEntity(Optimization.class);
-            }
-
-            return null;
-        }
-    }
-
     public void cancelStudio(UUID id, String apiKey, String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("studio")
