@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
@@ -61,7 +61,7 @@ interface ValidationResult {
   messages?: LLMMessage[];
 }
 
-const validateAndParseJson = (jsonValue: string): ValidationResult => {
+export const validateAndParseJson = (jsonValue: string): ValidationResult => {
   if (!jsonValue) {
     return { isValid: false };
   }
@@ -114,9 +114,9 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
   const theme = useCodemirrorTheme({
     editable: true,
   });
-  const [isValid, setIsValid] = React.useState(true);
+  const [isValid, setIsValid] = useState(true);
 
-  const processWithValidation = React.useCallback(
+  const processWithValidation = useCallback(
     (jsonValue: string) => {
       const result = validateAndParseJson(jsonValue);
       setIsValid(result.isValid);
