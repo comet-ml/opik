@@ -133,8 +133,10 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   }, [trace?.feedback_scores]);
 
   // Filter scores to only those from selected rules
-  const relevantScores = feedbackScores.filter(
-    (score) => score.name in scoreNameToRuleName,
+  const relevantScores = useMemo(
+    () =>
+      feedbackScores.filter((score) => score.name in scoreNameToRuleName),
+    [feedbackScores, scoreNameToRuleName],
   );
 
   // Determine which scores are still loading
