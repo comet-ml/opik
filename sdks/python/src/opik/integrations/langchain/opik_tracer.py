@@ -293,7 +293,6 @@ class OpikTracer(BaseTracer):
             parent_span_id_when_langgraph_started
         )
 
-        # Prepare span creation arguments
         start_span_arguments = arguments_helpers.StartSpanParameters(
             name=run_dict["name"],
             input=run_dict["inputs"],
@@ -304,30 +303,29 @@ class OpikTracer(BaseTracer):
             thread_id=self._thread_id,
         )
 
-        # Use the shared span creation logic from decorator
         span_creation_result = span_creation_handler.create_span_respecting_context(
             start_span_arguments=start_span_arguments,
             distributed_trace_headers=self._distributed_headers,
             opik_context_storage=self._opik_context_storage,
         )
 
-        # Track externally created traces
-        if span_creation_result.trace_data is None:
-            # Span attached to existing trace/span
-            if not self._is_opik_trace_created_by_this_tracer(
+        trace_created_externally = (
+            span_creation_result.trace_data is None
+            and not self._is_opik_trace_created_by_this_tracer(
                 span_creation_result.span_data.trace_id
-            ):
-                self._externally_created_traces_ids.add(
-                    span_creation_result.span_data.trace_id
-                )
+            )
+        )
+        if trace_created_externally:
+            self._externally_created_traces_ids.add(
+                span_creation_result.span_data.trace_id
+            )
 
-        # Apply LangGraph-specific logic: skip root span for LangGraph when creating new trace
-        if (
+        should_skip_root_span_creation = (
             span_creation_result.trace_data is not None
             and _is_root_run(run_dict)
             and not allow_duplicating_root_span
-        ):
-            # LangGraph root run with new trace - skip the span, only create trace
+        )
+        if should_skip_root_span_creation:
             return TrackRootRunResult(
                 new_trace_data=span_creation_result.trace_data,
                 new_span_data=None,
