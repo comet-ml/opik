@@ -7,6 +7,7 @@ import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useWorkspaceEmailInvites from "@/plugins/comet/useWorkspaceEmailInvites";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -82,6 +83,7 @@ const CollaboratorsTab = () => {
   const workspaceId = workspace?.workspaceId;
 
   const currentOrganization = useCurrentOrganization();
+  const { isWorkspaceOwner } = useUserPermission();
 
   const { data: workspaceMembers = [], isPending } = useAllWorkspaceMembers(
     { workspaceId: workspaceId || "" },
@@ -197,6 +199,10 @@ const CollaboratorsTab = () => {
       />
     );
   };
+
+  if (!isWorkspaceOwner) {
+    return null;
+  }
 
   return (
     <>

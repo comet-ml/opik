@@ -5,6 +5,7 @@ import WorkspacePreloader from "@/components/shared/WorkspacePreloader/Workspace
 import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
+import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -19,6 +20,7 @@ type PluginStore = {
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;
+  CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -35,6 +37,7 @@ const PLUGIN_NAMES = [
   "InviteDevButton",
   "SidebarInviteDevButton",
   "CollaboratorsTab",
+  "CollaboratorsTabTrigger",
   "init",
 ];
 
@@ -49,6 +52,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   InviteDevButton: null,
   SidebarInviteDevButton: null,
   CollaboratorsTab: null,
+  CollaboratorsTabTrigger: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

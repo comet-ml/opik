@@ -24,6 +24,9 @@ const ConfigurationPage = () => {
     FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
   );
 
+  const CollaboratorsTabTrigger = usePluginsStore(
+    (state) => state.CollaboratorsTabTrigger,
+  );
   const CollaboratorsTab = usePluginsStore((state) => state.CollaboratorsTab);
 
   useEffect(() => {
@@ -61,13 +64,10 @@ const ConfigurationPage = () => {
             >
               Workspace preferences
             </TabsTrigger>
-            {isCollaboratorsTabEnabled && CollaboratorsTab && (
-              <TabsTrigger
-                variant="underline"
+            {isCollaboratorsTabEnabled && CollaboratorsTabTrigger && (
+              <CollaboratorsTabTrigger
                 value={CONFIGURATION_TABS.COLLABORATORS}
-              >
-                Collaborators
-              </TabsTrigger>
+              />
             )}
           </TabsList>
 

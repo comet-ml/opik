@@ -52,6 +52,7 @@ import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -90,6 +91,7 @@ const UserMenu = () => {
     { enabled: !!user?.loggedIn && !!workspace },
   );
 
+  const { canInviteMembers } = useUserPermission();
   const inviteMembersURL = useInviteMembersURL();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
@@ -235,6 +237,10 @@ const UserMenu = () => {
 
   const renderInviteMembers = () => {
     if (isCollaboratorsTabEnabled) {
+      if (!canInviteMembers) {
+        return null;
+      }
+
       return (
         <DropdownMenuSub
           open={isInviteSubmenuOpen}
