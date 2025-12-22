@@ -1,35 +1,43 @@
+"""
+Optimizer job processor for Optimization Studio.
+
+This module handles optimization jobs from the Java backend via Redis Queue (RQ).
+Each optimization runs in an isolated subprocess for:
+- Customer isolation (separate SDK clients, API keys)
+- Memory isolation
+- Crash isolation (one optimization failing doesn't affect others)
+
+Logs from the subprocess are captured and streamed to Redis for S3 sync.
+"""
+
 import logging
-from datetime import datetime, timezone
+import os
 
 from opentelemetry import trace
-from opik_optimizer import ChatPrompt
 
+from opik_backend.executor_isolated import IsolatedSubprocessExecutor
+from opik_backend.subprocess_logger import create_optimization_log_collector
 from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
-    OptimizationConfig,
-    OptimizationResult,
-    JobMessageParseError,
-    OptimizationStatusManager,
-    optimization_lifecycle,
-    MetricFactory,
-    OptimizerFactory,
-    initialize_opik_client,
-    load_and_validate_dataset,
-    run_optimization,
 )
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
-def _validate_api_keys():
-    """Validate that LLM API keys are available."""   
-    has_keys = any(bool(value) for value in LLM_API_KEYS.values())
-    
-    if has_keys:
-        logger.info("At least one LLM API key is available.")
-    else:
-        logger.warning("No LLM API keys found. Optimization may fail.")
+# Path to the optimizer runner script
+OPTIMIZER_RUNNER_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "optimizer_runner.py"
+)
+
+# Default timeout for optimization (2 hours)
+DEFAULT_OPTIMIZATION_TIMEOUT_SECS = 7200
+
+
+class JobMessageParseError(Exception):
+    """Raised when job message cannot be parsed."""
+    pass
 
 
 def _parse_job_message(args, kwargs):
@@ -55,18 +63,21 @@ def _parse_job_message(args, kwargs):
 def process_optimizer_job(*args, **kwargs):
     """Process an optimizer job from the Java backend.
     
-    This is the main entry point for Optimization Studio jobs. It orchestrates
-    the entire optimization workflow:
-    1. Parse and validate job message
-    2. Initialize Opik client
-    3. Load and validate dataset
-    4. Build prompt, metric, and optimizer
-    5. Run optimization
-    6. Update status and return results
+    This is the main entry point for Optimization Studio jobs. It:
+    1. Parses the job message
+    2. Creates an isolated subprocess executor
+    3. Sets up log collection (Redis-backed)
+    4. Runs the optimization in the subprocess
+    5. Returns the result
+    
+    The actual optimization logic runs in optimizer_runner.py in a subprocess.
+    Status updates happen via the Opik SDK inside the subprocess.
+    Logs are captured and streamed to Redis for S3 sync.
     
     Expected job message structure:
     {
         "optimization_id": "uuid",
+        "workspace_id": "workspace-id",
         "workspace_name": "workspace-name", 
         "config": {
             "dataset_name": "dataset-name",
@@ -86,79 +97,79 @@ def process_optimizer_job(*args, **kwargs):
         Dictionary with optimization results
         
     Raises:
-        ValueError: If job message is invalid or dataset issues
-        Exception: Any error during optimization (status updated to 'error')
+        ValueError: If job message is invalid
+        Exception: Any error during optimization
     """
     with tracer.start_as_current_span("process_optimizer_job") as span:
         logger.info(f"Received optimizer job - args: {args}, kwargs: {kwargs}")
         
-        # Validate API keys at job start
-        _validate_api_keys()
-        
-        # Parse and validate job message
+        # Parse job message
         job_message = _parse_job_message(args, kwargs)
         context = OptimizationJobContext.from_job_message(job_message)
-        opt_config = OptimizationConfig.from_dict(context.config)
         
         # Set span attributes for tracing
         span.set_attribute("optimization_id", str(context.optimization_id))
+        span.set_attribute("workspace_id", context.workspace_id)
         span.set_attribute("workspace_name", context.workspace_name)
         
         logger.info(
             f"Processing Optimization Studio job: {context.optimization_id} "
             f"for workspace: {context.workspace_name}"
         )
-        logger.info(f"Using model: {opt_config.model} with params: {opt_config.model_params}")
         
-        # Initialize Opik SDK client and status manager
-        client = initialize_opik_client(context)
-        status_manager = OptimizationStatusManager(client, context.optimization_id)
+        # Prepare environment variables for subprocess
+        # Pass LLM API keys and Opik configuration
+        env_vars = {
+            **LLM_API_KEYS,  # OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+        }
         
-        # Use context manager for automatic status lifecycle management
-        with optimization_lifecycle(status_manager):
-            # Load and validate dataset
-            dataset = load_and_validate_dataset(client, opt_config.dataset_name)
+        # Pass Opik API key if provided (for cloud deployment)
+        if context.opik_api_key:
+            env_vars["OPIK_API_KEY"] = context.opik_api_key
+        
+        # Pass workspace name for SDK initialization
+        env_vars["OPIK_WORKSPACE"] = context.workspace_name
+        
+        # Create isolated subprocess executor with Redis-backed log collection
+        executor = IsolatedSubprocessExecutor(
+            timeout_secs=DEFAULT_OPTIMIZATION_TIMEOUT_SECS
+        )
+        
+        # Create log collector for this optimization
+        log_collector = create_optimization_log_collector(
+            workspace_id=context.workspace_id,
+            optimization_id=context.optimization_id,
+        )
+        
+        # Store log collector in executor for subprocess log capture
+        # The executor will use this to stream subprocess stdout/stderr to Redis
+        executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
+        
+        try:
+            logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
             
-            # Build optimization components
-            prompt = ChatPrompt(
-                    messages=opt_config.prompt_messages,
-                    model=opt_config.model,
-                    model_parameters=opt_config.model_params
-            )            
-
-            # Build metric function
-            metric_fn = MetricFactory.build(
-                metric_type=opt_config.metric_type,
-                metric_params=opt_config.metric_params,
-                model=opt_config.model
-            )
-
-            optimizer = OptimizerFactory.build(
-                optimizer_type=opt_config.optimizer_type,
-                model=opt_config.model,
-                model_params=opt_config.model_params,
-                optimizer_params=opt_config.optimizer_params
+            # Execute optimization in isolated subprocess
+            result = executor.execute(
+                file_path=OPTIMIZER_RUNNER_PATH,
+                data=job_message,
+                env_vars=env_vars,
+                timeout_secs=DEFAULT_OPTIMIZATION_TIMEOUT_SECS,
+                payload_type="optimization",
+                optimization_id=str(context.optimization_id),
+                job_id=str(context.optimization_id),
             )
             
-            logger.info(f"Starting optimization with {opt_config.optimizer_type} optimizer")
+            # Check for errors
+            if "error" in result:
+                logger.error(f"Optimization failed: {result.get('error')}")
+                raise Exception(result.get("error", "Unknown error"))
             
-            # Run optimization
-            result = run_optimization(
-                optimizer=optimizer,
-                optimization_id=context.optimization_id,
-                prompt=prompt,
-                dataset=dataset,
-                metric_fn=metric_fn
-            )
-            
-            # Build and return success response
-            optimization_result = OptimizationResult(
-                optimization_id=context.optimization_id,
-                final_score=result.score,
-                initial_score=result.initial_score,
-                metric_name=result.metric_name,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-
-            return optimization_result.to_dict()
-
+            logger.info(f"Optimization completed successfully: {context.optimization_id}")
+            return result
+        
+        finally:
+            # Ensure log collector is closed (flushes remaining logs)
+            try:
+                log_collector.close()
+            except Exception as e:
+                logger.warning(f"Error closing log collector: {e}")

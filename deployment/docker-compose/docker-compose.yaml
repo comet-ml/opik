@@ -242,7 +242,7 @@ services:
       REDIS_URL: redis://:opik@redis:6379/0
       RQ_WORKER_ENABLED: ${RQ_WORKER_ENABLED:-true}
       # Opik SDK Configuration
-      OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://backend:8080}
+      OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://host.docker.internal:8080}
     healthcheck:
       test: [ "CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:$${PYTHON_BACKEND_PORT:-8000}/healthcheck; else exit 0; fi" ]
       interval: 2s
