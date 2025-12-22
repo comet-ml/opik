@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 import useTraceById from "@/api/traces/useTraceById";
@@ -50,6 +50,14 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
+  // Track when polling started for timeout calculation
+  const pollingStartTimeRef = useRef<number | null>(null);
+
+  // Reset polling start time when traceId changes
+  useEffect(() => {
+    pollingStartTimeRef.current = traceId ? Date.now() : null;
+  }, [traceId]);
+
   // Rules are selected if selectedRuleIds is null (all selected) or has items
   const hasSelectedRules =
     selectedRuleIds === null || selectedRuleIds.length > 0;
@@ -60,8 +68,8 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     { enabled: !!workspaceName && hasSelectedRules },
   );
 
-  // Fetch rules to get names for loading state
-  const { data: rulesData } = useRulesList(
+  // Fetch rules to map score names to rule names
+  const { data: rulesData, isSuccess: rulesLoaded } = useRulesList(
     {
       workspaceName,
       projectId: playgroundProject?.id,
@@ -117,8 +125,10 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
         const data = query.state.data;
         const hasScores =
           data?.feedback_scores && data.feedback_scores.length > 0;
-        const firstFetchTime = query.state.dataFetchedAt || Date.now();
-        const elapsedTime = Date.now() - firstFetchTime;
+
+        // Use ref to track elapsed time since polling started
+        const startTime = pollingStartTimeRef.current || Date.now();
+        const elapsedTime = Date.now() - startTime;
 
         if (hasScores || elapsedTime > MAX_REFETCH_TIME) {
           return false;
@@ -132,11 +142,16 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return trace?.feedback_scores ?? [];
   }, [trace?.feedback_scores]);
 
-  // Filter scores to only those from selected rules
-  const relevantScores = useMemo(
-    () => feedbackScores.filter((score) => score.name in scoreNameToRuleName),
-    [feedbackScores, scoreNameToRuleName],
-  );
+  // Filter scores to only those from selected rules (if rules have loaded)
+  // If rules haven't loaded yet, show all scores as fallback
+  const relevantScores = useMemo(() => {
+    if (!rulesLoaded) {
+      // Rules not loaded yet - show all scores with original names
+      return feedbackScores;
+    }
+    // Rules loaded - filter to only selected rules' scores
+    return feedbackScores.filter((score) => score.name in scoreNameToRuleName);
+  }, [feedbackScores, scoreNameToRuleName, rulesLoaded]);
 
   // Determine which scores are still loading
   const isWaitingForScores =
@@ -147,38 +162,41 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return null;
   }
 
-  // Don't render if no scores and no pending rules
-  if (relevantScores.length === 0 && selectedRuleNames.length === 0) {
+  // Don't render if no scores and no pending rules (only check rules if loaded)
+  if (
+    relevantScores.length === 0 &&
+    (rulesLoaded ? selectedRuleNames.length === 0 : true)
+  ) {
     return null;
   }
 
   return (
-    <div
-      className={cn("flex flex-wrap gap-1.5", stale && "opacity-50", className)}
-    >
-      {/* Render loaded scores - show rule name instead of score name */}
-      {relevantScores.map((score) => {
-        const ruleName = scoreNameToRuleName[score.name];
-        return (
-          <FeedbackScoreTag
-            key={score.name}
-            label={ruleName}
-            value={score.value}
-            reason={score.reason}
-            lastUpdatedAt={score.last_updated_at}
-            lastUpdatedBy={score.last_updated_by}
-            valueByAuthor={score.value_by_author}
-            category={score.category_name}
-          />
-        );
-      })}
+    <div className={cn("flex gap-1.5", stale && "opacity-50", className)}>
+      {/* Render loaded scores - show rule name if available, otherwise score name */}
+      {!isWaitingForScores &&
+        relevantScores.map((score) => {
+          const displayName = scoreNameToRuleName[score.name] || score.name;
+          return (
+            <FeedbackScoreTag
+              key={score.name}
+              label={displayName}
+              value={score.value}
+              reason={score.reason}
+              lastUpdatedAt={score.last_updated_at}
+              lastUpdatedBy={score.last_updated_by}
+              valueByAuthor={score.value_by_author}
+              category={score.category_name}
+            />
+          );
+        })}
 
-      {/* Render loading tags for pending scores (only when no scores loaded yet) */}
+      {/* Render loading tags for pending scores (only when rules loaded) */}
       {isWaitingForScores &&
+        rulesLoaded &&
         selectedRuleNames.map((ruleName) => {
           const variant = generateTagVariant(ruleName);
           const color =
-            (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b"; // fallback color if variant is null/undefined or not mapped
+            (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b";
           return (
             <div
               key={ruleName}

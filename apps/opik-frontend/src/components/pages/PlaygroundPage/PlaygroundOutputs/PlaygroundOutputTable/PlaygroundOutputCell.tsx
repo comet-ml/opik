@@ -117,15 +117,15 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </Button>
           </TooltipWrapper>
         )}
-        <div className="h-[var(--cell-top-height)]" />
-        <div className="h-[calc(100%-var(--cell-top-height))] overflow-y-auto">
-          {renderContent()}
+        <div className="h-[var(--cell-top-height)] overflow-x-auto">
           <PlaygroundOutputScores
             traceId={traceId}
             selectedRuleIds={selectedRuleIds}
             stale={stale}
-            className="mt-2 border-t border-border pt-2"
           />
+        </div>
+        <div className="h-[calc(100%-var(--cell-top-height))] overflow-y-auto">
+          {renderContent()}
         </div>
       </div>
     </CellWrapper>
