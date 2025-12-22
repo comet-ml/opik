@@ -23,9 +23,23 @@ export const useMediaQuery = (query: string): boolean => {
       setMatches(e.matches);
     };
 
-    mediaQuery.addEventListener("change", handleChange);
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleChange);
+    } else {
+      // Legacy API for older browsers like Safari < 14
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mediaQuery as any).addListener(handleChange);
+    }
 
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else {
+        // Legacy cleanup for older browsers like Safari < 14
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (mediaQuery as any).removeListener(handleChange);
+      }
+    };
   }, [query]);
 
   return matches;
