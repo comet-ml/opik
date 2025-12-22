@@ -29,8 +29,8 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
             </div>
           ) : (
             <>
-              {logs.map((log, index) => (
-                <div key={index} className="comet-body-s text-muted-slate">
+              {logs.map((log) => (
+                <div key={log} className="comet-body-s text-muted-slate">
                   {log}
                 </div>
               ))}

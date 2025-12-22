@@ -48,8 +48,11 @@ import SidebarMenuItem, {
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
+
+const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
 const CONFIGURATION_ITEM: MenuItem = {
   id: "configuration",
@@ -282,21 +285,13 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { data: runningOptimizationsData } = useOptimizationsList(
     {
       workspaceName,
-      filters: [
-        {
-          id: "status-running",
-          field: "status",
-          operator: "=",
-          type: COLUMN_TYPE.string,
-          value: OPTIMIZATION_STATUS.RUNNING,
-        },
-      ],
+      filters: ACTIVE_OPTIMIZATION_FILTER,
       page: 1,
       size: 1,
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: 5000,
+      refetchInterval: RUNNING_OPTIMIZATION_REFETCH_INTERVAL,
     },
   );
 

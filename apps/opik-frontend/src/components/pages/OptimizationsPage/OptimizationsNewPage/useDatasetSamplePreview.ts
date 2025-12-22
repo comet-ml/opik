@@ -8,14 +8,12 @@ type UseDatasetSamplePreviewParams = {
 type UseDatasetSamplePreviewReturn = {
   datasetSample: Record<string, unknown> | null;
   datasetVariables: string[];
-  variablesHint: string;
-  isLoading: boolean;
 };
 
 const useDatasetSamplePreview = ({
   datasetId,
 }: UseDatasetSamplePreviewParams): UseDatasetSamplePreviewReturn => {
-  const { data: datasetItemsData, isLoading } = useDatasetItemsList(
+  const { data: datasetItemsData } = useDatasetItemsList(
     {
       datasetId: datasetId || "",
       page: 1,
@@ -37,18 +35,9 @@ const useDatasetSamplePreview = ({
     return Object.keys(datasetSample);
   }, [datasetSample]);
 
-  const variablesHint = useMemo(() => {
-    if (datasetVariables.length === 0) return "";
-    return `Use {{variable_name}} syntax to reference dataset variables in your prompt: ${datasetVariables
-      .map((key) => `{{${key}}}`)
-      .join(", ")}`;
-  }, [datasetVariables]);
-
   return {
     datasetSample,
     datasetVariables,
-    variablesHint,
-    isLoading,
   };
 };
 

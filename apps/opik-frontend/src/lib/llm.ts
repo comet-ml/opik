@@ -245,6 +245,15 @@ export const parsePromptVersionContent = (promptVersion?: {
   return template;
 };
 
+export const extractDisplayMessages = (
+  messages?: Array<{ role: string; content: string }>,
+): Array<{ role: string; content: string }> | undefined => {
+  return messages?.map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+  }));
+};
+
 /**
  * Parse chat template JSON string into LLMMessage array
  * Factory method that converts chat template to LLMMessage format with optional metadata
@@ -258,14 +267,6 @@ export const parsePromptVersionContent = (promptVersion?: {
  *
  * Note: Content is kept as-is (string or array format) as per MessageContent type definition
  */
-export const extractDisplayMessages = (
-  messages?: Array<{ role: string; content: string }>,
-): Array<{ role: string; content: string }> | undefined => {
-  return messages?.map((msg) => ({
-    role: msg.role,
-    content: msg.content,
-  }));
-};
 
 export const parseChatTemplateToLLMMessages = (
   template: string,
