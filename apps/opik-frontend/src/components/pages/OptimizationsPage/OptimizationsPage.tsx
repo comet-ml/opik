@@ -124,7 +124,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
           : toString(metadataVal);
       }
 
-      console.log(row, "ROW");
       const studioVal = row.studio_config?.optimizer?.type;
       return studioVal ? getOptimizerLabel(studioVal) : "-";
     },
