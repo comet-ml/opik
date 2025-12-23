@@ -58,11 +58,14 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
-  // Rules are selected if selectedRuleIds is null (all selected) or has items
-  // undefined means no run has happened yet, so no metrics to show
+  // Rules are selected if:
+  // - selectedRuleIds is undefined (legacy outputs without stored selection - treat as "all")
+  // - selectedRuleIds is null (explicitly "all" selected)
+  // - selectedRuleIds is a non-empty array (specific rules selected)
   const hasSelectedRules =
-    selectedRuleIds !== undefined &&
-    (selectedRuleIds === null || selectedRuleIds.length > 0);
+    selectedRuleIds === undefined ||
+    selectedRuleIds === null ||
+    selectedRuleIds.length > 0;
 
   // Fetch playground project to get rules
   const { data: playgroundProject } = useProjectByName(
@@ -86,14 +89,14 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
   // Get selected rules - only use specific rule IDs, not "all"
-  // When selectedRuleIds is null (meaning "all" was selected), we'll only show
-  // scores that actually exist in the trace, not loading spinners for all current rules
+  // When selectedRuleIds is null/undefined (meaning "all" was selected or legacy data),
+  // we'll only show scores that actually exist in the trace, not loading spinners
   const selectedRules = useMemo(() => {
     if (!hasSelectedRules || rules.length === 0) return [];
 
-    // If selectedRuleIds is null, return empty - we'll handle this case differently
-    // by only showing actual scores from the trace
-    if (selectedRuleIds === null) {
+    // If selectedRuleIds is null or undefined, return empty - we'll handle this case
+    // differently by only showing actual scores from the trace
+    if (selectedRuleIds === null || selectedRuleIds === undefined) {
       return [];
     }
 
@@ -159,9 +162,9 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
       score: TraceFeedbackScore | null;
     }> = [];
 
-    // If selectedRuleIds is null (meaning "all" was selected at run time),
+    // If selectedRuleIds is null/undefined (meaning "all" was selected or legacy data),
     // only show scores that actually exist in the trace - no loading spinners
-    if (selectedRuleIds === null) {
+    if (selectedRuleIds === null || selectedRuleIds === undefined) {
       for (const score of feedbackScores) {
         const ruleName = scoreNameToRuleName[score.name] || score.name;
         metrics.push({
@@ -201,7 +204,12 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   }
 
   // Don't render if rules loaded but no expected metrics (and we have specific rules selected)
-  if (rulesLoaded && expectedMetrics.length === 0 && selectedRuleIds !== null) {
+  if (
+    rulesLoaded &&
+    expectedMetrics.length === 0 &&
+    selectedRuleIds !== null &&
+    selectedRuleIds !== undefined
+  ) {
     return null;
   }
 
