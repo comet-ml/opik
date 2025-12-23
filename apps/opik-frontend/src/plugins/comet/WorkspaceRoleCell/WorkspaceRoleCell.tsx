@@ -60,12 +60,6 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     };
   }, [debouncedUpdatePermissions]);
 
-  useEffect(() => {
-    if (!popoverData) {
-      setPopoverData(row);
-    }
-  }, [row, popoverData]);
-
   const ifChangeWsRoleDisabled =
     !currentUserName ||
     !getPermissionStatus(
@@ -102,7 +96,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const trigger = (
     <SelectTrigger
-      className="-ml-1 h-auto min-w-0 border-none bg-transparent px-1 py-0.5 shadow-none hover:bg-transparent focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+      className="-ml-1 h-auto border-none bg-transparent px-1 py-0.5 disabled:bg-transparent"
       onClick={(e) => {
         e.stopPropagation();
         if (isInvitedByEmail) {
@@ -111,9 +105,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
       }}
       disabled={isInvitedByEmail}
     >
-      <SelectValue>
-        <span className="min-w-0 truncate">{value}</span>
-      </SelectValue>
+      <SelectValue placeholder={value}>{value}</SelectValue>
     </SelectTrigger>
   );
 
