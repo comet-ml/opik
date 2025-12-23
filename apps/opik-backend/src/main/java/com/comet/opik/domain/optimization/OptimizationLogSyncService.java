@@ -74,7 +74,7 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
     private static final String REDIS_LOG_KEY_PATTERN = "opik:logs:%s:%s";
     private static final String REDIS_META_KEY_PATTERN = "opik:logs:%s:%s:meta";
     private static final String LOCK_KEY_PATTERN = "opik:lock:logs:%s:%s";
-    private static final String S3_KEY_PATTERN = "logs/%s/%s.log.gz";
+    private static final String S3_KEY_PATTERN = "logs/optimization-studio/%s/%s.log.gz";
 
     private static final String META_LAST_APPEND_TS = "last_append_ts";
     private static final String META_LAST_FLUSH_TS = "last_flush_ts";
@@ -259,7 +259,7 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
      */
     private Mono<Void> executeWithLock(String workspaceId, UUID optimizationId, Mono<Void> action) {
         String lockKey = formatLockKey(workspaceId, optimizationId);
-        Duration lockDuration = Duration.ofSeconds(config.getLockTtlSeconds());
+        Duration lockDuration = config.getLockTimeout();
 
         return lockService.lockUsingToken(new LockService.Lock(lockKey), lockDuration)
                 .flatMap(acquired -> {

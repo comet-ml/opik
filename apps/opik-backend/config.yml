@@ -428,17 +428,11 @@ optimizationLogs:
   # Description: Interval between log sync runs
   syncInterval: ${OPTIMIZATION_LOGS_SYNC_INTERVAL:-2m}
   # Default: 30s
-  # Description: Lock timeout for distributed lock during sync
+  # Description: Lock timeout for per-optimization distributed lock during sync
   lockTimeout: ${OPTIMIZATION_LOGS_LOCK_TIMEOUT:-30s}
-  # Default: 5s
-  # Description: Maximum time to wait for lock acquisition
-  lockWaitTimeout: ${OPTIMIZATION_LOGS_LOCK_WAIT_TIMEOUT:-5s}
-  # Default: optimization-logs
-  # Description: S3 path prefix for optimization logs
-  s3PathPrefix: ${OPTIMIZATION_LOGS_S3_PATH_PREFIX:-optimization-logs}
-  # Default: 100
-  # Description: Maximum number of optimizations to process per sync cycle
-  maxOptimizationsPerSync: ${OPTIMIZATION_LOGS_MAX_PER_SYNC:-100}
+  # Default: 5
+  # Description: Maximum number of concurrent S3 uploads during sync
+  syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
 
 # LLM providers client configuration
 llmProviderClient:

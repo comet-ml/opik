@@ -12,31 +12,19 @@ public class OptimizationLogsConfig {
     private boolean enabled = true;
 
     @Valid @JsonProperty
-    private Duration syncInterval = Duration.minutes(2);
+    private Duration syncInterval = Duration.minutes(1);
 
     @Valid @JsonProperty
     private Duration lockTimeout = Duration.seconds(30);
 
     @Valid @JsonProperty
-    private Duration lockWaitTimeout = Duration.seconds(5);
+    private int syncConcurrency = 5;
 
-    @Valid @JsonProperty
-    private String s3PathPrefix = "optimization-logs";
-
-    @Valid @JsonProperty
-    private int maxOptimizationsPerSync = 100;
-
-    /**
-     * Get sync interval in seconds for use in scheduled job.
-     */
-    public long getSyncIntervalSeconds() {
-        return syncInterval.toSeconds();
+    public java.time.Duration getSyncInterval() {
+        return syncInterval.toJavaDuration();
     }
 
-    /**
-     * Get lock timeout in seconds for use in distributed locking.
-     */
-    public long getLockTtlSeconds() {
-        return lockTimeout.toSeconds();
+    public java.time.Duration getLockTimeout() {
+        return lockTimeout.toJavaDuration();
     }
 }

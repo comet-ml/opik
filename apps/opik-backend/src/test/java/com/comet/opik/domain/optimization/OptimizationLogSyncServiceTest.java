@@ -142,7 +142,8 @@ class OptimizationLogSyncServiceTest {
 
             verify(fileService).upload(keyCaptor.capture(), contentCaptor.capture(), contentTypeCaptor.capture());
 
-            assertThat(keyCaptor.getValue()).isEqualTo("logs/" + WORKSPACE_ID + "/" + OPTIMIZATION_ID + ".log.gz");
+            assertThat(keyCaptor.getValue())
+                    .isEqualTo("logs/optimization-studio/" + WORKSPACE_ID + "/" + OPTIMIZATION_ID + ".log.gz");
             assertThat(contentTypeCaptor.getValue()).isEqualTo("application/gzip");
 
             // Verify content is gzipped and contains the logs
@@ -203,7 +204,7 @@ class OptimizationLogSyncServiceTest {
 
             // Verify S3 upload
             verify(fileService).upload(
-                    eq("logs/" + WORKSPACE_ID + "/" + OPTIMIZATION_ID + ".log.gz"),
+                    eq("logs/optimization-studio/" + WORKSPACE_ID + "/" + OPTIMIZATION_ID + ".log.gz"),
                     any(byte[].class),
                     eq("application/gzip"));
 

@@ -2,86 +2,100 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OptimizationLogsConfig;
-import com.comet.opik.infrastructure.lock.LockService;
-import io.dropwizard.jobs.Job;
-import io.dropwizard.jobs.annotations.Every;
+import io.dropwizard.lifecycle.Managed;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.quartz.DisallowConcurrentExecution;
-import org.quartz.JobExecutionContext;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.options.KeysScanOptions;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Duration;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.comet.opik.infrastructure.lock.LockService.Lock;
-
 /**
- * Scheduled job that periodically syncs optimization logs from Redis to S3.
+ * Managed service that periodically syncs optimization logs from Redis to S3.
  * <p>
- * This job scans for active optimization log keys in Redis and triggers
- * sync for those with new logs. Uses distributed locking to prevent
- * duplicate work across multiple backend instances.
+ * Uses Flux.interval() for scheduling instead of Quartz, similar to BaseRedisSubscriber.
+ * Each optimization has its own distributed lock to prevent duplicate S3 uploads across instances.
  * <p>
  * Redis key pattern scanned: opik:logs:*:meta
- * <p>
- * The job runs every 5 minutes by default (configurable via optimizationLogs.syncIntervalSeconds).
  */
 @Slf4j
-@Singleton
-@DisallowConcurrentExecution
-@Every("5min")
-@RequiredArgsConstructor(onConstructor_ = @Inject)
-public class OptimizationLogFlusherJob extends Job {
+@EagerSingleton
+public class OptimizationLogFlusherJob implements Managed {
 
-    private static final Lock SCAN_LOCK_KEY = new Lock("optimization_log_flusher:scan_lock");
     private static final String META_KEY_PATTERN = "opik:logs:*:meta";
 
     // Pattern to extract workspace_id and optimization_id from meta key
     // opik:logs:{workspace_id}:{optimization_id}:meta
     private static final Pattern META_KEY_REGEX = Pattern.compile("opik:logs:([^:]+):([^:]+):meta");
 
-    private final @NonNull RedissonReactiveClient redisClient;
-    private final @NonNull OptimizationLogSyncService logSyncService;
-    private final @NonNull LockService lockService;
-    private final @NonNull @Config("optimizationLogs") OptimizationLogsConfig config;
+    private final RedissonReactiveClient redisClient;
+    private final OptimizationLogSyncService logSyncService;
+    private final OptimizationLogsConfig config;
+
+    private volatile Disposable subscription;
+    private volatile Scheduler timerScheduler;
+
+    @Inject
+    public OptimizationLogFlusherJob(
+            @NonNull RedissonReactiveClient redisClient,
+            @NonNull OptimizationLogSyncService logSyncService,
+            @NonNull @Config("optimizationLogs") OptimizationLogsConfig config) {
+        this.redisClient = redisClient;
+        this.logSyncService = logSyncService;
+        this.config = config;
+    }
 
     @Override
-    public void doJob(JobExecutionContext context) {
+    public void start() {
         if (!config.isEnabled()) {
-            log.debug("Optimization log flusher is disabled");
+            log.info("Optimization log flusher is disabled");
             return;
         }
 
-        log.debug("Starting optimization log flusher job");
+        if (timerScheduler == null) {
+            timerScheduler = Schedulers.newSingle("optimization-log-flusher-timer", true);
+        }
 
-        // Use distributed lock to prevent overlapping scans across instances
-        lockService.bestEffortLock(
-                SCAN_LOCK_KEY,
-                Mono.defer(this::scanAndSyncLogs),
-                Mono.defer(() -> {
-                    log.debug("Could not acquire scan lock, another instance is running");
-                    return Mono.empty();
-                }),
-                Duration.ofSeconds(config.getSyncIntervalSeconds()),
-                Duration.ofSeconds(10)).subscribe(
-                        __ -> log.debug("Optimization log flusher job completed"),
-                        error -> log.error("Optimization log flusher job failed", error));
+        if (subscription == null) {
+            subscription = Flux.interval(config.getSyncInterval(), timerScheduler)
+                    .onBackpressureDrop(tick -> log.debug("Backpressure drop, tick '{}'", tick))
+                    .concatMap(tick -> scanAndSyncLogs())
+                    .subscribe(
+                            __ -> {
+                            },
+                            error -> log.error("Optimization log flusher failed", error));
+
+            log.info("Optimization log flusher started with interval '{}'", config.getSyncInterval());
+        }
+    }
+
+    @Override
+    public void stop() {
+        if (subscription != null && !subscription.isDisposed()) {
+            subscription.dispose();
+            log.info("Optimization log flusher stopped");
+        }
+        if (timerScheduler != null && !timerScheduler.isDisposed()) {
+            timerScheduler.dispose();
+        }
     }
 
     /**
      * Scan Redis for optimization log meta keys and sync each one.
      */
     private Mono<Void> scanAndSyncLogs() {
-        return redisClient.getKeys().getKeysByPattern(META_KEY_PATTERN)
+        var scanOptions = KeysScanOptions.defaults().pattern(META_KEY_PATTERN);
+        return redisClient.getKeys().getKeys(scanOptions)
                 .collectList()
                 .flatMap(keys -> {
                     if (keys.isEmpty()) {
@@ -92,7 +106,7 @@ public class OptimizationLogFlusherJob extends Job {
                     log.info("Found '{}' optimization log keys to check", keys.size());
 
                     return Flux.fromIterable(keys)
-                            .flatMap(this::syncLogForMetaKey)
+                            .flatMap(this::syncLogForMetaKey, config.getSyncConcurrency())
                             .onErrorContinue((error, key) -> log.warn("Failed to sync logs for key '{}': {}",
                                     key, error.getMessage()))
                             .then();
@@ -116,7 +130,7 @@ public class OptimizationLogFlusherJob extends Job {
             UUID optimizationId = UUID.fromString(optimizationIdStr);
             return logSyncService.syncLogsToS3(workspaceId, optimizationId);
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid optimization ID in meta key '{}': {}", metaKey, optimizationIdStr);
+            log.warn("Invalid optimization ID in meta key '{}': '{}'", metaKey, optimizationIdStr);
             return Mono.empty();
         }
     }
