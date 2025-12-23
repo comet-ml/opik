@@ -1,7 +1,10 @@
 package com.comet.opik.api.filter;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Arrays;
 
 @RequiredArgsConstructor
 @Getter
@@ -32,4 +35,12 @@ public enum SpanField implements Field {
 
     private final String queryParamField;
     private final FieldType type;
+
+    @JsonCreator
+    public static SpanField fromString(String value) {
+        return Arrays.stream(values())
+                .filter(field -> field.queryParamField.equals(value))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown SpanField '%s'".formatted(value)));
+    }
 }
