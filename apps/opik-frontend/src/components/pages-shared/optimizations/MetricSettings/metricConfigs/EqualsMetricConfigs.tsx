@@ -5,15 +5,18 @@ import { Input } from "@/components/ui/input";
 import { EqualsMetricParameters } from "@/types/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import DatasetVariablesHint from "../DatasetVariablesHint";
 
 interface EqualsMetricConfigsProps {
   configs: Partial<EqualsMetricParameters>;
   onChange: (configs: Partial<EqualsMetricParameters>) => void;
+  datasetVariables?: string[];
 }
 
 const EqualsMetricConfigs = ({
   configs,
   onChange,
+  datasetVariables = [],
 }: EqualsMetricConfigsProps) => {
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -35,6 +38,12 @@ const EqualsMetricConfigs = ({
               onChange({ ...configs, reference_key: e.target.value })
             }
           />
+          <DatasetVariablesHint
+            datasetVariables={datasetVariables}
+            onSelect={(variable) =>
+              onChange({ ...configs, reference_key: variable })
+            }
+          />
         </div>
 
         <div className="flex items-center space-x-2">
@@ -46,7 +55,7 @@ const EqualsMetricConfigs = ({
             }
           />
           <Label htmlFor="case_sensitive" className="cursor-pointer text-sm">
-            Case sensitive
+            Case sensitive comparison
           </Label>
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.metric_case_sensitive]}

@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Info, RotateCw } from "lucide-react";
+import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
@@ -52,7 +52,6 @@ import OptimizationsActionsPanel from "@/components/pages/OptimizationsPage/Opti
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/components/pages/OptimizationsPage/OptimizationRowActionsCell";
-import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
@@ -71,15 +70,14 @@ import {
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
 import { checkIsGroupRowType } from "@/lib/groups";
-import {
-  DEFAULT_GROUPS_PER_PAGE,
-  DELETED_DATASET_ID,
-  GROUPING_COLUMN,
-} from "@/constants/groups";
+import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
+import { getOptimizerLabel } from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
+import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -119,9 +117,15 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     type: COLUMN_TYPE.string,
     size: 200,
     accessorFn: (row) => {
-      const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
+      const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
+      if (metadataVal) {
+        return isObject(metadataVal)
+          ? JSON.stringify(metadataVal, null, 2)
+          : toString(metadataVal);
+      }
 
-      return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+      const studioVal = row.studio_config?.optimizer?.type;
+      return studioVal ? getOptimizerLabel(studioVal) : "-";
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
   },
@@ -169,6 +173,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const isOptimizationStudioEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -375,52 +382,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [setGroupLimit],
   );
 
-  const chartsData = useMemo(() => {
-    const groupsMap: Record<string, ChartData> = {};
-    const indexMap: Record<string, number> = {};
-    let index = 0;
-
-    optimizations.forEach((optimization) => {
-      const key = optimization[GROUPING_COLUMN];
-      if (key !== DELETED_DATASET_ID) {
-        if (!groupsMap[key]) {
-          indexMap[key] = index;
-          groupsMap[key] = {
-            id: key,
-            name: optimization.dataset.name,
-            data: [],
-            lines: [],
-          };
-          index += 1;
-        }
-
-        // Only include the main objective score in the chart
-        const objectiveName = optimization.objective_name;
-        const objectiveScore = optimization.feedback_scores?.find(
-          (score) => score.name === objectiveName,
-        );
-
-        groupsMap[key].data.unshift({
-          entityId: optimization.id,
-          entityName: optimization.name,
-          createdDate: formatDate(optimization.created_at),
-          scores: objectiveScore
-            ? { [objectiveScore.name]: objectiveScore.value }
-            : {},
-        });
-
-        // Only add the objective name to lines
-        if (objectiveName && !groupsMap[key].lines.includes(objectiveName)) {
-          groupsMap[key].lines.push(objectiveName);
-        }
-      }
-    });
-
-    return Object.values(groupsMap).sort(
-      (g1, g2) => indexMap[g1.id] - indexMap[g2.id],
-    );
-  }, [optimizations]);
-
   if (isPending) {
     return <Loader />;
   }
@@ -429,94 +390,88 @@ const OptimizationsPage: React.FunctionComponent = () => {
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
-          Optimization runs
+          Optimization Studio
         </h1>
       </div>
       <ExplainerDescription
-        className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
       />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            config={filtersConfig as never}
-            filters={filters}
-            onChange={setFilters}
+      {isOptimizationStudioEnabled && <StudioTemplates />}
+      <div className="pt-6">
+        <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
+          Optimization runs
+        </h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search!}
+              setSearchText={setSearch}
+              placeholder="Search by name"
+              className="w-[320px]"
+              dimension="sm"
+            ></SearchInput>
+            <FiltersButton
+              columns={FILTER_COLUMNS}
+              config={filtersConfig as never}
+              filters={filters}
+              onChange={setFilters}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <OptimizationsActionsPanel optimizations={selectedRows} />
+            <Separator orientation="vertical" className="mx-2 h-4" />
+            <TooltipWrapper content="Refresh optimizations list">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="shrink-0"
+                onClick={() => refetch()}
+              >
+                <RotateCw />
+              </Button>
+            </TooltipWrapper>
+            <ColumnsButton
+              columns={DEFAULT_COLUMNS}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+            ></ColumnsButton>
+          </div>
+        </div>
+        <DataTable
+          columns={columns}
+          data={optimizations}
+          onRowClick={handleRowClick}
+          renderCustomRow={renderCustomRowCallback}
+          getIsCustomRow={getIsGroupRow}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          expandingConfig={expandingConfig}
+          groupingConfig={GROUPING_CONFIG}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={
+            <DataTableNoData title={noDataText}>
+              {noData && (
+                <Button variant="link" onClick={handleNewOptimizationClick}>
+                  Create new optimization
+                </Button>
+              )}
+            </DataTableNoData>
+          }
+        />
+        <div className="py-4">
+          <DataTablePagination
+            page={page!}
+            pageChange={setPage}
+            size={DEFAULT_GROUPS_PER_PAGE}
+            total={total}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <OptimizationsActionsPanel optimizations={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh optimizations list">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewOptimizationClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new optimization
-          </Button>
-        </div>
-      </div>
-      {Boolean(optimizations.length) && (
-        <FeedbackScoresChartsWrapper chartsData={chartsData} />
-      )}
-      <DataTable
-        columns={columns}
-        data={optimizations}
-        onRowClick={handleRowClick}
-        renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsGroupRow}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        expandingConfig={expandingConfig}
-        groupingConfig={GROUPING_CONFIG}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewOptimizationClick}>
-                Create new optimization
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page!}
-          pageChange={setPage}
-          size={DEFAULT_GROUPS_PER_PAGE}
-          total={total}
-        ></DataTablePagination>
       </div>
       <AddOptimizationDialog
         key={resetDialogKeyRef.current}

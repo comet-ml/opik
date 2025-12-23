@@ -6,10 +6,12 @@ import { Optimization } from "@/types/optimizations";
 
 type OptimizationLogsProps = {
   optimization: Optimization | null;
+  showViewAllTrialsLink?: boolean;
 };
 
 const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   optimization,
+  showViewAllTrialsLink = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -18,7 +20,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     : [];
 
   return (
-    <Card className="h-full">
+    <Card className="size-full">
       <CardContent className="flex h-full flex-col p-4">
         <div className="space-y-2">
           {logs.length === 0 ? (
@@ -32,7 +34,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
                   {log}
                 </div>
               ))}
-              {optimization && (
+              {showViewAllTrialsLink && optimization && (
                 <Link
                   to="/$workspaceName/optimizations/$datasetId/compare"
                   params={{

@@ -114,9 +114,10 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
       {expanded && (
         <>
           <div className="grow truncate">{item.label}</div>
-          {hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>}
-          {showIndicatorBadge && (
+          {showIndicatorBadge ? (
             <div className="size-2 shrink-0 rounded-full bg-[var(--color-green)]" />
+          ) : (
+            hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>
           )}
         </>
       )}

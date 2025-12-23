@@ -13,6 +13,7 @@ interface PromptMessageMediaSectionProps {
   setImages: (items: string[]) => void;
   setVideos: (items: string[]) => void;
   setAudios: (items: string[]) => void;
+  promptVariables?: string[];
   disabled?: boolean;
 }
 
@@ -23,6 +24,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
   setImages,
   setVideos,
   setAudios,
+  promptVariables,
   disabled = false,
 }) => {
   const [openPopover, setOpenPopover] = useState<string | null>(null);
@@ -53,6 +55,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
             items={images}
             setItems={setImages}
             onOpenChange={(isOpen) => handlePopoverChange("image", isOpen)}
+            promptVariables={promptVariables}
           >
             <TooltipWrapper content="Image">
               <Button
@@ -73,6 +76,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
             items={videos}
             setItems={setVideos}
             onOpenChange={(isOpen) => handlePopoverChange("video", isOpen)}
+            promptVariables={promptVariables}
           >
             <TooltipWrapper content="Video">
               <Button
@@ -93,6 +97,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
             items={audios}
             setItems={setAudios}
             onOpenChange={(isOpen) => handlePopoverChange("audio", isOpen)}
+            promptVariables={promptVariables}
           >
             <TooltipWrapper content="Audio">
               <Button

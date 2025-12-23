@@ -32,17 +32,20 @@ export const useOptimizationScores = (
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
 
-    if (
-      !objectiveName ||
-      !experiments.length ||
-      !isArray(sortedRows?.[0]?.feedback_scores)
-    )
+    // If no experiments, return empty result
+    if (!sortedRows.length) {
       return retVal;
+    }
+
+    // If we have experiments but no scores yet, use the first (or most recent) experiment as best
+    if (!objectiveName || !isArray(sortedRows?.[0]?.feedback_scores)) {
+      // Use the most recent experiment as the "best" when no scores exist
+      retVal.bestExperiment = sortedRows[sortedRows.length - 1];
+      return retVal;
+    }
 
     retVal.baseScore =
       getFeedbackScoreValue(sortedRows[0].feedback_scores, objectiveName) ?? 0;
-
-    if (retVal.baseScore === 0) return retVal;
 
     experiments.forEach((e) => {
       const score = getFeedbackScoreValue(
@@ -62,6 +65,11 @@ export const useOptimizationScores = (
         };
       }
     });
+
+    // If no experiment had a valid score, fallback to the most recent experiment
+    if (!retVal.bestExperiment) {
+      retVal.bestExperiment = sortedRows[sortedRows.length - 1];
+    }
 
     return retVal;
   }, [experiments, objectiveName]);
