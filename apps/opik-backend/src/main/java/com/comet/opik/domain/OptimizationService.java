@@ -166,7 +166,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
                                 return optimizationDAO.upsert(newOptimization)
                                         .thenReturn(newOptimization.id())
-                                        .doOnSuccess(experimentId -> {
+                                        .doOnSuccess(__ -> {
                                             postOptimizationCreatedEvent(newOptimization, workspaceId, userName);
 
                                             // Only enqueue job for NEW Studio optimizations
@@ -250,8 +250,8 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private void finalizeLogsAsync(String workspaceId, UUID optimizationId) {
         logSyncService.finalizeLogsOnCompletion(workspaceId, optimizationId)
-                .doOnError(error -> log.error("Failed to finalize logs for optimization {}: {}",
-                        optimizationId, error.getMessage()))
+                .doOnError(error -> log.error("Failed to finalize logs for optimization '{}'",
+                        optimizationId, error))
                 .subscribe();
     }
 

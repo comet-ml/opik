@@ -107,8 +107,8 @@ public class OptimizationLogFlusherJob implements Managed {
 
                     return Flux.fromIterable(keys)
                             .flatMap(this::syncLogForMetaKey, config.getSyncConcurrency())
-                            .onErrorContinue((error, key) -> log.warn("Failed to sync logs for key '{}': {}",
-                                    key, error.getMessage()))
+                            .onErrorContinue((error, key) -> log.warn("Failed to sync logs for key '{}'",
+                                    key, error))
                             .then();
                 });
     }
