@@ -14,7 +14,7 @@ const CollaboratorsTabTrigger = ({ value }: CollaboratorsTabTriggerProps) => {
 
   return (
     <TabsTrigger variant="underline" value={value}>
-      Collaborators
+      Members
     </TabsTrigger>
   );
 };

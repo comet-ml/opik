@@ -1,14 +1,26 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Mail } from "lucide-react";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useUsernameAutocomplete from "@/plugins/comet/api/useUsernameAutocomplete";
 import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
+import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
+import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
+import {
+  getPermissionByType,
+  isUserPermissionValid,
+} from "@/plugins/comet/lib/permissions";
+import {
+  ManagementPermissionsNames,
+  WORKSPACE_ROLE_TYPE,
+} from "@/plugins/comet/types";
 import {
   DropdownMenuContent,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import { Tag } from "@/components/ui/tag";
+import { cn } from "@/lib/utils";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_USERNAME_LENGTH = 3;
@@ -34,11 +46,9 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   const currentOrganization = useCurrentOrganization();
   const organizationId = currentOrganization?.id || "";
 
-  const { data: users = [] } = useUsernameAutocomplete(
+  const { data: users = [], isLoading } = useUsernameAutocomplete(
     {
       query: searchQuery,
-      organizationId,
-      excludedWorkspaceId: workspaceId || "",
     },
     {
       enabled:
@@ -47,7 +57,59 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     },
   );
 
+  const { data: workspaceMembers = [] } = useAllWorkspaceMembers(
+    { workspaceId: workspaceId || "" },
+    {
+      enabled: Boolean(workspaceId),
+    },
+  );
+
+  const { data: permissionsData = [] } = useWorkspaceUsersPermissions(
+    { workspaceId: workspaceId || "" },
+    {
+      enabled: Boolean(workspaceId),
+    },
+  );
+
   const inviteUsersMutation = useInviteUsersMutation();
+
+  const userRoleMap = useMemo(() => {
+    const permissionsMap = new Map(
+      permissionsData.map((permission) => [
+        permission.userName,
+        permission.permissions,
+      ]),
+    );
+
+    const map = new Map<string, WORKSPACE_ROLE_TYPE>();
+    workspaceMembers.forEach((member) => {
+      const userPermissions =
+        member.userName && permissionsMap.get(member.userName)
+          ? permissionsMap.get(member.userName) || []
+          : [];
+
+      const permissionByType = getPermissionByType(
+        userPermissions,
+        ManagementPermissionsNames.MANAGEMENT,
+      );
+
+      const role = isUserPermissionValid(permissionByType?.permissionValue)
+        ? WORKSPACE_ROLE_TYPE.owner
+        : WORKSPACE_ROLE_TYPE.member;
+
+      if (member.userName) {
+        map.set(member.userName, role);
+      }
+      if (member.email) {
+        map.set(member.email.toLowerCase(), role);
+      }
+    });
+    return map;
+  }, [workspaceMembers, permissionsData]);
+
+  const getUserRole = (identifier: string): WORKSPACE_ROLE_TYPE | null => {
+    return userRoleMap.get(identifier.toLowerCase()) || null;
+  };
 
   const hasEmailQuery = EMAIL_REGEX.test(searchQuery);
 
@@ -86,7 +148,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     const hasResults = users.length > 0;
     const showEmailRow = hasEmailQuery;
 
-    if (!hasResults && !showEmailRow) {
+    if (!hasResults && !showEmailRow && !isLoading) {
       return (
         <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
           No users found. You can also invite by email address
@@ -94,28 +156,54 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
       );
     }
 
+    const emailRole = showEmailRow ? getUserRole(searchQuery) : null;
+
     return (
       <div className="h-full space-y-1 overflow-y-auto">
-        {users.map((user) => (
-          <div
-            key={user}
-            onClick={() => handleInviteUser(user)}
-            className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground"
-          >
-            <div className="flex flex-1 flex-col">
-              <span className="comet-body-s-accented">{user}</span>
+        {users.map((user) => {
+          const role = getUserRole(user);
+          return (
+            <div
+              key={user}
+              onClick={() => !role && handleInviteUser(user)}
+              className={cn(
+                "flex items-center gap-3 rounded-sm px-3 py-2.5 transition-colors",
+                role
+                  ? "cursor-not-allowed opacity-50"
+                  : "cursor-pointer hover:bg-primary-foreground",
+              )}
+            >
+              <div className="flex flex-1 flex-col">
+                <span className="comet-body-s-accented">{user}</span>
+              </div>
+              {role && (
+                <Tag variant="gray" size="sm">
+                  {role}
+                </Tag>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {showEmailRow && (
           <div
-            onClick={() => handleInviteUser()}
-            className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground"
+            onClick={() => !emailRole && handleInviteUser()}
+            className={cn(
+              "flex items-center gap-3 rounded-sm px-3 py-2.5 transition-colors",
+              emailRole
+                ? "cursor-not-allowed opacity-50"
+                : "cursor-pointer hover:bg-primary-foreground",
+            )}
           >
             <div className="flex flex-1 flex-col">
               <span className="comet-body-s-accented">{searchQuery}</span>
             </div>
-            <Mail className="size-4 shrink-0 text-muted-slate" />
+            {emailRole ? (
+              <Tag variant="gray" size="sm">
+                {emailRole}
+              </Tag>
+            ) : (
+              <Mail className="size-4 shrink-0 text-muted-slate" />
+            )}
           </div>
         )}
       </div>

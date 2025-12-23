@@ -12,7 +12,7 @@ enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
   AI_PROVIDER = "ai-provider",
   WORKSPACE_PREFERENCES = "workspace-preferences",
-  COLLABORATORS = "collaborators",
+  MEMBERS = "members",
 }
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
@@ -65,9 +65,7 @@ const ConfigurationPage = () => {
               Workspace preferences
             </TabsTrigger>
             {isCollaboratorsTabEnabled && CollaboratorsTabTrigger && (
-              <CollaboratorsTabTrigger
-                value={CONFIGURATION_TABS.COLLABORATORS}
-              />
+              <CollaboratorsTabTrigger value={CONFIGURATION_TABS.MEMBERS} />
             )}
           </TabsList>
 
@@ -84,7 +82,7 @@ const ConfigurationPage = () => {
           </TabsContent>
 
           {isCollaboratorsTabEnabled && CollaboratorsTab && (
-            <TabsContent value={CONFIGURATION_TABS.COLLABORATORS}>
+            <TabsContent value={CONFIGURATION_TABS.MEMBERS}>
               <CollaboratorsTab />
             </TabsContent>
           )}
