@@ -79,14 +79,17 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const hasSearchOrFilter = hasSearch || hasFilter;
   const title = !hasSearchOrFilter ? "Trace" : "Results";
 
-  const spansFilterForTrace = [
-    createFilter({
-      field: "trace_id",
-      type: COLUMN_TYPE.string,
-      operator: "=",
-      value: trace.id,
-    }),
-  ];
+  const spansFilterForTrace = useMemo(
+    () => [
+      createFilter({
+        field: "trace_id",
+        type: COLUMN_TYPE.string,
+        operator: "=",
+        value: trace.id,
+      }),
+    ],
+    [trace.id],
+  );
 
   const predicate = useCallback(
     (data: Span | Trace) =>
