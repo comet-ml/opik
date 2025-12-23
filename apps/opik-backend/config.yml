@@ -419,6 +419,21 @@ onlineScoring:
       pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
+# Configuration for Optimization Studio logs synchronization
+optimizationLogs:
+  # Default: true
+  # Description: Whether log synchronization from Redis to S3 is enabled
+  enabled: ${OPTIMIZATION_LOGS_ENABLED:-true}
+  # Default: 2m
+  # Description: Interval between log sync runs
+  syncInterval: ${OPTIMIZATION_LOGS_SYNC_INTERVAL:-2m}
+  # Default: 30s
+  # Description: Lock timeout for per-optimization distributed lock during sync
+  lockTimeout: ${OPTIMIZATION_LOGS_LOCK_TIMEOUT:-30s}
+  # Default: 5
+  # Description: Maximum number of concurrent S3 uploads during sync
+  syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 3
