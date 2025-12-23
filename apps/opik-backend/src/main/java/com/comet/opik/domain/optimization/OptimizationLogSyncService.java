@@ -142,6 +142,7 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
 
         // Use StringCodec for log list since Python stores plain text log lines
         RListReactive<String> logList = redisClient.getList(logKey, StringCodec.INSTANCE);
+        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey);
 
         return logList.readAll()
                 .flatMap(logs -> {
@@ -160,12 +161,13 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
                     log.info("Uploading '{}' log lines ({} bytes -> {} bytes gzipped) for optimization '{}' to S3",
                             logs.size(), logContent.length(), compressedLogs.length, optimizationId);
 
-                    // Upload to S3, then reduce TTL (don't delete)
+                    // Upload to S3, update flush timestamp, then reduce TTL (don't delete)
                     return Mono.fromCallable(() -> {
                         fileService.upload(s3Key, compressedLogs, CONTENT_TYPE_GZIP);
                         return true;
                     })
                             .subscribeOn(Schedulers.boundedElastic())
+                            .then(updateLastFlushTimestamp(metaMap, optimizationId))
                             .then(reduceRedisTTL(logKey, metaKey, optimizationId));
                 });
     }
@@ -242,15 +244,6 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
         String now = String.valueOf(System.currentTimeMillis());
         return metaMap.put(META_LAST_FLUSH_TS, now)
                 .doOnSuccess(__ -> log.debug("Updated last_flush_ts for optimization '{}'", optimizationId))
-                .then();
-    }
-
-    /**
-     * Delete Redis keys after successful finalization.
-     */
-    private Mono<Void> deleteRedisKeys(String logKey, String metaKey, UUID optimizationId) {
-        return redisClient.getKeys().delete(logKey, metaKey)
-                .doOnSuccess(count -> log.info("Deleted '{}' Redis keys for optimization '{}'", count, optimizationId))
                 .then();
     }
 

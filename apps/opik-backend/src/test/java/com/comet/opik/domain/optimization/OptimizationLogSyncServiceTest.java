@@ -78,7 +78,7 @@ class OptimizationLogSyncServiceTest {
 
         // Default config - enabled
         lenient().when(config.isEnabled()).thenReturn(true);
-        lenient().when(config.getLockTtlSeconds()).thenReturn(30L);
+        lenient().when(config.getLockTimeout()).thenReturn(java.time.Duration.ofSeconds(30));
 
         // Default Redis mocks - use doReturn to avoid generic type issues
         lenient().doReturn(logList).when(redisClient).getList(anyString(), any(StringCodec.class));
@@ -197,6 +197,7 @@ class OptimizationLogSyncServiceTest {
             when(lockService.unlockUsingToken(any())).thenReturn(Mono.empty());
             when(logList.readAll()).thenReturn(Mono.just(logs));
             when(keysReactive.expire(anyString(), anyLong(), any())).thenReturn(Mono.just(true));
+            doReturn(Mono.just("old_value")).when(metaMap).put(eq("last_flush_ts"), anyString());
 
             // When & Then
             StepVerifier.create(service.finalizeLogsOnCompletion(WORKSPACE_ID, OPTIMIZATION_ID))
@@ -207,6 +208,9 @@ class OptimizationLogSyncServiceTest {
                     eq("logs/optimization-studio/" + WORKSPACE_ID + "/" + OPTIMIZATION_ID + ".log.gz"),
                     any(byte[].class),
                     eq("application/gzip"));
+
+            // Verify last_flush_ts was updated
+            verify(metaMap).put(eq("last_flush_ts"), anyString());
 
             // Verify TTL reduction on both keys
             verify(keysReactive).expire(eq(LOG_KEY), eq(3600L), any());

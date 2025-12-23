@@ -131,16 +131,20 @@ class OptimizationServiceImpl implements OptimizationService {
                                 // Preserve existing fields when updating (SDK doesn't know about studioConfig)
                                 if (existingOpt.isPresent()) {
                                     var existing = existingOpt.get();
-                                    log.info("Optimization '{}' already exists, preserving studioConfig and name",
-                                            id);
+                                    log.info("Optimization '{}' already exists, preserving studioConfig", id);
 
                                     // Preserve studioConfig if not provided in update
                                     if (optimization.studioConfig() == null && existing.studioConfig() != null) {
                                         builder.studioConfig(existing.studioConfig());
                                     }
 
-                                    // Preserve original name (don't let SDK overwrite with random name)
-                                    builder.name(existing.name());
+                                    // Preserve original name only if incoming name is blank
+                                    // (SDK sends blank name, but explicit updates should be honored)
+                                    if (StringUtils.isBlank(optimization.name())) {
+                                        builder.name(existing.name());
+                                    } else {
+                                        builder.name(optimization.name());
+                                    }
 
                                     // Don't re-enqueue job for existing optimizations
                                 } else {
@@ -162,7 +166,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
                                 return optimizationDAO.upsert(newOptimization)
                                         .thenReturn(newOptimization.id())
-                                        .doOnSuccess(experimentId -> {
+                                        .doOnSuccess(__ -> {
                                             postOptimizationCreatedEvent(newOptimization, workspaceId, userName);
 
                                             // Only enqueue job for NEW Studio optimizations
@@ -246,8 +250,8 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private void finalizeLogsAsync(String workspaceId, UUID optimizationId) {
         logSyncService.finalizeLogsOnCompletion(workspaceId, optimizationId)
-                .doOnError(error -> log.error("Failed to finalize logs for optimization {}: {}",
-                        optimizationId, error.getMessage()))
+                .doOnError(error -> log.error("Failed to finalize logs for optimization '{}'",
+                        optimizationId, error))
                 .subscribe();
     }
 
