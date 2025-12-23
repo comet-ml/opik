@@ -17,11 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Dict, Any, IO
 import subprocess
 from opik_backend.subprocess_log_config import SubprocessLogConfig
-
-try:
-    import requests
-except ImportError:
-    requests = None
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +106,6 @@ class BatchLogCollector(logging.Handler):
         if not backend_url:
             raise ValueError("backend_url is required for BatchLogCollector")
         
-        # Check requests library availability
-        if requests is None:
-            raise ImportError("requests library is required for subprocess logging. Install it with: pip install requests")
-        
         self.backend_url = backend_url
         self.optimization_id = optimization_id
         self.job_id = job_id
@@ -193,12 +185,6 @@ class BatchLogCollector(logging.Handler):
         Note: Must be called with buffer_lock held.
         """
         if not self.log_buffer:
-            return
-
-        if requests is None:
-            logger.warning("requests library not available for log posting")
-            self.log_buffer.clear()
-            self.buffer_size_bytes = 0
             return
 
         # Prepare the log batch
@@ -281,7 +267,7 @@ class BatchLogCollector(logging.Handler):
                             try:
                                 future.result(timeout=2.0)
                             except FuturesTimeoutError:
-                                logger.error(f"Reader thread timed out after 2.0s")
+                                logger.error("Reader thread timed out after 2.0s")
                             except Exception as e:
                                 logger.warning(f"Error in reader thread: {e}")
                 except Exception as e:
@@ -384,7 +370,7 @@ class BatchLogCollector(logging.Handler):
         Read from a stream line-by-line, emit logs, and keep only the last line.
         
         Private method used by start_stream_from_process to handle individual streams.
-        Emits raw lines to the log collector - no JSON parsing or wrapping.
+        Parses JSON logs to extract structured fields, falls back to plain text.
         
         Args:
             pipe: Input stream to read from (stdout or stderr)
@@ -399,8 +385,32 @@ class BatchLogCollector(logging.Handler):
                 if line.strip():
                     # Keep only the last line (for result parsing)
                     last_lines[stream_name] = line
-                    # Emit raw line - let the collector decide how to store it
-                    self.emit({'message': line.strip()})
+                    try:
+                        # Try to parse as JSON to preserve log structure
+                        log_data = json.loads(line.strip())
+                        # If it has log structure (level and logger_name), emit as-is
+                        if 'level' in log_data and 'logger_name' in log_data:
+                            self.emit(log_data)
+                        else:
+                            # Plain JSON result - treat as log message
+                            log_data = {
+                                'timestamp': int(time.time() * 1000),
+                                'level': 'INFO',
+                                'logger_name': f'subprocess.{stream_name}',
+                                'message': line.strip(),
+                                'attributes': {}
+                            }
+                            self.emit(log_data)
+                    except json.JSONDecodeError:
+                        # Fallback: treat as plain text message
+                        log_data = {
+                            'timestamp': int(time.time() * 1000),
+                            'level': 'INFO',
+                            'logger_name': f'subprocess.{stream_name}',
+                            'message': line.strip(),
+                            'attributes': {}
+                        }
+                        self.emit(log_data)
         except Exception as e:
             logger.warning(f"Error reading {stream_name}: {e}")
         finally:
@@ -537,6 +547,37 @@ class RedisBatchLogCollector(BatchLogCollector):
         
         except Exception as e:
             logger.warning(f"Error in RedisBatchLogCollector emit: {e}")
+    
+    def _read_stream(self, pipe: Optional[IO], stream_name: str, last_lines: Dict[str, str]) -> None:
+        """
+        Read from a stream line-by-line, emit raw logs without JSON parsing.
+        
+        Overrides parent to emit raw lines for Redis storage, preserving
+        Rich formatting and ANSI codes.
+        
+        Args:
+            pipe: Input stream to read from (stdout or stderr)
+            stream_name: Name of stream ("stdout" or "stderr") for logging
+            last_lines: Dict to store the last line from this stream
+        """
+        if pipe is None:
+            return
+        try:
+            for line in pipe:
+                # Only process non-empty lines
+                if line.strip():
+                    # Keep only the last line (for result parsing)
+                    last_lines[stream_name] = line
+                    # Emit raw line - Redis collector stores as-is
+                    self.emit({'message': line.strip()})
+        except Exception as e:
+            logger.warning(f"Error reading {stream_name}: {e}")
+        finally:
+            try:
+                if pipe:
+                    pipe.close()
+            except Exception as e:
+                logger.warning(f"Error closing {stream_name}: {e}")
     
     def _flush_logs(self) -> None:
         """

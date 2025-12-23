@@ -1,7 +1,6 @@
 """Configuration for Optimization Studio."""
 
 import os
-from typing import Dict
 
 # Opik Configuration
 OPIK_URL = os.getenv("OPIK_URL_OVERRIDE")
@@ -16,6 +15,9 @@ LLM_API_KEYS = {
 # Metric Defaults
 DEFAULT_REFERENCE_KEY = "answer"
 DEFAULT_CASE_SENSITIVE = False
+
+# Optimization timeout (default: 2 hours)
+OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTIMIZATION_TIMEOUT_SECS", "7200"))
 
 # Optimization Runtime Parameters
 # These are passed to optimizer.optimize_prompt() for all optimizer types
