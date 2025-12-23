@@ -6,6 +6,7 @@ import { Clock } from "lucide-react";
 import { formatDate } from "@/lib/date";
 import { Experiment } from "@/types/datasets";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import NoData from "@/components/shared/NoData/NoData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,7 @@ type OptimizationProgressChartContainerProps = {
 
 const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
-> = ({ experiments, bestEntityId, objectiveName = "", status }) => {
+> = ({ experiments, bestEntityId, status, objectiveName = "" }) => {
   const chartData = useMemo(() => {
     const retVal: ChartData = {
       data: [],
@@ -72,8 +73,7 @@ const OptimizationProgressChartContainer: React.FC<
 
     if (noData) {
       const isInProgress =
-        status === OPTIMIZATION_STATUS.RUNNING ||
-        status === OPTIMIZATION_STATUS.INITIALIZED;
+        !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
       return (
         <NoData

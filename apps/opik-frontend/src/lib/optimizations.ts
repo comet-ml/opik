@@ -33,6 +33,11 @@ export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
 };
 
+export const IN_PROGRESS_OPTIMIZATION_STATUSES: OPTIMIZATION_STATUS[] = [
+  OPTIMIZATION_STATUS.RUNNING,
+  OPTIMIZATION_STATUS.INITIALIZED,
+];
+
 export const ACTIVE_OPTIMIZATION_FILTER: Filters = [
   {
     id: "status-running",

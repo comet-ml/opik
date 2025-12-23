@@ -20,14 +20,10 @@ const OptimizationsNewPage: React.FC = () => {
   const datasetCreationRef = useRef<string | null>(null);
   const [isPreparingDataset, setIsPreparingDataset] = useState(false);
 
-  const templateData = useMemo(() => {
-    if (templateId) {
-      return (
-        OPTIMIZATION_DEMO_TEMPLATES.find((t) => t.id === templateId) || null
-      );
-    }
-    return null;
-  }, [templateId]);
+  const templateData = useMemo(
+    () => OPTIMIZATION_DEMO_TEMPLATES.find((t) => t.id === templateId) ?? null,
+    [templateId],
+  );
 
   const defaultValues = useMemo(() => {
     return convertOptimizationStudioToFormData(templateData);

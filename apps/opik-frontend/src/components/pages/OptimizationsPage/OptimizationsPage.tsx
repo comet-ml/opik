@@ -470,7 +470,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
             pageChange={setPage}
             size={DEFAULT_GROUPS_PER_PAGE}
             total={total}
-          ></DataTablePagination>
+          />
         </div>
       </div>
       <AddOptimizationDialog

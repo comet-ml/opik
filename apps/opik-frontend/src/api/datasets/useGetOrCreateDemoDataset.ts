@@ -29,13 +29,11 @@ const useGetOrCreateDemoDataset = () => {
       try {
         // Try to create dataset (will fail if exists, which is fine)
         let newDataset = null;
-        let isNewlyCreated = false;
         try {
           const { data } = await api.post(DATASETS_REST_ENDPOINT, {
             name: datasetName,
           });
           newDataset = data;
-          isNewlyCreated = true;
         } catch {
           // Dataset likely already exists, continue to fetch it
         }
@@ -49,7 +47,7 @@ const useGetOrCreateDemoDataset = () => {
         if (!dataset?.id) return null;
 
         // Only add items if dataset was newly created
-        if (isNewlyCreated) {
+        if (newDataset) {
           await api.put(`${DATASETS_REST_ENDPOINT}items`, {
             dataset_id: dataset.id,
             items: datasetItems.map((item: DemoDatasetItem) => ({

@@ -290,6 +290,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     {
       placeholderData: keepPreviousData,
       refetchInterval: RUNNING_OPTIMIZATION_REFETCH_INTERVAL,
+      enabled: !!workspaceName,
     },
   );
 

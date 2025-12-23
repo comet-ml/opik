@@ -33,7 +33,7 @@ export const useOptimizationScores = (
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
 
     // If no experiments, return empty result
-    if (!experiments.length) {
+    if (!sortedRows.length) {
       return retVal;
     }
 
@@ -67,7 +67,7 @@ export const useOptimizationScores = (
     });
 
     // If no experiment had a valid score, fallback to the most recent experiment
-    if (!retVal.bestExperiment && sortedRows.length > 0) {
+    if (!retVal.bestExperiment) {
       retVal.bestExperiment = sortedRows[sortedRows.length - 1];
     }
 
