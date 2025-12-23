@@ -7,7 +7,7 @@ import {
   useOutputLoadingByPromptDatasetItemId,
   useOutputStaleStatusByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
-  useSelectedRuleIds,
+  useSelectedRuleIdsByPromptDatasetItemId,
   useTraceIdByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
@@ -58,7 +58,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
     originalRow.dataItemId,
   );
 
-  const selectedRuleIds = useSelectedRuleIds();
+  const selectedRuleIds = useSelectedRuleIdsByPromptDatasetItemId(
+    promptId,
+    originalRow.dataItemId,
+  );
 
   const { data: playgroundProject } = useProjectByName(
     {
@@ -117,7 +120,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </Button>
           </TooltipWrapper>
         )}
-        <div className="min-h-[var(--cell-top-height)]">
+        <div className="mb-2 min-h-[var(--cell-top-height)]">
           <PlaygroundOutputScores
             traceId={traceId}
             selectedRuleIds={selectedRuleIds}

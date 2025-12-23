@@ -34,7 +34,7 @@ const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
 
 interface PlaygroundOutputScoresProps {
   traceId: string | null;
-  selectedRuleIds: string[] | null;
+  selectedRuleIds: string[] | null | undefined;
   stale?: boolean;
   className?: string;
 }
@@ -59,8 +59,10 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   }, [traceId]);
 
   // Rules are selected if selectedRuleIds is null (all selected) or has items
+  // undefined means no run has happened yet, so no metrics to show
   const hasSelectedRules =
-    selectedRuleIds === null || selectedRuleIds.length > 0;
+    selectedRuleIds !== undefined &&
+    (selectedRuleIds === null || selectedRuleIds.length > 0);
 
   // Fetch playground project to get rules
   const { data: playgroundProject } = useProjectByName(
@@ -83,16 +85,33 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
-  // Get selected rules
+  // Get selected rules - only use specific rule IDs, not "all"
+  // When selectedRuleIds is null (meaning "all" was selected), we'll only show
+  // scores that actually exist in the trace, not loading spinners for all current rules
   const selectedRules = useMemo(() => {
     if (!hasSelectedRules || rules.length === 0) return [];
 
+    // If selectedRuleIds is null, return empty - we'll handle this case differently
+    // by only showing actual scores from the trace
     if (selectedRuleIds === null) {
-      return rules;
+      return [];
     }
 
     return rules.filter((r) => selectedRuleIds.includes(r.id));
   }, [hasSelectedRules, rules, selectedRuleIds]);
+
+  // When "all" was selected (null), we need to know which rules produced the scores
+  // to display the rule name instead of the score name
+  const scoreNameToRuleName = useMemo(() => {
+    const mapping: Record<string, string> = {};
+    for (const rule of rules) {
+      const scoreNames = getScoreNamesFromRule(rule);
+      for (const scoreName of scoreNames) {
+        mapping[scoreName] = rule.name;
+      }
+    }
+    return mapping;
+  }, [rules]);
 
   // Fetch trace to get scores
   const { data: trace } = useTraceById(
@@ -140,28 +159,49 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
       score: TraceFeedbackScore | null;
     }> = [];
 
-    for (const rule of selectedRules) {
-      const scoreNames = getScoreNamesFromRule(rule);
-      for (const scoreName of scoreNames) {
+    // If selectedRuleIds is null (meaning "all" was selected at run time),
+    // only show scores that actually exist in the trace - no loading spinners
+    if (selectedRuleIds === null) {
+      for (const score of feedbackScores) {
+        const ruleName = scoreNameToRuleName[score.name] || score.name;
         metrics.push({
-          scoreName,
-          ruleName: rule.name,
-          score: scoresByName[scoreName] || null,
+          scoreName: score.name,
+          ruleName,
+          score,
         });
+      }
+    } else {
+      // Specific rules were selected - show loading spinners for expected scores
+      for (const rule of selectedRules) {
+        const scoreNames = getScoreNamesFromRule(rule);
+        for (const scoreName of scoreNames) {
+          metrics.push({
+            scoreName,
+            ruleName: rule.name,
+            score: scoresByName[scoreName] || null,
+          });
+        }
       }
     }
 
     // Sort by rule name alphabetically
     return metrics.sort((a, b) => a.ruleName.localeCompare(b.ruleName));
-  }, [rulesLoaded, selectedRules, scoresByName]);
+  }, [
+    rulesLoaded,
+    selectedRules,
+    scoresByName,
+    selectedRuleIds,
+    feedbackScores,
+    scoreNameToRuleName,
+  ]);
 
   // Don't render anything if no rules are selected or no traceId
   if (!hasSelectedRules || !traceId) {
     return null;
   }
 
-  // Don't render if rules loaded but no expected metrics
-  if (rulesLoaded && expectedMetrics.length === 0) {
+  // Don't render if rules loaded but no expected metrics (and we have specific rules selected)
+  if (rulesLoaded && expectedMetrics.length === 0 && selectedRuleIds !== null) {
     return null;
   }
 
