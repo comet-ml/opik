@@ -185,6 +185,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
         <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
           <ResizablePanel id="tree-viewer" defaultSize={40} minSize={20}>
             <TraceTreeViewer
+              projectId={projectId}
               trace={trace}
               spans={spansData?.content}
               rowId={spanId || traceId}

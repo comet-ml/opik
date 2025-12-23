@@ -330,6 +330,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
+                    .put(SpanField.TRACE_ID, TRACE_ID_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -518,7 +519,8 @@ public class FilterQueryBuilder {
                 SpanField.USAGE_TOTAL_TOKENS,
                 SpanField.DURATION,
                 SpanField.ERROR_INFO,
-                SpanField.TYPE));
+                SpanField.TYPE,
+                SpanField.TRACE_ID));
 
         map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
                 TraceField.FEEDBACK_SCORES,
