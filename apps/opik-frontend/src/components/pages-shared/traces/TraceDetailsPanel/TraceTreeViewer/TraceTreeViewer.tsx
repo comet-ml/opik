@@ -222,7 +222,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             <TooltipWrapper content="View all spans of this trace in table view">
               <button
                 onClick={handleNavigateToSpans}
-                className="comet-body-s text-muted-slate hover:text-foreground hover:underline"
+                className="comet-body-s text-muted-slate underline hover:text-foreground"
               >
                 {!hasSearchOrFilter ? traceSpans.length : searchIds.size} items
               </button>
