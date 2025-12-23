@@ -638,8 +638,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     function_map=getattr(
                         current_best_for_primary, "function_map", prompt.function_map
                     ),
-                    model=prompt.model,
-                    model_parameters=prompt.model_kwargs,
+                    model=getattr(current_best_for_primary, "model", prompt.model),
+                    model_parameters=getattr(
+                        current_best_for_primary, "model_kwargs", prompt.model_kwargs
+                    ),
                 )
             else:
                 # Single-objective
@@ -651,8 +653,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     function_map=getattr(
                         current_best_on_front, "function_map", prompt.function_map
                     ),
-                    model=prompt.model,
-                    model_parameters=prompt.model_kwargs,
+                    model=getattr(current_best_on_front, "model", prompt.model),
+                    model_parameters=getattr(
+                        current_best_on_front, "model_kwargs", prompt.model_kwargs
+                    ),
                 )
 
             if self.enable_moo:
@@ -813,8 +817,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     function_map=getattr(
                         best_overall_solution, "function_map", prompt.function_map
                     ),
-                    model=prompt.model,
-                    model_parameters=prompt.model_kwargs,
+                    model=getattr(best_overall_solution, "model", prompt.model),
+                    model_parameters=getattr(
+                        best_overall_solution, "model_kwargs", prompt.model_kwargs
+                    ),
                 )
                 final_primary_score = best_overall_solution.fitness.values[0]
                 final_length = best_overall_solution.fitness.values[1]

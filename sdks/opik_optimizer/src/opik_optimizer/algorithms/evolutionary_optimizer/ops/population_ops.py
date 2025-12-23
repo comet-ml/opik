@@ -38,8 +38,10 @@ def restart_population(
             function_map=getattr(
                 best_elite, "function_map", best_prompt_so_far.function_map
             ),
-            model=best_prompt_so_far.model,
-            model_parameters=best_prompt_so_far.model_kwargs,
+            model=getattr(best_elite, "model", best_prompt_so_far.model),
+            model_parameters=getattr(
+                best_elite, "model_kwargs", best_prompt_so_far.model_kwargs
+            ),
         )
     else:
         seed_prompt = best_prompt_so_far
