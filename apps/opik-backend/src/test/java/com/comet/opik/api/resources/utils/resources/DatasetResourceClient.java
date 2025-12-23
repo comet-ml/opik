@@ -7,6 +7,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionCreate;
@@ -599,5 +600,26 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(deleteRequest));
+    }
+
+    public DatasetVersion applyDatasetItemChanges(UUID datasetId, DatasetItemChanges changes, boolean override,
+            String apiKey, String workspaceName) {
+        try (var response = callApplyDatasetItemChanges(datasetId, changes, override, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callApplyDatasetItemChanges(UUID datasetId, DatasetItemChanges changes, boolean override,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("changes")
+                .queryParam("override", override)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(changes));
     }
 }

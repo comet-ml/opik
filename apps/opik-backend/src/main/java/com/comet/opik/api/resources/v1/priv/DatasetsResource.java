@@ -561,7 +561,7 @@ public class DatasetsResource {
     @JsonView(DatasetVersion.View.Public.class)
     public Response applyDatasetItemChanges(
             @PathParam("id") UUID datasetId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemChanges.class))) @JsonView(DatasetItemChanges.View.Write.class) @NotNull @Valid DatasetItemChanges changes,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemChanges.class))) @NotNull @Valid DatasetItemChanges changes,
             @QueryParam("override") @DefaultValue("false") boolean override) {
 
         checkVersioningFeatureEnabled();

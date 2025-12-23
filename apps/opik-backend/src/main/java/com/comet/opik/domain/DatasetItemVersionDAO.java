@@ -453,7 +453,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     workspace_id
                 )
                 SELECT
-                    generateUUIDv4() as new_id,
+                    toString(generateUUIDv4()) as new_id,
                     src.dataset_item_id,
                     src.dataset_id,
                     :newVersionId as dataset_version_id,
@@ -555,6 +555,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 )
                 """;
 
+        // Note: ClickHouse with async inserts returns 0 immediately before commit.
+        // We return the count of items we're inserting instead of relying on getRowsUpdated.
+        long itemCount = items.size();
+
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
 
@@ -568,26 +572,42 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .bind("dataset_id", datasetId.toString())
                                 .bind("dataset_version_id", newVersionId.toString())
                                 .bind("data", dataAsStrings)
-                                .bind("metadata", Map.<String, String>of())
+                                .bind("metadata", "")
                                 .bind("source", item.source() != null ? item.source().getValue() : "sdk")
                                 .bind("trace_id", DatasetItemResultMapper.getOrDefault(item.traceId()))
                                 .bind("span_id", DatasetItemResultMapper.getOrDefault(item.spanId()))
                                 .bind("tags", item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
-                                .bind("item_created_at", Instant.now())
-                                .bind("item_last_updated_at", Instant.now())
-                                .bind("item_created_by", userName)
-                                .bind("item_last_updated_by", userName)
+                                .bind("item_created_at", formatTimestamp(item.createdAt()))
+                                .bind("item_last_updated_at", formatTimestamp(item.lastUpdatedAt()))
+                                .bind("item_created_by", item.createdBy() != null ? item.createdBy() : userName)
+                                .bind("item_last_updated_by",
+                                        item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName)
                                 .bind("created_by", userName)
                                 .bind("last_updated_by", userName)
                                 .bind("workspace_id", workspaceId);
 
                         return Flux.from(statement.execute())
                                 .flatMap(Result::getRowsUpdated)
-                                .reduce(0L, Long::sum);
+                                .reduce(0L, Long::sum)
+                                .doOnError(e -> log.error("Insert failed for item datasetItemId='{}': {}",
+                                        item.datasetItemId(), e.getMessage()));
                     })
-                    .reduce(0L, Long::sum)
+                    .collectList()
+                    .map(results -> itemCount) // Return item count instead of sum of results
                     .doOnSuccess(count -> log.debug("Inserted '{}' items", count))
+                    .doOnError(e -> log.error("Insert items failed: {}", e.getMessage()))
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    /**
+     * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
+     * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
+     */
+    private static String formatTimestamp(Instant timestamp) {
+        if (timestamp == null) {
+            return Instant.now().toString().replace("Z", "");
+        }
+        return timestamp.toString().replace("Z", "");
     }
 }
