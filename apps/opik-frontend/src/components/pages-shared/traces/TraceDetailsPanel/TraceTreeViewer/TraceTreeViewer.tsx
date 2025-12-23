@@ -210,7 +210,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       <div className="min-w-[400px] max-w-full">
         <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-background pb-2 pl-6 pr-4 pt-4">
           <div className="flex h-8 items-center gap-1">
-            <div className="comet-title-xs">{title}</div>
+            <div className="comet-title-xs">{title} -</div>
             <TooltipWrapper content="View all spans of this trace in table view">
               <Link
                 to={`/$workspaceName/projects/$projectId/traces`}
