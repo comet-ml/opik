@@ -1,12 +1,16 @@
 package com.comet.opik.api.filter;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Arrays;
 
 @RequiredArgsConstructor
 @Getter
 public enum SpanField implements Field {
     ID(ID_QUERY_PARAM, FieldType.STRING),
+    TRACE_ID(TRACE_ID_QUERY_PARAM, FieldType.STRING),
     NAME(NAME_QUERY_PARAM, FieldType.STRING),
     START_TIME(START_TIME_QUERY_PARAM, FieldType.DATE_TIME),
     END_TIME(END_TIME_QUERY_PARAM, FieldType.DATE_TIME),
@@ -31,4 +35,12 @@ public enum SpanField implements Field {
 
     private final String queryParamField;
     private final FieldType type;
+
+    @JsonCreator
+    public static SpanField fromString(String value) {
+        return Arrays.stream(values())
+                .filter(field -> field.queryParamField.equals(value))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown SpanField '%s'".formatted(value)));
+    }
 }

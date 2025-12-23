@@ -311,6 +311,7 @@ public class FilterQueryBuilder {
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<SpanField, String>builder()
                     .put(SpanField.ID, ID_DB)
+                    .put(SpanField.TRACE_ID, TRACE_ID_DB)
                     .put(SpanField.NAME, NAME_DB)
                     .put(SpanField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
@@ -501,6 +502,7 @@ public class FilterQueryBuilder {
 
         map.put(FilterStrategy.SPAN, Set.of(
                 SpanField.ID,
+                SpanField.TRACE_ID,
                 SpanField.NAME,
                 SpanField.START_TIME,
                 SpanField.END_TIME,
