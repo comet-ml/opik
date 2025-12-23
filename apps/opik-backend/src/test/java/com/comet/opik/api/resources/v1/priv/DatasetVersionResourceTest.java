@@ -3,8 +3,10 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
@@ -1330,6 +1332,230 @@ class DatasetVersionResourceTest {
             var v3Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(v3Items).hasSize(4);
+        }
+    }
+
+    @Nested
+    @DisplayName("Patch Items With Versioning:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PatchItemsWithVersioning {
+
+        @Test
+        @DisplayName("Success: Patch single item creates new version with edit")
+        void patchItem__whenVersioningEnabled__thenCreateNewVersionWithEdit() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+
+            // Tag v1 for later reference
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get first item to patch
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            var itemToPatch = v1Items.get(0);
+
+            // When - Patch the item with new data
+            var newData = Map.of("patched", factory.manufacturePojo(JsonNode.class));
+            var patchItem = DatasetItem.builder()
+                    .data(newData)
+                    .build();
+            datasetResourceClient.patchDatasetItem(itemToPatch.draftItemId(), patchItem, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(3); // Same count, just edited
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify v1 still has original data (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(3);
+            var originalItem = v1ItemsAfter.stream()
+                    .filter(i -> i.draftItemId().equals(itemToPatch.draftItemId()))
+                    .findFirst().orElseThrow();
+            assertThat(originalItem.data()).isEqualTo(itemToPatch.data());
+
+            // Verify latest version has patched data
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(3);
+            var patchedItem = latestItems.stream()
+                    .filter(i -> i.draftItemId().equals(itemToPatch.draftItemId()))
+                    .findFirst().orElseThrow();
+            assertThat(patchedItem.data()).isEqualTo(newData);
+        }
+
+        @Test
+        @DisplayName("Success: Multiple patches create multiple versions")
+        void patchItem__whenMultiplePatches__thenCreateMultipleVersions() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var version1 = getLatestVersion(datasetId);
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            var item = v1Items.get(0);
+
+            // When - Patch the same item multiple times
+            var patchData1 = Map.of("version", factory.manufacturePojo(JsonNode.class));
+            datasetResourceClient.patchDatasetItem(item.draftItemId(),
+                    DatasetItem.builder().data(patchData1).build(), API_KEY, TEST_WORKSPACE);
+
+            var patchData2 = Map.of("version", factory.manufacturePojo(JsonNode.class));
+            datasetResourceClient.patchDatasetItem(item.draftItemId(),
+                    DatasetItem.builder().data(patchData2).build(), API_KEY, TEST_WORKSPACE);
+
+            var patchData3 = Map.of("version", factory.manufacturePojo(JsonNode.class));
+            datasetResourceClient.patchDatasetItem(item.draftItemId(),
+                    DatasetItem.builder().data(patchData3).build(), API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify 4 versions exist (initial + 3 patches)
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(4);
+
+            // Verify latest has the most recent patch data
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            var latestItem = latestItems.stream()
+                    .filter(i -> i.draftItemId().equals(item.draftItemId()))
+                    .findFirst().orElseThrow();
+            assertThat(latestItem.data()).isEqualTo(patchData3);
+        }
+
+        @Test
+        @DisplayName("Success: Batch update creates new version with edits")
+        void batchUpdate__whenVersioningEnabled__thenCreateNewVersionWithEdits() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(5);
+
+            // Tag v1 for later reference
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get items to update
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Select 3 items to batch update
+            var itemsToUpdate = Set.of(
+                    v1Items.get(0).draftItemId(),
+                    v1Items.get(1).draftItemId(),
+                    v1Items.get(2).draftItemId());
+
+            // When - Batch update with new tags
+            var newTags = Set.of("batch-updated", "test-tag");
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(itemsToUpdate)
+                    .update(DatasetItemUpdate.builder().tags(newTags).build())
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(5);
+            // Note: itemsModified is calculated by comparing data hashes.
+            // Since we only updated tags (not data), the hash stays the same,
+            // so items appear as "unchanged" to the diff calculation.
+            // This test verifies that the version was created and tags were applied correctly.
+
+            // Verify v1 items don't have the new tags (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            for (var item : v1ItemsAfter) {
+                if (item.tags() != null) {
+                    assertThat(item.tags()).doesNotContain("batch-updated");
+                }
+            }
+
+            // Verify latest version has updated tags on the 3 items
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            int updatedCount = 0;
+            for (var item : latestItems) {
+                if (itemsToUpdate.contains(item.draftItemId())) {
+                    assertThat(item.tags()).containsAll(newTags);
+                    updatedCount++;
+                }
+            }
+            assertThat(updatedCount).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Success: Patch then delete maintains correct state")
+        void patchThenDelete__whenMixedOperations__thenVersionsReflectChangesCorrectly() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            var itemToPatch = v1Items.get(0);
+            var itemToDelete = v1Items.get(1);
+
+            // When - First patch an item
+            var patchData = Map.of("patched", factory.manufacturePojo(JsonNode.class));
+            datasetResourceClient.patchDatasetItem(itemToPatch.draftItemId(),
+                    DatasetItem.builder().data(patchData).build(), API_KEY, TEST_WORKSPACE);
+
+            var version2 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version2.versionHash(),
+                    DatasetVersionTag.builder().tag("v2").build(), API_KEY, TEST_WORKSPACE);
+
+            // Then delete another item
+            deleteDatasetItem(datasetId, itemToDelete.draftItemId());
+
+            // Then - Verify 3 versions exist
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(3);
+
+            var version3 = getLatestVersion(datasetId);
+            assertThat(version3.itemsTotal()).isEqualTo(2); // 3 - 1 deleted
+            assertThat(version3.itemsDeleted()).isEqualTo(1);
+
+            // v1 still has 3 items
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(3);
+
+            // v2 has 3 items with the patch applied
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(3);
+
+            // latest has 2 items (patch + delete applied)
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(2);
+
+            // Verify the patched item still has the patched data in latest
+            var patchedItemInLatest = latestItems.stream()
+                    .filter(i -> i.draftItemId().equals(itemToPatch.draftItemId()))
+                    .findFirst().orElseThrow();
+            assertThat(patchedItemInLatest.data()).isEqualTo(patchData);
         }
     }
 }
