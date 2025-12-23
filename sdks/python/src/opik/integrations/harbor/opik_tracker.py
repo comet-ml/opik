@@ -23,7 +23,8 @@ Or enable tracking globally (for CLI usage):
 
 import functools
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing_extensions import override
 
 from harbor.job import Job
 from harbor.models.trajectories.step import Step
@@ -33,12 +34,110 @@ from harbor.trial.trial import Trial
 from harbor.verifier.verifier import Verifier
 
 from opik import datetime_helpers, id_helpers, opik_context, track
-from opik.api_objects import opik_client
+from opik.api_objects import opik_client, span
+from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import FeedbackScoreDict, SpanType
 
 from . import experiment_service
 
 LOGGER = logging.getLogger(__name__)
+
+
+class HarborTrialRunDecorator(base_track_decorator.BaseTrackDecorator):
+    """
+    Decorator for tracking Harbor Trial.run method.
+
+    Sets the trace name based on trial configuration before the span/trace
+    is sent to the backend.
+    """
+
+    @override
+    def _start_span_inputs_preprocessor(
+        self,
+        func: Callable,
+        track_options: arguments_helpers.TrackOptions,
+        args: Tuple,
+        kwargs: Dict[str, Any],
+    ) -> arguments_helpers.StartSpanParameters:
+        """Extract trial config and set trace name, input, metadata, and tags."""
+        # Extract Trial instance from args (Trial.run is an instance method)
+        if not args:
+            # Fallback if no args (shouldn't happen for instance methods)
+            name = (
+                track_options.name if track_options.name is not None else func.__name__
+            )
+            return arguments_helpers.StartSpanParameters(
+                name=name,
+                input=None,
+                type=track_options.type,
+                tags=track_options.tags,
+                metadata=track_options.metadata,
+                project_name=track_options.project_name,
+            )
+
+        trial: Trial = args[0]
+        config = trial.config
+
+        # Build trace name from config
+        trace_name = f"{config.agent.name}/{config.trial_name}"
+
+        # Build input dict
+        input_dict: Dict[str, Any] = {
+            "trial_name": config.trial_name,
+            "task": {
+                "name": config.task.name
+                if hasattr(config.task, "name")
+                else str(config.task.path),
+                "source": getattr(config.task, "source", None),
+            },
+            "agent": {
+                "name": config.agent.name,
+                "model": getattr(config.agent, "model_name", None),
+            },
+        }
+
+        # Build metadata
+        metadata = track_options.metadata if track_options.metadata is not None else {}
+        metadata["created_from"] = "harbor"
+
+        # Build tags
+        tags = track_options.tags if track_options.tags is not None else []
+        tags = list(tags)  # Make a copy to avoid mutating the original
+        if "harbor" not in tags:
+            tags.append("harbor")
+        if config.agent.name not in tags:
+            tags.append(config.agent.name)
+
+        return arguments_helpers.StartSpanParameters(
+            name=trace_name,
+            input=input_dict,
+            type=track_options.type,
+            tags=tags,
+            metadata=metadata,
+            project_name=track_options.project_name,
+        )
+
+    @override
+    def _end_span_inputs_preprocessor(
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
+    ) -> arguments_helpers.EndSpanParameters:
+        """Process output - minimal implementation since output is handled in _wrap_trial_run."""
+        # Output is handled separately in _wrap_trial_run via opik_context.update_current_trace
+        # So we don't need to process it here
+        return arguments_helpers.EndSpanParameters(output=None)
+
+    @override
+    def _streams_handler(
+        self,
+        output: Any,
+        capture_output: bool,
+        generations_aggregator: Optional[Callable[[List[Any]], Any]],
+    ) -> Optional[Any]:
+        """No stream handling needed for Trial.run."""
+        return None
 
 
 def _rewards_to_feedback_scores(
@@ -229,7 +328,9 @@ def track_harbor(
 def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable:
     """Wrap Trial.run with tracing, feedback scores, and experiment linking."""
 
-    @track(
+    decorator = HarborTrialRunDecorator()
+
+    @decorator.track(
         name="trial_run",
         tags=["harbor"],
         project_name=project_name,
@@ -237,27 +338,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
     )
     @functools.wraps(original)
     async def wrapped(self: Trial) -> TrialResult:
-        # Set nice trace name
         config = self.config
-        trace_name = f"{config.agent.name}/{config.trial_name}"
-        opik_context.update_current_trace(
-            name=trace_name,
-            input={
-                "trial_name": config.trial_name,
-                "task": {
-                    "name": config.task.name
-                    if hasattr(config.task, "name")
-                    else str(config.task.path),
-                    "source": getattr(config.task, "source", None),
-                },
-                "agent": {
-                    "name": config.agent.name,
-                    "model": getattr(config.agent, "model_name", None),
-                },
-            },
-            metadata={"created_from": "harbor"},
-            tags=["harbor", config.agent.name],
-        )
 
         # Lazily setup experiment service if not already done
         # This ensures experiment tracking works for both SDK and CLI modes
