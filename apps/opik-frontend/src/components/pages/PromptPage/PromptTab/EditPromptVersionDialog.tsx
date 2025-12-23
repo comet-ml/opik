@@ -172,11 +172,15 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
     images: originalImages,
     videos: originalVideos,
     audios: originalAudios,
-  } = parseLLMMessageContent(
-    parsePromptVersionContent({
-      template: promptTemplate,
-      metadata: promptMetadata,
-    }),
+  } = useMemo(
+    () =>
+      parseLLMMessageContent(
+        parsePromptVersionContent({
+          template: promptTemplate,
+          metadata: promptMetadata,
+        }),
+      ),
+    [promptTemplate, promptMetadata],
   );
 
   const currentText = template;
