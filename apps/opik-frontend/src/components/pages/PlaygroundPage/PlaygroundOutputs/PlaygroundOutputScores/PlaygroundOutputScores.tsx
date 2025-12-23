@@ -6,12 +6,19 @@ import useRulesList from "@/api/automations/useRulesList";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useAppStore from "@/store/AppStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { TraceFeedbackScore } from "@/types/traces";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 import { EvaluatorsRule, EVALUATORS_RULE_TYPE } from "@/types/automations";
+
+const MAX_VISIBLE_METRICS = 3;
 
 // Helper to get score names that a rule will produce
 const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
@@ -213,47 +220,79 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return null;
   }
 
+  const visibleMetrics = expectedMetrics.slice(0, MAX_VISIBLE_METRICS);
+  const hiddenMetrics = expectedMetrics.slice(MAX_VISIBLE_METRICS);
+  const remainingCount = hiddenMetrics.length;
+
+  const renderMetric = ({
+    scoreName,
+    ruleName,
+    score,
+  }: {
+    scoreName: string;
+    ruleName: string;
+    score: TraceFeedbackScore | null;
+  }) => {
+    const variant = generateTagVariant(ruleName);
+    const color = (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b";
+
+    // Score has loaded - show the actual value
+    if (score) {
+      return (
+        <FeedbackScoreTag
+          key={scoreName}
+          label={ruleName}
+          value={score.value}
+          reason={score.reason}
+          lastUpdatedAt={score.last_updated_at}
+          lastUpdatedBy={score.last_updated_by}
+          valueByAuthor={score.value_by_author}
+          category={score.category_name}
+        />
+      );
+    }
+
+    // Score still loading - show placeholder with spinner
+    return (
+      <div
+        key={scoreName}
+        className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2"
+      >
+        <div
+          className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
+          style={{ "--bg-color": color } as React.CSSProperties}
+        />
+        <span className="comet-body-s-accented truncate text-muted-slate">
+          {ruleName}
+        </span>
+        <Loader2 className="size-3 animate-spin text-muted-slate" />
+      </div>
+    );
+  };
+
   return (
     <div
       className={cn("flex flex-wrap gap-1.5", stale && "opacity-50", className)}
     >
-      {expectedMetrics.map(({ scoreName, ruleName, score }) => {
-        const variant = generateTagVariant(ruleName);
-        const color = (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b";
-
-        // Score has loaded - show the actual value
-        if (score) {
-          return (
-            <FeedbackScoreTag
-              key={scoreName}
-              label={ruleName}
-              value={score.value}
-              reason={score.reason}
-              lastUpdatedAt={score.last_updated_at}
-              lastUpdatedBy={score.last_updated_by}
-              valueByAuthor={score.value_by_author}
-              category={score.category_name}
-            />
-          );
-        }
-
-        // Score still loading - show placeholder with spinner
-        return (
-          <div
-            key={scoreName}
-            className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2"
+      {visibleMetrics.map(renderMetric)}
+      {remainingCount > 0 && (
+        <HoverCard openDelay={200}>
+          <HoverCardTrigger asChild>
+            <div className="comet-body-s-accented flex h-6 cursor-default items-center rounded-md border border-border px-1.5 text-muted-slate">
+              +{remainingCount}
+            </div>
+          </HoverCardTrigger>
+          <HoverCardContent
+            side="top"
+            align="start"
+            className="w-auto max-w-[300px]"
           >
-            <div
-              className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
-              style={{ "--bg-color": color } as React.CSSProperties}
-            />
-            <span className="comet-body-s-accented truncate text-muted-slate">
-              {ruleName}
-            </span>
-            <Loader2 className="size-3 animate-spin text-muted-slate" />
-          </div>
-        );
-      })}
+            <div className="flex flex-wrap gap-1.5">
+              {hiddenMetrics.map(renderMetric)}
+            </div>
+          </HoverCardContent>
+        </HoverCard>
+      )}
     </div>
   );
 };
