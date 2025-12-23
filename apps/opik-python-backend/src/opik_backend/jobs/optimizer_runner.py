@@ -108,6 +108,9 @@ def main():
         context = OptimizationJobContext.from_job_message(job_message)
         config = OptimizationConfig.from_dict(job_message.get("config", {}))
         
+        # Ensure optimizer_params is a dict before mutating
+        config.optimizer_params = config.optimizer_params or {}
+        
         # Force verbose mode for testing Rich output
         config.optimizer_params["verbose"] = True
         
