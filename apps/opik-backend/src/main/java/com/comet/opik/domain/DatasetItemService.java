@@ -94,6 +94,43 @@ public interface DatasetItemService {
      * @throws ClientErrorException with 409 status if baseVersion is stale and override is false
      */
     Mono<DatasetVersion> applyDeltaChanges(UUID datasetId, DatasetItemChanges changes, boolean override);
+
+    /**
+     * Saves dataset items, routing to either versioned or legacy storage based on configuration.
+     * <p>
+     * When dataset versioning is enabled:
+     * <ul>
+     *   <li>Resolves dataset ID from batch (creates dataset if needed)</li>
+     *   <li>Creates a new version on top of the latest one</li>
+     *   <li>If no versions exist, creates the first version</li>
+     * </ul>
+     * When versioning is disabled (legacy mode):
+     * <ul>
+     *   <li>Saves items to the legacy dataset_items table</li>
+     * </ul>
+     *
+     * @param batch the batch of items to save (must include datasetId or datasetName)
+     * @return Mono completing when save operation finishes
+     */
+    Mono<Void> save(DatasetItemBatch batch);
+
+    /**
+     * Saves items and creates a new version on top of the latest version.
+     * <p>
+     * This operation is used when dataset versioning is enabled. Instead of saving to
+     * a legacy table, it directly creates a new version with the provided items.
+     * <ul>
+     *   <li>If batch is empty, returns immediately without creating a version</li>
+     *   <li>If no versions exist, creates the first version with all items as "added"</li>
+     *   <li>If versions exist, determines which items are new vs updated based on ID matching</li>
+     *   <li>Creates a new version on top of the latest one</li>
+     * </ul>
+     *
+     * @param batch the batch of items to save
+     * @param datasetId the resolved dataset ID
+     * @return Mono emitting the newly created version, or empty if batch is empty
+     */
+    Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId);
 }
 
 @Singleton
@@ -437,7 +474,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private boolean isVersioningEnabled() {
-        return config.getServiceToggles().isDatasetVersioningEnabled();
+        return config.getServiceToggles() != null
+                && config.getServiceToggles().isDatasetVersioningEnabled();
     }
 
     private Mono<DatasetItemPage> getItemsFromLatestVersion(DatasetItemSearchCriteria criteria, int page, int size) {
@@ -569,5 +607,166 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return VersionedDatasetItem.fromDatasetItem(item, datasetItemId, datasetId);
                 })
                 .toList();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> save(@NonNull DatasetItemBatch batch) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            if (isVersioningEnabled()) {
+                UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
+                log.info("Saving items with versioning for dataset '{}'", datasetId);
+                return saveItemsWithVersion(batch, datasetId)
+                        .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
+                                .put(RequestContext.USER_NAME, userName))
+                        .then();
+            }
+
+            // Legacy: save to legacy table
+            log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
+            return verifyDatasetExistsAndSave(batch);
+        });
+    }
+
+    private UUID resolveDatasetId(DatasetItemBatch batch, String workspaceId, String userName) {
+        if (batch.datasetId() == null) {
+            return datasetService.getOrCreate(workspaceId, batch.datasetName(), userName);
+        }
+
+        Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId, null);
+        if (dataset == null) {
+            throw new NotFoundException("Dataset not found: '%s'".formatted(batch.datasetId()));
+        }
+        return dataset.id();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<DatasetVersion> saveItemsWithVersion(@NonNull DatasetItemBatch batch, @NonNull UUID datasetId) {
+        if (batch.items() == null || batch.items().isEmpty()) {
+            log.debug("Empty batch, skipping version creation for dataset '{}'", datasetId);
+            return Mono.empty();
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            log.info("Saving items with version for dataset '{}', itemCount '{}'",
+                    datasetId, batch.items().size());
+
+            // Verify dataset exists
+            datasetService.findById(datasetId, workspaceId, null);
+
+            // Get the latest version (if exists)
+            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId);
+
+            if (latestVersion.isEmpty()) {
+                // No versions exist yet - create the first version with all items as "added"
+                return createFirstVersion(datasetId, batch.items(), workspaceId, userName);
+            }
+
+            // Versions exist - apply delta on top of the latest
+            UUID baseVersionId = latestVersion.get().id();
+            return createVersionWithDelta(datasetId, baseVersionId, batch.items(), workspaceId, userName);
+        });
+    }
+
+    private Mono<DatasetVersion> createFirstVersion(UUID datasetId, List<DatasetItem> items,
+            String workspaceId, String userName) {
+        log.info("Creating first version for dataset '{}' with '{}' items", datasetId, items.size());
+
+        UUID newVersionId = idGenerator.generateId();
+
+        // All items are "added" for the first version
+        List<VersionedDatasetItem> addedItems = items.stream()
+                .map(item -> {
+                    UUID datasetItemId = item.id() != null ? item.id() : idGenerator.generateId();
+                    return VersionedDatasetItem.fromDatasetItem(item, datasetItemId, datasetId);
+                })
+                .toList();
+
+        // Use applyDelta with no base version items (empty copy)
+        // We need a special path since there's no base version
+        return versionDao.insertItems(datasetId, newVersionId, addedItems, workspaceId, userName)
+                .map(itemsTotal -> {
+                    log.info("Inserted '{}' items for first version of dataset '{}'", itemsTotal, datasetId);
+
+                    // Create version metadata (first version - all items are "added")
+                    DatasetVersion version = versionService.createVersionFromDelta(
+                            datasetId,
+                            newVersionId,
+                            itemsTotal.intValue(),
+                            null, // No base version for first version
+                            null, // No tags
+                            null, // No change description
+                            workspaceId,
+                            userName);
+
+                    log.info("Created first version '{}' for dataset '{}' with hash '{}'",
+                            version.id(), datasetId, version.versionHash());
+                    return version;
+                });
+    }
+
+    private Mono<DatasetVersion> createVersionWithDelta(UUID datasetId, UUID baseVersionId,
+            List<DatasetItem> items, String workspaceId, String userName) {
+        log.info("Creating version with delta for dataset '{}', baseVersion '{}', itemCount '{}'",
+                datasetId, baseVersionId, items.size());
+
+        UUID newVersionId = idGenerator.generateId();
+
+        // Get existing item IDs from the base version to determine adds vs edits
+        return versionDao.getItemIdsAndHashes(datasetId, baseVersionId)
+                .collectList()
+                .flatMap(existingItems -> {
+                    Set<UUID> existingItemIds = existingItems.stream()
+                            .map(DatasetItemIdAndHash::itemId)
+                            .collect(Collectors.toSet());
+
+                    // Classify incoming items as added or edited
+                    List<VersionedDatasetItem> addedItems = new java.util.ArrayList<>();
+                    List<VersionedDatasetItem> editedItems = new java.util.ArrayList<>();
+
+                    for (DatasetItem item : items) {
+                        UUID itemId = item.id();
+                        if (itemId != null && existingItemIds.contains(itemId)) {
+                            // Existing item - treat as edit
+                            editedItems.add(VersionedDatasetItem.fromDatasetItem(item, itemId, datasetId));
+                        } else {
+                            // New item - treat as add
+                            UUID newItemId = itemId != null ? itemId : idGenerator.generateId();
+                            addedItems.add(VersionedDatasetItem.fromDatasetItem(item, newItemId, datasetId));
+                        }
+                    }
+
+                    log.info("Classified items: added='{}', edited='{}' for dataset '{}'",
+                            addedItems.size(), editedItems.size(), datasetId);
+
+                    // Apply delta changes - no deletions in PUT flow
+                    return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                            addedItems, editedItems, Set.of())
+                            .map(itemsTotal -> {
+                                log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
+
+                                // Create version metadata
+                                DatasetVersion version = versionService.createVersionFromDelta(
+                                        datasetId,
+                                        newVersionId,
+                                        itemsTotal.intValue(),
+                                        baseVersionId,
+                                        null, // No tags
+                                        null, // No change description
+                                        workspaceId,
+                                        userName);
+
+                                log.info("Created version '{}' for dataset '{}' with hash '{}'",
+                                        version.id(), datasetId, version.versionHash());
+                                return version;
+                            });
+                });
     }
 }

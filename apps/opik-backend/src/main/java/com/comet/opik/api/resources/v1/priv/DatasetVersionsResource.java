@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
-import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
@@ -13,7 +12,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -55,28 +53,6 @@ public class DatasetVersionsResource {
     private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull OpikConfiguration config;
-
-    @POST
-    @Operation(operationId = "createDatasetVersion", summary = "Create dataset version", description = "Create a new immutable version of the dataset by snapshotting the current state", responses = {
-            @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/datasets/{datasetId}/versions", schema = @Schema(implementation = String.class))}),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
-    })
-    @RateLimited
-    @JsonView(DatasetVersion.View.Public.class)
-    public Response createVersion(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionCreate.class))) @Valid @NotNull DatasetVersionCreate request) {
-
-        checkFeatureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Creating version for dataset '{}' on workspace '{}'", datasetId, workspaceId);
-        DatasetVersion version = versionService.commitVersion(datasetId, request);
-        log.info("Created version '{}' for dataset '{}' on workspace '{}'", version.id(), datasetId, workspaceId);
-
-        return Response.ok(version).build();
-    }
 
     @GET
     @Operation(operationId = "listDatasetVersions", summary = "List dataset versions", description = "Get paginated list of versions for a dataset, ordered by creation time (newest first)", responses = {

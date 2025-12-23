@@ -49,27 +49,6 @@ public interface DatasetVersionService {
     String ERROR_VERSION_NOT_FOUND = "Version not found for dataset hash='%s' datasetId='%s'";
 
     /**
-     * Commits a new version for the specified dataset with metadata and optional tag.
-     * <p>
-     * This operation:
-     * <ul>
-     *   <li>Generates a UUID-based hash for the version (last 8 chars of UUID)</li>
-     *   <li>Creates immutable snapshot of current dataset items in ClickHouse</li>
-     *   <li>Calculates diff statistics compared to previous version</li>
-     *   <li>Stores version metadata including change statistics</li>
-     *   <li>Automatically assigns the 'latest' tag to the new version</li>
-     *   <li>Removes the 'latest' tag from the previous version if exists</li>
-     *   <li>Optionally adds a custom tag if provided in the request</li>
-     * </ul>
-     *
-     * @param datasetId the unique identifier of the dataset to version
-     * @param request version creation details including optional tag, change description, and metadata
-     * @return the created dataset version with generated hash, statistics, and assigned tags
-     * @throws ConflictException if the custom tag already exists for this dataset
-     */
-    DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate request);
-
-    /**
      * Retrieves a paginated list of versions for the specified dataset, ordered by creation time (newest first).
      *
      * @param datasetId the unique identifier of the dataset
@@ -227,87 +206,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
 
     @Override
-    public DatasetVersion commitVersion(@NonNull UUID datasetId, @NonNull DatasetVersionCreate request) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        return commitVersion(datasetId, request, workspaceId, userName);
-    }
-
-    private DatasetVersion commitVersion(@NonNull UUID datasetId, @NonNull DatasetVersionCreate request,
-            @NonNull String workspaceId, @NonNull String userName) {
-        log.info("Committing version for dataset: '{}'", datasetId);
-
-        // Generate version ID and hash (UUID-based, like prompt versions)
-        UUID versionId = idGenerator.generateId();
-        String versionHash = CommitUtils.getCommit(versionId);
-        log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
-
-        // Get item count from the latest version to determine how many UUIDs we need
-        Optional<DatasetVersion> latestVersion = getLatestVersionInternal(datasetId, workspaceId);
-        int latestVersionItemCount = latestVersion.map(DatasetVersion::itemsTotal).orElse(0);
-        log.info("Dataset '{}' latest version has '{}' items", datasetId, latestVersionItemCount);
-
-        List<UUID> uuids = generateUuidPool(latestVersionItemCount);
-        log.info("Generated '{}' UUIDs for dataset '{}' snapshot", uuids.size(), datasetId);
-
-        // Create snapshot in ClickHouse using pre-generated UUIDs
-        Long snapshotCount = datasetItemVersionDAO.makeSnapshot(datasetId, versionId, uuids)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
-        log.info("Saved version snapshot with '{}' items for version '{}'", snapshotCount, versionId);
-
-        return template.inTransaction(WRITE, handle -> {
-            var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
-
-            // Get previous version for diff calculation
-            var previousVersion = datasetVersionDAO.findByTag(datasetId, LATEST_TAG, workspaceId);
-
-            // Calculate diff statistics by comparing IDs and hashes AFTER snapshot is saved
-            // This only loads IDs and hashes, not full item data
-            DatasetVersionDiffStats diffStats = previousVersion
-                    .map(datasetVersion -> calculateDiffStatistics(datasetId, datasetVersion.id(), versionId,
-                            workspaceId, userName))
-                    .orElseGet(() -> new DatasetVersionDiffStats(snapshotCount.intValue(), 0, 0,
-                            snapshotCount.intValue()));
-
-            log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
-                    datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
-                    diffStats.itemsDeleted(), diffStats.itemsUnchanged());
-
-            // Create a new version with calculated diff statistics
-            var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
-                    versionId, datasetId, versionHash,
-                    snapshotCount.intValue(),
-                    diffStats.itemsAdded(),
-                    diffStats.itemsModified(),
-                    diffStats.itemsDeleted(),
-                    request, userName);
-
-            EntityConstraintHandler.handle(() -> {
-                datasetVersionDAO.insert(version, workspaceId);
-                return version;
-            }).withError(() -> new EntityAlreadyExistsException(
-                    new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
-
-            log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
-
-            // Remove 'latest' tag from previous version (if exists)
-            datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
-
-            // Always add 'latest' tag to the new version
-            datasetVersionDAO.insertTag(datasetId, LATEST_TAG, versionId, userName, workspaceId);
-            log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
-
-            // Add custom tags from the request
-            insertTags(datasetVersionDAO, datasetId, versionId, request.tags(), userName, workspaceId);
-
-            return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
-        });
-    }
-
-    @Override
     public DatasetVersionPage getVersions(@NonNull UUID datasetId, int page, int size) {
         Preconditions.checkArgument(page >= 1, "Page must be greater than or equal to 1");
         Preconditions.checkArgument(size >= 1, "Size must be greater than or equal to 1");
@@ -369,20 +267,26 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     @Override
     public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
-            int itemsTotal, @NonNull UUID baseVersionId, List<String> tags, String changeDescription,
+            int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
             @NonNull String workspaceId, @NonNull String userName) {
 
-        log.info("Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}'",
-                datasetId, newVersionId, itemsTotal);
+        log.info("Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}'",
+                datasetId, newVersionId, itemsTotal, baseVersionId);
 
         String versionHash = CommitUtils.getCommit(newVersionId);
 
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
 
-            // Calculate diff statistics against the base version
-            DatasetVersionDiffStats diffStats = calculateDiffStatistics(datasetId, baseVersionId, newVersionId,
-                    workspaceId, userName);
+            // Calculate diff statistics against the base version (if exists)
+            DatasetVersionDiffStats diffStats;
+            if (baseVersionId != null) {
+                diffStats = calculateDiffStatistics(datasetId, baseVersionId, newVersionId,
+                        workspaceId, userName);
+            } else {
+                // First version - all items are "added"
+                diffStats = new DatasetVersionDiffStats(itemsTotal, 0, 0, 0);
+            }
 
             log.info("Delta diff for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
                     datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
