@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 
 import { cn, isStringMarkdown } from "@/lib/utils";
 import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
@@ -31,7 +32,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       <ReactMarkdown
         className={cn("prose dark:prose-invert comet-markdown", className)}
         remarkPlugins={[remarkBreaks, remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[rehypeRaw, rehypeSanitize]}
       >
         {collapsibleMarkdown}
       </ReactMarkdown>

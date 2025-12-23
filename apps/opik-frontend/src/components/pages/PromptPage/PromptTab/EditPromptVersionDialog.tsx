@@ -180,6 +180,12 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   );
 
   const currentText = template;
+  const currentMetadata = useMemo(() => {
+    if (!metadata) return undefined;
+    const parsed = safelyParseJSON(metadata);
+    return isValidJsonObject(parsed) ? parsed : undefined;
+  }, [metadata]);
+
   const {
     images: currentImages,
     videos: currentVideos,
@@ -187,7 +193,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   } = parseLLMMessageContent(
     parsePromptVersionContent({
       template: localText,
-      metadata: promptMetadata,
+      metadata: currentMetadata,
     }),
   );
 
