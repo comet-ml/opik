@@ -110,18 +110,30 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return rules.filter((r) => selectedRuleIds.includes(r.id));
   }, [hasSelectedRules, rules, selectedRuleIds]);
 
-  // When "all" was selected (null), we need to know which rules produced the scores
-  // to display the rule name instead of the score name
-  const scoreNameToRuleName = useMemo(() => {
-    const mapping: Record<string, string> = {};
-    for (const rule of rules) {
+  // Calculate expected score names from selected rules (for polling logic)
+  const expectedScoreNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const rule of selectedRules) {
       const scoreNames = getScoreNamesFromRule(rule);
       for (const scoreName of scoreNames) {
-        mapping[scoreName] = rule.name;
+        names.add(scoreName);
       }
     }
-    return mapping;
-  }, [rules]);
+    return names;
+  }, [selectedRules]);
+
+  // Track if we're waiting for specific rules to load
+  // This prevents premature polling stop when rules haven't loaded yet
+  const hasSpecificRulesSelected =
+    Array.isArray(selectedRuleIds) && selectedRuleIds.length > 0;
+  const rulesStillLoading =
+    hasSpecificRulesSelected && selectedRules.length === 0;
+
+  // Store values in refs for access in refetchInterval
+  const expectedScoreNamesRef = useRef<Set<string>>(expectedScoreNames);
+  expectedScoreNamesRef.current = expectedScoreNames;
+  const rulesStillLoadingRef = useRef(rulesStillLoading);
+  rulesStillLoadingRef.current = rulesStillLoading;
 
   // Fetch trace to get scores
   const { data: trace } = useTraceById(
@@ -129,18 +141,40 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     {
       enabled: !!traceId && hasSelectedRules,
       refetchInterval: (query) => {
-        // Stop refetching if we have scores or exceeded max time
-        const data = query.state.data;
-        const hasScores =
-          data?.feedback_scores && data.feedback_scores.length > 0;
-
         // Use ref to track elapsed time since polling started
         const startTime = pollingStartTimeRef.current || Date.now();
         const elapsedTime = Date.now() - startTime;
 
-        if (hasScores || elapsedTime > MAX_REFETCH_TIME) {
+        // Always stop if we've exceeded max polling time
+        if (elapsedTime > MAX_REFETCH_TIME) {
           return false;
         }
+
+        // If rules are still loading, keep polling
+        if (rulesStillLoadingRef.current) {
+          return REFETCH_INTERVAL;
+        }
+
+        const data = query.state.data;
+        const receivedScores = data?.feedback_scores ?? [];
+        const expectedNames = expectedScoreNamesRef.current;
+
+        // If specific rules were selected, wait for all expected scores
+        if (expectedNames.size > 0) {
+          const receivedNames = new Set(receivedScores.map((s) => s.name));
+          const allExpectedReceived = [...expectedNames].every((name) =>
+            receivedNames.has(name),
+          );
+          if (allExpectedReceived) {
+            return false;
+          }
+        } else {
+          // For "all" selection or legacy data, stop as soon as we have any scores
+          if (receivedScores.length > 0) {
+            return false;
+          }
+        }
+
         return REFETCH_INTERVAL;
       },
     },
@@ -159,13 +193,10 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return map;
   }, [feedbackScores]);
 
-  // Build list of expected metrics with their display info, sorted by rule name
+  // Build list of expected metrics with their display info, sorted by score name
   const expectedMetrics = useMemo(() => {
-    if (!rulesLoaded) return [];
-
     const metrics: Array<{
       scoreName: string;
-      ruleName: string;
       score: TraceFeedbackScore | null;
     }> = [];
 
@@ -173,36 +204,34 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     // only show scores that actually exist in the trace - no loading spinners
     if (selectedRuleIds === null || selectedRuleIds === undefined) {
       for (const score of feedbackScores) {
-        const ruleName = scoreNameToRuleName[score.name] || score.name;
         metrics.push({
           scoreName: score.name,
-          ruleName,
           score,
         });
       }
     } else {
-      // Specific rules were selected - show loading spinners for expected scores
+      // Specific rules were selected - need rules to load to know expected scores
+      if (!rulesLoaded) return [];
+
       for (const rule of selectedRules) {
         const scoreNames = getScoreNamesFromRule(rule);
         for (const scoreName of scoreNames) {
           metrics.push({
             scoreName,
-            ruleName: rule.name,
             score: scoresByName[scoreName] || null,
           });
         }
       }
     }
 
-    // Sort by rule name alphabetically
-    return metrics.sort((a, b) => a.ruleName.localeCompare(b.ruleName));
+    // Sort by score name alphabetically
+    return metrics.sort((a, b) => a.scoreName.localeCompare(b.scoreName));
   }, [
     rulesLoaded,
     selectedRules,
     scoresByName,
     selectedRuleIds,
     feedbackScores,
-    scoreNameToRuleName,
   ]);
 
   // Don't render anything if no rules are selected or no traceId
@@ -226,14 +255,12 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
   const renderMetric = ({
     scoreName,
-    ruleName,
     score,
   }: {
     scoreName: string;
-    ruleName: string;
     score: TraceFeedbackScore | null;
   }) => {
-    const variant = generateTagVariant(ruleName);
+    const variant = generateTagVariant(scoreName);
     const color = (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b";
 
     // Score has loaded - show the actual value
@@ -241,7 +268,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
       return (
         <FeedbackScoreTag
           key={scoreName}
-          label={ruleName}
+          label={scoreName}
           value={score.value}
           reason={score.reason}
           lastUpdatedAt={score.last_updated_at}
@@ -263,7 +290,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
           style={{ "--bg-color": color } as React.CSSProperties}
         />
         <span className="comet-body-s-accented truncate text-muted-slate">
-          {ruleName}
+          {scoreName}
         </span>
         <Loader2 className="size-3 animate-spin text-muted-slate" />
       </div>
