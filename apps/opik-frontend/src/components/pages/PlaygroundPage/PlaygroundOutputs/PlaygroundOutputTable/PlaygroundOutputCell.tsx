@@ -104,7 +104,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
       tableMetadata={context.table.options.meta}
       className="flex pt-5"
     >
-      <div className="group relative size-full">
+      <div className="group relative flex size-full flex-col">
         {traceId && playgroundProject?.id && (
           <TooltipWrapper content="Click to open original trace">
             <Button
@@ -117,16 +117,14 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </Button>
           </TooltipWrapper>
         )}
-        <div className="h-[var(--cell-top-height)] overflow-x-auto">
+        <div className="min-h-[var(--cell-top-height)]">
           <PlaygroundOutputScores
             traceId={traceId}
             selectedRuleIds={selectedRuleIds}
             stale={stale}
           />
         </div>
-        <div className="h-[calc(100%-var(--cell-top-height))] overflow-y-auto">
-          {renderContent()}
-        </div>
+        <div className="flex-1 overflow-y-auto">{renderContent()}</div>
       </div>
     </CellWrapper>
   );

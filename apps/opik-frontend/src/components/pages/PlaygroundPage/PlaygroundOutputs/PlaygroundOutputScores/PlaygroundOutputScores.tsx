@@ -39,8 +39,8 @@ interface PlaygroundOutputScoresProps {
   className?: string;
 }
 
-const REFETCH_INTERVAL = 3000; // 3 seconds
-const MAX_REFETCH_TIME = 60000; // 60 seconds max polling
+const REFETCH_INTERVAL = 5000; // 5 seconds
+const MAX_REFETCH_TIME = 300000; // 5 minutes max polling
 
 const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   traceId,
@@ -94,29 +94,8 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return rules.filter((r) => selectedRuleIds.includes(r.id));
   }, [hasSelectedRules, rules, selectedRuleIds]);
 
-  // Get selected rule names for loading state
-  const selectedRuleNames = useMemo(() => {
-    return selectedRules.map((r) => r.name);
-  }, [selectedRules]);
-
-  // Create a mapping from score name (e.g., "Hallucination") to rule name (e.g., "Test Metric")
-  const scoreNameToRuleName = useMemo(() => {
-    const mapping: Record<string, string> = {};
-    for (const rule of selectedRules) {
-      const scoreNames = getScoreNamesFromRule(rule);
-      for (const scoreName of scoreNames) {
-        mapping[scoreName] = rule.name;
-      }
-    }
-    return mapping;
-  }, [selectedRules]);
-
   // Fetch trace to get scores
-  const {
-    data: trace,
-    isLoading,
-    isFetching,
-  } = useTraceById(
+  const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
       enabled: !!traceId && hasSelectedRules,
@@ -142,44 +121,64 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return trace?.feedback_scores ?? [];
   }, [trace?.feedback_scores]);
 
-  // Filter scores to only those from selected rules (if rules have loaded)
-  // If rules haven't loaded yet, show all scores as fallback
-  const relevantScores = useMemo(() => {
-    if (!rulesLoaded) {
-      // Rules not loaded yet - show all scores with original names
-      return feedbackScores;
+  // Create a map from score name to score for quick lookup
+  const scoresByName = useMemo(() => {
+    const map: Record<string, TraceFeedbackScore> = {};
+    for (const score of feedbackScores) {
+      map[score.name] = score;
     }
-    // Rules loaded - filter to only selected rules' scores
-    return feedbackScores.filter((score) => score.name in scoreNameToRuleName);
-  }, [feedbackScores, scoreNameToRuleName, rulesLoaded]);
+    return map;
+  }, [feedbackScores]);
 
-  // Determine which scores are still loading
-  const isWaitingForScores =
-    isLoading || (isFetching && relevantScores.length === 0);
+  // Build list of expected metrics with their display info, sorted by rule name
+  const expectedMetrics = useMemo(() => {
+    if (!rulesLoaded) return [];
+
+    const metrics: Array<{
+      scoreName: string;
+      ruleName: string;
+      score: TraceFeedbackScore | null;
+    }> = [];
+
+    for (const rule of selectedRules) {
+      const scoreNames = getScoreNamesFromRule(rule);
+      for (const scoreName of scoreNames) {
+        metrics.push({
+          scoreName,
+          ruleName: rule.name,
+          score: scoresByName[scoreName] || null,
+        });
+      }
+    }
+
+    // Sort by rule name alphabetically
+    return metrics.sort((a, b) => a.ruleName.localeCompare(b.ruleName));
+  }, [rulesLoaded, selectedRules, scoresByName]);
 
   // Don't render anything if no rules are selected or no traceId
   if (!hasSelectedRules || !traceId) {
     return null;
   }
 
-  // Don't render if no scores and no pending rules (only check rules if loaded)
-  if (
-    relevantScores.length === 0 &&
-    (rulesLoaded ? selectedRuleNames.length === 0 : true)
-  ) {
+  // Don't render if rules loaded but no expected metrics
+  if (rulesLoaded && expectedMetrics.length === 0) {
     return null;
   }
 
   return (
-    <div className={cn("flex gap-1.5", stale && "opacity-50", className)}>
-      {/* Render loaded scores - show rule name if available, otherwise score name */}
-      {!isWaitingForScores &&
-        relevantScores.map((score) => {
-          const displayName = scoreNameToRuleName[score.name] || score.name;
+    <div
+      className={cn("flex flex-wrap gap-1.5", stale && "opacity-50", className)}
+    >
+      {expectedMetrics.map(({ scoreName, ruleName, score }) => {
+        const variant = generateTagVariant(ruleName);
+        const color = (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b";
+
+        // Score has loaded - show the actual value
+        if (score) {
           return (
             <FeedbackScoreTag
-              key={score.name}
-              label={displayName}
+              key={scoreName}
+              label={ruleName}
               value={score.value}
               reason={score.reason}
               lastUpdatedAt={score.last_updated_at}
@@ -188,31 +187,25 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
               category={score.category_name}
             />
           );
-        })}
+        }
 
-      {/* Render loading tags for pending scores (only when rules loaded) */}
-      {isWaitingForScores &&
-        rulesLoaded &&
-        selectedRuleNames.map((ruleName) => {
-          const variant = generateTagVariant(ruleName);
-          const color =
-            (variant && TAG_VARIANTS_COLOR_MAP[variant]) || "#64748b";
-          return (
+        // Score still loading - show placeholder with spinner
+        return (
+          <div
+            key={scoreName}
+            className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2"
+          >
             <div
-              key={ruleName}
-              className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2"
-            >
-              <div
-                className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
-                style={{ "--bg-color": color } as React.CSSProperties}
-              />
-              <span className="comet-body-s-accented truncate text-muted-slate">
-                {ruleName}
-              </span>
-              <Loader2 className="size-3 animate-spin text-muted-slate" />
-            </div>
-          );
-        })}
+              className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
+              style={{ "--bg-color": color } as React.CSSProperties}
+            />
+            <span className="comet-body-s-accented truncate text-muted-slate">
+              {ruleName}
+            </span>
+            <Loader2 className="size-3 animate-spin text-muted-slate" />
+          </div>
+        );
+      })}
     </div>
   );
 };
