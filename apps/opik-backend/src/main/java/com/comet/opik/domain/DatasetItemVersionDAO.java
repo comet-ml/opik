@@ -71,6 +71,19 @@ public interface DatasetItemVersionDAO {
      */
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             List<VersionedDatasetItem> addedItems, List<VersionedDatasetItem> editedItems, Set<UUID> deletedIds);
+
+    /**
+     * Inserts items directly into a new version without copying from any base version.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to insert into
+     * @param items the items to insert
+     * @param workspaceId the workspace ID
+     * @param userName the user name
+     * @return the number of items inserted
+     */
+    Mono<Long> insertItems(UUID datasetId, UUID versionId, List<VersionedDatasetItem> items,
+            String workspaceId, String userName);
 }
 
 @Singleton
@@ -504,8 +517,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    private Mono<Long> insertItems(UUID datasetId, UUID newVersionId,
-            List<VersionedDatasetItem> items, String workspaceId, String userName) {
+    @Override
+    @WithSpan
+    public Mono<Long> insertItems(@NonNull UUID datasetId, @NonNull UUID newVersionId,
+            @NonNull List<VersionedDatasetItem> items, @NonNull String workspaceId, @NonNull String userName) {
 
         if (items.isEmpty()) {
             return Mono.just(0L);

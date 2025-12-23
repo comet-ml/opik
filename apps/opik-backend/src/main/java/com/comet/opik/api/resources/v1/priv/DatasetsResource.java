@@ -446,12 +446,15 @@ public class DatasetsResource {
 
         log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
                 batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.verifyDatasetExistsAndSave(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+
+        DatasetItemBatch batchWithIds = new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items);
+
+        itemService.save(batchWithIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
-        log.info("Created dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+        log.info("Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), workspaceId);
 
         return Response.noContent().build();
     }

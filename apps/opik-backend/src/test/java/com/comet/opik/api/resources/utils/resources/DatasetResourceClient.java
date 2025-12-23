@@ -10,7 +10,6 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
@@ -403,21 +402,6 @@ public class DatasetResourceClient {
         }
     }
 
-    public DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate versionCreate, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(datasetId.toString())
-                .path("versions")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(versionCreate))) {
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(DatasetVersion.class);
-        }
-    }
-
     public DatasetVersion.DatasetVersionPage listVersions(UUID datasetId, String apiKey, String workspaceName) {
         return listVersions(datasetId, apiKey, workspaceName, null, null);
     }
@@ -468,17 +452,6 @@ public class DatasetResourceClient {
 
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
-    }
-
-    public Response callCommitVersion(UUID datasetId, DatasetVersionCreate versionCreate, String apiKey,
-            String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(datasetId.toString())
-                .path("versions")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(versionCreate));
     }
 
     public Response callCreateVersionTag(UUID datasetId, String versionHash, DatasetVersionTag tag, String apiKey,
