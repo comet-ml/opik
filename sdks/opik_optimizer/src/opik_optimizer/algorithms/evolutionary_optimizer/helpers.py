@@ -40,4 +40,6 @@ def update_individual_with_prompt(
     individual[:] = prompt_candidate.get_messages()
     setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
     setattr(individual, "function_map", prompt_candidate.function_map)
+    setattr(individual, "model", prompt_candidate.model)
+    setattr(individual, "model_kwargs", copy.deepcopy(prompt_candidate.model_kwargs))
     return individual
