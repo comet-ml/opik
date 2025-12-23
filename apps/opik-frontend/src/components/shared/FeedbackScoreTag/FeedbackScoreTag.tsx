@@ -97,7 +97,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       {/* Value */}
       <span
         data-testid="feedback-score-tag-value"
-        className="comet-body-s-accented"
+        className="comet-body-s-accented min-w-0 truncate"
       >
         {displayValue}
       </span>

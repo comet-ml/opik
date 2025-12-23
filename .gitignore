@@ -24,7 +24,7 @@ target/
 # Python BE related
 /apps/opik-python-backend/images/
 
-# Opik opimizer related
+# Opik optimizer related
 /sdks/opik_optimizer/artifacts
 /sdks/opik_optimizer/benchmark_results/
 /sdks/opik_optimizer/node_modules
@@ -73,8 +73,6 @@ __pycache__
 pip-log.txt
 .venv*
 .ipynb_checkpoints
-# Track Python version pin to avoid accidental environment drift.
-# Remove this exclusion so changes to the version file are committed.
 
 # VS Code
 .vscode
@@ -98,5 +96,6 @@ response.txt
 # Playwright
 .playwright-mcp/
 
-# Virtual Environment
+# Virtual environments & editor backups
 venv
+*~
