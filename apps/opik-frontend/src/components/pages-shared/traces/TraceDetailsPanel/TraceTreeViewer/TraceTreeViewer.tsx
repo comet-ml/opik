@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { v4 as uuid } from "uuid";
 
 import {
@@ -67,6 +67,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
   const [config, setConfig] = useLocalStorageState(
     SELECTED_TREE_DATABLOCKS_KEY,
     {
@@ -79,19 +80,24 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const hasSearchOrFilter = hasSearch || hasFilter;
   const title = !hasSearchOrFilter ? "Trace" : "Results";
 
-  // Create a filter for trace_id to use when navigating to the spans table
-  const spansFilterForTrace = useMemo(
-    () => [
+  // Navigate to spans table with trace_id filter
+  const handleNavigateToSpans = useCallback(() => {
+    const spansFilter = [
       {
         id: uuid(),
         field: "trace_id",
         type: COLUMN_TYPE.string,
-        operator: "=" as const,
+        operator: "=",
         value: trace.id,
       },
-    ],
-    [trace.id],
-  );
+    ];
+    // Build URL with properly encoded filter for use-query-params compatibility
+    const baseUrl = `/${workspaceName}/projects/${projectId}/traces`;
+    const params = new URLSearchParams();
+    params.set("type", "spans");
+    params.set("spans_filters", JSON.stringify(spansFilter));
+    navigate({ to: `${baseUrl}?${params.toString()}` });
+  }, [workspaceName, projectId, trace.id, navigate]);
 
   const predicate = useCallback(
     (data: Span | Trace) =>
@@ -214,14 +220,12 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           <div className="flex h-8 items-center gap-1">
             <div className="comet-title-xs">{title}</div>
             <TooltipWrapper content="View all spans of this trace in table view">
-              <Link
-                to="/$workspaceName/projects/$projectId/traces"
-                params={{ workspaceName, projectId }}
-                search={{ type: "spans", spans_filters: spansFilterForTrace }}
+              <button
+                onClick={handleNavigateToSpans}
                 className="comet-body-s text-muted-slate hover:text-foreground hover:underline"
               >
                 {!hasSearchOrFilter ? traceSpans.length : searchIds.size} items
-              </Link>
+              </button>
             </TooltipWrapper>
             <ExplainerIcon
               {...EXPLAINERS_MAP[
