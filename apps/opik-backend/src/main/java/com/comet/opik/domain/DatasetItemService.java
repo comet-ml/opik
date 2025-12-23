@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
@@ -298,32 +299,309 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<Void> patch(@NonNull UUID id, @NonNull DatasetItem item) {
-        return get(id)
-                .flatMap(existingItem -> {
-                    // Build patched item by merging provided fields with existing item
-                    // Only non-null fields from the patch are applied
-                    var builder = existingItem.toBuilder();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-                    // Apply patch fields if provided
-                    Optional.ofNullable(item.data()).ifPresent(builder::data);
-                    Optional.ofNullable(item.source()).ifPresent(builder::source);
-                    Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
-                    Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
-                    Optional.ofNullable(item.tags()).ifPresent(builder::tags);
+            if (isVersioningEnabled()) {
+                log.info("Patching item '{}' with versioning", id);
+                return patchItemWithVersionById(id, item, workspaceId, userName);
+            }
 
-                    DatasetItem patchedItem = builder.build();
+            // Legacy mode: get from draft table and update
+            return get(id)
+                    .flatMap(existingItem -> {
+                        // Build patched item by merging provided fields with existing item
+                        var builder = existingItem.toBuilder();
 
-                    // Save the patched item (ClickHouse INSERT replaces existing rows with same ID)
-                    DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(), List.of(patchedItem));
-                    return saveBatch(batch, existingItem.datasetId());
-                })
-                .then();
+                        // Apply patch fields if provided
+                        Optional.ofNullable(item.data()).ifPresent(builder::data);
+                        Optional.ofNullable(item.source()).ifPresent(builder::source);
+                        Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
+                        Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
+                        Optional.ofNullable(item.tags()).ifPresent(builder::tags);
+
+                        DatasetItem patchedItem = builder.build();
+
+                        log.info("Patching item '{}' in legacy table for dataset '{}'",
+                                id, existingItem.datasetId());
+                        DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(),
+                                List.of(patchedItem));
+                        return saveBatch(batch, existingItem.datasetId());
+                    });
+        }).then();
+    }
+
+    /**
+     * Patches a single item by its dataset_item_id and creates a new version.
+     * First looks up the item in the versioned table to get its current state.
+     */
+    private Mono<Long> patchItemWithVersionById(UUID datasetItemId, DatasetItem patchData,
+            String workspaceId, String userName) {
+        // First, get the dataset ID from the versioned table
+        return versionDao.getDatasetIdByItemId(datasetItemId)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("Item '{}' not found in versioned table", datasetItemId);
+                    return Mono.error(failWithNotFound("Dataset item not found"));
+                }))
+                .flatMap(datasetId -> {
+                    // Get the latest version (using overload that takes workspaceId)
+                    Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+
+                    if (latestVersion.isEmpty()) {
+                        log.info("No versions exist for dataset '{}', cannot patch in versioning mode", datasetId);
+                        return Mono.error(failWithNotFound("No versions exist for dataset"));
+                    }
+
+                    UUID baseVersionId = latestVersion.get().id();
+                    int baseItemsCount = latestVersion.get().itemsTotal();
+                    UUID newVersionId = idGenerator.generateId();
+
+                    // Get the existing item from the latest version
+                    return getVersionedItemById(datasetId, datasetItemId)
+                            .flatMap(existingItem -> {
+                                // Apply patch to the existing item
+                                VersionedDatasetItem patchedItem = applyPatchToVersionedItem(
+                                        existingItem, patchData, datasetId, userName);
+
+                                log.info("Creating version with single item edit for dataset '{}', baseVersion='{}'",
+                                        datasetId, baseVersionId);
+
+                                // Apply delta with only the edited item
+                                return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                                        List.of(), // No added items
+                                        List.of(patchedItem), // Single edited item
+                                        Set.of(), // No deleted items
+                                        baseItemsCount)
+                                        .map(itemsTotal -> {
+                                            log.info("Applied patch delta to dataset '{}': itemsTotal '{}'",
+                                                    datasetId, itemsTotal);
+
+                                            // Create version metadata
+                                            versionService.createVersionFromDelta(
+                                                    datasetId,
+                                                    newVersionId,
+                                                    itemsTotal.intValue(),
+                                                    baseVersionId,
+                                                    null, // No tags
+                                                    "Updated 1 item",
+                                                    workspaceId,
+                                                    userName);
+
+                                            log.info("Created version '{}' for dataset '{}' after patch",
+                                                    newVersionId, datasetId);
+                                            return itemsTotal;
+                                        });
+                            });
+                });
+    }
+
+    /**
+     * Applies patch data to a versioned item, returning a new VersionedDatasetItem with the changes.
+     */
+    private VersionedDatasetItem applyPatchToVersionedItem(VersionedDatasetItem existingItem, DatasetItem patchData,
+            UUID datasetId, String userName) {
+        var builder = existingItem.toBuilder()
+                .lastUpdatedAt(java.time.Instant.now())
+                .lastUpdatedBy(userName);
+
+        // Apply patch fields if provided (non-null)
+        Optional.ofNullable(patchData.data()).ifPresent(builder::data);
+        Optional.ofNullable(patchData.source()).ifPresent(builder::source);
+        Optional.ofNullable(patchData.traceId()).ifPresent(builder::traceId);
+        Optional.ofNullable(patchData.spanId()).ifPresent(builder::spanId);
+        Optional.ofNullable(patchData.tags()).ifPresent(builder::tags);
+
+        return builder.build();
     }
 
     @WithSpan
     public Mono<Void> batchUpdate(@NonNull DatasetItemBatchUpdate batchUpdate) {
-        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.filters(), batchUpdate.update(),
-                batchUpdate.mergeTags());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            if (isVersioningEnabled()) {
+                log.info("Batch updating items with versioning, idsSize='{}', filtersSize='{}'",
+                        batchUpdate.ids() != null ? batchUpdate.ids().size() : 0,
+                        batchUpdate.filters() != null ? batchUpdate.filters().size() : 0);
+                return batchUpdateWithVersion(batchUpdate, workspaceId, userName);
+            }
+
+            // Legacy: bulk update in legacy table
+            log.info("Batch updating items in legacy table, idsSize='{}', filtersSize='{}'",
+                    batchUpdate.ids() != null ? batchUpdate.ids().size() : 0,
+                    batchUpdate.filters() != null ? batchUpdate.filters().size() : 0);
+            return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.filters(), batchUpdate.update(),
+                    batchUpdate.mergeTags());
+        });
+    }
+
+    /**
+     * Batch updates items and creates a new version with the edits.
+     * <p>
+     * This operation is used when dataset versioning is enabled.
+     * It fetches items matching the criteria from the latest version,
+     * applies the updates, and creates a new version with the edited items.
+     */
+    private Mono<Void> batchUpdateWithVersion(DatasetItemBatchUpdate batchUpdate, String workspaceId, String userName) {
+        // We need to determine the dataset ID from the first item
+        // For batch update by IDs, get the first item's dataset
+        if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
+            UUID firstItemId = batchUpdate.ids().iterator().next();
+
+            return versionDao.getDatasetIdByItemId(firstItemId)
+                    .switchIfEmpty(dao.get(firstItemId).map(DatasetItem::datasetId))
+                    .flatMap(datasetId -> batchUpdateByIdsWithVersion(datasetId, batchUpdate, workspaceId, userName));
+        }
+
+        // For batch update by filters, we need the dataset ID from the filter context
+        // This is a limitation - filters need to be scoped to a dataset
+        // For now, return an error indicating filters require dataset ID in versioning mode
+        log.warn("Batch update by filters without dataset ID is not supported with versioning enabled");
+        return Mono.error(new ClientErrorException(
+                "Batch update by filters requires explicit item IDs when versioning is enabled",
+                Response.Status.BAD_REQUEST));
+    }
+
+    /**
+     * Batch updates items by IDs and creates a new version.
+     */
+    private Mono<Void> batchUpdateByIdsWithVersion(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
+            String workspaceId, String userName) {
+        log.info("Batch updating '{}' items with versioning for dataset '{}'",
+                batchUpdate.ids().size(), datasetId);
+
+        // Get the latest version (using overload that takes workspaceId)
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+
+        if (latestVersion.isEmpty()) {
+            // No versions exist - fall back to legacy update
+            log.info("No versions exist for dataset '{}', falling back to legacy batch update", datasetId);
+            return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.filters(), batchUpdate.update(),
+                    batchUpdate.mergeTags());
+        }
+
+        UUID baseVersionId = latestVersion.get().id();
+        int baseItemsCount = latestVersion.get().itemsTotal();
+        UUID newVersionId = idGenerator.generateId();
+
+        // Fetch items to be updated from the latest version
+        return fetchItemsFromVersionByIds(datasetId, baseVersionId, batchUpdate.ids())
+                .map(item -> applyUpdateToItem(item, batchUpdate.update(), batchUpdate.mergeTags(), userName))
+                .collectList()
+                .flatMap(editedItems -> {
+                    if (editedItems.isEmpty()) {
+                        log.info("No items found to update for dataset '{}'", datasetId);
+                        return Mono.empty();
+                    }
+
+                    log.info("Creating version with '{}' edited items for dataset '{}', baseVersion='{}'",
+                            editedItems.size(), datasetId, baseVersionId);
+
+                    // Apply delta with the edited items
+                    return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                            List.of(), // No added items
+                            editedItems,
+                            Set.of(), // No deleted items
+                            baseItemsCount)
+                            .map(itemsTotal -> {
+                                log.info("Applied batch update delta to dataset '{}': itemsTotal '{}'",
+                                        datasetId, itemsTotal);
+
+                                // Create version metadata
+                                String changeDescription = editedItems.size() == 1
+                                        ? "Updated 1 item"
+                                        : "Updated " + editedItems.size() + " items";
+
+                                versionService.createVersionFromDelta(
+                                        datasetId,
+                                        newVersionId,
+                                        itemsTotal.intValue(),
+                                        baseVersionId,
+                                        null, // No tags
+                                        changeDescription,
+                                        workspaceId,
+                                        userName);
+
+                                log.info("Created version '{}' for dataset '{}' after batch update",
+                                        newVersionId, datasetId);
+                                return itemsTotal;
+                            });
+                })
+                .then();
+    }
+
+    /**
+     * Fetches items from a specific version by their dataset_item_id using a single batch query.
+     * This avoids N+1 queries by fetching all items in one database call.
+     */
+    private Flux<VersionedDatasetItem> fetchItemsFromVersionByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds) {
+        if (itemIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.debug("Fetching '{}' items by dataset_item_ids from version '{}' in dataset '{}'",
+                itemIds.size(), versionId, datasetId);
+
+        // Use the batch method to fetch all items in a single query
+        return versionDao.getItemsByDatasetItemIds(datasetId, itemIds)
+                .map(this::mapDatasetItemToVersionedItem);
+    }
+
+    /**
+     * Maps a DatasetItem (from the versioned table) to a VersionedDatasetItem.
+     */
+    private VersionedDatasetItem mapDatasetItemToVersionedItem(DatasetItem item) {
+        return VersionedDatasetItem.builder()
+                .datasetItemId(item.draftItemId() != null ? item.draftItemId() : item.id())
+                .datasetId(item.datasetId())
+                .data(item.data())
+                .source(item.source())
+                .traceId(item.traceId())
+                .spanId(item.spanId())
+                .tags(item.tags())
+                .createdAt(item.createdAt())
+                .lastUpdatedAt(item.lastUpdatedAt())
+                .createdBy(item.createdBy())
+                .lastUpdatedBy(item.lastUpdatedBy())
+                .build();
+    }
+
+    /**
+     * Gets a single versioned item by its dataset_item_id from the latest version.
+     */
+    private Mono<VersionedDatasetItem> getVersionedItemById(UUID datasetId, UUID datasetItemId) {
+        // Use the DAO method that queries the versioned table directly
+        return versionDao.getItemByDatasetItemId(datasetId, datasetItemId)
+                .map(this::mapDatasetItemToVersionedItem);
+    }
+
+    /**
+     * Applies an update to an item, returning a new VersionedDatasetItem with the changes.
+     */
+    private VersionedDatasetItem applyUpdateToItem(VersionedDatasetItem item, DatasetItemUpdate update,
+            Boolean mergeTags, String userName) {
+        var builder = item.toBuilder()
+                .lastUpdatedAt(java.time.Instant.now())
+                .lastUpdatedBy(userName);
+
+        // Apply updates if provided
+        if (update.data() != null) {
+            builder.data(update.data());
+        }
+        if (update.tags() != null) {
+            if (Boolean.TRUE.equals(mergeTags) && item.tags() != null) {
+                // Merge tags
+                Set<String> mergedTags = new java.util.HashSet<>(item.tags());
+                mergedTags.addAll(update.tags());
+                builder.tags(mergedTags);
+            } else {
+                builder.tags(update.tags());
+            }
+        }
+
+        return builder.build();
     }
 
     @WithSpan
@@ -488,8 +766,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset exists
         datasetService.findById(datasetId, workspaceId, null);
 
-        // Get the latest version
-        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId);
+        // Get the latest version (using overload that takes workspaceId)
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
 
         if (latestVersion.isEmpty()) {
             // No versions exist - fall back to legacy delete
@@ -655,7 +933,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
                     datasetItemSearchCriteria, page, size);
 
-            return getItemsFromLatestVersion(datasetItemSearchCriteria, page, size);
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                return getItemsFromLatestVersion(datasetItemSearchCriteria, page, size, workspaceId);
+            });
         } else {
             // Versioning toggle is OFF: fetch draft (current) items from dataset_items table
             log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
@@ -671,8 +952,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 && config.getServiceToggles().isDatasetVersioningEnabled();
     }
 
-    private Mono<DatasetItemPage> getItemsFromLatestVersion(DatasetItemSearchCriteria criteria, int page, int size) {
-        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId());
+    private Mono<DatasetItemPage> getItemsFromLatestVersion(DatasetItemSearchCriteria criteria, int page, int size,
+            String workspaceId) {
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(), workspaceId);
 
         if (latestVersion.isEmpty()) {
             // No versions exist yet - fall back to draft items
@@ -855,8 +1137,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             // Verify dataset exists
             datasetService.findById(datasetId, workspaceId, null);
 
-            // Get the latest version (if exists)
-            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId);
+            // Get the latest version (if exists) - using overload that takes workspaceId
+            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
 
             if (latestVersion.isEmpty()) {
                 // No versions exist yet - create the first version with all items as "added"

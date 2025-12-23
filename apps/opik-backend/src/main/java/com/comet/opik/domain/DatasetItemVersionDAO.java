@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Column;
+import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -106,6 +107,26 @@ public interface DatasetItemVersionDAO {
      * @return Mono emitting the dataset ID, or empty if not found
      */
     Mono<UUID> getDatasetIdByItemId(UUID datasetItemId);
+
+    /**
+     * Gets an item by its dataset_item_id from the latest version.
+     * This retrieves the full item data from the most recent version containing this item.
+     *
+     * @param datasetId the dataset ID
+     * @param datasetItemId the stable item ID (dataset_item_id)
+     * @return Mono emitting the DatasetItem, or empty if not found
+     */
+    Mono<DatasetItem> getItemByDatasetItemId(UUID datasetId, UUID datasetItemId);
+
+    /**
+     * Gets multiple items by their dataset_item_ids from the latest version in a single query.
+     * This is the batch version of getItemByDatasetItemId to avoid N+1 queries.
+     *
+     * @param datasetId the dataset ID
+     * @param datasetItemIds the stable item IDs (dataset_item_id values)
+     * @return Flux emitting DatasetItems for all found items
+     */
+    Flux<DatasetItem> getItemsByDatasetItemIds(UUID datasetId, Set<UUID> datasetItemIds);
 
 }
 
@@ -723,6 +744,146 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .doFinally(signalType -> endSegment(segment));
             });
         });
+    }
+
+    private static final String SELECT_ITEM_BY_DATASET_ITEM_ID = """
+            SELECT
+                id,
+                dataset_item_id,
+                dataset_id,
+                data,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at as created_at,
+                item_last_updated_at as last_updated_at,
+                item_created_by as created_by,
+                item_last_updated_by as last_updated_by
+            FROM dataset_item_versions
+            WHERE workspace_id = :workspace_id
+            AND dataset_id = :datasetId
+            AND dataset_item_id = :datasetItemId
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1
+            """;
+
+    private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
+            SELECT
+                id,
+                dataset_item_id,
+                dataset_id,
+                data,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at as created_at,
+                item_last_updated_at as last_updated_at,
+                item_created_by as created_by,
+                item_last_updated_by as last_updated_by
+            FROM dataset_item_versions
+            WHERE workspace_id = :workspace_id
+            AND dataset_id = :datasetId
+            AND dataset_item_id IN :datasetItemIds
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
+            """;
+
+    @Override
+    @WithSpan
+    public Mono<DatasetItem> getItemByDatasetItemId(@NonNull UUID datasetId, @NonNull UUID datasetItemId) {
+        log.debug("Getting item by dataset_item_id '{}' from dataset '{}'", datasetItemId, datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_ITEM_BY_DATASET_ITEM_ID)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("datasetItemId", datasetItemId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_item_by_dataset_item_id");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+
+                return Flux.from(statement.execute())
+                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
+                        .next()
+                        .doOnSuccess(item -> {
+                            if (item != null) {
+                                log.debug("Found item '{}' in dataset '{}'", datasetItemId, datasetId);
+                            } else {
+                                log.debug("Item '{}' not found in dataset '{}'", datasetItemId, datasetId);
+                            }
+                        })
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItemsByDatasetItemIds(@NonNull UUID datasetId, @NonNull Set<UUID> datasetItemIds) {
+        if (datasetItemIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.debug("Getting '{}' items by dataset_item_ids from dataset '{}'", datasetItemIds.size(), datasetId);
+
+        // Convert UUIDs to strings for the IN clause
+        List<String> itemIdStrings = datasetItemIds.stream()
+                .map(UUID::toString)
+                .toList();
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(SELECT_ITEMS_BY_DATASET_ITEM_IDS)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("datasetItemIds", itemIdStrings);
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_items_by_dataset_item_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)));
+        });
+    }
+
+    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row) {
+        // Map data field - stored as Map<String, String> in ClickHouse
+        Map<String, com.fasterxml.jackson.databind.JsonNode> data = Optional.ofNullable(row.get("data", Map.class))
+                .filter(m -> !m.isEmpty())
+                .map(value -> (Map<String, String>) value)
+                .stream()
+                .map(Map::entrySet)
+                .flatMap(java.util.Collection::stream)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> com.comet.opik.utils.JsonUtils.getJsonNodeFromStringWithFallback(entry.getValue())));
+
+        return DatasetItem.builder()
+                .id(UUID.fromString(row.get("id", String.class)))
+                .draftItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
+                .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
+                .data(data.isEmpty() ? null : data)
+                .source(Optional.ofNullable(row.get("source", String.class))
+                        .map(com.comet.opik.api.DatasetItemSource::fromString)
+                        .orElse(null))
+                .traceId(Optional.ofNullable(row.get("trace_id", String.class))
+                        .filter(s -> !s.isBlank())
+                        .map(UUID::fromString)
+                        .orElse(null))
+                .spanId(Optional.ofNullable(row.get("span_id", String.class))
+                        .filter(s -> !s.isBlank())
+                        .map(UUID::fromString)
+                        .orElse(null))
+                .tags(Optional.ofNullable(row.get("tags", String[].class))
+                        .map(java.util.Arrays::asList)
+                        .map(Set::copyOf)
+                        .orElse(null))
+                .createdAt(row.get("created_at", Instant.class))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .build();
     }
 
 }
