@@ -78,7 +78,7 @@ class OptimizationLogSyncServiceTest {
 
         // Default config - enabled
         lenient().when(config.isEnabled()).thenReturn(true);
-        lenient().when(config.getLockTtlSeconds()).thenReturn(30L);
+        lenient().when(config.getLockTimeout()).thenReturn(java.time.Duration.ofSeconds(30));
 
         // Default Redis mocks - use doReturn to avoid generic type issues
         lenient().doReturn(logList).when(redisClient).getList(anyString(), any(StringCodec.class));
