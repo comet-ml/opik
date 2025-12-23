@@ -187,6 +187,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
             <TraceTreeViewer
               trace={trace}
               spans={spansData?.content}
+              projectId={projectId}
               rowId={spanId || traceId}
               onSelectRow={handleRowSelect}
               search={search}

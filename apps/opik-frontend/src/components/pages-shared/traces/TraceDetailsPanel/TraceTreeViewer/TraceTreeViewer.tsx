@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { v4 as uuid } from "uuid";
 
 import {
   addAllParentIds,
   constructDataMapAndSearchIds,
   filterFunction,
 } from "./helpers";
-import { OnChangeFn } from "@/types/shared";
+import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
@@ -23,6 +25,7 @@ import useTreeDetailsStore, {
   TreeNodeConfig,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import SpanDetailsButton from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
+import useAppStore from "@/store/AppStore";
 
 const SELECTED_TREE_DATABLOCKS_KEY = "tree-datablocks-config";
 const SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE: TreeNodeConfig = {
@@ -41,6 +44,7 @@ const SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE: TreeNodeConfig = {
 type TraceTreeViewerProps = {
   trace: Trace;
   spans?: Span[];
+  projectId: string;
   rowId: string;
   onSelectRow: (id: string) => void;
   search?: string;
@@ -52,6 +56,7 @@ type TraceTreeViewerProps = {
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   trace,
   spans,
+  projectId,
   rowId,
   onSelectRow,
   search,
@@ -61,6 +66,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 }) => {
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [config, setConfig] = useLocalStorageState(
     SELECTED_TREE_DATABLOCKS_KEY,
     {
@@ -72,6 +78,20 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const hasFilter = Boolean(filters.length);
   const hasSearchOrFilter = hasSearch || hasFilter;
   const title = !hasSearchOrFilter ? "Trace" : "Results";
+
+  // Create a filter for trace_id to use when navigating to the spans table
+  const spansFilterForTrace = useMemo(
+    () => [
+      {
+        id: uuid(),
+        field: "trace_id",
+        type: COLUMN_TYPE.string,
+        operator: "=" as const,
+        value: trace.id,
+      },
+    ],
+    [trace.id],
+  );
 
   const predicate = useCallback(
     (data: Span | Trace) =>
@@ -193,9 +213,16 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-background pb-2 pl-6 pr-4 pt-4">
           <div className="flex h-8 items-center gap-1">
             <div className="comet-title-xs">{title}</div>
-            <div className="comet-body-s text-muted-slate">
-              {!hasSearchOrFilter ? traceSpans.length : searchIds.size} items
-            </div>
+            <TooltipWrapper content="View all spans of this trace in table view">
+              <Link
+                to="/$workspaceName/projects/$projectId/traces"
+                params={{ workspaceName, projectId }}
+                search={{ type: "spans", spans_filters: spansFilterForTrace }}
+                className="comet-body-s text-muted-slate hover:text-foreground hover:underline"
+              >
+                {!hasSearchOrFilter ? traceSpans.length : searchIds.size} items
+              </Link>
+            </TooltipWrapper>
             <ExplainerIcon
               {...EXPLAINERS_MAP[
                 EXPLAINER_ID.what_are_these_elements_in_the_tree

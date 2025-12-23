@@ -834,6 +834,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ...(type === TRACE_DATA_TYPE.spans
         ? [
             {
+              id: "trace_id",
+              label: "Trace ID",
+              type: COLUMN_TYPE.string,
+            },
+            {
               id: "type",
               label: "Type",
               type: COLUMN_TYPE.category,
