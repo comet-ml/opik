@@ -254,9 +254,15 @@ class IsolatedSubprocessExecutor:
         )
 
         try:
-            # Initialize logger BEFORE process starts if configured
-            # Lazy initialization on first use
-            if SubprocessLogConfig.is_fully_configured():
+            # Initialize logger BEFORE process starts
+            # Check if a log collector was pre-registered (e.g., for optimization jobs)
+            pre_registered_collector = self._log_collectors.pop(0, None)  # 0 is placeholder key
+            
+            if pre_registered_collector is not None:
+                # Use pre-registered collector (e.g., RedisBatchLogCollector for optimizations)
+                self._log_collectors[process.pid] = pre_registered_collector
+            elif SubprocessLogConfig.is_fully_configured():
+                # Fallback to HTTP-based logging if configured
                 try:
                     from opik_backend.subprocess_logger import BatchLogCollector
                     self._log_collectors[process.pid] = BatchLogCollector(

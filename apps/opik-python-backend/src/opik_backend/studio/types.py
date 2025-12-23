@@ -30,6 +30,7 @@ class OptimizationJobContext:
     an optimization job from the Java backend.
     """
     optimization_id: str
+    workspace_id: str
     workspace_name: str
     config: Dict[str, Any]
     opik_api_key: Optional[str] = None
@@ -49,6 +50,7 @@ class OptimizationJobContext:
         """
         return cls(
             optimization_id=job_message["optimization_id"],
+            workspace_id=job_message["workspace_id"],
             workspace_name=job_message["workspace_name"],
             config=job_message["config"],
             opik_api_key=job_message.get("opik_api_key"),

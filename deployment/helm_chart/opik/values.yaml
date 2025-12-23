@@ -204,6 +204,21 @@ component:
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
       # Opik SDK URL for optimizer to reach Java backend
       OPIK_URL_OVERRIDE: "http://opik-backend:8080"
+      # Redis URL for Optimization Studio log streaming
+      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      
+      # ============================================================
+      # Optimization Studio Configuration (optional)
+      # ============================================================
+      # Number of dataset items to sample for optimization (default: 20)
+      # Limits memory usage for large datasets
+      # OPTSTUDIO_DATASET_SAMPLES: "20"
+      # Terminal width for Rich log output formatting (default: 80)
+      # OPTSTUDIO_LOG_TERM_WIDTH: "80"
+      # Execution timeout for optimization jobs in seconds (default: 7200 = 2 hours)
+      # OPTSTUDIO_EXECUTION_TIMEOUT: "7200"
+      # TTL for optimization logs in Redis in seconds (default: 86400 = 24 hours)
+      # OPTSTUDIO_LOG_REDIS_TTL: "86400"
     
     # Optional: Reference external Kubernetes secrets for sensitive configuration
     # Use this to inject LLM API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
