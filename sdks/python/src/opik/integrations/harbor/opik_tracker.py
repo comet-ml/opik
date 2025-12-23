@@ -34,35 +34,12 @@ from harbor.verifier.verifier import Verifier
 
 from opik import datetime_helpers, id_helpers, opik_context, track
 from opik.api_objects import opik_client
-from opik.types import FeedbackScoreDict, SpanType
+from opik.types import SpanType
 
 from . import experiment_service
+from .harbor_trial_run_decorator import HarborTrialRunDecorator
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _rewards_to_feedback_scores(
-    rewards: Optional[Dict[str, Any]],
-    error: Optional[str] = None,
-) -> List[FeedbackScoreDict]:
-    """Convert Harbor verifier rewards to Opik feedback scores."""
-    if rewards is None:
-        return []
-
-    feedback_scores: List[FeedbackScoreDict] = []
-    for name, value in rewards.items():
-        try:
-            float_value = float(value)
-
-            score = FeedbackScoreDict(name=name, value=float_value, reason=error)
-
-            feedback_scores.append(score)
-        except (ValueError, TypeError):
-            LOGGER.warning(
-                "Could not convert reward value to float: %s=%s", name, value
-            )
-
-    return feedback_scores
 
 
 def _source_to_span_type(source: str) -> SpanType:
@@ -229,116 +206,16 @@ def track_harbor(
 def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable:
     """Wrap Trial.run with tracing, feedback scores, and experiment linking."""
 
-    @track(
-        name="trial_run",
+    decorator = HarborTrialRunDecorator()
+
+    @decorator.track(
         tags=["harbor"],
         project_name=project_name,
-        capture_output=False,
+        capture_output=True,
     )
     @functools.wraps(original)
     async def wrapped(self: Trial) -> TrialResult:
-        # Set nice trace name
-        config = self.config
-        trace_name = f"{config.agent.name}/{config.trial_name}"
-        opik_context.update_current_trace(
-            name=trace_name,
-            input={
-                "trial_name": config.trial_name,
-                "task": {
-                    "name": config.task.name
-                    if hasattr(config.task, "name")
-                    else str(config.task.path),
-                    "source": getattr(config.task, "source", None),
-                },
-                "agent": {
-                    "name": config.agent.name,
-                    "model": getattr(config.agent, "model_name", None),
-                },
-            },
-            metadata={"created_from": "harbor"},
-            tags=["harbor", config.agent.name],
-        )
-
-        # Lazily setup experiment service if not already done
-        # This ensures experiment tracking works for both SDK and CLI modes
-        if experiment_service.get_service() is None:
-            try:
-                # Use job_id for consistent experiment naming
-                experiment_name = (
-                    f"harbor-job-{str(config.job_id)[:8]}" if config.job_id else None
-                )
-                # Build experiment config with agent/model info
-                experiment_config: Dict[str, Any] = {
-                    "agent_name": config.agent.name,
-                }
-                model_name = getattr(config.agent, "model_name", None)
-                if model_name:
-                    experiment_config["model_name"] = model_name
-
-                LOGGER.debug(
-                    "Lazily setting up experiment service: experiment_name=%s",
-                    experiment_name,
-                )
-                experiment_service.setup_lazy(
-                    experiment_name=experiment_name,
-                    experiment_config=experiment_config,
-                )
-            except Exception as e:
-                LOGGER.debug("Failed to lazily setup experiment service: %s", e)
-
         result: TrialResult = await original(self)
-
-        # Update trace with output and feedback scores
-        output_dict: Dict[str, Any] = {
-            "trial_name": result.trial_name,
-            "task_name": result.task_name,
-        }
-        if result.verifier_result and result.verifier_result.rewards:
-            output_dict["rewards"] = result.verifier_result.rewards
-
-        feedback_scores = None
-        if result.verifier_result and result.verifier_result.rewards:
-            # Get error message if available
-            error_msg = getattr(result.verifier_result, "error", None) or getattr(
-                result, "error", None
-            )
-            feedback_scores = _rewards_to_feedback_scores(
-                result.verifier_result.rewards, error=error_msg
-            )
-
-        opik_context.update_current_trace(
-            output=output_dict,
-            feedback_scores=feedback_scores,
-        )
-
-        # Link to experiment
-        trace_data = opik_context.get_current_trace_data()
-        if trace_data is not None:
-            service = experiment_service.get_service()
-            LOGGER.debug(
-                "Linking trial to experiment: trial=%s, trace_id=%s, service=%s",
-                config.trial_name,
-                trace_data.id,
-                service,
-            )
-            if service is not None:
-                source = getattr(config.task, "source", None)
-                task_name = (
-                    config.task.name
-                    if hasattr(config.task, "name")
-                    else str(config.task.path)
-                )
-                service.link_trial_to_experiment(
-                    trial_name=config.trial_name,
-                    trace_id=trace_data.id,
-                    source=source,
-                    task_name=task_name,
-                )
-            else:
-                LOGGER.debug(
-                    "No experiment service available, skipping experiment linking"
-                )
-
         return result
 
     return wrapped
