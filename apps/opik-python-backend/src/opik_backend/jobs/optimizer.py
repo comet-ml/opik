@@ -32,6 +32,9 @@ OPTIMIZER_RUNNER_PATH = os.path.join(
     "optimizer_runner.py"
 )
 
+# Payload type constant for optimization jobs
+PAYLOAD_TYPE_OPTIMIZATION = "optimization"
+
 
 class JobMessageParseError(Exception):
     """Raised when job message cannot be parsed."""
@@ -149,8 +152,7 @@ def process_optimizer_job(*args, **kwargs):
                 file_path=OPTIMIZER_RUNNER_PATH,
                 data=job_message,
                 env_vars=env_vars,
-                timeout_secs=OPTIMIZATION_TIMEOUT_SECS,
-                payload_type="optimization",
+                payload_type=PAYLOAD_TYPE_OPTIMIZATION,
                 optimization_id=str(context.optimization_id),
                 job_id=str(context.optimization_id),
             )

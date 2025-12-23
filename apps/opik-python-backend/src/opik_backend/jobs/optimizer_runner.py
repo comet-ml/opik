@@ -15,7 +15,7 @@ import os
 import sys
 
 # Terminal width for Rich output formatting (configurable via env var)
-TERMINAL_WIDTH = int(os.environ.get("STUDIO_LOG_TERM_WIDTH", "80"))
+TERMINAL_WIDTH = int(os.environ.get("OPTSTUDIO_LOG_TERM_WIDTH", "80"))
 
 # Set terminal size for Rich output formatting BEFORE importing Rich
 os.environ["COLUMNS"] = str(TERMINAL_WIDTH)

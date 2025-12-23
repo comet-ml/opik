@@ -10,6 +10,7 @@ Configuration: All settings passed as parameters - no environment variables.
 
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -32,8 +33,8 @@ def _redis_meta_key(workspace_id: str, optimization_id: str) -> str:
     return f"opik:logs:{workspace_id}:{optimization_id}:meta"
 
 
-# Default TTL for Redis keys (24 hours as safety net)
-REDIS_KEY_TTL_SECONDS = 86400
+# Default TTL for Redis keys (configurable, default 24 hours as safety net)
+REDIS_KEY_TTL_SECONDS = int(os.environ.get("OPTSTUDIO_LOG_REDIS_TTL", "86400"))
 
 class SubprocessLogRecord:
     """Represents a single log record from subprocess."""
