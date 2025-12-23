@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -15,15 +16,33 @@ import org.stringtemplate.v4.ST;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @UtilityClass
 @Slf4j
 public class DatabaseUtils {
 
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
+    public static final int UUID_POOL_MULTIPLIER = 2;
+
+    /**
+     * Generates a pool of UUIDv7 identifiers for batch operations.
+     * The pool is sized at 2x the expected count for safety margin.
+     *
+     * @param idGenerator the ID generator to use for UUIDv7 generation
+     * @param expectedCount the expected number of items
+     * @return a list of UUIDv7 identifiers
+     */
+    public static List<UUID> generateUuidPool(IdGenerator idGenerator, int expectedCount) {
+        int poolSize = Math.max(1, expectedCount * UUID_POOL_MULTIPLIER);
+        return IntStream.range(0, poolSize)
+                .mapToObj(i -> idGenerator.generateId())
+                .toList();
+    }
 
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
         var filteredProperties = dataSourceFactory.getProperties()

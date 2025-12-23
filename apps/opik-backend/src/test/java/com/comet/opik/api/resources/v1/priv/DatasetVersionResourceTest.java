@@ -9,6 +9,7 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -194,6 +195,22 @@ class DatasetVersionResourceTest {
                 .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                 .post(Entity.json(DatasetItemsDelete.builder()
                         .itemIds(Set.of(itemId))
+                        .build()))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+        }
+    }
+
+    private void deleteDatasetItemsByFilters(UUID datasetId, List<DatasetItemFilter> filters) {
+        try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .post(Entity.json(DatasetItemsDelete.builder()
+                        .datasetId(datasetId)
+                        .filters(filters)
                         .build()))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -1087,6 +1104,232 @@ class DatasetVersionResourceTest {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Items With Versioning:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteItemsWithVersioning {
+
+        @Test
+        @DisplayName("Success: Delete items creates new version without deleted items")
+        void deleteItems__whenVersioningEnabled__thenCreateNewVersionWithoutDeletedItems() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            // Get version 1 and tag it
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get items from v1 to identify item to delete
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(5);
+
+            var itemToDelete = v1Items.get(0);
+
+            // When - Delete one item
+            deleteDatasetItem(datasetId, itemToDelete.draftItemId());
+
+            // Then - Verify a new version was created
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            // Verify the new version has 4 items (5 - 1 deleted)
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(4);
+            assertThat(version2.itemsDeleted()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsModified()).isEqualTo(0);
+
+            // Verify v1 still has 5 items (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(5);
+
+            // Verify v2 (latest) has 4 items and doesn't contain the deleted item
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(4);
+            assertThat(v2Items.stream().map(DatasetItem::draftItemId))
+                    .doesNotContain(itemToDelete.draftItemId());
+        }
+
+        @Test
+        @DisplayName("Success: Delete multiple items creates new version")
+        void deleteItems__whenMultipleItemsDeleted__thenCreateNewVersionWithoutDeletedItems() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get items to delete
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            var itemsToDelete = v1Items.subList(0, 3); // Delete first 3 items
+
+            // When - Delete multiple items one by one (each creates a version)
+            for (var item : itemsToDelete) {
+                deleteDatasetItem(datasetId, item.draftItemId());
+            }
+
+            // Then - Verify versions were created (1 original + 3 deletions = 4 versions)
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(4);
+
+            // Verify the latest version has 2 items (5 - 3 deleted)
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.itemsTotal()).isEqualTo(2);
+
+            // Verify latest items don't contain deleted items
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(2);
+
+            var deletedDraftItemIds = itemsToDelete.stream().map(DatasetItem::draftItemId).toList();
+            assertThat(latestItems.stream().map(DatasetItem::draftItemId))
+                    .doesNotContainAnyElementsOf(deletedDraftItemIds);
+        }
+
+        @Test
+        @DisplayName("Success: Delete all items leaves empty version")
+        void deleteItems__whenAllItemsDeleted__thenCreateEmptyVersion() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var version1 = getLatestVersion(datasetId);
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // When - Delete all items
+            for (var item : v1Items) {
+                deleteDatasetItem(datasetId, item.draftItemId());
+            }
+
+            // Then - Verify latest version has 0 items
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.itemsTotal()).isEqualTo(0);
+
+            // Verify v1 still has 2 items (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(2);
+
+            // Verify latest has 0 items
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Success: Delete by filters creates new version without matching items")
+        void deleteItems__whenDeleteByFilters__thenCreateNewVersionWithoutMatchingItems() {
+            // Given - Create dataset with items that have specific data values
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create items with different data values to enable filtering
+            var item1 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
+                            "status", factory.manufacturePojo(JsonNode.class)))
+                    .build();
+            var item2 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
+                            "status", factory.manufacturePojo(JsonNode.class)))
+                    .build();
+            var item3 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
+                            "status", factory.manufacturePojo(JsonNode.class)))
+                    .build();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(item1, item2, item3))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+
+            // Tag v1 so we can reference it later
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // When - Delete all items using empty filters (delete all in dataset)
+            deleteDatasetItemsByFilters(datasetId, List.of());
+
+            // Then - Verify a new version was created with 0 items
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(3);
+
+            // Verify v1 still has 3 items (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Success: Combined add and delete operations maintain correct state")
+        void addAndDelete__whenMixedOperations__thenVersionsReflectChangesCorrectly() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get an item to delete
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            var itemToDelete = v1Items.get(0);
+
+            // When - Delete one item (creates version 2 with 2 items)
+            deleteDatasetItem(datasetId, itemToDelete.draftItemId());
+
+            // Verify version 2 has 2 items
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.itemsTotal()).isEqualTo(2);
+
+            // Then - Add new items (creates version 3)
+            createDatasetItems(datasetId, 2);
+
+            // Verify version 3 has 4 items (2 + 2 added)
+            var version3 = getLatestVersion(datasetId);
+            assertThat(version3.itemsTotal()).isEqualTo(4);
+
+            // Verify v1 still has 3 items (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(3);
+
+            // Verify v2 still has 2 items (immutable)
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version2.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(2);
+
+            // Verify latest has 4 items
+            var v3Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(v3Items).hasSize(4);
         }
     }
 }

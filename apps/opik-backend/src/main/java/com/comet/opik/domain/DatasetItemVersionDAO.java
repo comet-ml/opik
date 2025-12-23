@@ -2,8 +2,12 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
+import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
@@ -12,6 +16,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -19,12 +24,13 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -41,15 +47,20 @@ public interface DatasetItemVersionDAO {
 
     /**
      * Copies items from a source version to a new target version directly within dataset_item_versions.
-     * Each copied item gets a new unique ID but retains the same dataset_item_id.
+     * Each copied item gets a new UUIDv7 but retains the same dataset_item_id.
+     * <p>
+     * Optionally excludes items matching filters (items matching filters will NOT be copied).
+     * If excludeFilters is null or empty, all items are copied.
      *
      * @param datasetId the dataset ID
      * @param sourceVersionId the source version to copy from
      * @param targetVersionId the new version ID to copy to
-     * @param uuids pre-generated UUIDs for the new rows
+     * @param excludeFilters optional filters to exclude items (null or empty = copy all)
+     * @param uuids pre-generated UUIDv7 pool for the new item IDs (should be at least 2x expected item count)
      * @return the number of items copied
      */
-    Mono<Long> copyVersionItems(UUID datasetId, UUID sourceVersionId, UUID targetVersionId, List<UUID> uuids);
+    Mono<Long> copyVersionItems(UUID datasetId, UUID sourceVersionId, UUID targetVersionId,
+            List<DatasetItemFilter> excludeFilters, List<UUID> uuids);
 
     /**
      * Applies delta changes (add, edit, delete) from a base version to create a new version.
@@ -67,10 +78,12 @@ public interface DatasetItemVersionDAO {
      * @param addedItems new items to add
      * @param editedItems existing items with updated data
      * @param deletedIds item IDs (datasetItemId) to exclude from the new version
+     * @param baseVersionItemCount the item count in the base version (for UUID pool sizing)
      * @return the total number of items in the new version
      */
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
-            List<VersionedDatasetItem> addedItems, List<VersionedDatasetItem> editedItems, Set<UUID> deletedIds);
+            List<VersionedDatasetItem> addedItems, List<VersionedDatasetItem> editedItems, Set<UUID> deletedIds,
+            int baseVersionItemCount);
 
     /**
      * Inserts items directly into a new version without copying from any base version.
@@ -84,6 +97,16 @@ public interface DatasetItemVersionDAO {
      */
     Mono<Long> insertItems(UUID datasetId, UUID versionId, List<VersionedDatasetItem> items,
             String workspaceId, String userName);
+
+    /**
+     * Gets the dataset ID for a given dataset_item_id from the versioned table.
+     * This looks up the most recent version of an item to find its dataset.
+     *
+     * @param datasetItemId the stable item ID (dataset_item_id)
+     * @return Mono emitting the dataset ID, or empty if not found
+     */
+    Mono<UUID> getDatasetIdByItemId(UUID datasetItemId);
+
 }
 
 @Singleton
@@ -186,6 +209,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             """;
 
+    // Copy items from source version to target version
+    // Optionally excludes items matching filters (when exclude_filters is set)
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -209,7 +234,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                arrayElement(:uuids, row_number() OVER ()) as new_id,
+                arrayElement(:uuids, row_number() OVER ()) as id,
                 src.dataset_item_id,
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
@@ -228,15 +253,32 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 :user_name as created_by,
                 :user_name as last_updated_by,
                 src.workspace_id
-            FROM dataset_item_versions AS src
-            WHERE src.dataset_id = :datasetId
-            AND src.dataset_version_id = :sourceVersionId
-            AND src.workspace_id = :workspace_id
-            ORDER BY (src.workspace_id, src.dataset_id, src.dataset_version_id, src.id) DESC, src.last_updated_at DESC
-            LIMIT 1 BY src.id
+            FROM (
+                SELECT *
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :sourceVersionId
+                AND workspace_id = :workspace_id
+                <if(exclude_filters)>
+                AND NOT (<exclude_filters>)
+                <endif>
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS src
+            """;
+
+    private static final String SELECT_DATASET_ID_BY_ITEM_ID = """
+            SELECT
+                dataset_id
+            FROM dataset_item_versions
+            WHERE dataset_item_id = :datasetItemId
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     @WithSpan
@@ -351,30 +393,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<Long> copyVersionItems(@NonNull UUID datasetId, @NonNull UUID sourceVersionId,
-            @NonNull UUID targetVersionId, @NonNull List<UUID> uuids) {
-        log.info("Copying items from version '{}' to version '{}' for dataset '{}' using '{}' pre-generated UUIDs",
-                sourceVersionId, targetVersionId, datasetId, uuids.size());
+            @NonNull UUID targetVersionId, List<DatasetItemFilter> excludeFilters, @NonNull List<UUID> uuids) {
 
-        return asyncTemplate.nonTransaction(connection -> {
+        log.info(
+                "Copying items from version '{}' to version '{}' for dataset '{}', excludeFilters='{}', uuidPoolSize='{}'",
+                sourceVersionId, targetVersionId, datasetId,
+                excludeFilters != null ? excludeFilters.size() : 0, uuids.size());
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            ST template = TemplateUtils.newST(COPY_VERSION_ITEMS);
+
+            // Add filter conditions if provided
+            if (excludeFilters != null && !excludeFilters.isEmpty()) {
+                Optional<String> filterClause = FilterQueryBuilder.toAnalyticsDbFilters(excludeFilters,
+                        FilterStrategy.DATASET_ITEM);
+                filterClause.ifPresent(filters -> template.add("exclude_filters", filters));
+            }
+
+            String query = template.render();
+
             // Convert UUIDs to String array for ClickHouse binding
             String[] uuidStrings = uuids.stream()
                     .map(UUID::toString)
                     .toArray(String[]::new);
 
-            var statement = connection.createStatement(COPY_VERSION_ITEMS)
-                    .bind("datasetId", datasetId.toString())
-                    .bind("sourceVersionId", sourceVersionId.toString())
-                    .bind("targetVersionId", targetVersionId.toString())
-                    .bind("uuids", uuidStrings);
+            return asyncTemplate.nonTransaction(connection -> {
+                var statement = connection.createStatement(query)
+                        .bind("datasetId", datasetId.toString())
+                        .bind("sourceVersionId", sourceVersionId.toString())
+                        .bind("targetVersionId", targetVersionId.toString())
+                        .bind("uuids", uuidStrings)
+                        .bind("workspace_id", workspaceId)
+                        .bind("user_name", userName);
 
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
+                // Bind filter parameters if provided
+                if (excludeFilters != null && !excludeFilters.isEmpty()) {
+                    FilterQueryBuilder.bind(statement, excludeFilters, FilterStrategy.DATASET_ITEM);
+                }
 
-            return makeMonoContextAware((userName, workspaceId) -> {
-                statement.bind("workspace_id", workspaceId);
-                statement.bind("user_name", userName);
-                log.debug("Copying items: datasetId='{}', sourceVersionId='{}', targetVersionId='{}', " +
-                        "workspaceId='{}', userName='{}'",
-                        datasetId, sourceVersionId, targetVersionId, workspaceId, userName);
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_version_items");
 
                 return Flux.from(statement.execute())
                         .flatMap(Result::getRowsUpdated)
@@ -391,11 +451,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @WithSpan
     public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull List<VersionedDatasetItem> addedItems,
-            @NonNull List<VersionedDatasetItem> editedItems, @NonNull Set<UUID> deletedIds) {
+            @NonNull List<VersionedDatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
+            int baseVersionItemCount) {
 
         log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
-                "added='{}', edited='{}', deleted='{}'",
-                datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(), deletedIds.size());
+                "added='{}', edited='{}', deleted='{}', baseItemCount='{}'",
+                datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(),
+                deletedIds.size(), baseVersionItemCount);
 
         // Collect all item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
@@ -406,13 +468,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         Set<UUID> excludedIds = new HashSet<>(deletedIds);
         excludedIds.addAll(editedItemIds);
 
+        // Calculate expected unchanged items and generate UUID pool
+        int expectedUnchangedCount = Math.max(0, baseVersionItemCount - excludedIds.size());
+        List<UUID> unchangedUuids = generateUuidPool(idGenerator, expectedUnchangedCount);
+
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
             // Step 1: Copy unchanged items from base version (excluding deleted and edited)
             Mono<Long> copyUnchanged = copyUnchangedItems(datasetId, baseVersionId, newVersionId,
-                    excludedIds, workspaceId, userName);
+                    excludedIds, unchangedUuids, workspaceId, userName);
 
             // Step 2: Insert edited items
             Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
@@ -430,19 +496,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     private Mono<Long> copyUnchangedItems(UUID datasetId, UUID baseVersionId, UUID newVersionId,
-            Set<UUID> excludedIds, String workspaceId, String userName) {
+            Set<UUID> excludedIds, List<UUID> uuids, String workspaceId, String userName) {
 
         if (excludedIds.isEmpty()) {
             // Simple copy - no exclusions needed
-            List<UUID> uuids = IntStream.range(0, 10000)
-                    .mapToObj(i -> UUID.randomUUID())
-                    .toList();
-            return copyVersionItems(datasetId, baseVersionId, newVersionId, uuids)
+            return copyVersionItems(datasetId, baseVersionId, newVersionId, null, uuids)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName));
         }
 
+        // Uses pre-generated UUIDv7 pool for time-ordered IDs
         String copyWithExclusionsQuery = """
                 INSERT INTO dataset_item_versions (
                     id,
@@ -466,7 +530,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     workspace_id
                 )
                 SELECT
-                    toString(generateUUIDv4()) as new_id,
+                    arrayElement(:uuids, row_number() OVER ()) as new_id,
                     src.dataset_item_id,
                     src.dataset_id,
                     :newVersionId as dataset_version_id,
@@ -499,11 +563,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .map(UUID::toString)
                     .toArray(String[]::new);
 
+            String[] uuidStrings = uuids.stream()
+                    .map(UUID::toString)
+                    .toArray(String[]::new);
+
             var statement = connection.createStatement(copyWithExclusionsQuery)
                     .bind("datasetId", datasetId.toString())
                     .bind("baseVersionId", baseVersionId.toString())
                     .bind("newVersionId", newVersionId.toString())
                     .bind("excludedIds", excludedIdStrings)
+                    .bind("uuids", uuidStrings)
                     .bind("workspace_id", workspaceId)
                     .bind("user_name", userName);
 
@@ -625,4 +694,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         }
         return timestamp.toString().replace("Z", "");
     }
+
+    @Override
+    @WithSpan
+    public Mono<UUID> getDatasetIdByItemId(@NonNull UUID datasetItemId) {
+        log.debug("Looking up dataset ID for item '{}'", datasetItemId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_DATASET_ID_BY_ITEM_ID)
+                    .bind("datasetItemId", datasetItemId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_dataset_id_by_item_id");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+
+                return Flux.from(statement.execute())
+                        .flatMap(result -> result
+                                .map((row, rowMetadata) -> UUID.fromString(row.get("dataset_id", String.class))))
+                        .next()
+                        .doOnSuccess(datasetId -> {
+                            if (datasetId != null) {
+                                log.debug("Found dataset '{}' for item '{}'", datasetId, datasetItemId);
+                            } else {
+                                log.debug("No dataset found for item '{}'", datasetItemId);
+                            }
+                        })
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        });
+    }
+
 }
