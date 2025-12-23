@@ -20,6 +20,7 @@ from opik_backend.subprocess_logger import create_optimization_log_collector
 from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
+    OPTIMIZATION_TIMEOUT_SECS,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,6 @@ OPTIMIZER_RUNNER_PATH = os.path.join(
     os.path.dirname(__file__),
     "optimizer_runner.py"
 )
-
-# Default timeout for optimization (2 hours)
-DEFAULT_OPTIMIZATION_TIMEOUT_SECS = 7200
 
 
 class JobMessageParseError(Exception):
@@ -101,9 +99,7 @@ def process_optimizer_job(*args, **kwargs):
         Exception: Any error during optimization
     """
     with tracer.start_as_current_span("process_optimizer_job") as span:
-        logger.info(f"Received optimizer job - args: {args}, kwargs: {kwargs}")
-        
-        # Parse job message
+        # Parse job message first (don't log raw args/kwargs - they contain API keys)
         job_message = _parse_job_message(args, kwargs)
         context = OptimizationJobContext.from_job_message(job_message)
         
@@ -132,7 +128,7 @@ def process_optimizer_job(*args, **kwargs):
         
         # Create isolated subprocess executor with Redis-backed log collection
         executor = IsolatedSubprocessExecutor(
-            timeout_secs=DEFAULT_OPTIMIZATION_TIMEOUT_SECS
+            timeout_secs=OPTIMIZATION_TIMEOUT_SECS
         )
         
         # Create log collector for this optimization
@@ -153,7 +149,7 @@ def process_optimizer_job(*args, **kwargs):
                 file_path=OPTIMIZER_RUNNER_PATH,
                 data=job_message,
                 env_vars=env_vars,
-                timeout_secs=DEFAULT_OPTIMIZATION_TIMEOUT_SECS,
+                timeout_secs=OPTIMIZATION_TIMEOUT_SECS,
                 payload_type="optimization",
                 optimization_id=str(context.optimization_id),
                 job_id=str(context.optimization_id),
