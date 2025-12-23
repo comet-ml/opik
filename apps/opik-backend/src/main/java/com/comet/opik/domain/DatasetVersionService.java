@@ -31,8 +31,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -125,6 +125,16 @@ public interface DatasetVersionService {
     Optional<DatasetVersion> getLatestVersion(UUID datasetId);
 
     /**
+     * Gets the latest version for a dataset.
+     * This overload is safe to call from reactive contexts where RequestContext is not available.
+     *
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @return Optional containing the latest version, or empty if no versions exist
+     */
+    Optional<DatasetVersion> getLatestVersion(UUID datasetId, String workspaceId);
+
+    /**
      * Gets a specific version by its ID.
      *
      * @param versionId the version ID
@@ -186,19 +196,6 @@ public interface DatasetVersionService {
 @Slf4j
 class DatasetVersionServiceImpl implements DatasetVersionService {
 
-    /**
-     * Minimum number of UUIDs to pre-generate for version snapshots.
-     * This ensures we have enough UUIDs even for new datasets or when the dataset
-     * has grown significantly since the last version.
-     */
-    private static final int MIN_UUID_POOL_SIZE = 1_000;
-
-    /**
-     * Multiplier applied to the item count when generating UUIDs.
-     * Using 2x provides a safety buffer to handle dataset growth between versions.
-     */
-    private static final int UUID_POOL_MULTIPLIER = 2;
-
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -235,14 +232,15 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    private Optional<DatasetVersion> getLatestVersionInternal(@NonNull UUID datasetId, @NonNull String workspaceId) {
-        return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
-    }
-
     @Override
     public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        return getLatestVersionInternal(datasetId, workspaceId);
+        return getLatestVersion(datasetId, workspaceId);
+    }
+
+    @Override
+    public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
+        return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
     }
 
     @Override
@@ -325,19 +323,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             return datasetVersionDAO.findById(newVersionId, workspaceId).orElseThrow();
         });
-    }
-
-    /**
-     * Generates a pool of UUIDs for version snapshot operations.
-     *
-     * @param itemCount number of items to generate UUIDs for
-     * @return list of pre-generated UUIDs
-     */
-    private List<UUID> generateUuidPool(int itemCount) {
-        int uuidCount = Math.max(itemCount * UUID_POOL_MULTIPLIER, MIN_UUID_POOL_SIZE);
-        return IntStream.range(0, uuidCount)
-                .mapToObj(i -> idGenerator.generateId())
-                .toList();
     }
 
     /**
@@ -620,7 +605,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     () -> new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(versionRef, datasetId)));
         });
 
-        Optional<DatasetVersion> latestVersion = getLatestVersionInternal(datasetId, workspaceId);
+        Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId, workspaceId);
         boolean isLatestVersionFlag = latestVersion.isPresent()
                 && latestVersion.get().id().equals(sourceVersionId);
 
@@ -633,9 +618,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         UUID newVersionId = idGenerator.generateId();
         String newVersionHash = CommitUtils.getCommit(newVersionId);
-        List<UUID> uuids = generateUuidsForCopy(context.sourceVersion.itemsTotal());
 
-        return copyItemsToNewVersion(datasetId, context, newVersionId, uuids)
+        return copyItemsToNewVersion(datasetId, context, newVersionId)
                 .flatMap(copiedCount -> {
                     log.info("Copied '{}' items from version '{}' to new version '{}' for dataset '{}'",
                             copiedCount, versionRef, newVersionHash, datasetId);
@@ -644,17 +628,13 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 });
     }
 
-    private List<UUID> generateUuidsForCopy(int sourceItemCount) {
-        int uuidCount = Math.max(sourceItemCount * 2, 1000);
-        return IntStream.range(0, uuidCount)
-                .mapToObj(i -> idGenerator.generateId())
-                .toList();
-    }
+    private Mono<Long> copyItemsToNewVersion(UUID datasetId, RestoreContext context, UUID newVersionId) {
+        // Generate UUID pool based on source version item count
+        int sourceItemCount = context.sourceVersion.itemsTotal();
+        List<UUID> uuids = generateUuidPool(idGenerator, sourceItemCount);
 
-    private Mono<Long> copyItemsToNewVersion(UUID datasetId, RestoreContext context,
-            UUID newVersionId, List<UUID> uuids) {
         return datasetItemVersionDAO
-                .copyVersionItems(datasetId, context.sourceVersionId, newVersionId, uuids)
+                .copyVersionItems(datasetId, context.sourceVersionId, newVersionId, null, uuids)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, context.userName)
                         .put(RequestContext.WORKSPACE_ID, context.workspaceId));
