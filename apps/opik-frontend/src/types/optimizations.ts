@@ -138,7 +138,3 @@ export interface Optimization {
   last_updated_at: string;
   last_updated_by: string;
 }
-
-export interface OptimizationStudio extends Optimization {
-  studio_config: OptimizationStudioConfig;
-}
