@@ -16,7 +16,6 @@ import {
   SparklesIcon,
   UserPen,
   ChartLine,
-  Zap,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -50,6 +49,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
+
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
 const CONFIGURATION_ITEM: MenuItem = {
@@ -152,21 +152,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
     label: "Optimization",
     items: [
       {
-        id: "optimization_studio",
-        path: "/$workspaceName/optimization-studio",
-        type: MENU_ITEM_TYPE.router,
-        icon: Zap,
-        label: "Optimization studio",
-        showIndicator: "running_optimizations",
-        featureFlag: FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-      },
-      {
         id: "optimizations",
         path: "/$workspaceName/optimizations",
         type: MENU_ITEM_TYPE.router,
         icon: SparklesIcon,
-        label: "Optimization runs",
+        label: "Optimization studio",
         count: "optimizations",
+        showIndicator: "optimizations_running",
       },
     ],
   },
@@ -208,9 +200,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
-  const isOptimizationStudioEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
   const isDashboardsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DASHBOARDS_ENABLED,
   );
@@ -294,20 +283,14 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { data: runningOptimizationsData } = useOptimizationsList(
     {
       workspaceName,
+      filters: ACTIVE_OPTIMIZATION_FILTER,
       page: 1,
       size: 1,
-      filters: ACTIVE_OPTIMIZATION_FILTER,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: !!workspaceName && isOptimizationStudioEnabled,
-      refetchInterval: (query) => {
-        // refetch every 5 seconds if there are running optimizations
-        const data = query.state.data;
-        return data?.total && data.total > 0
-          ? RUNNING_OPTIMIZATION_REFETCH_INTERVAL
-          : false;
-      },
+      refetchInterval: RUNNING_OPTIMIZATION_REFETCH_INTERVAL,
+      enabled: !!workspaceName,
     },
   );
 
@@ -359,9 +342,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     dashboards: dashboardsData?.total,
   };
 
+  const hasActiveOptimizations = (runningOptimizationsData?.total ?? 0) > 0;
+
   const indicatorDataMap: Record<string, boolean> = {
-    running_optimizations:
-      !!runningOptimizationsData?.total && runningOptimizationsData.total > 0,
+    optimizations_running: hasActiveOptimizations,
   };
 
   const logo = LogoComponent ? (

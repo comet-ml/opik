@@ -301,6 +301,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   validationErrors={validationErrors}
                   possibleTypes={MESSAGE_TYPE_OPTIONS}
                   disableMedia={isThreadScope}
+                  promptVariables={datasetColumnNames}
                   onChange={(messages: LLMMessage[]) =>
                     handleMessagesChange(messages, field.onChange, form)
                   }

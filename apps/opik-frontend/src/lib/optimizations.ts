@@ -13,6 +13,7 @@ import {
   DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS,
   DEFAULT_G_EVAL_METRIC_CONFIGS,
   DEFAULT_LEVENSHTEIN_METRIC_CONFIGS,
+  OPTIMIZER_OPTIONS,
 } from "@/constants/optimizations";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import { getDefaultTemperatureForModel } from "@/lib/modelUtils";
@@ -27,6 +28,15 @@ import {
 import { parseComposedProviderType } from "@/lib/provider";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filters } from "@/types/filters";
+
+export const getOptimizerLabel = (type: string): string => {
+  return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
+};
+
+export const IN_PROGRESS_OPTIMIZATION_STATUSES: OPTIMIZATION_STATUS[] = [
+  OPTIMIZATION_STATUS.RUNNING,
+  OPTIMIZATION_STATUS.INITIALIZED,
+];
 
 export const ACTIVE_OPTIMIZATION_FILTER: Filters = [
   {

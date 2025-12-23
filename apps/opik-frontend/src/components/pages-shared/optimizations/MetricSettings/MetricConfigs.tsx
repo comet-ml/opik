@@ -28,6 +28,8 @@ interface MetricConfigsProps {
   onChange: (configs: Partial<MetricParameters>) => void;
   size?: ButtonProps["size"];
   disabled?: boolean;
+  inline?: boolean;
+  datasetVariables?: string[];
 }
 
 const MetricConfigs = ({
@@ -36,6 +38,8 @@ const MetricConfigs = ({
   onChange,
   size = "icon-sm",
   disabled: disabledProp = false,
+  inline = false,
+  datasetVariables = [],
 }: MetricConfigsProps) => {
   const getMetricForm = () => {
     if (metricType === METRIC_TYPE.EQUALS) {
@@ -43,6 +47,7 @@ const MetricConfigs = ({
         <EqualsMetricConfigs
           configs={configs as Partial<EqualsMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }
@@ -52,6 +57,7 @@ const MetricConfigs = ({
         <JsonSchemaValidatorMetricConfigs
           configs={configs as Partial<JsonSchemaValidatorMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }
@@ -70,6 +76,7 @@ const MetricConfigs = ({
         <LevenshteinMetricConfigs
           configs={configs as Partial<LevenshteinMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }
@@ -78,6 +85,11 @@ const MetricConfigs = ({
   };
 
   const disabled = disabledProp || !metricType || isEmpty(configs);
+
+  // Inline mode - render form directly without dropdown
+  if (inline) {
+    return <div className="w-full [&>div]:w-full">{getMetricForm()}</div>;
+  }
 
   return (
     <DropdownMenu>
