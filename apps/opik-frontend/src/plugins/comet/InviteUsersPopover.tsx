@@ -138,7 +138,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
 
     if (!searchQuery || isQueryTooShort) {
       return (
-        <div className="comet-body-s text-muted-slate flex h-full items-center justify-center">
+        <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
           Type at least {MIN_USERNAME_LENGTH} characters or enter an email
           address
         </div>
@@ -150,7 +150,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
 
     if (!hasResults && !showEmailRow && !isLoading) {
       return (
-        <div className="comet-body-s text-muted-slate flex h-full items-center justify-center">
+        <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
           No users found. You can also invite by email address
         </div>
       );
@@ -202,7 +202,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
                 {emailRole}
               </Tag>
             ) : (
-              <Mail className="text-muted-slate size-4 shrink-0" />
+              <Mail className="size-4 shrink-0 text-muted-slate" />
             )}
           </div>
         )}

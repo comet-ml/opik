@@ -66,7 +66,7 @@ const WorkspaceRolePopover = ({
                       <span className="font-medium">
                         {checkboxOption.label}
                       </span>
-                      <span className="text-light-slate mt-0.5 text-sm">
+                      <span className="mt-0.5 text-sm text-light-slate">
                         {checkboxOption.text}
                       </span>
                     </div>

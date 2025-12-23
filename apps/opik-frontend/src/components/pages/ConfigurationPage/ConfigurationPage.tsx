@@ -24,9 +24,6 @@ const ConfigurationPage = () => {
     FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
   );
 
-  const CollaboratorsTabTrigger = usePluginsStore(
-    (state) => state.CollaboratorsTabTrigger,
-  );
   const CollaboratorsTab = usePluginsStore((state) => state.CollaboratorsTab);
 
   useEffect(() => {
