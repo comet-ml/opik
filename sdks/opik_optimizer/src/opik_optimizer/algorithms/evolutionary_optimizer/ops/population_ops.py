@@ -38,6 +38,8 @@ def restart_population(
             function_map=getattr(
                 best_elite, "function_map", best_prompt_so_far.function_map
             ),
+            model=best_prompt_so_far.model,
+            model_parameters=best_prompt_so_far.model_kwargs,
         )
     else:
         seed_prompt = best_prompt_so_far
@@ -137,6 +139,8 @@ def initialize_population(
                                 messages=fresh_prompts,
                                 tools=prompt.tools,
                                 function_map=prompt.function_map,
+                                model=prompt.model,
+                                model_parameters=prompt.model_kwargs,
                             )
                         )
                         init_pop_report.success_fresh_prompts(1)
@@ -147,6 +151,8 @@ def initialize_population(
                                     messages=p,
                                     tools=prompt.tools,
                                     function_map=prompt.function_map,
+                                    model=prompt.model,
+                                    model_parameters=prompt.model_kwargs,
                                 )
                                 for p in fresh_prompts[:num_fresh_starts]
                             ]
@@ -214,6 +220,8 @@ def initialize_population(
                                 messages=p,
                                 tools=prompt.tools,
                                 function_map=prompt.function_map,
+                                model=prompt.model,
+                                model_parameters=prompt.model_kwargs,
                             )
                             for p in generated_prompts_variations[
                                 :num_variations_on_initial
