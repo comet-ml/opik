@@ -46,6 +46,12 @@ import java.util.zip.GZIPOutputStream;
 public interface OptimizationLogSyncService {
 
     /**
+     * Redis key pattern for optimization log metadata.
+     * Used by OptimizationLogFlusherJob to scan for active optimizations.
+     */
+    String META_KEY_PATTERN = "opik:logs:*:meta";
+
+    /**
      * Sync logs from Redis to S3 if there are new logs since last flush.
      * Uses distributed locking to prevent duplicate work across instances.
      *
@@ -139,37 +145,7 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
      */
     private Mono<Void> doSyncToS3AndReduceTTL(String workspaceId, UUID optimizationId,
             String logKey, String metaKey) {
-
-        // Use StringCodec for log list since Python stores plain text log lines
-        RListReactive<String> logList = redisClient.getList(logKey, StringCodec.INSTANCE);
-        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey);
-
-        return logList.readAll()
-                .flatMap(logs -> {
-                    if (logs == null || logs.isEmpty()) {
-                        log.debug("No logs found in Redis for optimization '{}', skipping finalization",
-                                optimizationId);
-                        return Mono.empty();
-                    }
-
-                    // Join all log lines with newlines
-                    String logContent = String.join("\n", logs);
-                    String s3Key = formatS3Key(workspaceId, optimizationId);
-
-                    // Compress logs with gzip
-                    byte[] compressedLogs = compressGzip(logContent);
-                    log.info("Uploading '{}' log lines ({} bytes -> {} bytes gzipped) for optimization '{}' to S3",
-                            logs.size(), logContent.length(), compressedLogs.length, optimizationId);
-
-                    // Upload to S3, update flush timestamp, then reduce TTL (don't delete)
-                    return Mono.fromCallable(() -> {
-                        fileService.upload(s3Key, compressedLogs, CONTENT_TYPE_GZIP);
-                        return true;
-                    })
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .then(updateLastFlushTimestamp(metaMap, optimizationId))
-                            .then(reduceRedisTTL(logKey, metaKey, optimizationId));
-                });
+        return doSyncToS3(workspaceId, optimizationId, logKey, metaKey, true);
     }
 
     /**
@@ -203,6 +179,8 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
 
     /**
      * Perform the actual sync: read logs from Redis, upload to S3, update meta.
+     *
+     * @param isFinalize if true, reduce TTL on Redis keys after sync (for finalization)
      */
     private Mono<Void> doSyncToS3(String workspaceId, UUID optimizationId,
             String logKey, String metaKey, boolean isFinalize) {
@@ -228,12 +206,18 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
                             logs.size(), logContent.length(), compressedLogs.length, optimizationId);
 
                     // Upload to S3 (blocking call wrapped in scheduler)
-                    return Mono.fromCallable(() -> {
+                    Mono<Void> uploadAndUpdate = Mono.fromCallable(() -> {
                         fileService.upload(s3Key, compressedLogs, CONTENT_TYPE_GZIP);
                         return true;
                     })
                             .subscribeOn(Schedulers.boundedElastic())
                             .then(updateLastFlushTimestamp(metaMap, optimizationId));
+
+                    // If finalizing, also reduce TTL on Redis keys
+                    if (isFinalize) {
+                        return uploadAndUpdate.then(reduceRedisTTL(logKey, metaKey, optimizationId));
+                    }
+                    return uploadAndUpdate;
                 });
     }
 

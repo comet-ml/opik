@@ -32,8 +32,6 @@ import java.util.regex.Pattern;
 @EagerSingleton
 public class OptimizationLogFlusherJob implements Managed {
 
-    private static final String META_KEY_PATTERN = "opik:logs:*:meta";
-
     // Pattern to extract workspace_id and optimization_id from meta key
     // opik:logs:{workspace_id}:{optimization_id}:meta
     private static final Pattern META_KEY_REGEX = Pattern.compile("opik:logs:([^:]+):([^:]+):meta");
@@ -94,7 +92,7 @@ public class OptimizationLogFlusherJob implements Managed {
      * Scan Redis for optimization log meta keys and sync each one.
      */
     private Mono<Void> scanAndSyncLogs() {
-        var scanOptions = KeysScanOptions.defaults().pattern(META_KEY_PATTERN);
+        var scanOptions = KeysScanOptions.defaults().pattern(OptimizationLogSyncService.META_KEY_PATTERN);
         return redisClient.getKeys().getKeys(scanOptions)
                 .collectList()
                 .flatMap(keys -> {
