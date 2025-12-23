@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemChanges;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
@@ -155,14 +157,13 @@ class DatasetVersionResourceTest {
     }
 
     private List<DatasetItem> generateDatasetItems(int count) {
-        return PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
-                .limit(count)
-                .map(item -> {
+        return IntStream.range(0, count)
+                .mapToObj(i -> {
                     Map<String, JsonNode> data = Map.of(
                             "input", JsonUtils.getJsonNodeFromString("\"test input " + UUID.randomUUID() + "\""),
                             "output", JsonUtils.getJsonNodeFromString("\"test output " + UUID.randomUUID() + "\""));
-                    return item.toBuilder()
-                            .id(null) // Use null for new items
+                    return DatasetItem.builder()
+                            .source(DatasetItemSource.SDK) // Required field
                             .data(data)
                             .build();
                 })
@@ -918,6 +919,7 @@ class DatasetVersionResourceTest {
             assertThat(version1.itemsAdded()).isEqualTo(3);
 
             // Get created items to obtain their IDs
+            // With versioning enabled, getDatasetItems returns versioned items (from latest version)
             var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
                     TEST_WORKSPACE);
             var createdItems = createdItemsPage.content();
@@ -930,9 +932,10 @@ class DatasetVersionResourceTest {
                     .build();
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
-            // Delete first item
+            // Delete first item - use draftItemId (the stable identifier) when versioning is enabled
             var itemToDelete = createdItems.get(0);
-            deleteDatasetItem(datasetId, itemToDelete.id());
+            var idToDelete = itemToDelete.draftItemId() != null ? itemToDelete.draftItemId() : itemToDelete.id();
+            deleteDatasetItem(datasetId, idToDelete);
 
             // Commit second version
             var version2 = datasetResourceClient.commitVersion(
@@ -1242,11 +1245,15 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE);
 
             // Modify draft: delete 1 item
+            // With versioning enabled, getDatasetItems returns versioned items (from latest version),
+            // so we need to use draftItemId to target the draft table
             var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
                     TEST_WORKSPACE);
             var createdItems = createdItemsPage.content();
             var itemToDelete = createdItems.get(0);
-            datasetResourceClient.deleteDatasetItems(List.of(itemToDelete.id()), API_KEY, TEST_WORKSPACE);
+            // Use draftItemId (the stable identifier) when deleting from draft, as versioned items have different IDs
+            var idToDelete = itemToDelete.draftItemId() != null ? itemToDelete.draftItemId() : itemToDelete.id();
+            datasetResourceClient.deleteDatasetItems(List.of(idToDelete), API_KEY, TEST_WORKSPACE);
 
             // Commit version 2 (now has 2 items)
             var version2 = datasetResourceClient.commitVersion(
@@ -1350,6 +1357,302 @@ class DatasetVersionResourceTest {
             try (var response = datasetResourceClient.callRestoreVersion(datasetId, "non-existent", API_KEY,
                     TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Apply Dataset Item Changes:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ApplyDatasetItemChanges {
+
+        @Test
+        @DisplayName("Success: Apply combined changes (add, edit, delete) creates new version")
+        void applyChanges__whenCombinedAddEditDelete__thenCreateNewVersion() {
+            // Given - Create dataset with initial items and commit first version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(3);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit initial version (v1)
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get items from v1 to obtain their IDs for editing/deleting
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(3);
+
+            var itemToEdit = v1Items.get(0);
+            var itemToDelete = v1Items.get(1);
+            var itemToKeep = v1Items.get(2);
+
+            // Prepare changes: add 1 new item, edit 1 item, delete 1 item
+            var newItem = generateDatasetItems(1).get(0);
+            var editedItem = itemToEdit.toBuilder()
+                    .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
+                            "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
+                    .source(DatasetItemSource.SDK)
+                    .traceId(null)
+                    .spanId(null)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .addedItems(List.of(newItem))
+                    .editedItems(List.of(editedItem))
+                    .deletedIds(Set.of(itemToDelete.draftItemId()))
+                    .tags(List.of("v2"))
+                    .changeDescription("Combined changes: add, edit, delete")
+                    .build();
+
+            // When - Apply changes
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
+            assertThat(version2.changeDescription()).isEqualTo("Combined changes: add, edit, delete");
+            assertThat(version2.itemsTotal()).isEqualTo(3); // 3 - 1 deleted + 1 added = 3
+            assertThat(version2.itemsAdded()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsDeleted()).isEqualTo(1);
+
+            // Verify v2 items reflect changes
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(3);
+
+            // Verify the edited item has new data
+            var editedInV2 = v2Items.stream()
+                    .filter(item -> item.draftItemId().equals(itemToEdit.draftItemId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Edited item not found in v2"));
+            assertThat(editedInV2.data().get("edited")).isNotNull();
+            assertThat(editedInV2.data().get("description")).isNotNull();
+
+            // Verify the deleted item is not in v2
+            var deletedInV2 = v2Items.stream()
+                    .filter(item -> item.draftItemId().equals(itemToDelete.draftItemId()))
+                    .findFirst();
+            assertThat(deletedInV2).isEmpty();
+
+            // Verify the kept item is still in v2
+            var keptInV2 = v2Items.stream()
+                    .filter(item -> item.draftItemId().equals(itemToKeep.draftItemId()))
+                    .findFirst();
+            assertThat(keptInV2).isPresent();
+
+            // Verify v1 is still intact (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Error: Apply changes with stale baseVersion returns 409 Conflict")
+        void applyChanges__whenBaseVersionIsStale__thenReturn409() {
+            // Given - Create dataset with items and commit two versions
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(2);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit v1
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add more items and commit v2 (so v1 becomes stale)
+            var newItems = generateDatasetItems(1);
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Try to apply changes with stale baseVersion (v1 instead of v2)
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id()) // Stale version
+                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .tags(List.of("v3"))
+                    .changeDescription("Should fail - stale base version")
+                    .build();
+
+            try (var response = datasetResourceClient.callApplyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE)) {
+
+                // Then - Should return 409 Conflict
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                var error = response.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).anyMatch(msg -> msg.toLowerCase().contains("base version")
+                        || msg.toLowerCase().contains("conflict"));
+            }
+        }
+
+        @Test
+        @DisplayName("Success: Apply changes with stale baseVersion but override=true succeeds")
+        void applyChanges__whenBaseVersionIsStaleButOverride__thenSucceed() {
+            // Given - Create dataset with items and commit two versions
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(2);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit v1
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add more items and commit v2 (so v1 becomes stale)
+            var newItems = generateDatasetItems(1);
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Apply changes with stale baseVersion but override=true
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id()) // Stale version, but override=true
+                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .tags(List.of("v3-override"))
+                    .changeDescription("Override stale base version")
+                    .build();
+
+            var version3 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, true, API_KEY, TEST_WORKSPACE);
+
+            // Then - Should succeed with override
+            assertThat(version3.id()).isNotEqualTo(version1.id());
+            assertThat(version3.tags()).contains("v3-override", DatasetVersionService.LATEST_TAG);
+            assertThat(version3.changeDescription()).isEqualTo("Override stale base version");
+            // When overriding, changes are applied to the stale baseVersion (v1)
+            // v1 had 2 items + 1 added = 3 items
+            assertThat(version3.itemsTotal()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Success: Apply changes with matching baseVersion succeeds")
+        void applyChanges__whenBaseVersionMatchesLatest__thenSucceed() {
+            // Given - Create dataset with items and commit version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(3);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit version (becomes latest)
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get v1 items for editing
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+
+            // When - Apply changes with current baseVersion (which is the latest)
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id()) // Current latest version
+                    .editedItems(List.of(v1Items.get(0).toBuilder()
+                            .data(Map.of("updated", JsonUtils.getJsonNodeFromString("true")))
+                            .source(DatasetItemSource.SDK) // Required field
+                            .traceId(null)
+                            .spanId(null)
+                            .build()))
+                    .tags(List.of("v2"))
+                    .changeDescription("Update with matching base version")
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            // Then - Should succeed
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsTotal()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Error: Apply changes to non-existent dataset returns 404")
+        void applyChanges__whenDatasetNotFound__thenReturn404() {
+            // Given - Non-existent dataset ID
+            var nonExistentDatasetId = UUID.randomUUID();
+            var someVersionId = UUID.randomUUID();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(someVersionId)
+                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .build();
+
+            // When
+            try (var response = datasetResourceClient.callApplyDatasetItemChanges(
+                    nonExistentDatasetId, changes, false, API_KEY, TEST_WORKSPACE)) {
+
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Apply changes with non-existent baseVersion returns 404")
+        void applyChanges__whenBaseVersionNotFound__thenReturn404() {
+            // Given - Create dataset but use non-existent version ID
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var nonExistentVersionId = UUID.randomUUID();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(nonExistentVersionId) // Non-existent version
+                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .build();
+
+            // When
+            try (var response = datasetResourceClient.callApplyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE)) {
+
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
     }

@@ -444,9 +444,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
         Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId());
 
         if (latestVersion.isEmpty()) {
-            // No versions exist yet - return empty page
-            log.info("No versions found for dataset '{}', returning empty page", criteria.datasetId());
-            return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+            // No versions exist yet - fall back to draft items
+            // This allows users to work with draft items until the first version is committed
+            log.info("No versions found for dataset '{}', falling back to draft items", criteria.datasetId());
+            return dao.getItems(criteria, page, size)
+                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         }
 
         UUID versionId = latestVersion.get().id();
@@ -474,16 +476,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             log.info("Applying delta changes for dataset '{}', baseVersion '{}', override '{}'",
                     datasetId, changes.baseVersion(), override);
 
-            // Verify dataset exists
-            datasetService.findById(datasetId);
+            // Verify dataset exists (using explicit workspaceId since we're in reactive context)
+            datasetService.findById(datasetId, workspaceId, null);
 
-            // Resolve and validate the base version
-            UUID baseVersionId = versionService.resolveVersionId(workspaceId, datasetId,
-                    changes.baseVersion().toString());
+            // The baseVersion is the version ID directly (not a hash or tag)
+            UUID baseVersionId = changes.baseVersion();
+
+            // Verify the base version exists
+            versionService.getVersionById(baseVersionId, datasetId, workspaceId);
 
             // Check if baseVersion is the latest (unless override is set)
             if (!override && !versionService.isLatestVersion(datasetId, baseVersionId)) {
@@ -519,7 +524,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 itemsTotal.intValue(),
                                 baseVersionId,
                                 changes.tags(),
-                                changes.changeDescription());
+                                changes.changeDescription(),
+                                workspaceId,
+                                userName);
 
                         log.info("Created version '{}' for dataset '{}' with hash '{}'",
                                 version.id(), datasetId, version.versionHash());
@@ -549,15 +556,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return changes.editedItems().stream()
                 .map(item -> {
-                    // For edited items, preserve the existing id as datasetItemId
-                    // The item.id() should be the row ID from the version, but we need the stable datasetItemId
-                    // The UI sends items with id being the row id, we need to look up the datasetItemId
-                    // For now, assume item.id() is the datasetItemId (the stable identifier)
-                    UUID datasetItemId = item.id();
+                    // For edited items, use draftItemId (the stable identifier across versions)
+                    // If draftItemId is not available, fall back to id
+                    UUID datasetItemId = item.draftItemId() != null ? item.draftItemId() : item.id();
                     if (datasetItemId == null) {
                         throw new ClientErrorException(
                                 Response.status(Response.Status.BAD_REQUEST)
-                                        .entity(new ErrorMessage(List.of("Edited items must have an id")))
+                                        .entity(new ErrorMessage(
+                                                List.of("Edited items must have an id or draftItemId")))
                                         .build());
                     }
                     return VersionedDatasetItem.fromDatasetItem(item, datasetItemId, datasetId);

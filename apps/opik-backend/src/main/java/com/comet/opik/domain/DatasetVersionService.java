@@ -146,6 +146,17 @@ public interface DatasetVersionService {
     Optional<DatasetVersion> getLatestVersion(UUID datasetId);
 
     /**
+     * Gets a specific version by its ID.
+     *
+     * @param versionId the version ID
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @return the version
+     * @throws NotFoundException if the version is not found
+     */
+    DatasetVersion getVersionById(UUID versionId, UUID datasetId, String workspaceId);
+
+    /**
      * Checks if the given version ID is the latest version for the dataset.
      *
      * @param datasetId the dataset ID
@@ -164,10 +175,13 @@ public interface DatasetVersionService {
      * @param baseVersionId the base version ID (for diff calculation)
      * @param tags optional tags for the new version
      * @param changeDescription optional description of the changes
+     * @param workspaceId the workspace ID (required when called from reactive context)
+     * @param userName the user name (required when called from reactive context)
      * @return the created version
      */
     DatasetVersion createVersionFromDelta(UUID datasetId, UUID newVersionId, int itemsTotal,
-            UUID baseVersionId, List<String> tags, String changeDescription);
+            UUID baseVersionId, List<String> tags, String changeDescription,
+            String workspaceId, String userName);
 
     /**
      * Restores a dataset to a previous version state by creating a new version.
@@ -334,6 +348,19 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
+    public DatasetVersion getVersionById(@NonNull UUID versionId, @NonNull UUID datasetId,
+            @NonNull String workspaceId) {
+        log.info("Getting version by ID '{}' for dataset '{}'", versionId, datasetId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findById(versionId, workspaceId)
+                    .orElseThrow(() -> new NotFoundException(
+                            ERROR_VERSION_NOT_FOUND.formatted(versionId.toString(), datasetId)));
+        });
+    }
+
+    @Override
     public boolean isLatestVersion(@NonNull UUID datasetId, @NonNull UUID versionId) {
         return getLatestVersion(datasetId)
                 .map(latest -> latest.id().equals(versionId))
@@ -342,9 +369,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     @Override
     public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
-            int itemsTotal, @NonNull UUID baseVersionId, List<String> tags, String changeDescription) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
+            int itemsTotal, @NonNull UUID baseVersionId, List<String> tags, String changeDescription,
+            @NonNull String workspaceId, @NonNull String userName) {
 
         log.info("Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}'",
                 datasetId, newVersionId, itemsTotal);
