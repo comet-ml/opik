@@ -97,7 +97,8 @@ class HarborTrialRunDecorator(base_track_decorator.BaseTrackDecorator):
         }
 
         # Build metadata
-        metadata = track_options.metadata if track_options.metadata is not None else {}
+        metadata = (track_options.metadata.copy() if track_options.metadata is not None 
+                   else {})
         metadata["created_from"] = "harbor"
 
         # Build tags
