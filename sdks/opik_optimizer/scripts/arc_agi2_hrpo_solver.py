@@ -11,12 +11,11 @@ Workflow:
 
 from __future__ import annotations
 
-import contextlib
-import json
 import os
 import re
 import traceback
-from typing import Any, Iterable, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
 from opik.evaluation.metrics import score_result
@@ -39,12 +38,45 @@ HRPO_THREADS = 8
 SEED = 42
 PASS_AT_K = 2
 
-SYSTEM_PROMPT = """You solve ARC-AGI tasks by inferring the transformation from training pairs and producing candidate programs and outputs.
-Process:
-1) Describe the visual rule concisely (objects, symmetries, colors).
-2) Write Python code `def transform(grid: np.ndarray) -> np.ndarray` implementing the rule. Import numpy as np.
-3) Test your transform on each train example mentally; if uncertain, provide two candidate implementations.
-4) Return up to TWO Python code blocks (primary + optional fallback), nothing else."""
+# MIT-licensed baseline prompt adapted from Poetiq ARC-AGI solver (SOLVER_PROMPT_1).
+SYSTEM_PROMPT = """You are an expert in solving Abstract Reasoning Corpus (ARC) tasks by writing Python code. Your goal is to analyze input-output examples and create a 'transform' function that correctly transforms any given input grid into the corresponding output grid.
+
+Here's how to approach the problem:
+
+**1. Analyze the Examples:**
+  *   Identify the key objects in the input and output grids (e.g., shapes, lines, regions).
+  *   Determine the relationships between these objects (e.g., spatial arrangement, color, size).
+  *   Identify the operations that transform the input objects and relationships into the output objects and relationships (e.g., rotation, reflection, color change, object addition/removal).
+  *   Consider the grid dimensions, symmetries, and other visual features.
+
+**2. Formulate a Hypothesis:**
+  *   Based on your analysis, formulate a transformation rule that works consistently across all examples.
+  *   Express the rule as a sequence of image manipulation operations.
+  *   Prioritize simpler rules first.
+  *   Consider these types of transformations:
+      *   **Object Manipulation:** Moving, rotating, reflecting, or resizing objects.
+      *   **Color Changes:** Changing the color of specific objects or regions.
+      *   **Spatial Arrangements:** Rearranging the objects in a specific pattern.
+      *   **Object Addition/Removal:** Adding or removing objects based on certain criteria.
+
+**3. Implement the Code:**
+  *   Write a Python function called `transform(grid: np.ndarray) -> np.ndarray` that implements your transformation rule.
+  *   Use NumPy for array manipulations. Other standard libraries are also available.
+  *   Write modular code with clear variable names and comments to explain the logic behind each step.
+  *   Document your code clearly, explaining the transformation rule in the docstring.
+  *   Handle edge cases and invalid inputs gracefully.
+
+**4. Test and Refine:**
+  *   Test your code on all examples. If it fails for any example, refine your hypothesis and code.
+  *   Use debugging techniques to identify and fix errors.
+  *   Ensure your code handles edge cases and invalid inputs gracefully.
+
+**5. Output:**
+  *   Provide a brief explanation of your solution.
+  *   Include the complete Python code for the `transform` function within a single markdown code block.
+  *   Do not include any `__name__ == "__main__"` block or any code outside the function definition.
+
+Respond with ONE or TWO python code blocks (```python ...```), each defining transform(grid: np.ndarray) -> np.ndarray."""
 
 USER_PROMPT = """Training examples (input -> output):
 {training_examples_text}
@@ -174,9 +206,7 @@ def _evaluate_code_candidate(
         exact = float(np.array_equal(pred, truth))
         soft = float(np.mean(pred == truth)) if truth.size else 1.0
         diff = _format_diff(pred, truth)
-        train_feedback.append(
-            f"Train {idx}: exact={exact:.1f} soft={soft:.2f}\n{diff}"
-        )
+        train_feedback.append(f"Train {idx}: exact={exact:.1f} soft={soft:.2f}\n{diff}")
         exact_scores.append(exact)
         soft_scores.append(soft)
 
@@ -200,7 +230,9 @@ def _evaluate_code_candidate(
     }
 
 
-def arc_agi2_metric(dataset_item: dict[str, Any], llm_output: str) -> score_result.ScoreResult:
+def arc_agi2_metric(
+    dataset_item: dict[str, Any], llm_output: str
+) -> score_result.ScoreResult:
     """Score by executing generated code; uses pass@2 over multiple code blocks."""
     gold_outputs = dataset_item.get("test_outputs") or []
     train_examples = dataset_item.get("training_examples") or []
@@ -314,7 +346,9 @@ def main() -> None:
         project_name="ARC-AGI-2 HRPO",
     )
 
-    print(f"ARC-AGI-2 HRPO complete. Final score: {result.score:.3f} | trials: {len(result.history)}")
+    print(
+        f"ARC-AGI-2 HRPO complete. Final score: {result.score:.3f} | trials: {len(result.history)}"
+    )
     print(f"Best prompt name: {result.prompt.name}")
 
 
