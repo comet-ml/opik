@@ -331,7 +331,6 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
     decorator = HarborTrialRunDecorator()
 
     @decorator.track(
-        name="trial_run",
         tags=["harbor"],
         project_name=project_name,
         capture_output=False,
