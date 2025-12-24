@@ -303,6 +303,8 @@ services:
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
+      args:
+        OPIK_VERSION: ${OPIK_VERSION:-latest}
     #   cache_from:
     #     - alpine:latest
     #     - nginx:1.29.3-alpine-otel

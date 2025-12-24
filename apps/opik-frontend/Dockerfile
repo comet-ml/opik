@@ -21,6 +21,9 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
+# Create version.json for checking version
+RUN echo "{\"version\": \"$VITE_APP_VERSION\"}" > dist/version.json
+
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
 FROM nginx:1.29.4-alpine-otel AS nginx
