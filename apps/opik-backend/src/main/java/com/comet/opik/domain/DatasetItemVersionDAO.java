@@ -128,6 +128,31 @@ public interface DatasetItemVersionDAO {
      */
     Flux<DatasetItem> getItemsByDatasetItemIds(UUID datasetId, Set<UUID> datasetItemIds);
 
+    /**
+     * Gets columns metadata for items in a specific version.
+     * This extracts column names and types from the data field of versioned items.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to get columns for
+     * @return Mono emitting the set of columns
+     */
+    Mono<Set<Column>> getColumns(UUID datasetId, UUID versionId);
+
+    /**
+     * Maps row IDs (id field) to their corresponding stable item IDs (dataset_item_id).
+     * This is used when the frontend sends row IDs but we need stable IDs for operations.
+     *
+     * @param rowIds the row IDs (id field values)
+     * @return Flux emitting mappings of row ID to dataset_item_id
+     */
+    Flux<DatasetItemIdMapping> mapRowIdsToDatasetItemIds(Set<UUID> rowIds);
+
+    /**
+     * Mapping from row ID to dataset_item_id.
+     */
+    record DatasetItemIdMapping(UUID rowId, UUID datasetItemId, UUID datasetId) {
+    }
+
 }
 
 @Singleton
@@ -298,6 +323,47 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             LIMIT 1
             """;
 
+    private static final String SELECT_COLUMNS_BY_VERSION = """
+            SELECT
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
+                            )
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
+                ) AS columns
+            FROM (
+                SELECT
+                    id,
+                    data
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS lastRows
+            """;
+
+    private static final String SELECT_ITEM_ID_MAPPING_BY_ROW_IDS = """
+            SELECT
+                id,
+                dataset_item_id,
+                dataset_id
+            FROM dataset_item_versions
+            WHERE id IN :rowIds
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull IdGenerator idGenerator;
 
@@ -373,7 +439,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             @NonNull UUID versionId) {
         return Mono.zip(
                 getCount(criteria.datasetId(), versionId),
-                Mono.just(Set.<Column>of())).flatMap(tuple -> {
+                getColumns(criteria.datasetId(), versionId)).flatMap(tuple -> {
                     Long total = tuple.getT1();
                     Set<Column> columns = tuple.getT2();
 
@@ -884,6 +950,59 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<Column>> getColumns(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        log.debug("Getting columns for dataset '{}', version '{}'", datasetId, versionId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_COLUMNS_BY_VERSION)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_columns_by_version");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+
+                return Flux.from(statement.execute())
+                        .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data"))
+                        .next()
+                        .defaultIfEmpty(Set.of())
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItemIdMapping> mapRowIdsToDatasetItemIds(@NonNull Set<UUID> rowIds) {
+        if (rowIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.debug("Mapping '{}' row IDs to dataset_item_ids", rowIds.size());
+
+        // Convert UUIDs to strings for the IN clause
+        List<String> rowIdStrings = rowIds.stream()
+                .map(UUID::toString)
+                .toList();
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(SELECT_ITEM_ID_MAPPING_BY_ROW_IDS)
+                    .bind("rowIds", rowIdStrings);
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "map_row_ids_to_dataset_item_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> new DatasetItemIdMapping(
+                            UUID.fromString(row.get("id", String.class)),
+                            UUID.fromString(row.get("dataset_item_id", String.class)),
+                            UUID.fromString(row.get("dataset_id", String.class)))));
+        });
     }
 
 }

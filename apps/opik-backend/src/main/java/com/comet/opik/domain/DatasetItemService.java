@@ -850,15 +850,44 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Deletes items by item IDs, creating a new version.
      * Items are grouped by dataset since the API allows deleting items across datasets.
+     * <p>
+     * The frontend sends row IDs (id field) but deletion works on dataset_item_id (stable IDs).
+     * This method first maps row IDs to dataset_item_ids, then performs the deletion.
      */
     private Mono<Void> deleteByItemIdsWithVersion(Set<UUID> ids, String workspaceId, String userName) {
         log.info("Deleting '{}' items by IDs with versioning", ids.size());
 
-        // Get the first item to determine the dataset ID
-        // Note: This assumes all items belong to the same dataset (common case for SDK usage)
-        UUID firstItemId = ids.iterator().next();
+        // First, map the provided IDs (could be row IDs from frontend) to dataset_item_ids
+        // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for deletion
+        return versionDao.mapRowIdsToDatasetItemIds(ids)
+                .collectList()
+                .flatMap(mappings -> {
+                    if (mappings.isEmpty()) {
+                        // IDs might be dataset_item_ids directly (from SDK), try the old lookup
+                        log.info("No row ID mappings found, trying as dataset_item_ids directly");
+                        return deleteByDatasetItemIds(ids, workspaceId, userName);
+                    }
 
-        // First try to get from versioned table (when versioning is enabled, items are there)
+                    // Extract the dataset_item_ids and dataset_id from the mappings
+                    Set<UUID> datasetItemIds = mappings.stream()
+                            .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
+                            .collect(Collectors.toSet());
+                    UUID datasetId = mappings.get(0).datasetId();
+
+                    log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset '{}'",
+                            ids.size(), datasetItemIds.size(), datasetId);
+
+                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName);
+                });
+    }
+
+    /**
+     * Deletes items by dataset_item_id values (stable IDs), trying to find the dataset first.
+     */
+    private Mono<Void> deleteByDatasetItemIds(Set<UUID> datasetItemIds, String workspaceId, String userName) {
+        UUID firstItemId = datasetItemIds.iterator().next();
+
+        // Try to get from versioned table by dataset_item_id
         return versionDao.getDatasetIdByItemId(firstItemId)
                 .switchIfEmpty(
                         // Fall back to draft table if not found in versioned table
@@ -870,29 +899,35 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return Mono.empty();
                     }
 
-                    log.info("Resolved dataset '{}' for item deletion", datasetId);
+                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName);
+                });
+    }
 
-                    // Get the latest version (use overload that takes workspaceId since we're in reactive context)
-                    Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+    /**
+     * Deletes items by dataset_item_id values within a known dataset.
+     */
+    private Mono<Void> deleteByDatasetItemIdsInDataset(Set<UUID> datasetItemIds, UUID datasetId,
+            String workspaceId, String userName) {
+        log.info("Deleting '{}' items from dataset '{}' with versioning", datasetItemIds.size(), datasetId);
 
-                    if (latestVersion.isEmpty()) {
-                        // No versions exist - fall back to legacy delete
-                        log.info("No versions exist for dataset '{}', falling back to legacy delete", datasetId);
-                        return dao.delete(ids, null, null).then();
-                    }
+        // Get the latest version (use overload that takes workspaceId since we're in reactive context)
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
 
-                    UUID baseVersionId = latestVersion.get().id();
-                    int baseVersionItemCount = latestVersion.get().itemsTotal();
-                    UUID newVersionId = idGenerator.generateId();
+        if (latestVersion.isEmpty()) {
+            // No versions exist - fall back to legacy delete
+            log.info("No versions exist for dataset '{}', falling back to legacy delete", datasetId);
+            return dao.delete(datasetItemIds, null, null).then();
+        }
 
-                    // The provided IDs are dataset_item_id values (stable reference IDs)
-                    log.info("Creating new version for dataset '{}' with '{}' items deleted",
-                            datasetId, ids.size());
+        UUID baseVersionId = latestVersion.get().id();
+        int baseVersionItemCount = latestVersion.get().itemsTotal();
+        UUID newVersionId = idGenerator.generateId();
 
-                    return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, ids,
-                            baseVersionItemCount, workspaceId, userName);
-                })
-                .then();
+        log.info("Creating new version for dataset '{}' with '{}' items deleted",
+                datasetId, datasetItemIds.size());
+
+        return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, datasetItemIds,
+                baseVersionItemCount, workspaceId, userName);
     }
 
     /**
