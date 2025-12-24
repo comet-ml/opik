@@ -108,9 +108,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 break
             dataset_item_ids.append(str(dataset_item_id))
 
-        # Get the first prompt for experiment config (representative)
-        first_prompt = list(prompt_variants.values())[0]
-
         # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {

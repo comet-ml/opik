@@ -74,7 +74,9 @@ def create_round_data(
 
         if isinstance(prompt, dict):
             prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-            prompt_payload: Any = {name: p.get_messages() for name, p in prompt_dict.items()}
+            prompt_payload: Any = {
+                name: p.get_messages() for name, p in prompt_dict.items()
+            }
         else:
             prompt_payload = prompt.get_messages()
 

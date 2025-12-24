@@ -56,6 +56,11 @@ def _is_disk_full_error(exc: Exception) -> bool:
     return "No space left on device" in str(exc)
 
 
+def _is_missing_dataset_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return "doesn't exist on the Hub" in msg or "cannot be accessed" in msg
+
+
 def _default_cache_dir() -> Path:
     cache_env = os.getenv("HF_DATASETS_CACHE")
     if cache_env:
@@ -127,6 +132,8 @@ def test_hf_sources_resolve_one_record(
             pytest.skip(f"Hugging Face hub unavailable: {exc}")
         if _is_disk_full_error(exc):
             pytest.skip(f"HF cache volume is full: {exc}")
+        if _is_missing_dataset_error(exc):
+            pytest.skip(f"Hugging Face dataset unavailable in this environment: {exc}")
         raise
     assert len(records) == 1
     assert isinstance(records[0], dict)

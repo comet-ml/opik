@@ -44,9 +44,13 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
                         # No raw_score_results - still return as list
                         return [metric_val]
                     # Type-safe fallback (shouldn't happen at runtime)
-                    return [score_result.ScoreResult(
-                        name=self.name, value=float(metric_val), scoring_failed=False
-                    )]
+                    return [
+                        score_result.ScoreResult(
+                            name=self.name,
+                            value=float(metric_val),
+                            scoring_failed=False,
+                        )
+                    ]
 
                 # Handle ScoreResult return type (non-MultiMetricObjective)
                 if isinstance(metric_val, score_result.ScoreResult):

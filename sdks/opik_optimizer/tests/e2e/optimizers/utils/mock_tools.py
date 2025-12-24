@@ -108,5 +108,3 @@ WEATHER_TOOL: dict[str, Any] = {
         },
     },
 }
-
-

@@ -32,11 +32,13 @@ class TestDeapCrossoverChunkingStrategy:
         # Children should be combinations of parent chunks
         assert child1.endswith(".")
         assert child2.endswith(".")
-        
+
         # At least one child should have mixed content from both parents
         has_first = "First" in child1 or "First" in child2
         has_alpha = "Alpha" in child1 or "Alpha" in child2
-        assert has_first and has_alpha, "Children should contain chunks from both parents"
+        assert has_first and has_alpha, (
+            "Children should contain chunks from both parents"
+        )
 
     def test_raises_when_not_enough_chunks(self) -> None:
         """Should raise ValueError when prompts don't have enough chunks."""
@@ -214,4 +216,3 @@ class TestCrossoverIntegration:
         w1, w2 = _deap_crossover_word_level(msg1_words, msg2_words)
         assert w1 and w2
         assert isinstance(w1, str) and isinstance(w2, str)
-

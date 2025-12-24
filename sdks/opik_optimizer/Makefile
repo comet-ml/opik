@@ -62,6 +62,7 @@ test:
 	HF_HUB_DISABLE_TELEMETRY=1 \
 	PYTHONPATH=src \
 	LITELLM_CACHE_TYPE=memory \
+	LITELLM_USE_QUEUE_LOGGING=false \
 	$(PYTHON) -m pytest \
 		-n auto \
 		--dist loadfile \

@@ -366,7 +366,9 @@ class BaseOptimizer(ABC):
             else:
                 prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
                 prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
-                prompt_name = {k: getattr(p, "name", None) for k, p in prompt_dict.items()}
+                prompt_name = {
+                    k: getattr(p, "name", None) for k, p in prompt_dict.items()
+                }
                 prompt_project_name = {
                     k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
                 }
