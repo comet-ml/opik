@@ -1101,11 +1101,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             // Prepare added items (synchronous - no merging needed)
             List<VersionedDatasetItem> addedItems = prepareAddedItems(changes, datasetId);
-            Set<UUID> deletedIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
+            Set<UUID> deletedRowIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
 
-            // Prepare edited items (reactive - needs to fetch and merge with existing items)
-            return prepareEditedItemsWithMerge(changes, datasetId)
-                    .flatMap(editedItems -> {
+            // Prepare edited items and map deleted row IDs to dataset_item_ids (both reactive)
+            Mono<List<VersionedDatasetItem>> editedItemsMono = prepareEditedItemsWithMerge(changes, datasetId);
+            Mono<Set<UUID>> deletedItemIdsMono = mapRowIdsToDatasetItemIds(deletedRowIds);
+
+            return Mono.zip(editedItemsMono, deletedItemIdsMono)
+                    .flatMap(tuple -> {
+                        List<VersionedDatasetItem> editedItems = tuple.getT1();
+                        Set<UUID> deletedIds = tuple.getT2();
+
                         // Apply delta changes via DAO
                         return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
                                 addedItems, editedItems, deletedIds, baseVersionItemCount)
@@ -1253,6 +1259,33 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         ? existingItem.lastUpdatedAt()
                         : existingItem.lastUpdatedAt())
                 .build();
+    }
+
+    /**
+     * Maps row IDs (from API response's 'id' field) to stable dataset_item_ids.
+     * The frontend sends row IDs but the versioned deletion logic needs dataset_item_ids.
+     */
+    private Mono<Set<UUID>> mapRowIdsToDatasetItemIds(Set<UUID> rowIds) {
+        if (rowIds == null || rowIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+
+        return versionDao.mapRowIdsToDatasetItemIds(rowIds)
+                .collectList()
+                .map(mappings -> {
+                    if (mappings.isEmpty()) {
+                        // IDs might already be dataset_item_ids (from SDK or older clients)
+                        log.debug("No row ID mappings found, assuming IDs are already dataset_item_ids");
+                        return rowIds;
+                    }
+
+                    Set<UUID> datasetItemIds = mappings.stream()
+                            .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
+                            .collect(Collectors.toSet());
+
+                    log.debug("Mapped '{}' row IDs to '{}' dataset_item_ids", rowIds.size(), datasetItemIds.size());
+                    return datasetItemIds;
+                });
     }
 
     @Override
