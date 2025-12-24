@@ -148,6 +148,15 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItemIdMapping> mapRowIdsToDatasetItemIds(Set<UUID> rowIds);
 
     /**
+     * Gets an item by its ID (id field).
+     * This is used when the frontend sends the ID from the API response.
+     *
+     * @param id the item ID (id field value)
+     * @return Mono emitting the DatasetItem, or empty if not found
+     */
+    Mono<DatasetItem> getItemById(UUID id);
+
+    /**
      * Mapping from row ID to dataset_item_id.
      */
     record DatasetItemIdMapping(UUID rowId, UUID datasetItemId, UUID datasetId) {
@@ -362,6 +371,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
+            """;
+
+    private static final String SELECT_ITEM_BY_ID = """
+            SELECT
+                id,
+                dataset_item_id,
+                dataset_id,
+                data,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at as created_at,
+                item_last_updated_at as last_updated_at,
+                item_created_by as created_by,
+                item_last_updated_by as last_updated_by
+            FROM dataset_item_versions
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -1002,6 +1032,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             UUID.fromString(row.get("id", String.class)),
                             UUID.fromString(row.get("dataset_item_id", String.class)),
                             UUID.fromString(row.get("dataset_id", String.class)))));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<DatasetItem> getItemById(@NonNull UUID id) {
+        log.debug("Getting item by ID '{}'", id);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_ITEM_BY_ID)
+                    .bind("id", id.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_item_by_id");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+
+                return Flux.from(statement.execute())
+                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
+                        .next()
+                        .doOnSuccess(item -> {
+                            if (item != null) {
+                                log.debug("Found item by ID '{}'", id);
+                            } else {
+                                log.debug("Item not found by ID '{}'", id);
+                            }
+                        })
+                        .doFinally(signalType -> endSegment(segment));
+            });
         });
     }
 
