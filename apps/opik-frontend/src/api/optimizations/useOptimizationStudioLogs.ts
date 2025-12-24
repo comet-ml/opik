@@ -90,6 +90,8 @@ const getOptimizationStudioLogs = async ({
       expiresAt,
     };
   } catch {
+    // Clear cached URL on error so next request fetches a fresh one
+    urlCache.delete(optimizationId);
     return {
       content: "",
       url: null,
