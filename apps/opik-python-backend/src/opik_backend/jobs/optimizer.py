@@ -21,6 +21,7 @@ from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
     OPTIMIZATION_TIMEOUT_SECS,
+    CancellationChecker,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,17 @@ def process_optimizer_job(*args, **kwargs):
         # The executor will use this to stream subprocess stdout/stderr to Redis
         executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
         
+        # Create cancellation checker and start background thread
+        cancellation_checker = CancellationChecker(str(context.optimization_id))
+        
+        def on_cancelled():
+            logger.info(
+                f"Cancellation detected, killing subprocess for {context.optimization_id}"
+            )
+            executor.kill_all_processes(timeout=5)
+        
+        cancellation_checker.start_background_check(on_cancelled=on_cancelled)
+        
         try:
             logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
             
@@ -166,6 +178,9 @@ def process_optimizer_job(*args, **kwargs):
             return result
         
         finally:
+            # Stop cancellation checker
+            cancellation_checker.stop_background_check()
+            
             # Ensure log collector is closed (flushes remaining logs)
             try:
                 log_collector.close()
