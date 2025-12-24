@@ -96,6 +96,7 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         GepaOptimizer: {
             "n_threads": 2,
+            "reflection_minibatch_size": 1,
         },
         HierarchicalReflectiveOptimizer: {
             "n_threads": 2,
