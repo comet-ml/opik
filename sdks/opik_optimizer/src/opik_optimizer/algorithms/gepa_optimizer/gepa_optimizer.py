@@ -226,9 +226,6 @@ class GepaOptimizer(BaseOptimizer):
             name: p.copy() for name, p in optimizable_prompts.items()
         }
 
-        # Get the first prompt as working prompt for display/config purposes
-        working_prompt = list(optimizable_prompts.values())[0]
-
         # Set model defaults on all prompts
         for p in optimizable_prompts.values():
             if p.model is None:
@@ -272,6 +269,9 @@ class GepaOptimizer(BaseOptimizer):
             max_metric_calls // effective_n_samples if effective_n_samples else 0
         )
         if reflection_minibatch_size > max_trials:
+            # TODO(opik_optimizer/#testing): consider clamping the minibatch size inside the
+            # optimizer so that small-test configs don't surface warnings (currently individual
+            # tests override the parameter to keep CI quiet).
             logger.warning(
                 "reflection_minibatch_size (%s) exceeds max_trials (%s); GEPA reflection will not run. "
                 "Increase max_trials or lower the minibatch.",
@@ -281,6 +281,8 @@ class GepaOptimizer(BaseOptimizer):
         elif (
             budget_limited_trials and reflection_minibatch_size > budget_limited_trials
         ):
+            # TODO(opik_optimizer/#testing): same as above; auto-adjusting based on the effective
+            # metric budget would avoid manual overrides in smoke tests.
             logger.warning(
                 "reflection_minibatch_size (%s) exceeds the number of candidates allowed by the metric budget (%s). "
                 "Consider increasing max_trials or n_samples.",
@@ -347,7 +349,6 @@ class GepaOptimizer(BaseOptimizer):
                 verbose=self.verbose,
             )
 
-            baseline_eval_result: Any | None = None
             # Store initial prompts for result
             initial_prompts = {
                 name: p.copy() for name, p in optimizable_prompts.items()

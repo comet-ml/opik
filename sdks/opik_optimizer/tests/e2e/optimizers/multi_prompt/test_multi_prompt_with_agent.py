@@ -192,6 +192,9 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
     config = create_optimizer_config(optimizer_class)
     optimizer = optimizer_class(**config)
 
+    gepa_kwargs: dict[str, Any] = {}
+    if optimizer_class == GepaOptimizer:
+        gepa_kwargs["reflection_minibatch_size"] = 1
     # Run optimization - ParameterOptimizer uses optimize_parameter
     if optimizer_class == ParameterOptimizer:
         results = optimizer.optimize_parameter(
@@ -211,6 +214,7 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
             agent=agent,
             n_samples=2,
             max_trials=2,
+            **gepa_kwargs,
         )
 
     # Validate results structure

@@ -6,8 +6,6 @@ Tests cover:
 - PromptHallOfFame: Entry management, pattern extraction, pattern injection
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from typing import Any
 
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
@@ -257,7 +255,9 @@ class TestPromptHallOfFameParsePatternResponse:
         """Should parse JSON-formatted pattern response."""
         hof = PromptHallOfFame()
 
-        response = '{"patterns": [{"pattern": "Be concise", "example": "Short answers"}]}'
+        response = (
+            '{"patterns": [{"pattern": "Be concise", "example": "Short answers"}]}'
+        )
 
         result = hof._parse_pattern_response(response)
 
@@ -308,9 +308,7 @@ class TestPromptHallOfFameIdentifyPatternsInPrompt:
         """Should identify patterns that appear in prompt."""
         hof = PromptHallOfFame()
 
-        prompt_messages = [
-            {"role": "system", "content": "Be concise and helpful."}
-        ]
+        prompt_messages = [{"role": "system", "content": "Be concise and helpful."}]
         patterns = [
             "Be concise | Example: short answers",
             "Use examples | Example: show demonstrations",
@@ -367,7 +365,7 @@ class TestPromptHallOfFameExtractPatterns:
 
         assert result == []
 
-    def test_calls_llm_and_stores_patterns(self, mock_llm_call) -> None:
+    def test_calls_llm_and_stores_patterns(self, mock_llm_call: Any) -> None:
         """Should call LLM and store extracted patterns."""
         hof = PromptHallOfFame()
         hof.add(self._create_entry(0.7, 1))
@@ -383,7 +381,7 @@ class TestPromptHallOfFameExtractPatterns:
         assert "Pattern B" in result
         assert len(hof.extracted_patterns) >= 2
 
-    def test_handles_llm_error_gracefully(self, mock_llm_call) -> None:
+    def test_handles_llm_error_gracefully(self, mock_llm_call: Any) -> None:
         """Should handle LLM errors gracefully."""
         hof = PromptHallOfFame()
         hof.add(self._create_entry(0.7, 1))
@@ -395,4 +393,3 @@ class TestPromptHallOfFameExtractPatterns:
         result = hof.extract_patterns("gpt-4", {}, "accuracy")
 
         assert result == []
-

@@ -1,3 +1,5 @@
+# mypy: disable-error-code=no-untyped-def
+
 """
 Centralized test fixtures for opik_optimizer unit tests.
 
@@ -143,7 +145,7 @@ def mock_llm_sequence(monkeypatch: pytest.MonkeyPatch):
     """
 
     def _configure(responses: list[Any]):
-        call_count = {"n": 0}
+        call_count: dict[str, Any] = {"n": 0}
         captured_calls: list[dict[str, Any]] = []
 
         def fake_call_model(**kwargs):
@@ -167,7 +169,7 @@ def mock_llm_sequence_async(monkeypatch: pytest.MonkeyPatch):
     """Async version of mock_llm_sequence."""
 
     def _configure(responses: list[Any]):
-        call_count = {"n": 0}
+        call_count: dict[str, Any] = {"n": 0}
         captured_calls: list[dict[str, Any]] = []
 
         async def fake_call_model_async(**kwargs):
