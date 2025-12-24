@@ -401,9 +401,11 @@ class TestChatPromptCopy:
         copied = original.copy()
 
         # Modify copied messages
+        assert copied.messages is not None
         copied.messages[0]["content"] = "Modified"
 
         # Original should be unchanged
+        assert original.messages is not None
         assert original.messages[0]["content"] == "Hello"
 
     def test_copy_deep_copies_tools(self) -> None:
@@ -422,9 +424,11 @@ class TestChatPromptCopy:
         copied = original.copy()
 
         # Modify copied tools
+        assert copied.tools is not None
         copied.tools[0]["function"]["name"] = "modified"
 
         # Original should be unchanged
+        assert original.tools is not None
         assert original.tools[0]["function"]["name"] == "test"
 
     def test_copy_deep_copies_model_kwargs(self) -> None:
@@ -436,9 +440,11 @@ class TestChatPromptCopy:
         copied = original.copy()
 
         # Modify copied model_kwargs
+        assert copied.model_kwargs is not None
         copied.model_kwargs["nested"]["key"] = "modified"
 
         # Original should be unchanged
+        assert original.model_kwargs is not None
         assert original.model_kwargs["nested"]["key"] == "value"
 
 
@@ -464,6 +470,7 @@ class TestChatPromptSetMessages:
         prompt.set_messages(messages)
         messages[0]["content"] = "Modified"
 
+        assert prompt.messages is not None
         assert prompt.messages[0]["content"] == "Original"
 
 

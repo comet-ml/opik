@@ -137,7 +137,7 @@ class TestExpandForPrompts:
                 ParameterSpec(
                     name="temperature",
                     distribution=ParameterType.FLOAT,
-                    low=0.0,
+                    low=0.1,
                     high=2.0,
                     step=0.1,
                     scale="log",
@@ -150,7 +150,7 @@ class TestExpandForPrompts:
         spec = expanded.parameters[0]
         assert spec.name == "test.temperature"
         assert spec.distribution == ParameterType.FLOAT
-        assert spec.low == 0.0
+        assert spec.low == 0.1
         assert spec.high == 2.0
         assert spec.step == 0.1
         assert spec.scale == "log"
