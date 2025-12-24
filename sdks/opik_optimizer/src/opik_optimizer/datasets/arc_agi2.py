@@ -123,6 +123,7 @@ def _load_arc_agi2_split(
 ARC_AGI2_SPEC = DatasetSpec(
     name="arc_agi2",
     default_source_split="train",
+    hf_path="arc-agi-community/arc-agi-2",
     prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
