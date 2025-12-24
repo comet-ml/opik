@@ -96,7 +96,6 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         GepaOptimizer: {
             "n_threads": 2,
-            "reflection_minibatch_size": 1,
         },
         HierarchicalReflectiveOptimizer: {
             "n_threads": 2,
@@ -187,6 +186,10 @@ def test_single_prompt_with_tools(optimizer_class: type) -> None:
     config = create_optimizer_config(optimizer_class)
     optimizer = optimizer_class(**config)
 
+    gepa_kwargs: dict[str, Any] = {}
+    if optimizer_class == GepaOptimizer:
+        gepa_kwargs["reflection_minibatch_size"] = 1
+
     # Run optimization - ParameterOptimizer uses optimize_parameter
     if optimizer_class == ParameterOptimizer:
         results = optimizer.optimize_parameter(
@@ -204,6 +207,7 @@ def test_single_prompt_with_tools(optimizer_class: type) -> None:
             prompt=original_prompt,
             n_samples=2,
             max_trials=2,
+            **gepa_kwargs,
         )
 
     # Validate results structure
