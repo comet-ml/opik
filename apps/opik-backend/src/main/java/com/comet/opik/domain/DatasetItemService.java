@@ -300,6 +300,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetItem> get(@NonNull UUID id) {
+        if (isVersioningEnabled()) {
+            // When versioning is enabled, only query the versioned table
+            return versionDao.getItemById(id)
+                    .flatMap(item -> Mono.deferContextual(ctx -> {
+                        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                        Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+                        // Verify dataset visibility
+                        datasetService.findById(item.datasetId(), workspaceId, visibility);
+
+                        return Mono.just(item);
+                    }))
+                    .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
+        }
+
+        // Legacy mode: only query the draft table
         return dao.get(id)
                 .flatMap(item -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
