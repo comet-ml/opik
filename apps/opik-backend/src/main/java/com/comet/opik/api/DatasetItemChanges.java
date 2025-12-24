@@ -27,7 +27,7 @@ import java.util.UUID;
 public record DatasetItemChanges(
         @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "New items to add to the dataset") @Valid List<DatasetItem> addedItems,
 
-        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Existing items to update (matched by id)") @Valid List<DatasetItem> editedItems,
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Existing items to update with partial data (matched by id)") @Valid List<DatasetItemEdit> editedItems,
 
         @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Item IDs to delete from the dataset") Set<UUID> deletedIds,
 

@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
+import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemUpdate;
@@ -36,10 +37,12 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
@@ -1096,31 +1099,34 @@ class DatasetItemServiceImpl implements DatasetItemService {
             UUID newVersionId = idGenerator.generateId();
             log.info("Generated new version ID '{}' for dataset '{}'", newVersionId, datasetId);
 
-            // Prepare the delta items
+            // Prepare added items (synchronous - no merging needed)
             List<VersionedDatasetItem> addedItems = prepareAddedItems(changes, datasetId);
-            List<VersionedDatasetItem> editedItems = prepareEditedItems(changes, datasetId);
             Set<UUID> deletedIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
 
-            // Apply delta changes via DAO
-            return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                    addedItems, editedItems, deletedIds, baseVersionItemCount)
-                    .map(itemsTotal -> {
-                        log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
+            // Prepare edited items (reactive - needs to fetch and merge with existing items)
+            return prepareEditedItemsWithMerge(changes, datasetId)
+                    .flatMap(editedItems -> {
+                        // Apply delta changes via DAO
+                        return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                                addedItems, editedItems, deletedIds, baseVersionItemCount)
+                                .map(itemsTotal -> {
+                                    log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
-                        // Create version metadata
-                        DatasetVersion version = versionService.createVersionFromDelta(
-                                datasetId,
-                                newVersionId,
-                                itemsTotal.intValue(),
-                                baseVersionId,
-                                changes.tags(),
-                                changes.changeDescription(),
-                                workspaceId,
-                                userName);
+                                    // Create version metadata
+                                    DatasetVersion version = versionService.createVersionFromDelta(
+                                            datasetId,
+                                            newVersionId,
+                                            itemsTotal.intValue(),
+                                            baseVersionId,
+                                            changes.tags(),
+                                            changes.changeDescription(),
+                                            workspaceId,
+                                            userName);
 
-                        log.info("Created version '{}' for dataset '{}' with hash '{}'",
-                                version.id(), datasetId, version.versionHash());
-                        return version;
+                                    log.info("Created version '{}' for dataset '{}' with hash '{}'",
+                                            version.id(), datasetId, version.versionHash());
+                                    return version;
+                                });
                     });
         });
     }
@@ -1139,26 +1145,114 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .toList();
     }
 
-    private List<VersionedDatasetItem> prepareEditedItems(DatasetItemChanges changes, UUID datasetId) {
+    /**
+     * Prepares edited items by fetching existing items and merging partial changes.
+     * The frontend may send partial updates (e.g., only the 'data' field), so we need to
+     * fetch the existing item and merge the changes to preserve fields like 'source', 'tags', etc.
+     */
+    private Mono<List<VersionedDatasetItem>> prepareEditedItemsWithMerge(DatasetItemChanges changes, UUID datasetId) {
         if (changes.editedItems() == null || changes.editedItems().isEmpty()) {
-            return List.of();
+            return Mono.just(List.of());
         }
 
-        return changes.editedItems().stream()
-                .map(item -> {
-                    // For edited items, use draftItemId (the stable identifier across versions)
-                    // If draftItemId is not available, fall back to id
-                    UUID datasetItemId = item.draftItemId() != null ? item.draftItemId() : item.id();
-                    if (datasetItemId == null) {
-                        throw new ClientErrorException(
-                                Response.status(Response.Status.BAD_REQUEST)
-                                        .entity(new ErrorMessage(
-                                                List.of("Edited items must have an id or draftItemId")))
-                                        .build());
+        // Extract row IDs from the edited items (the frontend sends 'id' which is the row ID)
+        Set<UUID> rowIds = changes.editedItems().stream()
+                .map(DatasetItemEdit::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (rowIds.isEmpty()) {
+            return Mono.error(new ClientErrorException(
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(
+                                    List.of("Edited items must have an id or draftItemId")))
+                            .build()));
+        }
+
+        // First, map row IDs to stable dataset_item_ids and fetch existing items
+        return versionDao.mapRowIdsToDatasetItemIds(rowIds)
+                .collectList()
+                .flatMap(mappings -> {
+                    if (mappings.isEmpty()) {
+                        log.warn("No items found for provided row IDs: {}", rowIds);
+                        return Mono.error(new ClientErrorException(
+                                Response.status(Response.Status.NOT_FOUND)
+                                        .entity(new ErrorMessage(List.of("Items not found for the provided IDs")))
+                                        .build()));
                     }
-                    return VersionedDatasetItem.fromDatasetItem(item, datasetItemId, datasetId);
-                })
-                .toList();
+
+                    // Create map from row ID to mapping for quick lookup
+                    Map<UUID, DatasetItemVersionDAO.DatasetItemIdMapping> rowIdToMapping = mappings.stream()
+                            .collect(Collectors.toMap(
+                                    DatasetItemVersionDAO.DatasetItemIdMapping::rowId,
+                                    Function.identity()));
+
+                    // Get the stable dataset_item_ids to fetch the full items
+                    Set<UUID> datasetItemIds = mappings.stream()
+                            .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
+                            .collect(Collectors.toSet());
+
+                    // Fetch the existing items
+                    return versionDao.getItemsByDatasetItemIds(datasetId, datasetItemIds)
+                            .collectList()
+                            .map(existingItems -> {
+                                // Create map from dataset_item_id to existing item
+                                Map<UUID, DatasetItem> existingItemMap = existingItems.stream()
+                                        .collect(Collectors.toMap(
+                                                DatasetItem::draftItemId,
+                                                Function.identity()));
+
+                                // Merge partial changes with existing items
+                                return changes.editedItems().stream()
+                                        .map(editItem -> {
+                                            UUID rowId = editItem.id();
+                                            DatasetItemVersionDAO.DatasetItemIdMapping mapping = rowIdToMapping
+                                                    .get(rowId);
+                                            if (mapping == null) {
+                                                throw new ClientErrorException(
+                                                        Response.status(Response.Status.NOT_FOUND)
+                                                                .entity(new ErrorMessage(List.of(
+                                                                        "Item not found for ID: " + rowId)))
+                                                                .build());
+                                            }
+
+                                            DatasetItem existingItem = existingItemMap.get(mapping.datasetItemId());
+                                            if (existingItem == null) {
+                                                throw new ClientErrorException(
+                                                        Response.status(Response.Status.NOT_FOUND)
+                                                                .entity(new ErrorMessage(List.of(
+                                                                        "Item not found: " + mapping.datasetItemId())))
+                                                                .build());
+                                            }
+
+                                            // Merge: use edit values if present, otherwise use existing
+                                            return mergeEditWithExisting(existingItem, editItem,
+                                                    mapping.datasetItemId(), datasetId);
+                                        })
+                                        .toList();
+                            });
+                });
+    }
+
+    /**
+     * Merges a DatasetItemEdit (partial update) with an existing item.
+     * Fields from the edit override the existing item only if they are non-null.
+     */
+    private VersionedDatasetItem mergeEditWithExisting(DatasetItem existingItem, DatasetItemEdit editItem,
+            UUID datasetItemId, UUID datasetId) {
+        return VersionedDatasetItem.builder()
+                .datasetItemId(datasetItemId)
+                .datasetId(datasetId)
+                .data(editItem.data() != null ? editItem.data() : existingItem.data())
+                .source(existingItem.source()) // Source is always preserved from existing item
+                .traceId(existingItem.traceId()) // TraceId is always preserved from existing item
+                .spanId(existingItem.spanId()) // SpanId is always preserved from existing item
+                .tags(editItem.tags() != null ? editItem.tags() : existingItem.tags())
+                .createdAt(existingItem.createdAt()) // Always preserve original creation time
+                .lastUpdatedAt(existingItem.lastUpdatedAt() != null
+                        ? existingItem.lastUpdatedAt()
+                        : existingItem.lastUpdatedAt())
+                .build();
     }
 
     @Override

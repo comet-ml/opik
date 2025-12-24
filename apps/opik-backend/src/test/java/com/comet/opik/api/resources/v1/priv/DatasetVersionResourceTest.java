@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
+import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
@@ -895,12 +896,10 @@ class DatasetVersionResourceTest {
 
             // Prepare changes: add 1 new item, edit 1 item, delete 1 item
             var newItem = generateDatasetItems(1).get(0);
-            var editedItem = itemToEdit.toBuilder()
+            var editedItem = DatasetItemEdit.builder()
+                    .id(itemToEdit.id()) // Row ID from API response
                     .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
                             "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
-                    .source(DatasetItemSource.SDK)
-                    .traceId(null)
-                    .spanId(null)
                     .build();
 
             var changes = DatasetItemChanges.builder()
@@ -1042,13 +1041,12 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
 
             // When - Apply changes with current baseVersion (which is the latest)
+            var itemToEdit = v1Items.get(0);
             var changes = DatasetItemChanges.builder()
                     .baseVersion(version1.id()) // Current latest version
-                    .editedItems(List.of(v1Items.get(0).toBuilder()
+                    .editedItems(List.of(DatasetItemEdit.builder()
+                            .id(itemToEdit.id()) // Row ID from API response
                             .data(Map.of("updated", JsonUtils.getJsonNodeFromString("true")))
-                            .source(DatasetItemSource.SDK) // Required field
-                            .traceId(null)
-                            .spanId(null)
                             .build()))
                     .tags(List.of("v2"))
                     .changeDescription("Update with matching base version")
@@ -1062,6 +1060,71 @@ class DatasetVersionResourceTest {
             assertThat(version2.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
             assertThat(version2.itemsModified()).isEqualTo(1);
             assertThat(version2.itemsTotal()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Success: Apply changes with partial data (only id and data) - simulating frontend behavior")
+        void applyChanges__whenEditedItemHasOnlyIdAndData__thenMergeWithExistingItem() {
+            // Given - Create dataset with items (auto-creates version)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            // Get version and tag it
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get v1 items - these have full data including source, tags, etc.
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            var originalItem = v1Items.get(0);
+
+            // Capture original values that should be preserved
+            var originalSource = originalItem.source();
+            var originalTags = originalItem.tags();
+
+            // When - Apply changes with ONLY id and data (simulating frontend partial update)
+            // This is what the frontend sends - using DatasetItemEdit DTO with only id, data, tags
+            var editItem = DatasetItemEdit.builder()
+                    .id(originalItem.id()) // Row ID from API response
+                    .data(Map.of("edited_field", JsonUtils.getJsonNodeFromString("\"new value\"")))
+                    // Note: tags is null - should be preserved from existing item
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editItem))
+                    .tags(List.of("v2-partial"))
+                    .changeDescription("Partial update with only data field")
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            // Then - Version should be created successfully (no 422 error)
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.tags()).contains("v2-partial", DatasetVersionService.LATEST_TAG);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsTotal()).isEqualTo(3);
+
+            // Verify the edited item has merged data
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2-partial", API_KEY, TEST_WORKSPACE).content();
+
+            var editedInV2 = v2Items.stream()
+                    .filter(item -> item.draftItemId().equals(originalItem.draftItemId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Edited item not found in v2"));
+
+            // Verify the new data is present
+            assertThat(editedInV2.data().get("edited_field")).isNotNull();
+            assertThat(editedInV2.data().get("edited_field").asText()).isEqualTo("new value");
+
+            // Verify original fields were preserved (merged from existing item)
+            assertThat(editedInV2.source()).isEqualTo(originalSource);
+            if (originalTags != null) {
+                assertThat(editedInV2.tags()).isEqualTo(originalTags);
+            }
         }
 
         @Test
@@ -1455,6 +1518,53 @@ class DatasetVersionResourceTest {
             assertThat(fetchedItem.id()).isEqualTo(rowId);
             assertThat(fetchedItem.draftItemId()).isEqualTo(itemFromList.draftItemId());
             assertThat(fetchedItem.datasetId()).isEqualTo(datasetId);
+        }
+
+        @Test
+        @DisplayName("Success: GET datasets list shows correct item count from latest version")
+        void getDatasets__whenVersioningEnabled__thenItemsCountFromLatestVersion() {
+            // Given - Create dataset with initial items (creates version 1 with 3 items)
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 3);
+
+            // Verify initial count
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+
+            // Get the dataset from list API and verify items count
+            var datasetsPage = datasetResourceClient.getDatasets(TEST_WORKSPACE, API_KEY);
+            var dataset = datasetsPage.content().stream()
+                    .filter(d -> d.id().equals(datasetId))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Dataset not found in list"));
+            assertThat(dataset.datasetItemsCount()).isEqualTo(3L);
+
+            // Now delete an item via applyDeltaChanges (creates version 2 with 2 items)
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            var itemToDelete = v1Items.get(0);
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .deletedIds(Set.of(itemToDelete.draftItemId()))
+                    .changeDescription("Delete one item")
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            // When - Get datasets list again
+            var datasetsPageAfter = datasetResourceClient.getDatasets(TEST_WORKSPACE, API_KEY);
+
+            // Then - Dataset should show 2 items (from latest version, not legacy table)
+            var datasetAfter = datasetsPageAfter.content().stream()
+                    .filter(d -> d.id().equals(datasetId))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Dataset not found in list after update"));
+            assertThat(datasetAfter.datasetItemsCount()).isEqualTo(2L);
+
+            // Verify latest version has 2 items
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.itemsTotal()).isEqualTo(2);
         }
     }
 
