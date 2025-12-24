@@ -203,10 +203,12 @@ def _parse_response(
             llm_provider="litellm",
             model=getattr(response, "model", None),
             response=response,
-            litellm_debug_info=json.dumps({
-                "finish_reason": finish_reason,
-                "content_excerpt": content[:200],
-            }),
+            litellm_debug_info=json.dumps(
+                {
+                    "finish_reason": finish_reason,
+                    "content_excerpt": content[:200],
+                }
+            ),
             body=None,
         )
 
