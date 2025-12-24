@@ -788,7 +788,7 @@ class DatasetVersionResourceTest {
             // Create version 2 by applying delta (deleting one item)
             var changes = DatasetItemChanges.builder()
                     .baseVersion(version1.id())
-                    .deletedIds(Set.of(itemToDelete.draftItemId()))
+                    .deletedIds(Set.of(itemToDelete.id()))
                     .tags(List.of("v2"))
                     .build();
             var version2 = datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, API_KEY,
@@ -906,7 +906,7 @@ class DatasetVersionResourceTest {
                     .baseVersion(version1.id())
                     .addedItems(List.of(newItem))
                     .editedItems(List.of(editedItem))
-                    .deletedIds(Set.of(itemToDelete.draftItemId()))
+                    .deletedIds(Set.of(itemToDelete.id()))
                     .tags(List.of("v2"))
                     .changeDescription("Combined changes: add, edit, delete")
                     .build();
@@ -1197,7 +1197,7 @@ class DatasetVersionResourceTest {
             var itemToDelete = v1Items.get(0);
 
             // When - Delete one item
-            deleteDatasetItem(datasetId, itemToDelete.draftItemId());
+            deleteDatasetItem(datasetId, itemToDelete.id());
 
             // Then - Verify a new version was created
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
@@ -1240,9 +1240,9 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             var itemsToDelete = v1Items.subList(0, 3); // Delete first 3 items
 
-            // When - Delete multiple items one by one (each creates a version)
+            // When - Delete multiple items one by one
             for (var item : itemsToDelete) {
-                deleteDatasetItem(datasetId, item.draftItemId());
+                deleteDatasetItem(datasetId, item.id());
             }
 
             // Then - Verify versions were created (1 original + 3 deletions = 4 versions)
@@ -1276,7 +1276,7 @@ class DatasetVersionResourceTest {
 
             // When - Delete all items
             for (var item : v1Items) {
-                deleteDatasetItem(datasetId, item.draftItemId());
+                deleteDatasetItem(datasetId, item.id());
             }
 
             // Then - Verify latest version has 0 items
@@ -1547,7 +1547,7 @@ class DatasetVersionResourceTest {
 
             var changes = DatasetItemChanges.builder()
                     .baseVersion(version1.id())
-                    .deletedIds(Set.of(itemToDelete.draftItemId()))
+                    .deletedIds(Set.of(itemToDelete.id()))
                     .changeDescription("Delete one item")
                     .build();
             datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, API_KEY, TEST_WORKSPACE);
