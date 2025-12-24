@@ -177,6 +177,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset exists
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> {
                 return template.inTransaction(READ_ONLY, handle -> {
@@ -199,7 +200,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .build())
                                 .toList();
 
-                        // Save dataset items
+                        // Save dataset items - route to versioned or legacy based on toggle
+                        if (isVersioningEnabled()) {
+                            log.info("Creating dataset items from traces with versioning for dataset '{}'", datasetId);
+                            return saveItemsWithVersion(new DatasetItemBatch(null, datasetId, datasetItems), datasetId)
+                                    .then(Mono.just(0L));
+                        }
+
+                        // Legacy: save to legacy table
                         DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
                         return saveBatch(batch, datasetId);
                     });
@@ -218,6 +226,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset exists
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> {
                 return template.inTransaction(READ_ONLY, handle -> {
@@ -240,7 +249,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .build())
                                 .toList();
 
-                        // Save dataset items
+                        // Save dataset items - route to versioned or legacy based on toggle
+                        if (isVersioningEnabled()) {
+                            log.info("Creating dataset items from spans with versioning for dataset '{}'", datasetId);
+                            return saveItemsWithVersion(new DatasetItemBatch(null, datasetId, datasetItems), datasetId)
+                                    .then(Mono.just(0L));
+                        }
+
+                        // Legacy: save to legacy table
                         DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
                         return saveBatch(batch, datasetId);
                     });
@@ -628,8 +644,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return Mono.just(0L);
         }
 
-        // Create a batch with the items and save it
+        // Create a batch with the items
         DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
+
+        // Route to versioned or legacy based on toggle
+        if (isVersioningEnabled()) {
+            log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
+            return saveItemsWithVersion(batch, datasetId)
+                    .map(version -> (long) items.size())
+                    .defaultIfEmpty((long) items.size());
+        }
+
+        // Legacy: save to legacy table
         return saveBatch(batch, datasetId);
     }
 
