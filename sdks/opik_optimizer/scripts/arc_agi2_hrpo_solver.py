@@ -29,14 +29,18 @@ DATASET_START = 0
 TEST_MODE = False  # Set True to force embedded sample.
 ARC_AGI2_DATA_DIR = os.getenv("ARC_AGI2_DATA_DIR")  # optional override
 
-EVAL_MODEL = "gemini/gemini-1.5-flash-002"
-REASONING_MODEL = "gemini/gemini-3-pro-preview"
-EVAL_TEMPERATURE = 0.0
-REASONING_TEMPERATURE = 0.7
+EVAL_MODEL = "openai/gpt-5.2"
+REASONING_MODEL = "openai/gpt-5.2"
+EVAL_TEMPERATURE = 1.0
+REASONING_TEMPERATURE = 1.0
 HRPO_MAX_TRIALS = 3
 HRPO_THREADS = 8
 SEED = 42
 PASS_AT_K = 2
+
+DATASET_NAME = os.getenv("ARC_AGI2_DATASET_NAME") or (
+    f"arc_agi2_{DATASET_SPLIT}_{DATASET_COUNT}_seed{SEED}"
+)
 
 # MIT-licensed baseline prompt adapted from Poetiq ARC-AGI solver (SOLVER_PROMPT_1).
 SYSTEM_PROMPT = """You are an expert in solving Abstract Reasoning Corpus (ARC) tasks by writing Python code. Your goal is to analyze input-output examples and create a 'transform' function that correctly transforms any given input grid into the corresponding output grid.
@@ -323,6 +327,7 @@ def main() -> None:
         split=DATASET_SPLIT,
         count=DATASET_COUNT,
         start=DATASET_START,
+        dataset_name=DATASET_NAME,
         test_mode=TEST_MODE,
         seed=SEED,
     )
