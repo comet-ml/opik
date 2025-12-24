@@ -39,6 +39,7 @@ dev = [
     "pytest-asyncio",
     "pytest-env",
     "pytest-profiling",
+    "huggingface-hub",
     # "google-adk",
     "langgraph",
     "pre-commit",
