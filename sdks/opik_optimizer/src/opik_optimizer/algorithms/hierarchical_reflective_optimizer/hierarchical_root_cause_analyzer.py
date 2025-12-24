@@ -40,7 +40,7 @@ class HierarchicalRootCauseAnalyzer:
         seed: int,
         max_parallel_batches: int,
         batch_size: int,
-        model_parameters: dict[str, Any],
+        model_parameters: dict[str, Any] | None,
         verbose: int = 1,
     ) -> None:
         """
@@ -58,7 +58,7 @@ class HierarchicalRootCauseAnalyzer:
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
         self.verbose = verbose
-        self.model_parameters = model_parameters
+        self.model_parameters = model_parameters or {}
 
     def _format_test_results_batch(
         self,
