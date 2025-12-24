@@ -11,8 +11,10 @@ Note: Some optimizers are expected to fail initially as they don't yet
 support content_parts. These will be updated to support multimodal prompts.
 """
 
-import pytest
+import os
 from typing import Any
+
+import pytest
 
 import opik
 from opik.evaluation.metrics import LevenshteinRatio
@@ -31,7 +33,13 @@ from opik_optimizer import (
 )
 
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not os.getenv("OPENAI_API_KEY"),
+        reason="OPENAI_API_KEY environment variable required",
+    ),
+]
 
 
 # -----------------------------------------------------------------------------
