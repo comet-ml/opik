@@ -7,7 +7,7 @@ from opik_optimizer.utils.dataset_utils import DatasetHandle
 
 AI2_ARC_SPEC = DatasetSpec(
     name="ai2_arc",
-    hf_path="ai2_arc",
+    hf_path="allenai",
     hf_name="ARC-Challenge",
     default_source_split="train",
     prefer_presets=True,
