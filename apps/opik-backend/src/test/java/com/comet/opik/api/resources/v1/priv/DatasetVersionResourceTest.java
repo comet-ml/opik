@@ -1431,6 +1431,31 @@ class DatasetVersionResourceTest {
                     .toList();
             assertThat(columnNames).contains("input", "output");
         }
+
+        @Test
+        @DisplayName("Success: GET single item by row ID (id field) works with versioning")
+        void getItemById__whenUsingRowIdFromApiResponse__thenReturnsItem() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            // Get items from the latest version
+            var items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(items).hasSize(3);
+
+            var itemFromList = items.get(0);
+            var rowId = itemFromList.id();
+
+            // When - Get single item by row ID (what the frontend does)
+            var fetchedItem = datasetResourceClient.getDatasetItem(rowId, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify item is returned correctly
+            assertThat(fetchedItem).isNotNull();
+            assertThat(fetchedItem.id()).isEqualTo(rowId);
+            assertThat(fetchedItem.draftItemId()).isEqualTo(itemFromList.draftItemId());
+            assertThat(fetchedItem.datasetId()).isEqualTo(datasetId);
+        }
     }
 
     @Nested
