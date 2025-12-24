@@ -8,13 +8,11 @@ from types import FrameType
 
 import litellm
 from litellm.exceptions import BadRequestError
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
 from . import _throttle
 from . import utils as _utils
 
-from opik.integrations import litellm as litellm_integration
 
 logger = logging.getLogger(__name__)
 
@@ -202,10 +200,12 @@ def _parse_response(
             llm_provider="litellm",
             model=getattr(response, "model", None),
             response=response,
-            litellm_debug_info=json.dumps({
-                "finish_reason": finish_reason,
-                "content_excerpt": content[:200],
-            }),
+            litellm_debug_info=json.dumps(
+                {
+                    "finish_reason": finish_reason,
+                    "content_excerpt": content[:200],
+                }
+            ),
             body=None,
         )
 

@@ -23,7 +23,7 @@ class MetricFunction(Protocol):
         dataset_item: dict[str, Any],
         llm_output: str,
         **kwargs: Any,
-    ) -> Union[float, score_result.ScoreResult, list[score_result.ScoreResult]]: ...
+    ) -> float | score_result.ScoreResult | list[score_result.ScoreResult]: ...
 
 
 class PropertySchema(pydantic.BaseModel):

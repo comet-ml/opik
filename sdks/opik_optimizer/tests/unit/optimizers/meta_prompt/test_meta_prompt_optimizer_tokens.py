@@ -13,6 +13,12 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops import (
 )
 
 
+def _metric_with_name(name: str = "mock_metric") -> Mock:
+    metric = Mock()
+    metric.__name__ = name
+    return metric
+
+
 class TestTokenCalculation:
     """Test token calculation logic using litellm."""
 
@@ -125,7 +131,7 @@ class TestAdaptiveContextFitting:
     def test_adaptive_fitting_reduces_examples(self) -> None:
         """Test that adaptive fitting reduces number of examples when over budget."""
         mock_dataset = self.create_mock_dataset(num_items=5, long_values=True)
-        mock_metric = Mock()
+        mock_metric = _metric_with_name()
 
         with patch(
             "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
@@ -148,7 +154,7 @@ class TestAdaptiveContextFitting:
     def test_adaptive_fitting_reduces_truncation(self) -> None:
         """Test that adaptive fitting reduces truncation length when needed."""
         mock_dataset = self.create_mock_dataset(num_items=1, long_values=True)
-        mock_metric = Mock()
+        mock_metric = _metric_with_name()
 
         with patch(
             "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
@@ -171,7 +177,7 @@ class TestAdaptiveContextFitting:
     def test_adaptive_fitting_returns_minimal_when_cannot_fit(self) -> None:
         """Test that minimal context is returned when cannot fit within budget."""
         mock_dataset = self.create_mock_dataset(num_items=1, long_values=True)
-        mock_metric = Mock()
+        mock_metric = _metric_with_name()
 
         with patch(
             "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
@@ -212,7 +218,7 @@ class TestColumnSelection:
                 "answer": "4",  # Should be excluded (output field)
             }
         ]
-        mock_metric = Mock()
+        mock_metric = _metric_with_name()
 
         with patch(
             "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
@@ -247,7 +253,7 @@ class TestColumnSelection:
                 "answer": "4",
             }
         ]
-        mock_metric = Mock()
+        mock_metric = _metric_with_name()
 
         with patch(
             "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"

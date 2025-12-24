@@ -25,8 +25,16 @@ def calculate_population_diversity(population: list[Any] | None) -> float:
     count = 0
     for i in range(len(population)):
         for j in range(i + 1, len(population)):
-            str1 = str(dict(population[i])) if hasattr(population[i], 'items') else str(population[i])
-            str2 = str(dict(population[j])) if hasattr(population[j], 'items') else str(population[j])
+            str1 = (
+                str(dict(population[i]))
+                if hasattr(population[i], "items")
+                else str(population[i])
+            )
+            str2 = (
+                str(dict(population[j]))
+                if hasattr(population[j], "items")
+                else str(population[j])
+            )
             distance = rapidfuzz.distance.Indel.normalized_similarity(str1, str2)
             max_len = max(len(str1), len(str2))
             if max_len > 0:
@@ -35,6 +43,8 @@ def calculate_population_diversity(population: list[Any] | None) -> float:
                 count += 1
 
     return total_distance / count if count > 0 else 0.0
+
+
 def update_individual_with_prompt(
     individual: Any, prompt_candidate: chat_prompt.ChatPrompt
 ) -> Any:

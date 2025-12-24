@@ -5,10 +5,10 @@ Tests cover:
 - compute_sensitivity_from_trials: Correlation-based sensitivity calculation
 """
 
-import pytest
-from unittest.mock import MagicMock
-import math
-
+from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import ParameterSpec
+from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
+    ParameterType,
+)
 from opik_optimizer.algorithms.parameter_optimizer.sensitivity_analysis import (
     compute_sensitivity_from_trials,
 )
@@ -22,11 +22,14 @@ class MockTrial:
         self.value = value
 
 
-class MockParameterSpec:
-    """Mock ParameterSpec for testing."""
-
-    def __init__(self, name: str):
-        self.name = name
+def _make_parameter_spec(name: str) -> ParameterSpec:
+    """Create a minimal float ParameterSpec used for tests."""
+    return ParameterSpec(
+        name=name,
+        type=ParameterType.FLOAT,
+        min=0.0,
+        max=1.0,
+    )
 
 
 class TestComputeSensitivityFromTrials:
@@ -43,7 +46,7 @@ class TestComputeSensitivityFromTrials:
     def test_returns_zero_for_single_trial(self) -> None:
         """Should return zero sensitivity for single trial."""
         trials = [MockTrial({"param": 0.5}, 0.8)]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -56,7 +59,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 0.5}, 0.7),
             MockTrial({"param": 0.5}, 0.8),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -72,7 +75,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 0.7}, 0.7),
             MockTrial({"param": 0.9}, 0.9),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -89,7 +92,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 0.3}, 0.5),
             MockTrial({"param": 0.7}, 0.5),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -106,7 +109,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 0.7}, 0.3),
             MockTrial({"param": 0.9}, 0.1),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -121,7 +124,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": True}, 0.9),
             MockTrial({"param": False}, 0.2),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -136,7 +139,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 3}, 0.6),
             MockTrial({"param": 4}, 0.8),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -149,7 +152,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 0.5}, None),  # Should be skipped
             MockTrial({"param": 0.9}, 0.9),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -162,7 +165,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": "string_value"}, 0.5),
             MockTrial({"param": "another_string"}, 0.7),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -176,7 +179,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param_a": 0.5, "param_b": 0.5}, 0.5),
             MockTrial({"param_a": 0.9, "param_b": 0.1}, 0.5),
         ]
-        specs = [MockParameterSpec("param_a"), MockParameterSpec("param_b")]
+        specs = [_make_parameter_spec("param_a"), _make_parameter_spec("param_b")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -190,7 +193,7 @@ class TestComputeSensitivityFromTrials:
             MockTrial({"param": 0.1}, 0.2),
             MockTrial({"param": 0.9}, 0.8),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         result = compute_sensitivity_from_trials(trials, specs)
 
@@ -203,10 +206,9 @@ class TestComputeSensitivityFromTrials:
             MockTrial({}, 0.6),  # Missing param
             MockTrial({"param": 0.7}, 0.7),
         ]
-        specs = [MockParameterSpec("param")]
+        specs = [_make_parameter_spec("param")]
 
         # Should not crash, just use available data
         result = compute_sensitivity_from_trials(trials, specs)
 
         assert "param" in result
-

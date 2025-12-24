@@ -134,7 +134,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         # Resolve which dataset to use based on item IDs (train vs validation)
         target_dataset = self._resolve_dataset_for_batch(dataset_item_ids)
-
         # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {

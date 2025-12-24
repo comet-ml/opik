@@ -798,11 +798,14 @@ def execute_task(
                 **optimize_kwargs,
             )
             # Handle the optimized prompt - may be dict for multi-prompt agents
-            if isinstance(optimization_results.prompt, dict):
-                optimized_prompt = optimization_results.prompt
+            result_prompt = optimization_results.prompt
+            if isinstance(result_prompt, dict):
+                optimized_prompt = result_prompt
+            elif isinstance(result_prompt, ChatPrompt):
+                optimized_prompt = result_prompt
             else:
                 optimized_prompt = ChatPrompt(
-                    messages=optimization_results.prompt,  # type: ignore[arg-type]
+                    messages=result_prompt,  # type: ignore[arg-type]
                     model=getattr(optimizer, "model", model_name),
                     model_parameters=getattr(
                         optimizer, "model_parameters", model_parameters

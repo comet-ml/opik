@@ -63,6 +63,7 @@ test:
 	PYTHONPATH=src \
 	LITELLM_CACHE_TYPE=memory \
 	LITELLM_LOGGING_DISABLED=1 \
+	LITELLM_USE_QUEUE_LOGGING=false \
 	$(PYTHON) -m pytest \
 		-n auto \
 		--dist loadfile \
@@ -82,6 +83,7 @@ profile:
 	PYTHONPATH=src \
 	LITELLM_CACHE_TYPE=memory \
 	LITELLM_LOGGING_DISABLED=1 \
+	LITELLM_USE_QUEUE_LOGGING=false \
 	$(PYTHON) -m pytest -n auto --dist loadfile tests/unit -vv -rA --profile --maxfail=1
 
 precommit:

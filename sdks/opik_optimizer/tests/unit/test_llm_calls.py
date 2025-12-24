@@ -9,7 +9,7 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
 from pydantic import BaseModel, ValidationError
 
 from opik_optimizer._llm_calls import (
@@ -105,7 +105,7 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When is_reasoning=True, should add opik_call_type metadata.
-        
+
         Note: The mock returns params with an empty metadata dict. The actual
         _prepare_model_params function then adds opik_call_type AFTER calling
         the monitoring wrapper, so this test verifies that second step works.
@@ -413,9 +413,9 @@ class TestEdgeCases:
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = (
-            '{"inner": {"value": 42}, "name": "test"}'
-        )
+        mock_response.choices[
+            0
+        ].message.content = '{"inner": {"value": 42}, "name": "test"}'
         mock_response.choices[0].finish_reason = "stop"
 
         result = _parse_response(mock_response, response_model=Outer)
@@ -466,9 +466,7 @@ class TestEdgeCases:
             lambda x: x,
         )
 
-        model_params = {
-            "metadata": {"opik": {"project_name": "existing-project"}}
-        }
+        model_params = {"metadata": {"opik": {"project_name": "existing-project"}}}
 
         result = _prepare_model_params(
             model_parameters=model_params,
@@ -477,4 +475,3 @@ class TestEdgeCases:
         )
 
         assert result["metadata"]["opik"]["project_name"] == "existing-project"
-

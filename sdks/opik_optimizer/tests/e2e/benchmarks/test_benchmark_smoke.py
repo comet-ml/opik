@@ -61,7 +61,13 @@ class DummyOptimizer:
         self.kwargs = kwargs
 
     def evaluate_prompt(  # type: ignore[no-untyped-def]
-        self, prompt: ChatPrompt, dataset: Any, metric: Any, n_threads: int
+        self,
+        prompt: ChatPrompt,
+        dataset: Any,
+        metric: Any,
+        n_threads: int,
+        agent: Any | None = None,
+        **_: Any,
     ):
         return metric({}, "")
 
@@ -72,6 +78,7 @@ class DummyOptimizer:
         dataset: Any,
         metric: Any,
         validation_dataset: Any | None = None,
+        agent: Any | None = None,
         **kwargs: Any,
     ):
         return DummyOptimizationResult(prompt.messages)
@@ -138,6 +145,9 @@ def test_run_benchmark_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     """Smoke test the benchmark runner end-to-end with dummy components."""
     _patch_benchmark_config(monkeypatch)
     _patch_datasets(monkeypatch)
+
+    # Ensure benchmark logging writes into the tmp path to avoid permission errors.
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     # Inline executor to avoid multiprocessing in tests
     monkeypatch.setattr(local_runner, "ProcessPoolExecutor", InlineExecutor)

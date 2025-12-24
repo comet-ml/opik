@@ -16,11 +16,11 @@ def assert_tools_preserved(
 ) -> None:
     """
     Assert that tools and function_map are preserved after optimization.
-    
+
     Args:
         original_prompt: The original ChatPrompt before optimization
         optimized_prompt: The optimized ChatPrompt after optimization
-        
+
     Raises:
         AssertionError: If tools or function_map were modified
     """
@@ -30,7 +30,7 @@ def assert_tools_preserved(
         f"Original: {original_prompt.tools}\n"
         f"Optimized: {optimized_prompt.tools}"
     )
-    
+
     # Check function_map keys are identical
     original_keys = set(original_prompt.function_map.keys())
     optimized_keys = set(optimized_prompt.function_map.keys())
@@ -47,26 +47,26 @@ def assert_prompt_changed(
 ) -> bool:
     """
     Check if at least one message content changed during optimization.
-    
+
     Args:
         original_prompt: The original ChatPrompt before optimization
         optimized_prompt: The optimized ChatPrompt after optimization
-        
+
     Returns:
         True if any content changed, False otherwise
-        
+
     Note:
         This function does not raise an assertion error because optimization
         might not always change the prompt if it's already optimal.
     """
     original_msgs = original_prompt.get_messages()
     optimized_msgs = optimized_prompt.get_messages()
-    
+
     # Check that at least one message content differs
     for orig, opt in zip(original_msgs, optimized_msgs):
         if orig.get("content") != opt.get("content"):
             return True
-    
+
     return False
 
 
@@ -76,36 +76,40 @@ def assert_multimodal_structure_preserved(
 ) -> None:
     """
     Assert that multimodal content structure is preserved after optimization.
-    
+
     Args:
         original_prompt: The original ChatPrompt with multimodal content
         optimized_prompt: The optimized ChatPrompt
-        
+
     Raises:
         AssertionError: If multimodal structure was not preserved
     """
     original_msgs = original_prompt.get_messages()
     optimized_msgs = optimized_prompt.get_messages()
-    
+
     for i, (orig, opt) in enumerate(zip(original_msgs, optimized_msgs)):
         orig_content = orig.get("content")
         opt_content = opt.get("content")
-        
+
         # If original had list content (multimodal), optimized should too
         if isinstance(orig_content, list):
             assert isinstance(opt_content, list), (
                 f"Message {i}: Multimodal structure was lost. "
                 f"Original had list content, optimized has {type(opt_content)}"
             )
-            
+
             # Check that content types are preserved
-            orig_types = [part.get("type") for part in orig_content if isinstance(part, dict)]
-            opt_types = [part.get("type") for part in opt_content if isinstance(part, dict)]
+            orig_types = [
+                part.get("type") for part in orig_content if isinstance(part, dict)
+            ]
+            opt_types = [
+                part.get("type") for part in opt_content if isinstance(part, dict)
+            ]
             assert orig_types == opt_types, (
                 f"Message {i}: Content part types changed. "
                 f"Original: {orig_types}, Optimized: {opt_types}"
             )
-            
+
             # Check that image_url parts are preserved
             for orig_part, opt_part in zip(orig_content, opt_content):
                 if isinstance(orig_part, dict) and orig_part.get("type") == "image_url":
@@ -129,11 +133,11 @@ def assert_multi_prompt_changed(
 ) -> dict[str, bool]:
     """
     Check and report which prompts changed during multi-prompt optimization.
-    
+
     Args:
         original_prompts: Dict of original ChatPrompts
         optimized_prompts: Dict of optimized ChatPrompts
-        
+
     Returns:
         Dict mapping prompt names to whether they changed
     """
@@ -147,5 +151,3 @@ def assert_multi_prompt_changed(
         else:
             changes[name] = False
     return changes
-
-

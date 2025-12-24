@@ -28,5 +28,3 @@ __all__ = [
     "ChatPromptFactory",
     "EvaluationResultFactory",
 ]
-
-

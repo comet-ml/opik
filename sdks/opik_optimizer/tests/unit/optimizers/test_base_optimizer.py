@@ -1,3 +1,5 @@
+# mypy: disable-error-code=no-untyped-def
+
 """
 Unit tests for opik_optimizer.base_optimizer module.
 
@@ -10,18 +12,41 @@ Tests cover:
 - Counter and history management
 """
 
+from __future__ import annotations
+
 import pytest
-from typing import Any
+from typing import Any, TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
-from opik_optimizer import ChatPrompt
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+
+if TYPE_CHECKING:
+    from opik import Dataset
+    from opik_optimizer.agents import OptimizableAgent
+    from opik_optimizer.api_objects import chat_prompt
+    from opik_optimizer.api_objects.types import MetricFunction
+    from opik_optimizer.optimization_result import OptimizationResult
 
 
 class ConcreteOptimizer(BaseOptimizer):
     """Concrete implementation for testing the abstract BaseOptimizer."""
 
-    def optimize_prompt(self, prompt, dataset, metric, **kwargs):
+    def optimize_prompt(
+        self,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        project_name: str = "Optimization",
+        optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
+        max_trials: int = 10,
+        *args: Any,
+        **kwargs: Any,
+    ) -> OptimizationResult:
         """Required abstract method implementation."""
         return MagicMock()
 
@@ -59,7 +84,9 @@ class TestValidateOptimizationInputs:
         mock_ds = MagicMock(spec=Dataset)
 
         # Should not raise
-        optimizer._validate_optimization_inputs(simple_chat_prompt, mock_ds, mock_metric)
+        optimizer._validate_optimization_inputs(
+            simple_chat_prompt, mock_ds, mock_metric
+        )
 
     def test_accepts_valid_prompt_dict(
         self, optimizer, simple_chat_prompt, mock_metric
@@ -80,9 +107,13 @@ class TestValidateOptimizationInputs:
         mock_ds = MagicMock(spec=Dataset)
 
         with pytest.raises(ValueError, match="ChatPrompt"):
-            optimizer._validate_optimization_inputs("not a prompt", mock_ds, mock_metric)
+            optimizer._validate_optimization_inputs(
+                "not a prompt", mock_ds, mock_metric
+            )
 
-    def test_rejects_dict_with_non_chatprompt_values(self, optimizer, mock_metric) -> None:
+    def test_rejects_dict_with_non_chatprompt_values(
+        self, optimizer, mock_metric
+    ) -> None:
         """Should reject dict containing non-ChatPrompt values."""
         from opik import Dataset
 
@@ -259,8 +290,10 @@ class TestBuildAgentConfig:
             assert isinstance(config["messages"], list)
             assert len(config["messages"]) > 0
             has_content = True
-        
-        assert has_content, "Config should include prompt content (system, user, or messages)"
+
+        assert has_content, (
+            "Config should include prompt content (system, user, or messages)"
+        )
 
     def test_includes_model(self, optimizer, simple_chat_prompt) -> None:
         """Should include model name."""
@@ -342,8 +375,17 @@ class TestBuildOptimizationMetadata:
         """Should include agent class name when provided."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        class CustomAgent:
-            pass
+        from opik_optimizer.agents import OptimizableAgent
+
+        class CustomAgent(OptimizableAgent):
+            def invoke_agent(
+                self,
+                prompts: dict[str, chat_prompt.ChatPrompt],
+                dataset_item: dict[str, Any],
+                allow_tool_use: bool = False,
+                seed: int | None = None,
+            ) -> str:
+                return "output"
 
         metadata = optimizer._build_optimization_metadata(agent_class=CustomAgent)
 
@@ -455,7 +497,7 @@ class TestCleanup:
     def test_cleanup_clears_opik_client(self) -> None:
         """cleanup should clear the Opik client reference."""
         optimizer = ConcreteOptimizer(model="gpt-4")
-        optimizer._opik_client = MagicMock()
+        optimizer._opik_client = cast(Any, MagicMock())
 
         optimizer.cleanup()
 
@@ -521,4 +563,3 @@ class TestDescribeAnnotation:
         result = BaseOptimizer._describe_annotation("custom_annotation")
 
         assert result == "custom_annotation"
-

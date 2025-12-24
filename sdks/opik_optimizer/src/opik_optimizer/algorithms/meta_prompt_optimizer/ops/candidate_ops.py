@@ -5,6 +5,7 @@ This module contains functions for generating and sanitizing candidate prompts.
 """
 
 import ast
+import copy
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable
@@ -141,8 +142,10 @@ def sanitize_generated_prompts(
         "scoring function",
     ]
 
+    sanitized = copy.deepcopy(prompt_json)
+
     rejected_count = 0
-    for prompt_item in prompt_json.get("prompts", []):
+    for prompt_item in sanitized.get("prompts", []):
         if "prompt" in prompt_item and isinstance(prompt_item["prompt"], list):
             has_leakage = False
 
@@ -170,9 +173,9 @@ def sanitize_generated_prompts(
                 rejected_count += 1
 
     # Filter out rejected prompts
-    original_count = len(prompt_json.get("prompts", []))
-    prompt_json["prompts"] = [
-        p for p in prompt_json["prompts"] if not p.get("_rejected", False)
+    original_count = len(sanitized.get("prompts", []))
+    sanitized["prompts"] = [
+        p for p in sanitized["prompts"] if not p.get("_rejected", False)
     ]
 
     if rejected_count > 0:
@@ -181,7 +184,7 @@ def sanitize_generated_prompts(
             f"due to data leakage"
         )
 
-    return prompt_json
+    return sanitized
 
 
 def _format_agent_prompts_for_prompt(

@@ -28,7 +28,7 @@ class LLMResponseBuilder:
         # Use with mock_llm_sequence fixture
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._responses: list[Any] = []
 
     def add_response(self, response: Any) -> "LLMResponseBuilder":
@@ -41,7 +41,9 @@ class LLMResponseBuilder:
         self._responses.append(error)
         return self
 
-    def add_structured(self, model_class: type[BaseModel], **fields) -> "LLMResponseBuilder":
+    def add_structured(
+        self, model_class: type[BaseModel], **fields: Any
+    ) -> "LLMResponseBuilder":
         """Add a structured Pydantic model response."""
         self._responses.append(model_class(**fields))
         return self
@@ -54,7 +56,9 @@ class LLMResponseBuilder:
         return len(self._responses)
 
 
-def create_structured_response(model_class: type[BaseModel], **fields) -> BaseModel:
+def create_structured_response(
+    model_class: type[BaseModel], **fields: Any
+) -> BaseModel:
     """
     Create a structured Pydantic model instance for mocking.
 
@@ -169,7 +173,7 @@ class ConversationMocker:
         # Use mocker.get_response as side_effect in mock_llm_call
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._rules: list[tuple[str, str]] = []
         self._default: str = "Mock response"
         self._history: list[dict[str, Any]] = []
@@ -183,7 +187,7 @@ class ConversationMocker:
         self._default = response
         return self
 
-    def get_response(self, **kwargs) -> str:
+    def get_response(self, **kwargs: Any) -> str:
         """
         Get response based on the conversation context.
 
@@ -209,12 +213,10 @@ class ConversationMocker:
         return len(self._history)
 
     class _RuleBuilder:
-        def __init__(self, parent: "ConversationMocker", pattern: str):
+        def __init__(self, parent: "ConversationMocker", pattern: str) -> None:
             self._parent = parent
             self._pattern = pattern
 
         def respond(self, response: str) -> "ConversationMocker":
             self._parent._rules.append((self._pattern, response))
             return self._parent
-
-

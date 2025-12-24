@@ -327,9 +327,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             ) / len(best_result.test_results)
 
             # Evaluate remaining candidates and keep the best-scoring bundle.
-            best_reasoning = (
-                candidate_reasonings[0] if candidate_reasonings else ""
-            )
+            best_reasoning = candidate_reasonings[0] if candidate_reasonings else ""
             for idx, improved_chat_prompts in enumerate(
                 improved_chat_prompts_candidates[1:], start=1
             ):

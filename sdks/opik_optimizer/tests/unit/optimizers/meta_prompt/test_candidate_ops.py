@@ -28,7 +28,10 @@ class TestSanitizeGeneratedPrompts:
             "prompts": [
                 {
                     "prompt": [
-                        {"role": "system", "content": "Optimize for accuracy_score metric."}
+                        {
+                            "role": "system",
+                            "content": "Optimize for accuracy_score metric.",
+                        }
                     ]
                 },
                 {"prompt": [{"role": "system", "content": "Be helpful and concise."}]},
@@ -52,7 +55,11 @@ class TestSanitizeGeneratedPrompts:
                         }
                     ]
                 },
-                {"prompt": [{"role": "system", "content": "Answer questions clearly."}]},
+                {
+                    "prompt": [
+                        {"role": "system", "content": "Answer questions clearly."}
+                    ]
+                },
             ]
         }
 
@@ -129,11 +136,7 @@ class TestSanitizeGeneratedPrompts:
                         {"role": "user", "content": "Answer my question."},
                     ]
                 },
-                {
-                    "prompt": [
-                        {"role": "system", "content": "Be concise and accurate."}
-                    ]
-                },
+                {"prompt": [{"role": "system", "content": "Be concise and accurate."}]},
             ]
         }
 
@@ -143,7 +146,7 @@ class TestSanitizeGeneratedPrompts:
 
     def test_handles_empty_prompts_list(self) -> None:
         """Should handle empty prompts list."""
-        prompt_json = {"prompts": []}
+        prompt_json: dict[str, Any] = {"prompts": []}
 
         result = sanitize_generated_prompts(prompt_json, "my_metric")
 
@@ -187,9 +190,7 @@ class TestFormatAgentPromptsForPrompt:
 
     def test_formats_single_agent(self) -> None:
         """Should format a single agent prompt correctly."""
-        prompts = {
-            "main": ChatPrompt(system="Be helpful.", user="{question}")
-        }
+        prompts = {"main": ChatPrompt(system="Be helpful.", user="{question}")}
 
         result = _format_agent_prompts_for_prompt(prompts)
 
@@ -376,4 +377,3 @@ class TestDataLeakagePatterns:
         result = sanitize_generated_prompts(prompt_json, "my_metric")
 
         assert len(result["prompts"]) == 1
-

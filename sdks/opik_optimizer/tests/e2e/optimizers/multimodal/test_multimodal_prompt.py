@@ -11,8 +11,10 @@ Note: Some optimizers are expected to fail initially as they don't yet
 support content_parts. These will be updated to support multimodal prompts.
 """
 
-import pytest
+import os
 from typing import Any
+
+import pytest
 
 import opik
 from opik.evaluation.metrics import LevenshteinRatio
@@ -31,7 +33,13 @@ from opik_optimizer import (
 )
 
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not os.getenv("OPENAI_API_KEY"),
+        reason="OPENAI_API_KEY environment variable required",
+    ),
+]
 
 
 # -----------------------------------------------------------------------------
@@ -179,6 +187,9 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
     config = create_optimizer_config(optimizer_class)
     optimizer = optimizer_class(**config)
 
+    gepa_kwargs: dict[str, Any] = {}
+    if optimizer_class == GepaOptimizer:
+        gepa_kwargs["reflection_minibatch_size"] = 1
     # Run optimization - ParameterOptimizer uses optimize_parameter
     if optimizer_class == ParameterOptimizer:
         results = optimizer.optimize_parameter(
@@ -196,6 +207,7 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
             prompt=original_prompt,
             n_samples=2,
             max_trials=2,
+            **gepa_kwargs,
         )
 
     # Validate results structure

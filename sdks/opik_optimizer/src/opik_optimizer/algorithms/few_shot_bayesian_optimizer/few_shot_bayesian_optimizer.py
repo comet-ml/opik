@@ -18,7 +18,7 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import LiteLLMAgent, OptimizableAgent
-from ... import _throttle, optimization_result, task_evaluator, utils
+from ... import _throttle, optimization_result, task_evaluator
 from . import reporting, types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace

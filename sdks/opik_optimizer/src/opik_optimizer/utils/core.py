@@ -20,7 +20,6 @@ import opik.config
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
-from ..agents import OptimizableAgent
 
 if TYPE_CHECKING:
     pass

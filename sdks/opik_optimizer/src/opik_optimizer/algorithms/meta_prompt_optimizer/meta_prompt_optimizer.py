@@ -1,6 +1,5 @@
 import logging
 from typing import Any, cast
-from collections.abc import Callable
 
 from opik import Dataset
 from ...base_optimizer import BaseOptimizer, OptimizationRound
