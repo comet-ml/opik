@@ -79,6 +79,21 @@ public class DatasetResourceClient {
         }
     }
 
+    public DatasetPage getDatasets(String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", 1)
+                .queryParam("size", 100)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetPage.class);
+        }
+    }
+
     public void createDatasetItems(DatasetItemBatch batch, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
