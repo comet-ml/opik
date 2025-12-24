@@ -52,6 +52,23 @@ public interface OptimizationLogSyncService {
     String META_KEY_PATTERN = "opik:logs:*:meta";
 
     /**
+     * S3 key pattern for optimization logs.
+     * Format: logs/optimization-studio/{workspace_id}/{optimization_id}.log.gz
+     */
+    String S3_KEY_PATTERN = "logs/optimization-studio/%s/%s.log.gz";
+
+    /**
+     * Formats the S3 key for an optimization's log file.
+     *
+     * @param workspaceId    the workspace ID
+     * @param optimizationId the optimization ID
+     * @return the S3 key path
+     */
+    static String formatS3Key(String workspaceId, UUID optimizationId) {
+        return String.format(S3_KEY_PATTERN, workspaceId, optimizationId);
+    }
+
+    /**
      * Sync logs from Redis to S3 if there are new logs since last flush.
      * Uses distributed locking to prevent duplicate work across instances.
      *
@@ -80,12 +97,17 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
     private static final String REDIS_LOG_KEY_PATTERN = "opik:logs:%s:%s";
     private static final String REDIS_META_KEY_PATTERN = "opik:logs:%s:%s:meta";
     private static final String LOCK_KEY_PATTERN = "opik:lock:logs:%s:%s";
-    private static final String S3_KEY_PATTERN = "logs/optimization-studio/%s/%s.log.gz";
 
     private static final String META_LAST_APPEND_TS = "last_append_ts";
     private static final String META_LAST_FLUSH_TS = "last_flush_ts";
 
     private static final String CONTENT_TYPE_GZIP = "application/gzip";
+
+    /**
+     * Record to hold log timestamp information for decision logging.
+     */
+    private record LogTimestamps(long lastAppend, long lastFlush) {
+    }
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull FileService fileService;
@@ -104,10 +126,13 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
         String metaKey = formatMetaKey(workspaceId, optimizationId);
 
         // First check if there are new logs (fast path, no lock needed)
-        return hasNewLogs(metaKey)
-                .flatMap(hasNew -> {
+        return getLogTimestamps(metaKey)
+                .flatMap(timestamps -> {
+                    long lastAppend = timestamps.lastAppend;
+                    long lastFlush = timestamps.lastFlush;
+                    boolean hasNew = lastAppend > lastFlush;
+
                     if (!hasNew) {
-                        log.trace("No new logs for optimization '{}', skipping sync", optimizationId);
                         return Mono.empty();
                     }
 
@@ -161,20 +186,21 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
     }
 
     /**
-     * Check if there are new logs to sync by comparing timestamps in meta.
+     * Get log timestamps from meta to determine if sync is needed.
      * Uses HMGET to fetch both timestamps in a single Redis call.
      */
-    private Mono<Boolean> hasNewLogs(String metaKey) {
-        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey);
+    private Mono<LogTimestamps> getLogTimestamps(String metaKey) {
+        // Use StringCodec since Python stores plain text values
+        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey, StringCodec.INSTANCE);
 
         // Use getAll (HMGET) to fetch both timestamps in one Redis call
         return metaMap.getAll(Set.of(META_LAST_APPEND_TS, META_LAST_FLUSH_TS))
                 .map(values -> {
                     long lastAppend = parseLong(values.getOrDefault(META_LAST_APPEND_TS, "0"));
                     long lastFlush = parseLong(values.getOrDefault(META_LAST_FLUSH_TS, "0"));
-                    return lastAppend > lastFlush;
+                    return new LogTimestamps(lastAppend, lastFlush);
                 })
-                .defaultIfEmpty(false);
+                .defaultIfEmpty(new LogTimestamps(0, 0));
     }
 
     /**
@@ -185,9 +211,9 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
     private Mono<Void> doSyncToS3(String workspaceId, UUID optimizationId,
             String logKey, String metaKey, boolean isFinalize) {
 
-        // Use StringCodec for log list since Python stores plain text log lines
+        // Use StringCodec for log list and meta map since Python stores plain text values
         RListReactive<String> logList = redisClient.getList(logKey, StringCodec.INSTANCE);
-        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey);
+        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey, StringCodec.INSTANCE);
 
         return logList.readAll()
                 .flatMap(logs -> {
@@ -198,7 +224,7 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
 
                     // Join all log lines with newlines
                     String logContent = String.join("\n", logs);
-                    String s3Key = formatS3Key(workspaceId, optimizationId);
+                    String s3Key = OptimizationLogSyncService.formatS3Key(workspaceId, optimizationId);
 
                     // Compress logs with gzip
                     byte[] compressedLogs = compressGzip(logContent);
@@ -261,10 +287,6 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
 
     private static String formatLockKey(String workspaceId, UUID optimizationId) {
         return String.format(LOCK_KEY_PATTERN, workspaceId, optimizationId);
-    }
-
-    private static String formatS3Key(String workspaceId, UUID optimizationId) {
-        return String.format(S3_KEY_PATTERN, workspaceId, optimizationId);
     }
 
     private static long parseLong(String value) {
