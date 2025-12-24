@@ -2,7 +2,8 @@ import json
 import logging
 import re
 from contextlib import contextmanager
-from typing import Any
+from functools import wraps
+from typing import Any, Callable, TypeVar, cast
 
 from rich import box
 from rich.console import Console, Group, RenderableType
@@ -11,8 +12,35 @@ from rich.progress import track
 from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
+from .api_objects import chat_prompt
 
 PANEL_WIDTH = 70
+
+F = TypeVar('F', bound=Callable[..., Any])
+
+
+def suppress_experiment_reporting(func: F) -> F:
+    """Decorator to suppress opik experiment result/link display."""
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        from opik.evaluation import report
+
+        original_results: Callable[..., None] = report.display_experiment_results
+        original_link: Callable[..., None] = report.display_experiment_link
+
+        def noop(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        report.display_experiment_results = noop  # type: ignore[assignment]
+        report.display_experiment_link = noop  # type: ignore[assignment]
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            report.display_experiment_results = original_results  # type: ignore[assignment]
+            report.display_experiment_link = original_link  # type: ignore[assignment]
+
+    return wrapper  # type: ignore[return-value]
 
 
 def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
@@ -41,7 +69,7 @@ def get_console(*args: Any, **kwargs: Any) -> Console:
 
 @contextmanager
 def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> Any:
-    """Context manager to convert tqdm to rich."""
+    """Context manager to convert tqdm to rich progress bars."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
     def _tqdm_to_track(iterable: Any, desc: str, disable: bool, total: int) -> Any:
@@ -51,25 +79,12 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
         )
 
     original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
-    opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track
-
-    from opik.evaluation import report
-
-    # Store original functions
-    original_display_experiment_results = report.display_experiment_results
-    original_display_experiment_link = report.display_experiment_link
-
-    # Replace with no-ops
-    report.display_experiment_results = lambda *args, **kwargs: None
-    report.display_experiment_link = lambda *args, **kwargs: None
+    opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track  # type: ignore[assignment]
 
     try:
         yield
     finally:
-        # Restore everything
         opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
-        report.display_experiment_results = original_display_experiment_results
-        report.display_experiment_link = original_display_experiment_link
 
 
 @contextmanager
@@ -266,20 +281,77 @@ def _format_tool_panel(tool: dict[str, Any]) -> Panel:
     )
 
 
-def _display_tools(tools: list[dict[str, Any]] | None) -> None:
+def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None:
+    """Display tools with optional prefix for each line."""
     if not tools:
         return
 
     console = get_console()
-    console.print(Text("\nTools registered:\n", style="bold"))
+    console.print(Text(f"{prefix}Tools registered:\n", style="bold"))
     for tool in tools:
         panel = _format_tool_panel(tool)
         with console.capture() as capture:
             console.print(panel)
         rendered_panel = capture.get()
         for line in rendered_panel.splitlines():
-            console.print(Text.from_ansi(line))
+            console.print(Text(prefix) + Text.from_ansi(line))
     console.print("")
+
+
+def _format_tool_summary(tool: dict[str, Any]) -> str:
+    """Format a concise tool summary showing only name and description."""
+    function_block = tool.get("function", {})
+    name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description", "No description")
+    return f"  • {name}: {description}"
+
+
+def _display_chat_prompt_messages_and_tools(
+    chat_p: chat_prompt.ChatPrompt,
+    key: str | None = None,
+) -> list[RenderableType]:
+    """
+    Extract and format messages and tools from a ChatPrompt for display.
+
+    Args:
+        chat_p: The ChatPrompt to display
+        key: Optional key name if this is part of a dictionary of prompts
+
+    Returns:
+        List of Rich renderable items
+    """
+    items: list[RenderableType] = []
+
+    # Add key header if provided
+    if key:
+        items.append(Text(f"\n[{key}]", style="bold yellow"))
+
+    # Display messages
+    messages = chat_p.get_messages()
+    for msg in messages:
+        content_value: str | list[dict[str, Any]] = msg.get("content", "")
+        formatted_content = _format_message_content(content_value)
+        role = msg.get("role", "message")
+
+        items.append(
+            Panel(
+                formatted_content,
+                title=role,
+                title_align="left",
+                border_style="dim",
+                width=PANEL_WIDTH,
+                padding=(1, 2),
+            )
+        )
+
+    # Display tool summary if tools exist
+    if chat_p.tools:
+        tool_summary_lines = ["Tools:"]
+        for tool in chat_p.tools:
+            tool_summary_lines.append(_format_tool_summary(tool))
+        items.append(Text("\n".join(tool_summary_lines), style="dim cyan"))
+
+    return items
 
 
 def get_link_text(
@@ -331,10 +403,18 @@ def display_header(
 def display_result(
     initial_score: float,
     best_score: float,
-    best_prompt: list[dict[str, str]],
+    prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     verbose: int = 1,
-    tools: list[dict[str, Any]] | None = None,
 ) -> None:
+    """
+    Display optimization results including score improvement and optimized prompts.
+
+    Args:
+        initial_score: The initial score before optimization
+        best_score: The best score achieved after optimization
+        prompt: Either a single ChatPrompt or a dictionary of ChatPrompts
+        verbose: Verbosity level (0 = silent, 1+ = display)
+    """
     if verbose < 1:
         return
 
@@ -343,6 +423,7 @@ def display_result(
 
     content: list[RenderableType] = []
 
+    # Display score comparison
     if best_score > initial_score:
         perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
         if has_percentage:
@@ -368,22 +449,18 @@ def display_result(
         )
 
     content.append(Text("\nOptimized prompt:"))
-    for i, msg in enumerate(best_prompt):
-        # MessageDict requires content, but we use .get() for defensive programming
-        content_value: str | list[dict[str, Any]] = msg.get("content", "")
-        formatted_content = _format_message_content(content_value)
-        role = msg.get("role", "message")
 
-        content.append(
-            Panel(
-                formatted_content,
-                title=role,
-                title_align="left",
-                border_style="dim",
-                width=PANEL_WIDTH,
-                padding=(1, 2),
-            )
-        )
+    # Handle both single ChatPrompt and dict of ChatPrompts
+    if isinstance(prompt, dict):
+        # Dictionary of prompts - display each with its key
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+        for key, chat_p in prompt_dict.items():
+            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+            content.extend(prompt_items)
+    else:
+        # Single ChatPrompt
+        prompt_items = _display_chat_prompt_messages_and_tools(prompt, key=None)
+        content.extend(prompt_items)
 
     console.print(
         Panel(
@@ -396,27 +473,60 @@ def display_result(
         )
     )
 
-    if tools:
-        _display_tools(tools)
-
 
 def display_configuration(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, str]]
+    | dict[str, chat_prompt.ChatPrompt]
+    | chat_prompt.ChatPrompt
+    | None,
     optimizer_config: dict[str, Any],
     verbose: int = 1,
     tools: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Displays the LLM messages and optimizer configuration using Rich panels."""
+    """Displays the LLM messages and optimizer configuration using Rich panels.
+
+    Args:
+        messages: Either a list of message dicts, a single ChatPrompt,
+                  a dict of ChatPrompts, or None to skip prompt display.
+                  For dict with single item, displays without key header.
+        optimizer_config: Configuration dict with optimizer parameters.
+        verbose: Verbosity level (0 = silent, 1+ = display).
+        tools: Optional list of tool definitions to display (legacy, prefer ChatPrompt.tools).
+    """
 
     if verbose < 1:
         return
 
-    # Panel for Optimizer configuration
     console = get_console()
     console.print(Text("> Let's optimize the prompt:\n"))
 
-    display_messages(messages)
-    _display_tools(tools)
+    # Handle different message formats
+    if messages is None:
+        pass  # Skip prompt display
+    elif isinstance(messages, dict):
+        # Dictionary of ChatPrompts
+        messages_dict = cast(dict[str, chat_prompt.ChatPrompt], messages)
+        if len(messages_dict) == 1:
+            # Single-prompt optimization: display without key header
+            chat_p = list(messages_dict.values())[0]
+            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=None)
+            for item in prompt_items:
+                console.print(item)
+        else:
+            # Multi-prompt optimization: display each with its key
+            for key, chat_p in messages_dict.items():
+                prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                for item in prompt_items:
+                    console.print(item)
+    elif isinstance(messages, chat_prompt.ChatPrompt):
+        # Single ChatPrompt
+        prompt_items = _display_chat_prompt_messages_and_tools(messages, key=None)
+        for item in prompt_items:
+            console.print(item)
+    elif isinstance(messages, list):
+        # Legacy: list of message dicts
+        display_messages(messages)
+        _display_tools(tools)
 
     # Panel for configuration
     console.print(

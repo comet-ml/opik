@@ -1,16 +1,23 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any
+from typing import Any, cast
 
 import pydantic
-import rich
+import rich.box
+import rich.console
+import rich.panel
+import rich.table
+import rich.text
 
 from .reporting_utils import (
     _format_message_content,
+    format_prompt_snippet,
     get_console,
     get_link_text,
     get_optimization_run_url_by_id,
 )
+
+from .api_objects import chat_prompt
 
 
 def _format_float(value: Any, digits: int = 6) -> str:
@@ -20,12 +27,45 @@ def _format_float(value: Any, digits: int = 6) -> str:
     return str(value)
 
 
+def _format_prompt_for_plaintext(
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Format a prompt (single or dict) for plain text display."""
+    if isinstance(prompt, dict):
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+        parts = []
+        for key, chat_p in prompt_dict.items():
+            parts.append(f"[{key}]")
+            for msg in chat_p.get_messages():
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                # Handle both string and multimodal content
+                if isinstance(content, str):
+                    snippet = format_prompt_snippet(content, max_length=150)
+                else:
+                    snippet = "[multimodal content]"
+                parts.append(f"  {role}: {snippet}")
+        return "\n".join(parts)
+    else:
+        # Single ChatPrompt
+        parts = []
+        for msg in prompt.get_messages():
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                snippet = format_prompt_snippet(content, max_length=150)
+            else:
+                snippet = "[multimodal content]"
+            parts.append(f"  {role}: {snippet}")
+        return "\n".join(parts)
+
+
 class OptimizationResult(pydantic.BaseModel):
     """Result oan optimization run."""
 
     optimizer: str = "Optimizer"
 
-    prompt: list[dict[str, Any]]
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
     score: float
     metric_name: str
 
@@ -33,18 +73,15 @@ class OptimizationResult(pydantic.BaseModel):
     dataset_id: str | None = None
 
     # Initial score
-    initial_prompt: list[dict[str, Any]] | None = None
+    initial_prompt: (
+        chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt] | None
+    ) = None
     initial_score: float | None = None
 
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
     history: list[dict[str, Any]] = []
     llm_calls: int | None = None
     tool_calls: int | None = None
-
-    # MIPRO specific
-    demonstrations: list[dict[str, Any]] | None = None
-    mipro_prompt: str | None = None
-    tool_prompts: dict[str, str] | None = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
@@ -82,23 +119,6 @@ class OptimizationResult(pydantic.BaseModel):
             Dictionary of optimized parameters, empty dict if not available
         """
         return self.details.get("optimized_parameters", {})
-
-    def apply_to_prompt(self, prompt: Any) -> Any:
-        """
-        Apply optimized parameters to a prompt.
-
-        Args:
-            prompt: ChatPrompt instance to apply optimizations to
-
-        Returns:
-            New ChatPrompt instance with optimized parameters applied
-        """
-        prompt_copy = prompt.copy()
-        if "optimized_model_kwargs" in self.details:
-            prompt_copy.model_kwargs = self.details["optimized_model_kwargs"]
-        if "optimized_model" in self.details:
-            prompt_copy.model = self.details["optimized_model"]
-        return prompt_copy
 
     def _calculate_improvement_str(self) -> str:
         """Helper to calculate improvement percentage string."""
@@ -149,12 +169,7 @@ class OptimizationResult(pydantic.BaseModel):
         temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "N/A"
 
         try:
-            final_prompt_display = "\n".join(
-                [
-                    f"  {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:150]}..."
-                    for msg in self.prompt
-                ]
-            )
+            final_prompt_display = _format_prompt_for_plaintext(self.prompt)
         except Exception:
             final_prompt_display = str(self.prompt)
 
@@ -309,25 +324,64 @@ class OptimizationResult(pydantic.BaseModel):
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
             chat_group_items: list[rich.console.RenderableType] = []
-            for msg in self.prompt:
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                role_style = (
-                    "bold green"
-                    if role == "user"
-                    else (
-                        "bold blue"
-                        if role == "assistant"
-                        else ("bold magenta" if role == "system" else "")
+
+            # Handle both single ChatPrompt and dict of ChatPrompts
+            if isinstance(self.prompt, dict):
+                # Dictionary of prompts
+                prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], self.prompt)
+                for key, chat_p in prompt_dict.items():
+                    # Add key header
+                    key_header = rich.text.Text(f"[{key}]", style="bold yellow")
+                    chat_group_items.append(key_header)
+                    chat_group_items.append(rich.text.Text("---", style="dim"))
+
+                    # Add messages for this prompt
+                    for msg in chat_p.get_messages():
+                        role = msg.get("role", "unknown")
+                        content = msg.get("content", "")
+                        role_style = (
+                            "bold green"
+                            if role == "user"
+                            else (
+                                "bold blue"
+                                if role == "assistant"
+                                else ("bold magenta" if role == "system" else "")
+                            )
+                        )
+                        formatted_content = _format_message_content(content)
+                        role_text = rich.text.Text(
+                            f"{role.capitalize()}:", style=role_style
+                        )
+                        chat_group_items.append(
+                            rich.console.Group(role_text, formatted_content)
+                        )
+                        chat_group_items.append(rich.text.Text("---", style="dim"))
+                    chat_group_items.append(
+                        rich.text.Text("")
+                    )  # Extra space between prompts
+            else:
+                # Single ChatPrompt
+                for msg in self.prompt.get_messages():
+                    role = msg.get("role", "unknown")
+                    content = msg.get("content", "")
+                    role_style = (
+                        "bold green"
+                        if role == "user"
+                        else (
+                            "bold blue"
+                            if role == "assistant"
+                            else ("bold magenta" if role == "system" else "")
+                        )
                     )
-                )
-                # Format content using Rich, handling both string and multimodal content
-                formatted_content = _format_message_content(content)
-                role_text = rich.text.Text(f"{role.capitalize()}:", style=role_style)
-                chat_group_items.append(
-                    rich.console.Group(role_text, formatted_content)
-                )
-                chat_group_items.append(rich.text.Text("---", style="dim"))  # Separator
+                    formatted_content = _format_message_content(content)
+                    role_text = rich.text.Text(
+                        f"{role.capitalize()}:", style=role_style
+                    )
+                    chat_group_items.append(
+                        rich.console.Group(role_text, formatted_content)
+                    )
+                    chat_group_items.append(rich.text.Text("---", style="dim"))
+
             prompt_renderable: rich.console.RenderableType = rich.console.Group(
                 *chat_group_items
             )

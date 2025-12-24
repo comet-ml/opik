@@ -13,21 +13,31 @@ Usage:
 import os
 import random
 import logging
-from rich.console import Console
-from rich.markdown import Markdown
+from pydantic import BaseModel
+import json
 
+import opik
+from opik import opik_context
 from opik_optimizer.datasets import hotpot
 from benchmarks.metrics.hotpot import hotpot_f1
-from benchmarks.agents.hotpot_multihop_agent import HotpotMultiHopAgent
+
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
-from opik_optimizer.utils.llm_logger import LLMLogger
 from opik_optimizer.logging_config import setup_logging
-from opik_optimizer import MetaPromptOptimizer
+from opik_optimizer import HierarchicalReflectiveOptimizer, OptimizableAgent, ChatPrompt
+from typing import Any
+from collections.abc import Callable
+
+from opik.integrations.litellm import track_completion
+import litellm
+
+# Disable tqdm progress bars (used by bm25s)
+os.environ["TQDM_DISABLE"] = "1"
 
 # Configure logging
 setup_logging()
 logger = logging.getLogger(__name__)
-tool_logger = LLMLogger("hotpot_multihop_benchmark", agent_name="Hotpot Multi-Hop")
+
+tracked_completion = track_completion()(litellm.completion)
 
 # Set seed for reproducibility
 SEED = 42
@@ -49,15 +59,11 @@ print()
 
 # Dataset splits (matching GEPA paper: 150 train, 300 val, 300 test)
 print("Loading datasets...")
-train_dataset = hotpot(
-    count=150, split="train", dataset_name="hotpot_train", test_mode=True
-)
+train_dataset = hotpot(count=150, split="train", dataset_name="hotpot_train")
 validation_dataset = hotpot(
-    count=300, split="validation", dataset_name="hotpot_validation", test_mode=True
+    count=300, split="validation", dataset_name="hotpot_validation"
 )
-test_dataset = hotpot(
-    count=300, split="test", dataset_name="hotpot_test", test_mode=True
-)
+test_dataset = hotpot(count=300, split="test", dataset_name="hotpot_test")
 
 print(f"  - Train: {len(train_dataset.get_items())} samples")
 print(f"  - Validation: {len(validation_dataset.get_items())} samples")
@@ -87,21 +93,20 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
     if disable_flag in ("1", "true", "yes", "on"):
         return []
 
-    # Cap query length for logging; avoid model overrun
+    # Cap query length to avoid model overrun
     if len(query) > 256:
         query = query[:256] + "..."
 
-    with tool_logger.log_tool("wikipedia_search", query):
-        try:
-            results = search_wikipedia(
-                query,
-                search_type="bm25",
-                k=n,
-                bm25_hf_repo="Comet/wikipedia-2017-bm25",
-            )
-        except Exception:
-            logger.exception("BM25 search failed, falling back to Wikipedia API")
-            results = search_wikipedia(query, search_type="api", k=n)
+    try:
+        results = search_wikipedia(
+            query,
+            search_type="bm25",
+            k=n,
+            bm25_hf_repo="Comet/wikipedia-2017-bm25",
+        )
+    except Exception:
+        logger.exception("BM25 search failed, falling back to Wikipedia API")
+        results = search_wikipedia(query, search_type="api", k=n)
 
     return results[:n] if len(results) >= n else results + [""] * (n - len(results))
 
@@ -126,13 +131,12 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
         return []
 
     try:
-        with tool_logger.log_tool("wikipedia_bm25", query):
-            results = search_wikipedia(
-                query,
-                search_type="bm25",
-                k=n,
-                bm25_hf_repo="Comet/wikipedia-2017-bm25",
-            )
+        results = search_wikipedia(
+            query,
+            search_type="bm25",
+            k=n,
+            bm25_hf_repo="Comet/wikipedia-2017-bm25",
+        )
         return results
 
     except Exception as e:
@@ -158,75 +162,235 @@ except Exception:
 # AGENT SETUP
 # ============================================================================
 
-# Execution order for the multi-hop pipeline
-AGENT_ORDER = [
-    "create_query_1",
-    "summarize_1",
-    "create_query_2",
-    "summarize_2",
-    "final_answer",
-]
+initial_prompts = {
+    "create_query_1": ChatPrompt(
+        system=(
+            "Generate a Wikipedia search query to answer the question. "
+            "Identify key entities, relations, and disambiguating details."
+        ),
+        user="{question}",
+    ),
+    "summarize_1": ChatPrompt(
+        system=(
+            "Summarize the retrieved passages focusing on facts relevant to the question. "
+            "Identify what information is still missing or unclear."
+        ),
+        user=(
+            "Question: {question}\n\n"
+            "Retrieved passages from first search:\n{passages_1}\n\n"
+            "Provide:\n"
+            "1. Summary: Key facts from passages\n"
+            "2. Gaps: What's still missing to answer the question"
+        ),
+    ),
+    "create_query_2": ChatPrompt(
+        system=(
+            "Generate a refined Wikipedia search query targeting the identified gaps. "
+            "Use different terms/angles than the first query."
+        ),
+        user=(
+            "Question: {question}\n\n"
+            "First summary: {summary_1}\n\n"
+            "Identified gaps: {gaps_1}\n\n"
+            "Generate a second search query to fill these gaps."
+        ),
+    ),
+    "summarize_2": ChatPrompt(
+        system=(
+            "Update the summary with new information from the second search. "
+            "Synthesize information from both searches."
+        ),
+        user=(
+            "Question: {question}\n\n"
+            "First summary: {summary_1}\n\n"
+            "New passages from second search:\n{passages_2}\n\n"
+            "Provide an updated comprehensive summary."
+        ),
+    ),
+    "final_answer": ChatPrompt(
+        system=(
+            "Answer the question based on the accumulated evidence. "
+            "Be concise and factual. Keep answers as short as possible, ideally a single word or phrase."
+        ),
+        user=(
+            "Question: {question}\n\n"
+            "Evidence from searches:\n{summary_2}\n\n"
+            "Provide a direct answer to the question."
+        ),
+    ),
+}
+# - create_query_1: Generate initial search query
+# - search_1: Retrieve Wikipedia passages (external function)
+# - summarize_1: Summarize findings + identify gaps
+# - create_query_2: Generate refined query targeting gaps
+# - search_2: Retrieve more passages
+# - summarize_2: Update summary with new information
+# - final_answer: Generate answer from accumulated evidence
+
+
+class SummaryObject(BaseModel):
+    summary: str
+    gaps: list[str]
+
+
+class HotpotMultiHopAgent(OptimizableAgent):
+    def __init__(
+        self,
+        search_fn: Callable[[str, int], list[str]],
+        model: str = "openai/gpt-4.1-mini",
+        model_parameters: dict | None = None,
+        num_passages_per_hop: int = 5,
+    ):
+        self.search_fn = opik.track(name="wikipedia_search", type="tool")(search_fn)
+        self.model = model
+        self.model_parameters = model_parameters or {}
+        self.num_passages = num_passages_per_hop
+
+    def invoke(
+        self,
+        messages: list[dict[str, str]] | None = None,
+        seed: int | None = None,
+        allow_tool_use: bool = True,
+    ) -> str:
+        raise NotImplementedError(
+            "invoke_agent is not implemented for HotpotMultiHopAgent"
+        )
+
+    def create_agent_graph(self):
+        return {
+            "format": "mermaid",
+            "data": "graph TD; Q1[create_query_1]-->S1[summarize_1]; S1-->Q2[create_query_2]; Q2-->S2[summarize_2]; S2-->FA[final_answer];",
+        }
+
+    @opik.track(name="agent invocation")
+    def invoke_agent(
+        self,
+        prompts: dict[str, ChatPrompt],
+        dataset_item: dict[str, Any],
+        seed: int | None = None,
+        allow_tool_use: bool = True,
+    ):
+        opik_context.update_current_trace(
+            metadata={"_opik_graph_definition": self.create_agent_graph()}
+        )
+
+        # Run first search query:
+        messages = prompts["create_query_1"].get_messages(dataset_item)
+        search_query_1 = tracked_completion(
+            model=self.model,
+            messages=messages,
+            metadata={
+                "opik": {
+                    "current_span_data": opik_context.get_current_span_data(),
+                    "tags": ["streaming-test"],
+                },
+            },
+            **self.model_parameters,
+        )
+        search_query_1 = search_query_1.choices[0].message.content
+
+        # Do the first external search
+        search_query_1_result = self.search_fn(search_query_1, self.num_passages)
+
+        # Do the first summarization
+        messages = prompts["summarize_1"].get_messages(
+            {
+                "question": dataset_item["question"],
+                "passages_1": "\n\n".join(search_query_1_result),
+            }
+        )
+        response = tracked_completion(
+            model=self.model,
+            messages=messages,
+            response_format=SummaryObject,
+            metadata={
+                "opik": {
+                    "current_span_data": opik_context.get_current_span_data(),
+                    "tags": ["streaming-test"],
+                },
+            },
+            **self.model_parameters,
+        )
+        response_content = json.loads(response.choices[0].message.content)
+        search_query_1_summary = response_content["summary"]
+        gaps_1 = response_content["gaps"]
+
+        # Do the second search query
+        messages = prompts["create_query_2"].get_messages(
+            {
+                "question": dataset_item["question"],
+                "summary_1": search_query_1_summary,
+                "gaps_1": "\n\n".join(gaps_1),
+            }
+        )
+        search_query_2 = tracked_completion(
+            model=self.model,
+            messages=messages,
+            metadata={
+                "opik": {
+                    "current_span_data": opik_context.get_current_span_data(),
+                    "tags": ["streaming-test"],
+                },
+            },
+            **self.model_parameters,
+        )
+        search_query_prompt = search_query_2.choices[0].message.content
+        search_query_2_result = self.search_fn(search_query_prompt, self.num_passages)
+
+        # Do the second summarization
+        messages = prompts["summarize_2"].get_messages(
+            {
+                "question": dataset_item["question"],
+                "summary_1": search_query_1_summary,
+                "passages_2": "\n\n".join(search_query_2_result),
+            }
+        )
+        search_query_2_summary = tracked_completion(
+            model=self.model,
+            messages=messages,
+            metadata={
+                "opik": {
+                    "current_span_data": opik_context.get_current_span_data(),
+                    "tags": ["streaming-test"],
+                },
+            },
+            **self.model_parameters,
+        )
+        search_query_2_summary = search_query_2_summary.choices[0].message.content
+
+        # Do the final answer
+        messages = prompts["final_answer"].get_messages(
+            {
+                "question": dataset_item["question"],
+                "summary_2": search_query_2_summary,
+            }
+        )
+
+        final_answer = tracked_completion(
+            model=self.model,
+            messages=messages,
+            metadata={
+                "opik": {
+                    "current_span_data": opik_context.get_current_span_data(),
+                    "tags": ["streaming-test"],
+                },
+            },
+            **self.model_parameters,
+        )
+        final_answer = final_answer.choices[0].message.content
+        return final_answer
+
 
 MODEL_NAME = "openai/gpt-4.1-mini"
 MODEL_PARAMS = {"temperature": 1.0}
 NUM_PASSAGES = 5
 
-print("Initializing multi-hop agent...")
 agent = HotpotMultiHopAgent(
     search_fn=SEARCH_FN,
     model=MODEL_NAME,
     model_parameters=MODEL_PARAMS,
     num_passages_per_hop=NUM_PASSAGES,
-    plan=AGENT_ORDER,
 )
-
-print(f"Agent has {len(agent.get_optimizable_prompts())} optimizable prompts:")
-for prompt_name in agent.get_optimizable_prompts().keys():
-    print(f"  - {prompt_name}")
-print()
-graph_def = agent.get_graph_definition()
-print("Agent execution plan:")
-print(f"  Plan order: {AGENT_ORDER}")
-if isinstance(graph_def, dict) and graph_def.get("format") == "mermaid":
-    print("  Mermaid graph:")
-    graph_md = f"```mermaid\n{graph_def.get('data')}\n```"
-    Console().print(Markdown(graph_md))
-print()
-
-
-def _ordered_prompts(prompts: dict) -> dict:
-    """Ensure prompts follow the expected Hotpot step order."""
-    ordered: dict = {}
-    for name in AGENT_ORDER:
-        if name in prompts:
-            ordered[name] = prompts[name]
-    for name, prompt in prompts.items():
-        if name not in ordered:
-            ordered[name] = prompt
-    return ordered
-
-
-def run_bundle_fn(
-    bundle_prompts: dict, dataset_item: dict
-) -> dict[str, str | dict[str, object]]:
-    """
-    Runner used by MetaPromptOptimizer for bundle evaluation.
-
-    Instantiates a HotpotMultiHopAgent with the candidate prompts and executes the
-    full multi-hop pipeline so metrics see the final answer plus trace.
-    """
-    ordered = _ordered_prompts(bundle_prompts)
-    plan = [step for step in AGENT_ORDER if step in ordered]
-    agent_runner = HotpotMultiHopAgent(
-        search_fn=SEARCH_FN,
-        model=MODEL_NAME,
-        model_parameters=MODEL_PARAMS,
-        num_passages_per_hop=NUM_PASSAGES,
-        prompts=ordered,
-        plan=plan,
-    )
-    return agent_runner.run(dataset_item)
-
 
 # ============================================================================
 # OPTIMIZATION
@@ -246,43 +410,29 @@ print("Training on hotpot_train (150 samples)...")
 print("Validation on hotpot_validation (300 samples)...")
 print()
 
-optimizer = MetaPromptOptimizer(
+
+def hotpot_multihop_metric(dataset_item: dict, llm_output: str) -> float:
+    return hotpot_f1(dataset_item, llm_output)
+
+
+optimizer = HierarchicalReflectiveOptimizer(
     model=MODEL_NAME,
     model_parameters=MODEL_PARAMS,
     seed=SEED,
 )
 
-
-def bundle_metric(item: dict, output: str, trace: dict | None = None) -> float:
-    # trace carries intermediate hops if needed
-    return hotpot_f1(item, output)
-
-
-print("Running multi-prompt optimization (MetaPromptOptimizer)...")
+print(f"Running multi-prompt optimization ({optimizer.__class__.__name__})...")
 opt_result = optimizer.optimize_prompt(
-    prompt=agent.prompts,  # dict[str, ChatPrompt] triggers bundle mode
+    prompt=initial_prompts,
     dataset=train_dataset,
-    metric=bundle_metric,
-    candidate_generator_kwargs={
-        "bundle_agent_class": HotpotMultiHopAgent,
-        "bundle_plan": AGENT_ORDER,
-        "bundle_agent_kwargs": {
-            "search_fn": SEARCH_FN,
-            "model": MODEL_NAME,
-            "model_parameters": MODEL_PARAMS,
-            "num_passages_per_hop": NUM_PASSAGES,
-        },
-    },
-    max_trials=3,  # increase for more meta rounds; watch rollout budget
-    # n_samples=None,
-    n_samples=5,
+    validation_dataset=validation_dataset,
+    metric=hotpot_multihop_metric,
+    agent=agent,
+    max_trials=50,
 )
 print(f"Optimization best score: {opt_result.score:.4f}")
-# opt_result.prompt holds best messages for single prompt; for bundle, use details if present
-try:
-    agent.prompts = opt_result.details.get("best_prompts", agent.prompts)  # type: ignore[assignment]
-except Exception:
-    pass
+
+prompts = opt_result.prompt
 
 # ============================================================================
 # TESTING
@@ -291,13 +441,12 @@ except Exception:
 print("=" * 80)
 print("TESTING")
 print("=" * 80)
-print("To test the optimized agent, run evaluation on test set:")
 print()
-print("test_scores = []")
-print("for item in test_dataset.get_items():")
-print("    output = agent.execute(item['question'])")
-print("    score = multihop_metric(item, output)")
-print("    test_scores.append(score)")
-print("test_f1 = sum(test_scores) / len(test_scores)")
-print("print(f'Test F1: {test_f1:.4f}')")
-print()
+test_score = optimizer.evaluate_prompt(
+    prompt=prompts,
+    agent=agent,
+    dataset=test_dataset,
+    metric=hotpot_multihop_metric,
+    n_threads=1,
+)
+print(f"Test score: {test_score:.4f}")

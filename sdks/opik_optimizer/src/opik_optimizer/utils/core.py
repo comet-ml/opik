@@ -13,17 +13,17 @@ import random
 import string
 import urllib.parse
 from types import TracebackType
-import re
 
 
 import opik
+import opik.config
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
+from ..agents import OptimizableAgent
 
 if TYPE_CHECKING:
-    from ..optimizable_agent import OptimizableAgent
-    from ..api_objects import chat_prompt
+    pass
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
@@ -175,33 +175,6 @@ def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
 
 
-def disable_experiment_reporting() -> None:
-    import opik.evaluation.report
-
-    opik.evaluation.report._patch_display_experiment_results = (
-        opik.evaluation.report.display_experiment_results
-    )
-    opik.evaluation.report._patch_display_experiment_link = (
-        opik.evaluation.report.display_experiment_link
-    )
-    opik.evaluation.report.display_experiment_results = lambda *args, **kwargs: None
-    opik.evaluation.report.display_experiment_link = lambda *args, **kwargs: None
-
-
-def enable_experiment_reporting() -> None:
-    import opik.evaluation.report
-
-    try:
-        opik.evaluation.report.display_experiment_results = (
-            opik.evaluation.report._patch_display_experiment_results
-        )
-        opik.evaluation.report.display_experiment_link = (
-            opik.evaluation.report._patch_display_experiment_link
-        )
-    except AttributeError:
-        pass
-
-
 def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
@@ -337,69 +310,6 @@ def get_trial_compare_url(
     return urllib.parse.urljoin(base, compare_path)
 
 
-def create_litellm_agent_class(
-    prompt: "chat_prompt.ChatPrompt", optimizer_ref: Any = None
-) -> type["OptimizableAgent"]:
-    """
-    Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
-
-    Args:
-        prompt: The chat prompt to use when instantiating the agent.
-        optimizer_ref: Optional optimizer instance attached to the generated class.
-
-    Returns:
-        A concrete subclass with a sanitized class name, bound optimizer reference,
-        and an invoke method that prefers the prompt's custom `invoke` callable while
-        still routing default calls through `OptimizableAgent`.
-    """
-    from opik_optimizer.optimizable_agent import OptimizableAgent
-
-    def _derive_class_name(name: str) -> str:
-        # Split on non-word characters to preserve original capitalization boundaries.
-        segments = [segment for segment in re.split(r"\W+", name) if segment]
-        if not segments:
-            return "LiteLLMAgent"
-
-        camel = "".join(segment[0].upper() + segment[1:] for segment in segments)
-
-        # Remove any leading digits so the identifier remains valid.
-        camel = camel.lstrip(string.digits)
-        return f"{camel}LiteLLMAgent" if camel else "LiteLLMAgent"
-
-    class LiteLLMAgent(OptimizableAgent):
-        optimizer = optimizer_ref
-
-        def __init__(
-            self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
-        ) -> None:
-            # Get project_name from optimizer if available
-            resolved_project = project_name
-            if resolved_project is None and hasattr(self.optimizer, "project_name"):
-                resolved_project = self.optimizer.project_name
-            super().__init__(prompt, project_name=resolved_project)
-
-        def invoke(
-            self, messages: list[dict[str, str]], seed: int | None = None
-        ) -> str:
-            prompt_invoke = getattr(self.prompt, "invoke", None)
-            if callable(prompt_invoke):
-                optimizer_obj = getattr(self, "optimizer", None)
-                if optimizer_obj is not None and hasattr(
-                    optimizer_obj, "_increment_llm_counter"
-                ):
-                    optimizer_obj._increment_llm_counter()
-                return prompt_invoke(
-                    self.model,
-                    messages,
-                    getattr(self.prompt, "tools", None),
-                    **self.model_kwargs,
-                )  # type: ignore[arg-type]
-            return super().invoke(messages=messages, seed=seed)
-
-    LiteLLMAgent.__name__ = _derive_class_name(prompt.name)
-    return LiteLLMAgent
-
-
 def function_to_tool_definition(
     func: Callable, description: str | None = None
 ) -> dict[str, Any]:
@@ -421,7 +331,7 @@ def function_to_tool_definition(
     return {
         "type": "function",
         "function": {
-            "name": func.__name__,
+            "name": getattr(func, "__name__", "<unknown>"),
             "description": doc.strip(),
             "parameters": {
                 "type": "object",

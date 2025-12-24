@@ -327,11 +327,14 @@ def _search_wikipedia_bm25(
 
         # Tokenize query
         query_tokens = bm25s.tokenize(
-            [query], stopwords="en", stemmer=stemmer if stemmer else None
+            [query],
+            stopwords="en",
+            stemmer=stemmer if stemmer else None,
+            show_progress=False,
         )
 
         # Get top k results
-        results, scores = retriever.retrieve(query_tokens, k=k)
+        results, scores = retriever.retrieve(query_tokens, k=k, show_progress=False)
 
         # Extract passages
         passages = []

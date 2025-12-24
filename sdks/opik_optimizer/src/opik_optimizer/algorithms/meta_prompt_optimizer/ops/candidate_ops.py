@@ -5,87 +5,98 @@ This module contains functions for generating and sanitizing candidate prompts.
 """
 
 import ast
+from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable
 import logging
 import json
 import random
 
-from ....api_objects import chat_prompt
+from pydantic import BaseModel, Field
+
+from ....api_objects import chat_prompt, types
+from ....api_objects.types import MetricFunction
 from .... import _llm_calls
 from ....base_optimizer import OptimizationRound
-from ....utils.prompt_segments import (
-    extract_prompt_segments,
-    apply_segment_updates,
-)
 from ..prompts import (
     build_reasoning_system_prompt,
     build_candidate_generation_user_prompt,
-    build_mcp_tool_description_user_prompt,
 )
 from .. import reporting
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
-from ....mcp_utils.mcp_workflow import MCPExecutionConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
-    """
-    Synchronize tool descriptions in the system message.
+class AgentPromptUpdate(BaseModel):
+    """Represents an update to a single agent's prompt."""
 
-    Updates the system message to reflect changes in tool descriptions.
-    """
-    from ....mcp_utils.mcp import PROMPT_TOOL_HEADER, PROMPT_TOOL_FOOTER
-
-    if not prompt.tools:
-        return
-
-    system_text = prompt.system or ""
-    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
-        return
-
-    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
-    end = system_text.index(PROMPT_TOOL_FOOTER)
-
-    before_block = system_text[: start - len(PROMPT_TOOL_HEADER)]
-    middle_block = system_text[start:end]
-    after_block = system_text[end + len(PROMPT_TOOL_FOOTER) :]
-
-    import re
-
-    for tool in prompt.tools:
-        tool_name = tool.get("function", {}).get("name", "")
-        if not tool_name:
-            continue
-
-        description_text = tool.get("function", {}).get("description", "")
-
-        # Update tool list in the before block (e.g., "- tool-name: description")
-        tool_list_pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
-        before_block = re.sub(
-            tool_list_pattern,
-            lambda match: f"{match.group(1)}{description_text}",
-            before_block,
-        )
-
-        # Update description in the middle block (just the description text)
-        # The middle block may contain just the description or have other formatting
-        middle_block = middle_block.strip()
-        if middle_block:
-            middle_block = f"\n{description_text}\n"
-        else:
-            middle_block = description_text
-
-    new_system = (
-        before_block
-        + PROMPT_TOOL_HEADER
-        + middle_block
-        + PROMPT_TOOL_FOOTER
-        + after_block
+    name: str = Field(..., description="The name of the agent to update")
+    messages: list[types.Message] = Field(
+        ..., description="The updated messages for this agent"
     )
-    prompt.system = new_system
+    improvement_focus: str | None = Field(
+        None, description="What aspect of the agent's performance is being improved"
+    )
+    reasoning: str | None = Field(
+        None, description="Explanation of why these changes were made"
+    )
+
+
+class AgentBundleCandidateResponse(BaseModel):
+    """Response model for agent bundle candidate generation."""
+
+    agents: list[AgentPromptUpdate] = Field(
+        ..., description="List of agent prompt updates"
+    )
+    bundle_improvement_focus: str | None = Field(
+        None, description="Overall focus for this bundle of improvements"
+    )
+
+
+class AgentBundleCandidatesResponse(BaseModel):
+    """Response model for multiple agent bundle candidates."""
+
+    candidates: list[AgentBundleCandidateResponse] = Field(
+        ..., description="List of candidate bundles"
+    )
+
+
+@dataclass
+class AgentMetadata:
+    """Metadata for a single agent's prompt optimization."""
+
+    improvement_focus: str | None = None
+    """What aspect of the agent's performance is being targeted for improvement"""
+
+    reasoning: str | None = None
+    """Explanation of why the prompt changes were made"""
+
+
+@dataclass
+class AgentBundleCandidate:
+    """Represents a single candidate bundle of agent prompts with metadata."""
+
+    prompts: dict[str, chat_prompt.ChatPrompt]
+    """Dictionary mapping agent names to their updated ChatPrompt objects"""
+
+    metadata: dict[str, AgentMetadata]
+    """Dictionary mapping agent names to their improvement metadata"""
+
+    def get_agent_names(self) -> list[str]:
+        """Get all agent names in this bundle."""
+        return list(self.prompts.keys())
+
+    def get_agent_reasoning(self, agent_name: str) -> str | None:
+        """Get the reasoning for a specific agent's prompt changes."""
+        agent_meta = self.metadata.get(agent_name)
+        return agent_meta.reasoning if agent_meta else None
+
+    def get_agent_improvement_focus(self, agent_name: str) -> str | None:
+        """Get the improvement focus for a specific agent."""
+        agent_meta = self.metadata.get(agent_name)
+        return agent_meta.improvement_focus if agent_meta else None
 
 
 def sanitize_generated_prompts(
@@ -194,7 +205,7 @@ def generate_candidate_prompts(
     best_score: float,
     round_num: int,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -358,7 +369,7 @@ def generate_candidate_prompts(
                 )
 
             # Sanitize generated prompts to remove data leakage
-            metric_name = getattr(metric, "__name__", str(metric))
+            metric_name = metric.__name__
             json_result = sanitize_generated_prompts(json_result, metric_name)
 
             # Extract and log valid prompts
@@ -444,29 +455,22 @@ def generate_agent_bundle_candidates(
     best_score: float,
     round_num: int,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
-    mcp_config: MCPExecutionConfig | None = None,
-) -> tuple[
-    list[dict[str, chat_prompt.ChatPrompt]], list[dict[str, dict[str, str | None]]]
-]:
+) -> list[AgentBundleCandidate]:
     """
     Generate updated prompts for multiple named agents in a single meta-prompt pass.
 
     Returns:
-        (updated_prompts, agent_metadata) where agent_metadata contains reasoning per agent.
+        List of AgentBundleCandidate objects, each containing updated prompts
+        and strongly-typed metadata for all agents in the bundle.
     """
-    if mcp_config is not None:
-        raise ValueError(
-            "Multi-agent prompt generation is disabled for MCP tool optimization."
-        )
-
     with reporting.display_candidate_generation_report(
-        len(current_prompts), verbose=optimizer.verbose
+        optimizer.prompts_per_round, verbose=optimizer.verbose
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating agent bundle prompts for round {round_num + 1}")
         logger.debug("Generating from agents: %s", list(current_prompts.keys()))
@@ -522,7 +526,7 @@ def generate_agent_bundle_candidates(
             metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
             metadata_for_call["opik_call_type"] = "optimization_algorithm"
 
-            content = _llm_calls.call_model(
+            response = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
@@ -536,109 +540,35 @@ def generate_agent_bundle_candidates(
                 model_parameters=optimizer.model_parameters,
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                response_model=AgentBundleCandidatesResponse,
             )
-            summary_logged = False
-            try:
-                parsed = json.loads(content)
-                cand_list: list[dict[str, Any]] | None = (
-                    parsed.get("candidates") if isinstance(parsed, dict) else None
+
+            # Log summary of candidates
+            logger.debug(
+                "Bundle LLM response: %d candidate bundles",
+                len(response.candidates),
+            )
+            for idx, cand in enumerate(response.candidates, start=1):
+                agents = [a.name for a in cand.agents]
+                focus = cand.bundle_improvement_focus
+                logger.debug(
+                    "  Candidate %d: agents=%s focus=%s",
+                    idx,
+                    agents,
+                    (focus[:120] + "...")
+                    if isinstance(focus, str) and len(focus) > 120
+                    else focus,
                 )
-                if cand_list:
-                    logger.debug(
-                        "Bundle LLM response: %d candidate bundles", len(cand_list)
-                    )
-                    for idx, cand in enumerate(cand_list, start=1):
-                        agents = [
-                            a.get("name")
-                            for a in cand.get("agents", [])
-                            if isinstance(a, dict) and a.get("name")
-                        ]
-                        focus = cand.get("bundle_improvement_focus")
-                        logger.debug(
-                            "  Candidate %d: agents=%s focus=%s",
-                            idx,
-                            agents,
-                            (focus[:120] + "...")
-                            if isinstance(focus, str) and len(focus) > 120
-                            else focus,
-                        )
-                        summary_logged = True
-            except Exception:
-                pass
 
-            if not summary_logged:
-                logger.debug("Bundle LLM raw response len=%d", len(content or ""))
+            # Convert Pydantic response to AgentBundleCandidate objects
+            candidates: list[AgentBundleCandidate] = []
 
-            json_result = None
-            try:
-                json_result = json.loads(content)
-            except json.JSONDecodeError as exc:
-                import re
-
-                # NOTE: Some models return fenced JSON blocks or prepend/append prose.
-                # Collect likely JSON snippets and try them in order of size.
-                candidates: list[str] = []
-
-                # Try fenced ```json ... ``` blocks
-                fenced = re.findall(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL)
-                candidates.extend(fenced)
-
-                # Fallback: any JSON object blob
-                candidates.extend(re.findall(r"\{.*\}", content, re.DOTALL))
-
-                for candidate in sorted(set(candidates), key=len, reverse=True):
-                    try:
-                        json_result = json.loads(candidate)
-                        break
-                    except Exception:
-                        continue
-
-                if json_result is None:
-                    raise ValueError(
-                        "No parseable JSON object found in response "
-                        f"(original error: {exc})"
-                    )
-
-            candidate_payloads: list[dict[str, Any]] = []
-            if isinstance(json_result, list):
-                # backwards compatibility: list with dict/agents
-                candidate_payloads = [
-                    obj for obj in json_result if isinstance(obj, dict)
-                ]
-            elif isinstance(json_result, dict):
-                if "candidates" in json_result and isinstance(
-                    json_result["candidates"], list
-                ):
-                    candidate_payloads = [
-                        c for c in json_result["candidates"] if isinstance(c, dict)
-                    ]
-                elif "agents" in json_result:
-                    candidate_payloads = [json_result]
-
-            if not candidate_payloads:
-                raise ValueError("Parsed JSON missing 'agents' or 'candidates' key.")
-
-            prompt_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
-            metadata_candidates: list[dict[str, dict[str, str | None]]] = []
-
-            for cand in candidate_payloads:
-                agents_payload = cand.get("agents", [])
-                if not isinstance(agents_payload, list):
-                    logger.warning("'agents' key must be a list; skipping candidate.")
-                    continue
-
+            for candidate_response in response.candidates:
                 updated_prompts: dict[str, chat_prompt.ChatPrompt] = {}
-                agent_metadata: dict[str, dict[str, str | None]] = {}
+                agent_metadata: dict[str, AgentMetadata] = {}
 
-                for item in agents_payload:
-                    if not isinstance(item, dict):
-                        logger.warning("Skipping non-dict agent payload: %s", item)
-                        continue
-
-                    name = item.get("name")
-                    if not name:
-                        logger.warning("Skipping agent entry missing a name: %s", item)
-                        continue
+                for agent_update in candidate_response.agents:
+                    name = agent_update.name
 
                     if name not in current_prompts:
                         logger.warning(
@@ -646,28 +576,24 @@ def generate_agent_bundle_candidates(
                         )
                         continue
 
-                    messages = item.get("messages")
-                    if not isinstance(messages, list):
-                        logger.warning(
-                            "Agent '%s' missing messages; preserving original.", name
-                        )
-                        messages = current_prompts[name].get_messages()
-
                     try:
+                        # Convert Pydantic Message objects to dicts for ChatPrompt
+                        messages_dict = [
+                            msg.model_dump() for msg in agent_update.messages
+                        ]
                         updated_prompt = chat_prompt.ChatPrompt(
                             name=current_prompts[name].name or name,
-                            messages=messages,
+                            messages=messages_dict,
                             tools=current_prompts[name].tools,
                             function_map=current_prompts[name].function_map,
                             model=current_prompts[name].model,
                             model_parameters=current_prompts[name].model_kwargs,
-                            invoke=current_prompts[name].invoke,
                         )
                         updated_prompts[name] = updated_prompt
-                        agent_metadata[name] = {
-                            "improvement_focus": item.get("improvement_focus"),
-                            "reasoning": item.get("reasoning"),
-                        }
+                        agent_metadata[name] = AgentMetadata(
+                            improvement_focus=agent_update.improvement_focus,
+                            reasoning=agent_update.reasoning,
+                        )
                     except Exception as exc:
                         logger.warning(
                             "Failed to build ChatPrompt for agent '%s': %s", name, exc
@@ -679,14 +605,17 @@ def generate_agent_bundle_candidates(
                         updated_prompts[name] = prompt
 
                 if updated_prompts:
-                    prompt_candidates.append(updated_prompts)
-                    metadata_candidates.append(agent_metadata)
+                    candidates.append(
+                        AgentBundleCandidate(
+                            prompts=updated_prompts, metadata=agent_metadata
+                        )
+                    )
 
-            if not prompt_candidates:
+            if not candidates:
                 raise ValueError("No valid agent prompts returned from response.")
 
             candidate_generation_report.set_generated_prompts()
-            return prompt_candidates, metadata_candidates
+            return candidates
 
         except Exception as e:
             if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
@@ -696,148 +625,12 @@ def generate_agent_bundle_candidates(
             )
 
 
-def generate_mcp_candidate_prompts(
-    optimizer: Any,
-    current_prompt: chat_prompt.ChatPrompt,
-    best_score: float,
-    round_num: int,
-    previous_rounds: list[OptimizationRound],
-    metric: Callable,
-    tool_segment_id: str,
-    tool_name: str,
-    build_history_context_fn: Callable,
-    optimization_id: str | None = None,
-    project_name: str | None = None,
-    panel_style: str = "bright_magenta",
-) -> list[chat_prompt.ChatPrompt]:
-    """
-    Generate MCP tool description candidate prompts.
-
-    Args:
-        optimizer: Reference to the optimizer instance
-        current_prompt: Current best prompt
-        best_score: Current best score
-        round_num: Current round number
-        previous_rounds: List of previous optimization rounds
-        metric: Metric function
-        tool_segment_id: ID of the tool segment to optimize
-        tool_name: Name of the tool
-        build_history_context_fn: Function to build history context
-        optimization_id: Optional optimization ID
-        project_name: Optional project name
-        panel_style: Display panel style
-
-    Returns:
-        List of candidate prompts with updated tool descriptions
-    """
-    segments = {
-        segment.segment_id: segment
-        for segment in extract_prompt_segments(current_prompt)
-    }
-    if tool_segment_id not in segments:
-        raise ValueError(f"Tool segment '{tool_segment_id}' not found in prompt")
-
-    target_segment = segments[tool_segment_id]
-    current_description = target_segment.content
-    tool_metadata = target_segment.metadata.get("raw_tool", {})
-
-    history_context = build_history_context_fn(previous_rounds)
-
-    instruction = build_mcp_tool_description_user_prompt(
-        tool_name=tool_name,
-        current_description=current_description,
-        tool_metadata_json=json.dumps(tool_metadata, indent=2),
-        best_score=best_score,
-        history_context=history_context,
-        prompts_per_round=optimizer.prompts_per_round,
-    )
-
-    with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round, verbose=optimizer.verbose
-    ) as candidate_generation_report:
-        try:
-            # Prepare metadata for optimization algorithm call
-            metadata_for_call_tools: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call_tools["project_name"] = project_name
-                metadata_for_call_tools["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call_tools:
-                metadata_for_call_tools["opik"]["optimization_id"] = optimization_id
-            metadata_for_call_tools["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
-
-            content = _llm_calls.call_model(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": build_reasoning_system_prompt(
-                            optimizer.allow_user_prompt_optimization
-                        ),
-                    },
-                    {"role": "user", "content": instruction},
-                ],
-                model=optimizer.model,
-                model_parameters=optimizer.model_parameters,
-                metadata=metadata_for_call_tools,
-                optimization_id=optimization_id,
-            )
-
-            try:
-                json_result = json.loads(content)
-            except json.JSONDecodeError:
-                import re
-
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if not json_match:
-                    raise ValueError("No JSON object found in reasoning output")
-                json_result = json.loads(json_match.group())
-
-            prompts_payload = json_result.get("prompts")
-            if not isinstance(prompts_payload, list):
-                raise ValueError("Reasoning output missing 'prompts' list")
-
-            candidate_generation_report.set_generated_prompts()
-
-            candidates: list[chat_prompt.ChatPrompt] = []
-            for item in prompts_payload:
-                if not isinstance(item, dict):
-                    continue
-                description = item.get("tool_description")
-                if not isinstance(description, str) or not description.strip():
-                    continue
-
-                updated_prompt = apply_segment_updates(
-                    current_prompt,
-                    {tool_segment_id: description.strip()},
-                )
-                _sync_tool_description_in_system(updated_prompt)
-                if (
-                    description.strip()
-                    and description.strip() != current_description.strip()
-                ):
-                    reporting.display_tool_description(
-                        description.strip(),
-                        f"Round {round_num + 1} tool description",
-                        panel_style,
-                    )
-                candidates.append(updated_prompt)
-
-            if not candidates:
-                raise ValueError(
-                    "Reasoning output did not produce valid tool descriptions"
-                )
-
-            return candidates
-        except Exception as exc:
-            raise ValueError(f"Error generating MCP prompt candidates: {exc}")
-
-
 def generate_synthesis_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
     project_name: str | None = None,

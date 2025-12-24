@@ -785,6 +785,7 @@ def display_optimized_prompt_diff(
     initial_score: float,
     best_score: float,
     verbose: int = 1,
+    prompt_name: str | None = None,
 ) -> None:
     """Display git-style diff of prompt changes."""
     import difflib
@@ -794,8 +795,25 @@ def display_optimized_prompt_diff(
 
     console.print(Text("│"))
     console.print(Text("│"))
-    console.print(Text("│ ").append(Text("> Optimization Results", style="bold green")))
+
+    # Display prompt name if provided
+    if prompt_name:
+        console.print(
+            Text("│ ").append(
+                Text(f"> Optimization Results for '{prompt_name}'", style="bold green")
+            )
+        )
+    else:
+        console.print(
+            Text("│ ").append(Text("> Optimization Results", style="bold green"))
+        )
     console.print(Text("│"))
+
+    # Check if prompt is unchanged
+    if initial_messages == optimized_messages:
+        console.print(Text("│   ").append(Text("Prompt unchanged", style="dim")))
+        console.print(Text("│"))
+        return
 
     # Show score improvement
     if best_score > initial_score:

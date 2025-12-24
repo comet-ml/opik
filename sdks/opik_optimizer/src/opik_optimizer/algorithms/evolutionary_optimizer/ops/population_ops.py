@@ -7,8 +7,7 @@ from deap import tools
 from deap import creator as _creator
 
 from .. import prompts as evo_prompts
-from .. import reporting, helpers, mcp, evolutionary_optimizer  # noqa: F401
-from ..mcp import initialize_population_mcp
+from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
 
@@ -17,14 +16,24 @@ logger = logging.getLogger(__name__)
 creator = _creator
 
 
-# TODO: We should probably remove the "optimizer" parameter
 def restart_population(
     optimizer: "evolutionary_optimizer.EvolutionaryOptimizer",
     hof: tools.HallOfFame,
     population: list[Any],
-    best_prompt_so_far: chat_prompt.ChatPrompt,
+    best_prompts_so_far: dict[str, chat_prompt.ChatPrompt],
 ) -> list[Any]:
-    """Return a fresh, evaluated population seeded by elites."""
+    """Return a fresh, evaluated population seeded by elites.
+
+    Args:
+        optimizer: The evolutionary optimizer instance.
+        hof: Hall of fame containing best individuals.
+        population: Current population.
+        best_prompts_so_far: Dict mapping prompt names to best ChatPrompt objects.
+
+    Returns:
+        A new evaluated population with variations of the seed prompts.
+    """
+    # Get best elite to use as seed
     if optimizer.enable_moo:
         elites = list(hof)
     else:
@@ -32,28 +41,36 @@ def restart_population(
 
     if elites:
         best_elite = max(elites, key=lambda x: x.fitness.values[0])
-        seed_prompt = chat_prompt.ChatPrompt(
-            messages=best_elite,
-            tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
-            function_map=getattr(
-                best_elite, "function_map", best_prompt_so_far.function_map
-            ),
-        )
+        seed_prompts = optimizer._individual_to_prompts(best_elite)
     else:
-        seed_prompt = best_prompt_so_far
+        seed_prompts = best_prompts_so_far
 
-    prompt_variants = initialize_population(
-        prompt=seed_prompt,
-        output_style_guidance=optimizer.output_style_guidance,
-        mcp_context=optimizer._mcp_context,
-        model=optimizer.model,
-        model_parameters=optimizer.model_parameters,
-        optimization_id=optimizer.current_optimization_id,
-        population_size=optimizer.population_size,
-        verbose=optimizer.verbose,
-    )
-    new_pop = [optimizer._create_individual_from_prompt(p) for p in prompt_variants]
+    # Generate variations per prompt (same pattern as initial population)
+    prompt_variations: dict[str, list[chat_prompt.ChatPrompt]] = {}
+    for prompt_name, prompt_obj in seed_prompts.items():
+        variations = initialize_population(
+            prompt=prompt_obj,
+            output_style_guidance=optimizer.output_style_guidance,
+            model=optimizer.model,
+            model_parameters=optimizer.model_parameters,
+            optimization_id=optimizer.current_optimization_id,
+            population_size=optimizer.population_size,
+            verbose=optimizer.verbose,
+        )
+        prompt_variations[prompt_name] = variations
 
+    # Combine variations into individuals
+    new_pop = []
+    for i in range(optimizer.population_size):
+        prompts_for_individual = {
+            name: variations[i % len(variations)]
+            for name, variations in prompt_variations.items()
+        }
+        new_pop.append(
+            optimizer._create_individual_from_prompts(prompts_for_individual)
+        )
+
+    # Evaluate the new population
     for ind, fit in zip(
         new_pop, map(optimizer._deap_evaluate_individual_fitness, new_pop)
     ):
@@ -66,7 +83,6 @@ def restart_population(
 def initialize_population(
     prompt: chat_prompt.ChatPrompt,
     output_style_guidance: str,
-    mcp_context: mcp.EvolutionaryMCPContext | None,
     model: str,
     model_parameters: dict[str, Any],
     optimization_id: str | None,
@@ -77,16 +93,6 @@ def initialize_population(
     including some 'fresh start' prompts based purely on task description.
     All generated prompts should aim to elicit answers matching self.output_style_guidance.
     """
-    if mcp_context is not None:
-        return initialize_population_mcp(
-            prompt=prompt,
-            context=mcp_context,
-            model=model,
-            model_parameters=model_parameters,
-            optimization_id=optimization_id,
-            population_size=population_size,
-            verbose=verbose,
-        )
     with reporting.initializing_population(verbose=verbose) as init_pop_report:
         init_pop_report.start(population_size)
 

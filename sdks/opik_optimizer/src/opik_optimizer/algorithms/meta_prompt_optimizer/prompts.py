@@ -3,7 +3,6 @@
 This module contains all the prompt templates used by the optimizer for:
 - Meta-reasoning about prompt improvements
 - Generating candidate prompt variations
-- MCP tool description optimization
 """
 
 import textwrap
@@ -140,6 +139,88 @@ META_PROMPT_SECTIONS = {
     "agents": "<agents>\n{agents}\n</agents>\n",
 }
 
+# Template for agent bundle user prompt
+AGENT_BUNDLE_USER_PROMPT_TEMPLATE = """###### START agents ######
+{agent_blocks}
+###### END agents ######
+
+Current score: {best_score}
+
+{history_section}
+
+{examples_section}
+
+{patterns_section}
+
+{analysis_instruction}
+Generate updated versions for ALL agents above (keep names the same).
+Return between 1 and {prompts_per_round} candidate bundles in the JSON format below.
+Each candidate bundle must include ALL agents under "agents" and may also include bundle_improvement_focus and bundle_reasoning.
+
+{metric_focus_instruction}
+
+Diversity guidance:
+- Consider different structures (concise vs detailed) where helpful per agent.
+- Tighten entity specificity and retrieval intent for search-style agents.
+- Strengthen factual grounding and output-format compliance for synthesis agents.
+
+IMPORTANT:
+- Preserve every placeholder token (curly-braced variables).
+- Preserve tool/function definitions and message ordering.
+- Do NOT rename agents or swap their responsibilities.
+
+Generate up to [{prompts_per_round}] distinct bundle candidates when you see multiple viable directions; otherwise return your single best bundle.
+
+Output must be valid JSON with the top-level key "candidates" (or "agents" for a single bundle)."""
+
+# Template for candidate generation user prompt
+CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE = """{prompt_section}
+
+Current score: {best_score}
+
+{history_section}
+
+{task_context_section}
+
+{pattern_section}
+
+{analysis_instruction}
+Generate [{prompts_per_round}] improved versions of this prompt.
+{metric_focus_instruction}
+
+CRITICAL: Study the Hall of Fame entries above, what made those prompts successful? How can you BUILD ON those winning elements while still exploring bold new directions?
+
+Generate [{prompts_per_round}] DISTINCTLY DIFFERENT prompt variations that:
+
+DIVERSITY DIMENSIONS (explore all of these):
+- Length: from ultra-minimal (1 sentence) to in-depth comprehensive (multi-paragraph with reasoning steps)
+- Structure: direct commands, numbered steps, narrative flow, question-based, example-driven
+- Tone: formal instruction, conversational guidance, Socratic questioning, technical specification
+- Approach: explicit constraints, implicit guidance, meta-cognitive prompting, role-playing
+
+STRATEGIC GUIDANCE:
+- Be more specific and clear about expectations based on the task
+- Build on patterns from top-performing prompts in the Hall of Fame
+- ADD structure and reasoning guidance (consider prompting frameworks: Situation→Task→Objective→Knowledge→Examples, and/or include role, style, format, job description, constraints)
+- Try counter-intuitive approaches - sometimes the opposite of conventional wisdom works
+- Experiment with being MORE specific in some versions and MORE abstract in others
+- Combine winning elements in unexpected ways
+{pattern_integration_note}
+
+Don't follow a template or recipe. Genuinely innovate by:
+- Taking successful elements from history and amplifying or inverting them
+- Testing hypotheses about what might work better (e.g., "what if we focus on X instead of Y?")
+- Pushing to extremes (ultra-terse vs ultra-detailed)
+- Trying something completely different if the current approach has plateaued
+
+IMPORTANT REMINDERS:
+- CHECK THE "Available input variables" section above - your prompts MUST use ALL necessary input variables
+- If you see variables like {{start}}context{{end}}, {{start}}question{{end}}, {{start}}code{{end}}, etc. listed, INCLUDE THEM in your prompts
+- Avoid mentioning specific dataset fields, metric names, or evaluation terminology
+- Keep prompts generalizable to similar tasks
+
+Return a valid JSON array as specified."""
+
 
 def build_candidate_generation_user_prompt(
     current_prompt_messages: str,
@@ -176,129 +257,45 @@ def build_candidate_generation_user_prompt(
             prompt=current_prompt_messages
         )
 
-    # Add pattern section if patterns are provided
+    # Build conditional sections
+    history_section = (
+        META_PROMPT_SECTIONS["history"].format(history=history_context)
+        if history_context
+        else ""
+    )
+
     pattern_section = ""
     if pattern_guidance:
         pattern_section = (
             f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
         )
 
-    # Wrap task context with section markers if provided
     task_context_section = ""
     if task_context_str:
         task_context_section = (
             f"\n{META_PROMPT_SECTIONS['examples'].format(examples=task_context_str)}\n"
         )
 
-    return (
-        textwrap.dedent(
-            f"""
-            {prompt_section}
-
-            Current score: {best_score}
-
-            {META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""}
-
-            {task_context_section}
-
-            {pattern_section}
-
-            {analysis_instruction}
-            Generate [{prompts_per_round}] improved versions of this prompt.
-            {metric_focus_instruction}
-
-            CRITICAL: Study the Hall of Fame entries above, what made those prompts successful? How can you BUILD ON those winning elements while still exploring bold new directions?
-
-            Generate [{prompts_per_round}] DISTINCTLY DIFFERENT prompt variations that:
-
-            DIVERSITY DIMENSIONS (explore all of these):
-            - Length: from ultra-minimal (1 sentence) to in-depth comprehensive (multi-paragraph with reasoning steps)
-            - Structure: direct commands, numbered steps, narrative flow, question-based, example-driven
-            - Tone: formal instruction, conversational guidance, Socratic questioning, technical specification
-            - Approach: explicit constraints, implicit guidance, meta-cognitive prompting, role-playing
-
-            STRATEGIC GUIDANCE:
-            - Be more specific and clear about expectations based on the task
-            - Build on patterns from top-performing prompts in the Hall of Fame
-            - ADD structure and reasoning guidance (consider prompting frameworks: Situation→Task→Objective→Knowledge→Examples, and/or include role, style, format, job description, constraints)
-            - Try counter-intuitive approaches - sometimes the opposite of conventional wisdom works
-            - Experiment with being MORE specific in some versions and MORE abstract in others
-            - Combine winning elements in unexpected ways
-            {"- Creatively integrate the winning patterns provided - adapt, don't just copy" if pattern_guidance else ""}
-
-            Don't follow a template or recipe. Genuinely innovate by:
-            - Taking successful elements from history and amplifying or inverting them
-            - Testing hypotheses about what might work better (e.g., "what if we focus on X instead of Y?")
-            - Pushing to extremes (ultra-terse vs ultra-detailed)
-            - Trying something completely different if the current approach has plateaued
-
-            IMPORTANT REMINDERS:
-            - CHECK THE "Available input variables" section above - your prompts MUST use ALL necessary input variables
-            - If you see variables like {{start}}context{{end}}, {{start}}question{{end}}, {{start}}code{{end}}, etc. listed, INCLUDE THEM in your prompts
-            - Avoid mentioning specific dataset fields, metric names, or evaluation terminology
-            - Keep prompts generalizable to similar tasks
-
-            Return a valid JSON array as specified.
-            """
-        )
-        .strip()
-        .replace("{start}", START_DELIM)
-        .replace("{end}", END_DELIM)
+    pattern_integration_note = (
+        "\n- Creatively integrate the winning patterns provided - adapt, don't just copy"
+        if pattern_guidance
+        else ""
     )
 
+    # Use the template
+    result = CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE.format(
+        prompt_section=prompt_section,
+        best_score=best_score,
+        history_section=history_section,
+        task_context_section=task_context_section,
+        pattern_section=pattern_section,
+        analysis_instruction=analysis_instruction,
+        prompts_per_round=prompts_per_round,
+        metric_focus_instruction=metric_focus_instruction,
+        pattern_integration_note=pattern_integration_note,
+    )
 
-def build_mcp_tool_description_user_prompt(
-    tool_name: str,
-    current_description: str,
-    tool_metadata_json: str,
-    best_score: float,
-    history_context: str,
-    prompts_per_round: int,
-) -> str:
-    """Build the user prompt for generating improved MCP tool descriptions.
-
-    Args:
-        tool_name: Name of the tool being optimized
-        current_description: Current tool description
-        tool_metadata_json: JSON string of tool metadata
-        best_score: Current best evaluation score
-        history_context: Context from previous optimization rounds
-        prompts_per_round: Number of descriptions to generate
-
-    Returns:
-        Formatted user prompt string
-    """
-    return textwrap.dedent(
-        f"""
-            Current tool name: {tool_name}
-            Current tool description:
-            ---
-            {current_description}
-            ---
-
-            Tool metadata (JSON):
-            {tool_metadata_json}
-
-            Current best score: {best_score:.4f}
-            {history_context}
-
-            Generate [{prompts_per_round}] improved descriptions for this tool.
-            Each description should clarify expected input arguments and set explicit expectations
-            for how the tool output must be used in the final response.
-            Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
-
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
-            """
-    ).strip()
+    return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)
 
 
 def build_pattern_extraction_system_prompt() -> str:
@@ -494,44 +491,33 @@ def build_agent_bundle_user_prompt(
     """
     User prompt for generating improved prompts across multiple named agents.
     """
-    return (
-        textwrap.dedent(
-            f"""
-            ###### START agents ######
-            {agent_blocks}
-            ###### END agents ######
-
-            Current score: {best_score}
-
-            {META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""}
-
-            {META_PROMPT_SECTIONS["examples"].format(examples=task_context_str) if task_context_str else ""}
-
-            {META_PROMPT_SECTIONS["patterns"].format(patterns=pattern_guidance) if pattern_guidance else ""}
-
-            {analysis_instruction}
-            Generate updated versions for ALL agents above (keep names the same).
-            Return between 1 and {prompts_per_round} candidate bundles in the JSON format below.
-            Each candidate bundle must include ALL agents under "agents" and may also include bundle_improvement_focus and bundle_reasoning.
-
-            {metric_focus_instruction}
-
-            Diversity guidance:
-            - Consider different structures (concise vs detailed) where helpful per agent.
-            - Tighten entity specificity and retrieval intent for search-style agents.
-            - Strengthen factual grounding and output-format compliance for synthesis agents.
-
-            IMPORTANT:
-            - Preserve every placeholder token (curly-braced variables).
-            - Preserve tool/function definitions and message ordering.
-            - Do NOT rename agents or swap their responsibilities.
-
-            Generate up to [{prompts_per_round}] distinct bundle candidates when you see multiple viable directions; otherwise return your single best bundle.
-
-            Output must be valid JSON with the top-level key "candidates" (or "agents" for a single bundle).
-            """
-        )
-        .strip()
-        .replace("{start}", START_DELIM)
-        .replace("{end}", END_DELIM)
+    # Build conditional sections
+    history_section = (
+        META_PROMPT_SECTIONS["history"].format(history=history_context)
+        if history_context
+        else ""
     )
+    examples_section = (
+        META_PROMPT_SECTIONS["examples"].format(examples=task_context_str)
+        if task_context_str
+        else ""
+    )
+    patterns_section = (
+        META_PROMPT_SECTIONS["patterns"].format(patterns=pattern_guidance)
+        if pattern_guidance
+        else ""
+    )
+
+    # Use the template
+    result = AGENT_BUNDLE_USER_PROMPT_TEMPLATE.format(
+        agent_blocks=agent_blocks,
+        best_score=best_score,
+        history_section=history_section,
+        examples_section=examples_section,
+        patterns_section=patterns_section,
+        analysis_instruction=analysis_instruction,
+        prompts_per_round=prompts_per_round,
+        metric_focus_instruction=metric_focus_instruction,
+    )
+
+    return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)

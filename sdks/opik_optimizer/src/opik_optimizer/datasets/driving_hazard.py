@@ -189,49 +189,48 @@ def _load_dhpr_dataset(
             f"We recommend deleting the dataset and re-creating it."
         )
 
-    # Load from HuggingFace and process
-    if len(items) == 0:
-        import datasets as ds
+    # Load from HuggingFace and process (len(items) == 0 at this point)
+    import datasets as ds
 
-        # Load DHPR dataset from HuggingFace
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
+    # Load DHPR dataset from HuggingFace
+    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)  # type: ignore[arg-type]
+    ds.disable_progress_bar()
 
-        try:
-            hf_dataset = ds.load_dataset(
-                "DHPR/Driving-Hazard-Prediction-and-Reasoning",
-                streaming=True,
-                download_config=download_config,
-                trust_remote_code=True,  # May be needed for custom dataset scripts
-            )
-        except Exception as e:
-            # Fallback: try without streaming if streaming fails
-            ds.enable_progress_bar()
-            raise ValueError(
-                f"Failed to load DHPR dataset: {e}. "
-                f"Make sure you have internet connection and the dataset is accessible."
-            )
-
-        # Process items
-        data: list[dict[str, Any]] = []
-
-        for i, item in enumerate(hf_dataset[split]):
-            if i >= actual_nb_items:
-                break
-
-            processed_item = _process_dhpr_item(
-                item=item,
-                max_image_size=max_image_size,
-                image_quality=image_quality,
-            )
-            data.append(processed_item)
-
+    try:
+        hf_dataset = ds.load_dataset(
+            "DHPR/Driving-Hazard-Prediction-and-Reasoning",
+            streaming=True,
+            download_config=download_config,
+            trust_remote_code=True,  # May be needed for custom dataset scripts
+        )
+    except Exception as e:
+        # Fallback: try without streaming if streaming fails
         ds.enable_progress_bar()
+        raise ValueError(
+            f"Failed to load DHPR dataset: {e}. "
+            f"Make sure you have internet connection and the dataset is accessible."
+        )
 
-        # Insert into Opik dataset
-        dataset.insert(data)
+    # Process items
+    data: list[dict[str, Any]] = []
 
-        return dataset
+    for i, item in enumerate(hf_dataset[split]):  # type: ignore[arg-type]
+        if i >= actual_nb_items:
+            break
+
+        processed_item = _process_dhpr_item(
+            item=item,
+            max_image_size=max_image_size,
+            image_quality=image_quality,
+        )
+        data.append(processed_item)
+
+    ds.enable_progress_bar()
+
+    # Insert into Opik dataset
+    dataset.insert(data)
+
+    return dataset
 
 
 def _encode_pil_to_base64_uri(
@@ -296,7 +295,7 @@ def _process_dhpr_item(
     question_id = item.get("question_id")
     question = item.get("question")
     hazard = item.get("hazard")
-    pil_image: Image.Image = item.get("image")
+    pil_image: Image.Image = item.get("image")  # type: ignore[assignment]
 
     # Resize if needed
     if max_image_size:

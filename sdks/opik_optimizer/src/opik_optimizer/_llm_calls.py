@@ -1,5 +1,6 @@
-from typing import Any
+from typing import Any, TypeVar, overload
 from pydantic import BaseModel, ValidationError as PydanticValidationError
+
 import json
 import logging
 import sys
@@ -8,6 +9,7 @@ from types import FrameType
 import litellm
 from litellm.exceptions import BadRequestError
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from opik.integrations.litellm import track_completion
 
 from . import _throttle
 from . import utils as _utils
@@ -16,8 +18,11 @@ logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+# TypeVar for generic response model typing
+_T = TypeVar("_T", bound=BaseModel)
 
-def _increment_llm_counter_if_needed() -> None:
+
+def _increment_llm_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
@@ -35,6 +40,28 @@ def _increment_llm_counter_if_needed() -> None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
             optimizer_candidate._increment_llm_counter()
+            break
+        frame = frame.f_back
+
+
+def _increment_tool_counter_if_in_optimizer() -> None:
+    """
+    Walk up the call stack and increment the first optimizer's counter if found.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            optimizer_candidate._increment_tool_counter()
             break
         frame = frame.f_back
 
@@ -176,10 +203,10 @@ def _parse_response(
             llm_provider="litellm",
             model=getattr(response, "model", None),
             response=response,
-            litellm_debug_info={
+            litellm_debug_info=json.dumps({
                 "finish_reason": finish_reason,
                 "content_excerpt": content[:200],
-            },
+            }),
             body=None,
         )
 
@@ -213,6 +240,45 @@ def _parse_response(
             raise StructuredOutputParsingError(content=content, error=exc) from exc
 
     return content
+
+
+# Overloads for call_model to provide precise return types
+@overload
+def call_model(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    response_model: None = None,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str: ...
+
+
+@overload
+def call_model(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    response_model: type[_T] = ...,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> _T: ...
 
 
 @_throttle.rate_limited(_limiter)
@@ -256,7 +322,7 @@ def call_model(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
-    _increment_llm_counter_if_needed()
+    _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
@@ -280,7 +346,7 @@ def call_model(
         optimization_id,
     )
 
-    response = litellm.completion(
+    response = track_completion()(litellm.completion)(
         model=model,
         messages=messages,
         seed=seed,
@@ -289,6 +355,47 @@ def call_model(
     )
 
     return _parse_response(response, response_model)
+
+
+# Overloads for call_model_async to provide precise return types
+@overload
+async def call_model_async(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    response_model: None = None,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str: ...
+
+
+@overload
+async def call_model_async(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    response_model: type[_T] = ...,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> _T: ...
 
 
 @_throttle.rate_limited_async(_limiter)
@@ -333,7 +440,7 @@ async def call_model_async(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
-    _increment_llm_counter_if_needed()
+    _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(

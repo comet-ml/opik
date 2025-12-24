@@ -280,7 +280,7 @@ def resolve_slice_request(
         preset = None
 
     source_split = _resolve_slice_field(
-        explicit=requested_split,
+        explicit=None,  # Don't override - let preset's source_split determine the HF split
         preset=preset,
         preset_key="source_split",
         default=default_source_split,

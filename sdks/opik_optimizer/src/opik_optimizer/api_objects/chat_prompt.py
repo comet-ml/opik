@@ -2,10 +2,26 @@ import copy
 import json
 from collections.abc import Callable
 from typing import Any
-
+from pydantic import BaseModel, ConfigDict
 from opik import track
 
 from . import types
+
+
+class ModelParameters(BaseModel):
+    """Wrapper for model parameters that allows arbitrary key-value pairs."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class ChatPromptObject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    messages: list[types.Message]
+    model: str
+    tools: list[types.Tool]
+    model_parameters: ModelParameters
 
 
 class ChatPrompt:
@@ -34,7 +50,6 @@ class ChatPrompt:
         tools: list[dict[str, Any]] | None = None,
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",
-        invoke: Callable | None = None,
         model_parameters: dict[str, Any] | None = None,
     ) -> None:
         if system is None and user is None and messages is None:
@@ -82,7 +97,6 @@ class ChatPrompt:
         # These are used for the LiteLLMAgent class:
         self.model = model
         self.model_kwargs = model_parameters or {}
-        self.invoke = invoke
 
     @staticmethod
     def _validate_messages(messages: list[dict[str, Any]]) -> None:
@@ -167,6 +181,20 @@ class ChatPrompt:
                     if isinstance(url, str) and label in url:
                         image_url_data["url"] = url.replace(label, value)
 
+    def replace_in_messages(
+        self, messages: list[dict[str, Any]], label: str, value: str
+    ) -> list[dict[str, Any]]:
+        for message in messages:
+            content = message["content"]
+            if isinstance(content, str):
+                message["content"] = self._update_string_content(
+                    content, label, str(value)
+                )
+            elif isinstance(content, list):
+                self._update_content_parts(content, label, str(value))
+
+        return messages
+
     def get_messages(
         self,
         dataset_item: dict[str, str] | None = None,
@@ -176,20 +204,9 @@ class ChatPrompt:
 
         if dataset_item:
             for key, value in dataset_item.items():
-                for message in messages:
-                    # Only replace user message content:
-                    label = "{" + key + "}"
-                    content = message["content"]
-
-                    # Handle string content
-                    if isinstance(content, str):
-                        message["content"] = self._update_string_content(
-                            content, label, str(value)
-                        )
-
-                    # Handle list of content parts (multimodal)
-                    elif isinstance(content, list):
-                        self._update_content_parts(content, label, str(value))
+                # Only replace user message content:
+                label = "{" + key + "}"
+                messages = self.replace_in_messages(messages, label, str(value))
         return messages
 
     def _standardize_prompts(self, **kwargs: Any) -> list[dict[str, str]]:
@@ -245,8 +262,6 @@ class ChatPrompt:
     def copy(self) -> "ChatPrompt":
         """Shallow clone preserving model configuration and tools."""
 
-        # TODO(opik-mcp): once we introduce a dedicated MCP prompt subclass,
-        # migrate callers away from generic copies so optimizer metadata stays typed.
         model_parameters = (
             copy.deepcopy(self.model_kwargs) if self.model_kwargs else None
         )
@@ -258,7 +273,6 @@ class ChatPrompt:
             tools=copy.deepcopy(self.tools),
             function_map=self.function_map,
             model=self.model,
-            invoke=self.invoke,
             model_parameters=model_parameters,
         )
 
@@ -266,14 +280,6 @@ class ChatPrompt:
         self.system = None
         self.user = None
         self.messages = copy.deepcopy(messages)
-
-    # TODO(opik): remove this stop-gap once MetaPromptOptimizer supports MCP.
-    # Provides a second-pass flow so tool results can be appended before
-    # rerunning the model.
-    def with_messages(self, messages: list[dict[str, Any]]) -> "ChatPrompt":
-        cloned = self.copy()
-        cloned.set_messages(messages)
-        return cloned
 
     @classmethod
     def model_validate(
