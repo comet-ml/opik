@@ -31,7 +31,7 @@ chartMigration:
   # Enable this for the first upgrade that includes a migration from Bitnami charts and images
   # After successful migration, set this back to false
   enabled: true
-  image: "bitnamilegacy/kubectl:1.29.11"
+  image: "alpine/kubectl:1.35.0"
   # Service account name (must have permissions to delete StatefulSets and Deployments)
   serviceAccountName: ""
   # Node selector for the migration job pod (falls back to global nodeSelector if not specified)
@@ -605,6 +605,9 @@ clickhouse:
 zookeeper:
   enabled: true
   fullnameOverride: opik-zookeeper
+  # Server ID offset for Zookeeper cluster. Default is 1 for compatibility with
+  # previous Bitnami-based installations. Set to 0 only for fresh installs.
+  serverIdOffset: 1
   image:
     registry: docker.io
     repository: zookeeper
@@ -624,6 +627,8 @@ zookeeper:
   extraEnvVars:
     - name: ZK_HEAP_SIZE
       value: "512M"
+    - name: ZOO_DATA_DIR
+      value: "/bitnami/zookeeper/data"
 
     # resources:
     #   requests:
