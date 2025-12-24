@@ -10,12 +10,16 @@ These tests do NOT require:
 - Actually running any Harbor jobs
 """
 
+import asyncio
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from harbor.trial.trial import Trial
 from harbor.verifier.verifier import Verifier
 from harbor.models.trajectories.step import Step
 
+from opik import flush_tracker
 from opik.integrations.harbor import track_harbor, reset_harbor_tracking
 from opik.integrations.harbor.opik_tracker import _patch_step_class
 
@@ -128,3 +132,107 @@ class TestHarborClassesExist:
         """Verify Step class exists and can be imported."""
         # Step is imported at module level, so if we get here it exists
         assert Step is not None, "Step class should exist"
+
+
+class TestHarborTraceName:
+    """Tests to verify that trace names are set correctly via track_harbor."""
+
+    @pytest.mark.asyncio
+    async def test_track_harbor_sets_correct_trace_name(self, fake_backend):
+        """Verify that track_harbor sets the correct trace name format when Trial.run is called.
+
+        This test verifies that the trace name is set correctly:
+        1. Immediately when the span starts (during execution)
+        2. After the trial completes
+        """
+        # Create mock Trial with config
+        mock_agent = MagicMock()
+        mock_agent.name = "test-agent"
+        mock_agent.model_name = "gpt-4"
+
+        mock_task = MagicMock()
+        mock_task.name = "test-task"
+        mock_task.path = "/path/to/task"
+
+        mock_config = MagicMock()
+        mock_config.agent = mock_agent
+        mock_config.trial_name = "test-trial-123"
+        mock_config.task = mock_task
+        mock_config.job_id = None  # No job_id for this test
+
+        # Create mock TrialResult
+        mock_trial_result = MagicMock()
+        mock_trial_result.trial_name = "test-trial-123"
+        mock_trial_result.task_name = "test-task"
+        mock_trial_result.verifier_result = None
+        mock_trial_result.error = None
+
+        # Create mock Trial instance
+        mock_trial = MagicMock(spec=Trial)
+        mock_trial.config = mock_config
+
+        # Create an event to pause execution so we can check trace name during execution
+        pause_event = asyncio.Event()
+        resume_event = asyncio.Event()
+
+        # Mock the original Trial.run to pause during execution
+        async def mock_original_run(self):
+            # Signal that we've started
+            pause_event.set()
+            # Wait for resume signal
+            await resume_event.wait()
+            return mock_trial_result
+
+        expected_trace_name = "test-agent/test-trial-123"
+
+        # Patch the original method before track_harbor patches it
+        with patch.object(Trial, "run", new=mock_original_run):
+            # Enable tracking via public interface
+            track_harbor(project_name="test-project")
+
+            # Start the wrapped Trial.run method as a task
+            task = asyncio.create_task(Trial.run(mock_trial))
+
+            # Wait for the function to start (trace should be created by now)
+            await pause_event.wait()
+
+            # Flush to ensure trace is sent to fake_backend before checking
+            flush_tracker()
+
+            # Check trace name DURING execution (before completion)
+            # The trace should exist and have the correct name immediately
+            assert (
+                len(fake_backend.trace_trees) >= 1
+            ), "Expected trace to be created during execution"
+            trace_during_execution = fake_backend.trace_trees[0]
+            assert trace_during_execution.name == expected_trace_name, (
+                f"Expected trace name '{expected_trace_name}' during execution, "
+                f"got '{trace_during_execution.name}'. "
+                f"This indicates the name is not set correctly when the span starts."
+            )
+
+            # Resume execution
+            resume_event.set()
+
+            # Wait for completion
+            await task
+
+            # Flush to ensure trace is sent to fake_backend
+            flush_tracker()
+
+        # Verify trace still has correct name after completion
+        assert len(fake_backend.trace_trees) == 1, "Expected exactly one trace"
+        trace = fake_backend.trace_trees[0]
+
+        # Verify trace name is still correct after completion
+        assert (
+            trace.name == expected_trace_name
+        ), f"Expected trace name '{expected_trace_name}' after completion, got '{trace.name}'"
+
+        # Verify other properties are set correctly
+        assert trace.project_name == "test-project"
+        assert "harbor" in (trace.tags or [])
+        assert "test-agent" in (trace.tags or [])
+        assert trace.metadata.get("created_from") == "harbor"
+        assert trace.input["trial_name"] == "test-trial-123"
+        assert trace.input["agent"]["name"] == "test-agent"
