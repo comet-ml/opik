@@ -36,6 +36,7 @@ from .helpers import (
     load_and_validate_dataset,
     run_optimization,
 )
+from .cancellation import CancellationChecker
 
 __all__ = [
     # Config
@@ -67,5 +68,7 @@ __all__ = [
     "initialize_opik_client",
     "load_and_validate_dataset",
     "run_optimization",
+    # Cancellation
+    "CancellationChecker",
 ]
 
