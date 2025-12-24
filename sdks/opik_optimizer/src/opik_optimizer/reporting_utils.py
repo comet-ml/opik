@@ -3,7 +3,8 @@ import logging
 import re
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar, cast
+from collections.abc import Callable
 
 from rich import box
 from rich.console import Console, Group, RenderableType
@@ -16,11 +17,12 @@ from .api_objects import chat_prompt
 
 PANEL_WIDTH = 70
 
-F = TypeVar('F', bound=Callable[..., Any])
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def suppress_experiment_reporting(func: F) -> F:
     """Decorator to suppress opik experiment result/link display."""
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         from opik.evaluation import report
