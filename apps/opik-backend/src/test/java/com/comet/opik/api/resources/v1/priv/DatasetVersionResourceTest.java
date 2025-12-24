@@ -1333,6 +1333,104 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(v3Items).hasSize(4);
         }
+
+        @Test
+        @DisplayName("Success: Delete items using row ID (id field) from API response - simulating frontend behavior")
+        void deleteItems__whenUsingRowIdFromApiResponse__thenDeletesCorrectly() {
+            // Given - Create dataset with items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 5);
+
+            // Get version 1 and tag it
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get items from v1 - the frontend receives these items
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(5);
+
+            var itemToDelete = v1Items.get(0);
+
+            var rowId = itemToDelete.id();
+            assertThat(rowId).isNotNull();
+            assertThat(itemToDelete.draftItemId()).isNotNull();
+
+            // When - Delete using row ID (id field) - this is what the frontend sends
+            deleteDatasetItem(datasetId, rowId);
+
+            // Then - Verify a new version was created with 4 items
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(4);
+            assertThat(version2.itemsDeleted()).isEqualTo(1);
+
+            // Verify the deleted item is not in the latest version
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(4);
+            assertThat(v2Items.stream().map(DatasetItem::draftItemId))
+                    .doesNotContain(itemToDelete.draftItemId());
+
+            // Verify v1 still has 5 items (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1ItemsAfter).hasSize(5);
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Items Response Structure:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetItemsResponseStructure {
+
+        @Test
+        @DisplayName("Success: GET items response includes columns metadata for versioned items")
+        void getItems__whenVersioningEnabled__thenIncludesColumnsMetadata() {
+            // Given - Create dataset with items that have specific data fields
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create items with known data fields to test columns extraction
+            var item1 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "input", JsonUtils.readTree("{\"query\": \"test query\"}"),
+                            "output", JsonUtils.readTree("{\"response\": \"test response\"}"),
+                            "score", JsonUtils.readTree("0.95")))
+                    .build();
+            var item2 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "input", JsonUtils.readTree("{\"query\": \"another query\"}"),
+                            "tags", JsonUtils.readTree("[\"tag1\", \"tag2\"]")))
+                    .build();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(item1, item2))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // When - Get items from the latest version
+            var itemPage = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify columns are populated (not empty)
+            assertThat(itemPage.columns()).isNotNull();
+            assertThat(itemPage.columns()).isNotEmpty();
+
+            // Verify expected column names are present
+            var columnNames = itemPage.columns().stream()
+                    .map(col -> col.name())
+                    .toList();
+            assertThat(columnNames).contains("input", "output");
+        }
     }
 
     @Nested
