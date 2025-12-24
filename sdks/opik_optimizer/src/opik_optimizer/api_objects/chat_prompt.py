@@ -197,7 +197,7 @@ class ChatPrompt:
 
     def get_messages(
         self,
-        dataset_item: dict[str, str] | None = None,
+        dataset_item: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         # This is a copy, so we can alter the messages:
         messages = self._standardize_prompts()
@@ -209,8 +209,8 @@ class ChatPrompt:
                 messages = self.replace_in_messages(messages, label, str(value))
         return messages
 
-    def _standardize_prompts(self, **kwargs: Any) -> list[dict[str, str]]:
-        standardize_messages: list[dict[str, str]] = []
+    def _standardize_prompts(self, **kwargs: Any) -> list[dict[str, Any]]:
+        standardize_messages: list[dict[str, Any]] = []
 
         if self.system is not None:
             standardize_messages.append({"role": "system", "content": self.system})
@@ -244,13 +244,13 @@ class ChatPrompt:
     def __repr__(self) -> str:
         return f"ChatPrompt(name={self.name!r}, messages={self._format_messages_for_display()!r})"
 
-    def to_dict(self) -> dict[str, str | list[dict[str, str]]]:
+    def to_dict(self) -> dict[str, str | list[dict[str, Any]]]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
 
         Returns:
             Dict containing the serializable representation of this ChatPrompt
         """
-        retval: dict[str, str | list[dict[str, str]]] = {}
+        retval: dict[str, str | list[dict[str, Any]]] = {}
         if self.system is not None:
             retval["system"] = self.system
         if self.user is not None:

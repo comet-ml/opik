@@ -50,7 +50,7 @@ class DatasetItemFactory:
         question: str | None = None,
         answer: str | None = None,
         item_id: str | None = None,
-        **extra_fields,
+        **extra_fields: Any,
     ) -> dict[str, Any]:
         """Create a single dataset item."""
         self._counter += 1
@@ -70,7 +70,7 @@ class DatasetItemFactory:
     def create_batch(
         self,
         count: int,
-        **shared_fields,
+        **shared_fields: Any,
     ) -> list[dict[str, Any]]:
         """Create multiple dataset items."""
         return [self.create(**shared_fields) for _ in range(count)]
@@ -80,12 +80,9 @@ class DatasetItemFactory:
         qa_pairs: list[tuple[str, str]],
     ) -> list[dict[str, Any]]:
         """Create items from explicit question-answer pairs."""
-        return [
-            self.create(question=q, answer=a)
-            for q, a in qa_pairs
-        ]
+        return [self.create(question=q, answer=a) for q, a in qa_pairs]
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the counter for reproducible tests."""
         self._counter = 0
 
@@ -139,7 +136,7 @@ class ChatPromptFactory:
             user=user if messages is None else None,
             messages=messages,
             tools=tools,
-            model=model,
+            model=model or "gpt-4o-mini",
             model_parameters=model_kwargs,
         )
 
@@ -150,7 +147,7 @@ class ChatPromptFactory:
         include_system: bool = True,
     ) -> ChatPrompt:
         """Create a prompt with multiple messages."""
-        messages = []
+        messages: list[dict[str, Any]] = []
 
         if include_system:
             messages.append({"role": "system", "content": self.default_system})
@@ -171,20 +168,25 @@ class ChatPromptFactory:
 
         tools = []
         for name in tool_names:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": f"The {name} tool",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Input query"}
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": f"The {name} tool",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Input query",
+                                }
+                            },
+                            "required": ["query"],
                         },
-                        "required": ["query"],
                     },
-                },
-            })
+                }
+            )
 
         return self.create(
             system=f"Use the following tools: {', '.join(tool_names)}",
@@ -211,7 +213,7 @@ class ChatPromptFactory:
             ]
         )
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the counter for reproducible tests."""
         self._counter = 0
 
@@ -267,9 +269,7 @@ class EvaluationResultFactory:
             score_result = MagicMock()
             score_result.name = self.metric_name
             score_result.value = score
-            score_result.reason = (
-                reasons[i] if reasons else self.default_reason
-            )
+            score_result.reason = reasons[i] if reasons else self.default_reason
             score_result.scoring_failed = include_failures and random.random() < 0.1
 
             test_result.score_results = [score_result]
@@ -287,7 +287,7 @@ class EvaluationResultFactory:
     ) -> MagicMock:
         """Create results with a mix of high and low scores."""
         scores = []
-        reasons = [] if include_reasons else None
+        reasons: list[str] | None = [] if include_reasons else None
 
         for i in range(count):
             if random.random() < success_rate:
@@ -295,7 +295,11 @@ class EvaluationResultFactory:
                 reason = "Good response" if include_reasons else None
             else:
                 score = random.uniform(0.0, 0.4)
-                reason = "Poor response - missing key information" if include_reasons else None
+                reason = (
+                    "Poor response - missing key information"
+                    if include_reasons
+                    else None
+                )
 
             scores.append(score)
             if reasons is not None and reason is not None:
@@ -320,5 +324,3 @@ def random_string(length: int = 10) -> str:
 def random_id() -> str:
     """Generate a random ID string."""
     return f"id-{''.join(random.choices(string.hexdigits.lower(), k=8))}"
-
-
