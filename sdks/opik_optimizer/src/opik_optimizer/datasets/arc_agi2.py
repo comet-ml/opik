@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Iterable
+from collections.abc import Mapping
 
 import opik
 from datasets import load_dataset
@@ -32,7 +34,8 @@ def _render_examples(examples: list[dict[str, Any]]) -> str:
 
 def _render_test_inputs(test_inputs: list[list[list[int]]]) -> str:
     return "\n\n".join(
-        f"Test {idx} input:\n{_format_grid(grid)}" for idx, grid in enumerate(test_inputs)
+        f"Test {idx} input:\n{_format_grid(grid)}"
+        for idx, grid in enumerate(test_inputs)
     )
 
 
@@ -76,7 +79,7 @@ def _build_records(
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     if isinstance(challenges, Mapping):
-        iterator = challenges.items()
+        iterator: Iterable[tuple[str | None, Mapping[str, Any]]] = challenges.items()
     else:
         iterator = [(None, payload) for payload in challenges]
 
@@ -151,7 +154,7 @@ def arc_agi2(
     seed: int | None = None,
     test_mode_count: int | None = None,
     prefer_presets: bool | None = None,
-) -> "opik.Dataset":
+) -> opik.Dataset:
     """
     Load slices of the ARC-AGI-2 dataset from Hugging Face (arc-agi-community/arc-agi-2).
     """
