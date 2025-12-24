@@ -34,7 +34,7 @@ dependencies:
   repository: "https://comet-ml.github.io/comet-mysql-helm/"
   condition: mysql.enabled
 - name: zookeeper
-  version: 0.3.7
+  version: 0.3.10
   repository: oci://registry-1.docker.io/cloudpirates
   condition: zookeeper.enabled
 - name: redis
