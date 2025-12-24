@@ -18,7 +18,8 @@ from __future__ import annotations
 import json
 import re
 import traceback
-from typing import Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
 from opik.evaluation.metrics import score_result
@@ -71,7 +72,8 @@ def _render_examples(examples: list[dict[str, Any]]) -> str:
 
 def _render_test_inputs(test_inputs: list[list[list[int]]]) -> str:
     return "\n\n".join(
-        f"Test {idx} input:\n{_format_grid(grid)}" for idx, grid in enumerate(test_inputs)
+        f"Test {idx} input:\n{_format_grid(grid)}"
+        for idx, grid in enumerate(test_inputs)
     )
 
 
@@ -178,7 +180,9 @@ def _evaluate_code_candidate(
     }
 
 
-def arc_agi2_metric(dataset_item: dict[str, Any], llm_output: str) -> score_result.ScoreResult:
+def arc_agi2_metric(
+    dataset_item: dict[str, Any], llm_output: str
+) -> score_result.ScoreResult:
     train_examples = dataset_item.get("training_examples") or []
     test_inputs = dataset_item.get("test_inputs") or []
     gold_outputs = dataset_item.get("test_outputs") or []
