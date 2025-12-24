@@ -40,8 +40,6 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(DatasetItemVersionDAOImpl.class)
 public interface DatasetItemVersionDAO {
-    Mono<Long> makeSnapshot(UUID datasetId, UUID versionId, List<UUID> uuids);
-
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria searchCriteria, int page, int size, UUID versionId);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
@@ -129,16 +127,6 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItem> getItemsByDatasetItemIds(UUID datasetId, Set<UUID> datasetItemIds);
 
     /**
-     * Gets columns metadata for items in a specific version.
-     * This extracts column names and types from the data field of versioned items.
-     *
-     * @param datasetId the dataset ID
-     * @param versionId the version ID to get columns for
-     * @return Mono emitting the set of columns
-     */
-    Mono<Set<Column>> getColumns(UUID datasetId, UUID versionId);
-
-    /**
      * Maps row IDs (id field) to their corresponding stable item IDs (dataset_item_id).
      * This is used when the frontend sends row IDs but we need stable IDs for operations.
      *
@@ -171,55 +159,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
-
-    private static final String INSERT_SNAPSHOT = """
-            INSERT INTO dataset_item_versions (
-                id,
-                dataset_item_id,
-                dataset_id,
-                dataset_version_id,
-                data,
-                metadata,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                item_created_at,
-                item_last_updated_at,
-                item_created_by,
-                item_last_updated_by,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                workspace_id
-            )
-            SELECT
-                arrayElement(:uuids, row_number() OVER ()) as id,
-                dataset_items.id as dataset_item_id,
-                dataset_id,
-                :versionId as dataset_version_id,
-                data,
-                metadata,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                created_at as item_created_at,
-                last_updated_at as item_last_updated_at,
-                created_by as item_created_by,
-                last_updated_by as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :user_name as created_by,
-                :user_name as last_updated_by,
-                workspace_id
-            FROM dataset_items
-            WHERE dataset_id = :datasetId
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, dataset_items.id) DESC, last_updated_at DESC
-            LIMIT 1 BY dataset_items.id
-            """;
 
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
@@ -396,42 +335,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull IdGenerator idGenerator;
-
-    @Override
-    @WithSpan
-    public Mono<Long> makeSnapshot(@NonNull UUID datasetId, @NonNull UUID versionId, @NonNull List<UUID> uuids) {
-        log.info("Creating snapshot for dataset '{}', version '{}' using '{}' pre-generated UUIDs",
-                datasetId, versionId, uuids.size());
-
-        return asyncTemplate.nonTransaction(connection -> {
-            // Convert UUIDs to String array for ClickHouse binding
-            String[] uuidStrings = uuids.stream()
-                    .map(UUID::toString)
-                    .toArray(String[]::new);
-
-            var statement = connection.createStatement(INSERT_SNAPSHOT)
-                    .bind("datasetId", datasetId)
-                    .bind("versionId", versionId)
-                    .bind("uuids", uuidStrings);
-
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "create_version_snapshot");
-
-            return makeMonoContextAware((userName, workspaceId) -> {
-                statement.bind("workspace_id", workspaceId);
-                statement.bind("user_name", userName);
-                log.debug("Creating snapshot: datasetId='{}', versionId='{}', workspaceId='{}', userName='{}'",
-                        datasetId, versionId, workspaceId, userName);
-
-                return Flux.from(statement.execute())
-                        .flatMap(Result::getRowsUpdated)
-                        .reduce(0L, Long::sum)
-                        .doOnSuccess(insertedCount -> log.info(
-                                "Snapshot created: '{}' rows inserted for version '{}'",
-                                insertedCount, versionId))
-                        .doFinally(signalType -> endSegment(segment));
-            });
-        });
-    }
 
     @Override
     @WithSpan
@@ -982,9 +885,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .build();
     }
 
-    @Override
-    @WithSpan
-    public Mono<Set<Column>> getColumns(@NonNull UUID datasetId, @NonNull UUID versionId) {
+    private Mono<Set<Column>> getColumns(UUID datasetId, UUID versionId) {
         log.debug("Getting columns for dataset '{}', version '{}'", datasetId, versionId);
 
         return asyncTemplate.nonTransaction(connection -> {
