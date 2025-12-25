@@ -98,33 +98,37 @@ public interface DatasetItemVersionDAO {
             String workspaceId, String userName);
 
     /**
-     * Gets the dataset ID for a given dataset_item_id from the versioned table.
-     * This looks up the most recent version of an item to find its dataset.
+     * Resolves which dataset contains the given item by looking across all versions.
+     * This is used for initial lookup when only the item ID is known.
+     *
+     * Note: This method queries across versions to find which dataset contains the item.
+     * It's only used for dataset resolution - actual data retrieval should use version-specific methods.
      *
      * @param datasetItemId the stable item ID (dataset_item_id)
-     * @return Mono emitting the dataset ID, or empty if not found
+     * @return Mono emitting the dataset ID, or empty if item not found
      */
-    Mono<UUID> getDatasetIdByItemId(UUID datasetItemId);
+    Mono<UUID> resolveDatasetIdFromItemId(UUID datasetItemId);
 
     /**
-     * Gets an item by its dataset_item_id from the latest version.
-     * This retrieves the full item data from the most recent version containing this item.
+     * Gets an item by its dataset_item_id from a specific version.
      *
      * @param datasetId the dataset ID
+     * @param versionId the version ID to retrieve the item from
      * @param datasetItemId the stable item ID (dataset_item_id)
      * @return Mono emitting the DatasetItem, or empty if not found
      */
-    Mono<DatasetItem> getItemByDatasetItemId(UUID datasetId, UUID datasetItemId);
+    Mono<DatasetItem> getItemByDatasetItemId(UUID datasetId, UUID versionId, UUID datasetItemId);
 
     /**
-     * Gets multiple items by their dataset_item_ids from the latest version in a single query.
+     * Gets multiple items by their dataset_item_ids from a specific version in a single query.
      * This is the batch version of getItemByDatasetItemId to avoid N+1 queries.
      *
      * @param datasetId the dataset ID
+     * @param versionId the version ID to retrieve items from
      * @param datasetItemIds the stable item IDs (dataset_item_id values)
      * @return Flux emitting DatasetItems for all found items
      */
-    Flux<DatasetItem> getItemsByDatasetItemIds(UUID datasetId, Set<UUID> datasetItemIds);
+    Flux<DatasetItem> getItemsByDatasetItemIds(UUID datasetId, UUID versionId, Set<UUID> datasetItemIds);
 
     /**
      * Maps row IDs (id field) to their corresponding stable item IDs (dataset_item_id).
@@ -261,7 +265,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ) AS src
             """;
 
-    private static final String SELECT_DATASET_ID_BY_ITEM_ID = """
+    private static final String RESOLVE_DATASET_ID_FROM_ITEM_ID = """
             SELECT
                 dataset_id
             FROM dataset_item_versions
@@ -717,14 +721,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<UUID> getDatasetIdByItemId(@NonNull UUID datasetItemId) {
-        log.debug("Looking up dataset ID for item '{}'", datasetItemId);
+    public Mono<UUID> resolveDatasetIdFromItemId(@NonNull UUID datasetItemId) {
+        log.debug("Resolving dataset ID for item '{}'", datasetItemId);
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(SELECT_DATASET_ID_BY_ITEM_ID)
+            var statement = connection.createStatement(RESOLVE_DATASET_ID_FROM_ITEM_ID)
                     .bind("datasetItemId", datasetItemId.toString());
 
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_dataset_id_by_item_id");
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "resolve_dataset_id_from_item_id");
 
             return makeMonoContextAware((userName, workspaceId) -> {
                 statement.bind("workspace_id", workspaceId);
@@ -735,7 +739,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .next()
                         .doOnSuccess(datasetId -> {
                             if (datasetId != null) {
-                                log.debug("Found dataset '{}' for item '{}'", datasetId, datasetItemId);
+                                log.debug("Resolved dataset '{}' for item '{}'", datasetId, datasetItemId);
                             } else {
                                 log.debug("No dataset found for item '{}'", datasetItemId);
                             }
@@ -762,6 +766,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM dataset_item_versions
             WHERE workspace_id = :workspace_id
             AND dataset_id = :datasetId
+            AND dataset_version_id = :versionId
             AND dataset_item_id = :datasetItemId
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1
@@ -784,6 +789,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM dataset_item_versions
             WHERE workspace_id = :workspace_id
             AND dataset_id = :datasetId
+            AND dataset_version_id = :versionId
             AND dataset_item_id IN :datasetItemIds
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
@@ -791,12 +797,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<DatasetItem> getItemByDatasetItemId(@NonNull UUID datasetId, @NonNull UUID datasetItemId) {
-        log.debug("Getting item by dataset_item_id '{}' from dataset '{}'", datasetItemId, datasetId);
+    public Mono<DatasetItem> getItemByDatasetItemId(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull UUID datasetItemId) {
+        log.debug("Getting item by dataset_item_id '{}' from dataset '{}' version '{}'", datasetItemId, datasetId,
+                versionId);
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(SELECT_ITEM_BY_DATASET_ITEM_ID)
                     .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString())
                     .bind("datasetItemId", datasetItemId.toString());
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_item_by_dataset_item_id");
@@ -809,9 +818,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .next()
                         .doOnSuccess(item -> {
                             if (item != null) {
-                                log.debug("Found item '{}' in dataset '{}'", datasetItemId, datasetId);
+                                log.debug("Found item '{}' in dataset '{}' version '{}'", datasetItemId, datasetId,
+                                        versionId);
                             } else {
-                                log.debug("Item '{}' not found in dataset '{}'", datasetItemId, datasetId);
+                                log.debug("Item '{}' not found in dataset '{}' version '{}'", datasetItemId, datasetId,
+                                        versionId);
                             }
                         })
                         .doFinally(signalType -> endSegment(segment));
@@ -821,12 +832,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Flux<DatasetItem> getItemsByDatasetItemIds(@NonNull UUID datasetId, @NonNull Set<UUID> datasetItemIds) {
+    public Flux<DatasetItem> getItemsByDatasetItemIds(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull Set<UUID> datasetItemIds) {
         if (datasetItemIds.isEmpty()) {
             return Flux.empty();
         }
 
-        log.debug("Getting '{}' items by dataset_item_ids from dataset '{}'", datasetItemIds.size(), datasetId);
+        log.debug("Getting '{}' items by dataset_item_ids from dataset '{}' version '{}'", datasetItemIds.size(),
+                datasetId, versionId);
 
         // Convert UUIDs to strings for the IN clause
         List<String> itemIdStrings = datasetItemIds.stream()
@@ -836,6 +849,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(SELECT_ITEMS_BY_DATASET_ITEM_IDS)
                     .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString())
                     .bind("datasetItemIds", itemIdStrings);
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_items_by_dataset_item_ids");
