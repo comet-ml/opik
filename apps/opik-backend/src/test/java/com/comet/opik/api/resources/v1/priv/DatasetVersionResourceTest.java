@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
+import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -12,6 +14,8 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.Span;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -24,7 +28,11 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.SpanEnrichmentOptions;
+import com.comet.opik.domain.TraceEnrichmentOptions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -103,6 +111,8 @@ class DatasetVersionResourceTest {
     private String baseURI;
     private ClientSupport client;
     private DatasetResourceClient datasetResourceClient;
+    private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -114,6 +124,8 @@ class DatasetVersionResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         datasetResourceClient = new DatasetResourceClient(client, baseURI);
+        traceResourceClient = new TraceResourceClient(client, baseURI);
+        spanResourceClient = new SpanResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -143,6 +155,9 @@ class DatasetVersionResourceTest {
                             "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
                     return item.toBuilder()
                             .id(null)
+                            .source(DatasetItemSource.MANUAL) // Explicitly set source
+                            .traceId(null) // MANUAL source must have null traceId
+                            .spanId(null) // MANUAL source must have null spanId
                             .data(data)
                             .build();
                 })
@@ -1396,6 +1411,191 @@ class DatasetVersionResourceTest {
                 }
             }
             assertThat(updatedCount).isEqualTo(3);
+        }
+    }
+
+    @Nested
+    @DisplayName("Create Items From Traces/Spans With Versioning:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateFromTracesAndSpans {
+
+        private final com.fasterxml.uuid.impl.TimeBasedEpochGenerator traceIdGenerator = com.fasterxml.uuid.Generators
+                .timeBasedEpochGenerator();
+
+        @Test
+        @DisplayName("Success: Create dataset items from traces creates new version")
+        void createFromTraces__whenVersioningEnabled__thenCreateNewVersion() {
+            // Given - Create dataset
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create some initial items to establish version 1
+            createDatasetItems(datasetId, 2);
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(2);
+
+            // Tag version 1
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Create traces using proper client helpers
+            String projectName = traceIdGenerator.generate().toString();
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt 1\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 1\"}"))
+                    .tags(Set.of("trace-tag1"))
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt 2\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 2\"}"))
+                    .tags(Set.of("trace-tag2"))
+                    .build();
+
+            traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
+
+            // When - Create dataset items from traces
+            var enrichmentOptions = TraceEnrichmentOptions.builder()
+                    .includeSpans(false)
+                    .includeTags(true)
+                    .includeFeedbackScores(false)
+                    .includeComments(false)
+                    .includeUsage(false)
+                    .includeMetadata(false)
+                    .build();
+
+            var request = CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(trace1.id(), trace2.id()))
+                    .enrichmentOptions(enrichmentOptions)
+                    .build();
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(4); // 2 original + 2 from traces
+            assertThat(version2.itemsAdded()).isEqualTo(2); // 2 new items from traces
+            // Note: changeDescription is null when adding via traces (not using applyDatasetItemChanges)
+
+            // Verify version 1 is unchanged (immutable)
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(2);
+
+            // Verify latest version has all 4 items
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(latestItems).hasSize(4);
+
+            // Verify the new items have the correct source (at least 2 from traces)
+            long traceSourceCount = latestItems.stream()
+                    .filter(item -> item.source() == DatasetItemSource.TRACE)
+                    .count();
+            assertThat(traceSourceCount).isGreaterThanOrEqualTo(2);
+
+            // Verify the trace items have trace IDs set
+            var traceItems = latestItems.stream()
+                    .filter(item -> item.source() == DatasetItemSource.TRACE)
+                    .toList();
+            assertThat(traceItems).allMatch(item -> item.traceId() != null);
+        }
+
+        @Test
+        @DisplayName("Success: Create dataset items from spans creates new version")
+        void createFromSpans__whenVersioningEnabled__thenCreateNewVersion() {
+            // Given - Create dataset
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create some initial items to establish version 1
+            createDatasetItems(datasetId, 3);
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+
+            // Tag version 1
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Create traces and spans using proper client helpers
+            String projectName = traceIdGenerator.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"parent trace\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"parent response\"}"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .name("span1")
+                    .input(JsonUtils.getJsonNodeFromString("{\"input\": \"span input 1\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"span output 1\"}"))
+                    .tags(Set.of("span-tag1"))
+                    .build();
+
+            var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .name("span2")
+                    .input(JsonUtils.getJsonNodeFromString("{\"input\": \"span input 2\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"span output 2\"}"))
+                    .tags(Set.of("span-tag2"))
+                    .build();
+
+            spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
+
+            // When - Create dataset items from spans
+            var enrichmentOptions = SpanEnrichmentOptions.builder()
+                    .includeTags(true)
+                    .includeFeedbackScores(false)
+                    .includeComments(false)
+                    .includeUsage(false)
+                    .includeMetadata(false)
+                    .build();
+
+            var request = CreateDatasetItemsFromSpansRequest.builder()
+                    .spanIds(Set.of(span1.id(), span2.id()))
+                    .enrichmentOptions(enrichmentOptions)
+                    .build();
+
+            datasetResourceClient.createDatasetItemsFromSpans(datasetId, request, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(5); // 3 original + 2 from spans
+            assertThat(version2.itemsAdded()).isEqualTo(2); // 2 new items from spans
+            // Note: changeDescription is null when adding via spans (not using applyDatasetItemChanges)
+
+            // Verify version 1 is unchanged (immutable)
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(3);
+
+            // Verify latest version has all 5 items
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(latestItems).hasSize(5);
+
+            // Verify the new items have the correct source and span IDs
+            var spanItems = latestItems.stream()
+                    .filter(item -> item.source() == DatasetItemSource.SPAN)
+                    .toList();
+            assertThat(spanItems).hasSize(2);
+            assertThat(spanItems).allMatch(item -> item.spanId() != null);
         }
     }
 }
