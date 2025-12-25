@@ -598,7 +598,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     f"below threshold ({self.convergence_threshold:.2%}). "
                     f"Stopping after {iteration} iterations."
                 )
-                break
+                # Do not break early; continue until max_trials are exhausted for stubborn cases
+                # break
 
             # Update previous score for next iteration
             previous_iteration_score = best_score
