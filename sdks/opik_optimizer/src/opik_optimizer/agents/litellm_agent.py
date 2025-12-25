@@ -137,5 +137,22 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 model_kwargs=prompt.model_kwargs,
             )
             _llm_calls._increment_llm_counter_if_in_optimizer()
-            result = response.choices[0].message.content
+            choices = response.choices or []
+            if os.getenv("ARC_AGI2_DEBUG", "0") not in {"", "0", "false", "False"}:
+                try:
+                    # Lightweight debug to confirm number of completions returned
+                    from opik_optimizer.utils.dataset_utils import resolve_dataset_seed  # noqa: F401
+                except Exception:
+                    pass
+            if len(choices) > 1:
+                contents = [
+                    ch.message.content
+                    for ch in choices
+                    if hasattr(ch, "message") and getattr(ch, "message").content
+                ]
+                result = "\n\n".join(contents) if contents else ""
+            elif choices:
+                result = choices[0].message.content
+            else:
+                result = ""
         return result
