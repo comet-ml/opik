@@ -12,6 +12,9 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import MetricSelector from "./MetricSelector";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
 import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
+import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { generateExperimentIdFilter } from "@/lib/filters";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -402,80 +405,103 @@ const PlaygroundOutputActions = ({
           <PlaygroundProgressIndicator />
         </div>
       )}
-      <div className="sticky right-0 ml-auto flex gap-2">
+      <div className="sticky flex items-center justify-between gap-2">
         {createdExperiments.length > 0 && (
-          <TooltipWrapper
-            content={
-              createdExperiments.length === 1
-                ? "Your run was stored in this experiment. Explore your results to find insights."
-                : "Your run was stored in experiments. Explore comparison results to get insights."
-            }
-          >
-            <Button
-              size="sm"
-              className="mt-2.5"
-              onClick={navigateToExperiments}
-              variant="outline"
+          <div className="flex gap-2">
+            <TooltipWrapper
+              content={
+                createdExperiments.length === 1
+                  ? "Your run was stored in this experiment. Explore your results to find insights."
+                  : "Your run was stored in experiments. Explore comparison results to get insights."
+              }
             >
-              <FlaskConical className="mr-2 size-4" />
-              {createdExperiments.length === 1
-                ? "Explore experiment"
-                : "Compare experiments"}
-            </Button>
-          </TooltipWrapper>
-        )}
-        <div className="mt-2.5">
-          <DatasetSelectBox
-            value={datasetId}
-            onChange={onChangeDatasetId}
-            workspaceName={workspaceName}
-            onDatasetChangeExtra={handleDatasetChangeExtra}
-          />
-        </div>
-        {datasetId && (
-          <div className="mt-2.5 flex">
-            <FiltersButton
-              columns={filtersColumnData}
-              filters={filters}
-              onChange={onFiltersChange}
-              layout="icon"
-            />
+              <Button
+                size="sm"
+                className="mt-2.5"
+                onClick={navigateToExperiments}
+                variant="outline"
+              >
+                <FlaskConical className="mr-2 size-4" />
+                {createdExperiments.length === 1
+                  ? "Explore experiment"
+                  : "Compare experiments"}
+              </Button>
+            </TooltipWrapper>
+            {createdExperiments.length === 1 &&
+              playgroundProject?.id &&
+              createdExperiments[0]?.id && (
+                <div className="mt-2.5">
+                  <NavigationTag
+                    resource={RESOURCE_TYPE.traces}
+                    id={playgroundProject.id}
+                    name="Traces"
+                    size="lg"
+                    className="h-8"
+                    search={{
+                      traces_filters: generateExperimentIdFilter(
+                        createdExperiments[0].id,
+                      ),
+                    }}
+                    tooltipContent="View all traces for this experiment"
+                  />
+                </div>
+              )}
           </div>
         )}
-        <div className="mt-2.5 flex">
-          <MetricSelector
-            rules={rules}
-            selectedRuleIds={selectedRuleIds}
-            onSelectionChange={setSelectedRuleIds}
-            datasetId={datasetId}
-            onCreateRuleClick={handleCreateRuleClick}
-            workspaceName={workspaceName}
-          />
-        </div>
-        {datasetId && (
-          <div className="mt-2.5 flex h-8 items-center justify-center">
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <DataTablePagination
-              page={page}
-              pageChange={onChangePage}
-              size={size}
-              sizeChange={onChangeSize}
-              total={total}
-              variant="minimal"
-              itemsPerPage={[10, 50, 100, 200, 500, 1000]}
-              disabled={isRunning}
-              isLoadingTotal={isLoadingTotal}
+        <div className="ml-auto flex gap-2">
+          <div className="mt-2.5">
+            <DatasetSelectBox
+              value={datasetId}
+              onChange={onChangeDatasetId}
+              workspaceName={workspaceName}
+              onDatasetChangeExtra={handleDatasetChangeExtra}
+            />
+          </div>
+          {datasetId && (
+            <div className="mt-2.5 flex">
+              <FiltersButton
+                columns={filtersColumnData}
+                filters={filters}
+                onChange={onFiltersChange}
+                layout="icon"
+              />
+            </div>
+          )}
+          <div className="mt-2.5 flex">
+            <MetricSelector
+              rules={rules}
+              selectedRuleIds={selectedRuleIds}
+              onSelectionChange={setSelectedRuleIds}
+              datasetId={datasetId}
+              onCreateRuleClick={handleCreateRuleClick}
+              workspaceName={workspaceName}
+            />
+          </div>
+          {datasetId && (
+            <div className="mt-2.5 flex h-8 items-center justify-center">
+              <Separator orientation="vertical" className="mr-2 h-4" />
+              <DataTablePagination
+                page={page}
+                pageChange={onChangePage}
+                size={size}
+                sizeChange={onChangeSize}
+                total={total}
+                variant="minimal"
+                itemsPerPage={[10, 50, 100, 200, 500, 1000]}
+                disabled={isRunning}
+                isLoadingTotal={isLoadingTotal}
+              />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </div>
+          )}
+          <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
             />
             <Separator orientation="vertical" className="mx-2 h-4" />
           </div>
-        )}
-        <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
-          />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {renderActionButton()}
         </div>
-        {renderActionButton()}
       </div>
       <AddEditRuleDialog
         open={isRuleDialogOpen}
