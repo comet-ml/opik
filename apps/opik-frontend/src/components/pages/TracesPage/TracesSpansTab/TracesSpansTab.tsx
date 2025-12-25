@@ -843,6 +843,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Type",
               type: COLUMN_TYPE.category,
             },
+            {
+              id: "trace_id",
+              label: "Trace ID",
+              type: COLUMN_TYPE.string,
+            },
           ]
         : []),
       {

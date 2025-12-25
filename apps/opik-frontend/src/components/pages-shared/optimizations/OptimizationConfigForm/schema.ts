@@ -3,7 +3,7 @@ import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
   OptimizationStudioConfig,
-  OptimizationStudio,
+  Optimization,
 } from "@/types/optimizations";
 import { LLMMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
@@ -63,11 +63,11 @@ export const HierarchicalReflectiveOptimizerParamsSchema = z.object({
 
 export const EqualsMetricParamsSchema = z.object({
   case_sensitive: z.boolean(),
-  reference_key: z.string().optional(),
+  reference_key: z.string().min(1, "Reference key is required"),
 });
 
 export const JsonSchemaValidatorMetricParamsSchema = z.object({
-  reference_key: z.string().optional(),
+  reference_key: z.string().min(1, "Reference key is required"),
   case_sensitive: z.boolean().optional(),
 });
 
@@ -78,10 +78,27 @@ export const GEvalMetricParamsSchema = z.object({
 
 export const LevenshteinMetricParamsSchema = z.object({
   normalize: z.boolean().optional(),
-  reference_key: z.string().optional(),
+  reference_key: z.string().min(1, "Reference key is required"),
 });
 
+const isMessageEmpty = (message: LLMMessage): boolean => {
+  const content = message.content;
+  if (typeof content === "string") {
+    return content.trim().length === 0;
+  }
+  if (Array.isArray(content)) {
+    return content.every((part) => {
+      if (part.type === "text") {
+        return part.text.trim().length === 0;
+      }
+      return false;
+    });
+  }
+  return true;
+};
+
 const BaseOptimizationConfigSchema = z.object({
+  name: z.string().optional(),
   datasetId: z.string().min(1, "Dataset is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
@@ -91,7 +108,10 @@ const BaseOptimizationConfigSchema = z.object({
   ]),
   messages: z
     .array(z.custom<LLMMessage>())
-    .min(1, "At least one message is required"),
+    .min(1, "At least one message is required")
+    .refine((messages) => !messages.some(isMessageEmpty), {
+      message: "All messages must have content",
+    }),
   modelName: z.nativeEnum(PROVIDER_MODEL_TYPE),
   modelConfig: z
     .object({
@@ -138,7 +158,7 @@ const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
 };
 
 export const convertOptimizationStudioToFormData = (
-  optimization?: Partial<OptimizationStudio> | null,
+  optimization?: Partial<Optimization> | null,
 ): OptimizationConfigFormType => {
   const existingConfig = optimization?.studio_config?.llm_model?.parameters as
     | LLMPromptConfigsType
@@ -152,10 +172,7 @@ export const convertOptimizationStudioToFormData = (
       id: crypto.randomUUID(),
       role: m.role as LLM_MESSAGE_ROLE,
       content: m.content,
-    })) || [
-      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system }),
-      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
-    ];
+    })) || [generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user })];
 
   const optimizerType =
     (optimization?.studio_config?.optimizer.type as OPTIMIZER_TYPE) ||
@@ -175,6 +192,7 @@ export const convertOptimizationStudioToFormData = (
     : defaultConfig;
 
   return {
+    name: optimization?.name || "Optimization studio run",
     datasetId: optimization?.dataset_id || "",
     optimizerType,
     optimizerParams:

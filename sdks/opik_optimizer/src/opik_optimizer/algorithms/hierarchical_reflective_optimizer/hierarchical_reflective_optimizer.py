@@ -323,6 +323,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             messages=messages_as_dicts,
             tools=best_prompt.tools,
             function_map=best_prompt.function_map,
+            model=best_prompt.model,
+            model_parameters=best_prompt.model_kwargs,
         )
 
         # Evaluate improved prompt

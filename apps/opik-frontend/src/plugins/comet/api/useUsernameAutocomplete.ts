@@ -3,8 +3,8 @@ import api, { QueryConfig } from "../api";
 
 interface UseUsernameAutocompleteParams {
   query: string;
-  organizationId: string;
-  excludedWorkspaceId: string;
+  organizationId?: string;
+  excludedWorkspaceId?: string;
 }
 
 const getUsernameAutocomplete = async (

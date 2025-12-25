@@ -125,11 +125,10 @@ const PlaygroundPrompt = ({
 
   const provider = providerResolver(model);
 
-  const hintMessage = datasetVariables?.length
-    ? `Reference dataset variables using mustache syntax: ${datasetVariables
-        .map((dv) => `{{${dv}}}`)
-        .join(", ")}`
-    : "";
+  const promptVariablesArray = useMemo(
+    () => datasetVariables || [],
+    [datasetVariables],
+  );
 
   // Memoize the template JSON to avoid costly JSON.stringify on every render
   const chatPromptTemplate = useMemo(
@@ -495,7 +494,7 @@ const PlaygroundPrompt = ({
         messages={messages}
         onChange={handleUpdateMessage}
         onAddMessage={handleAddMessage}
-        hint={hintMessage}
+        promptVariables={promptVariablesArray}
         hidePromptActions={false}
         improvePromptConfig={{
           model,

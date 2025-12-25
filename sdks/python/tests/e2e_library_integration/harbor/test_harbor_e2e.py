@@ -170,6 +170,9 @@ class TestHarborSDKIntegration:
         for trace in traces:
             assert trace.metadata.get("created_from") == "harbor"
             assert "harbor" in (trace.tags or [])
+            assert (
+                constants.AGENT_NAME in trace.name
+            ), f"Trace name '{trace.name}' should contain agent name '{constants.AGENT_NAME}'"
 
             spans = opik_client.search_spans(trace_id=trace.id, truncate=False)
             assert len(spans) >= 1
@@ -266,6 +269,9 @@ class TestHarborCLIIntegration:
         assert len(traces) == 2, f"Expected 2 traces (one per task), got {len(traces)}"
         for trace in traces:
             assert "harbor" in (trace.tags or [])
+            assert (
+                constants.AGENT_NAME in trace.name
+            ), f"Trace name '{trace.name}' should contain agent name '{constants.AGENT_NAME}'"
 
         opik_dataset = opik_client.get_dataset(constants.DATASET_NAME)
         assert opik_dataset is not None, "Dataset should be created automatically"
