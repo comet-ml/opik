@@ -38,7 +38,7 @@ EVAL_MODEL = "gemini/gemini-1.5-flash-002"  # model used for candidate eval call
 REASONING_MODEL = "gemini/gemini-3-pro-preview"  # model used inside HRPO
 EVAL_TEMPERATURE = 0.0
 REASONING_TEMPERATURE = 0.7
-HRPO_MAX_TRIALS = 4
+HRPO_MAX_TRIALS = 15
 HRPO_THREADS = 8
 
 # Starting system prompt

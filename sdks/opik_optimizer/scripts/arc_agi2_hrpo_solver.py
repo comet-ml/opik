@@ -12,6 +12,7 @@ Workflow:
 from __future__ import annotations
 
 import os
+import time
 import re
 import traceback
 from typing import Any
@@ -33,14 +34,19 @@ EVAL_MODEL = "openai/gpt-5.2"
 REASONING_MODEL = "openai/gpt-5.2"
 EVAL_TEMPERATURE = 1.0
 REASONING_TEMPERATURE = 1.0
-HRPO_MAX_TRIALS = 3
+HRPO_MAX_TRIALS = 15
 HRPO_THREADS = 8
 SEED = 42
 PASS_AT_K = 2
+DEBUG_LOG = os.getenv("ARC_AGI2_DEBUG", "0") not in {"", "0", "false", "False"}
 
 DATASET_NAME = os.getenv("ARC_AGI2_DATASET_NAME") or (
-    f"arc_agi2_{DATASET_SPLIT}_{DATASET_COUNT}_seed{SEED}"
+    f"arc_agi2_{DATASET_SPLIT}_{DATASET_COUNT}_{int(time.time())}"
 )
+
+def _log_debug(message: str) -> None:
+    if DEBUG_LOG:
+        print(f"[DEBUG] {message}")
 
 # MIT-licensed baseline prompt adapted from Poetiq ARC-AGI solver (SOLVER_PROMPT_1).
 SYSTEM_PROMPT = """You are an expert in solving Abstract Reasoning Corpus (ARC) tasks by writing Python code. Your goal is to analyze input-output examples and create a 'transform' function that correctly transforms any given input grid into the corresponding output grid.
@@ -80,10 +86,21 @@ Here's how to approach the problem:
   *   Include the complete Python code for the `transform` function within a single markdown code block.
   *   Do not include any `__name__ == "__main__"` block or any code outside the function definition.
 
+Safety and format constraints:
+- Use only NumPy (`import numpy as np` if you need it); no other imports or libraries are allowed.
+- Keep all helper logic inside the single code block with `transform`; no extra files, I/O, network, randomness, or subprocesses.
+- Ensure `transform` returns a NumPy array of ints matching the expected grid shape unless the rule requires a different shape.
+- Avoid any mention (even in comments/strings) of banned tokens: `os`, `sys`, `pathlib`, `subprocess`, `open`, `eval`, `exec`, `requests`, `httpx`, `pickle`, `json`, `importlib`, or `__import__`.
+- Use safe NumPy checks: never do `if array:` or array comparisons to scalars without `.any()`/`.all()`; prefer `np.array_equal`, `np.any`, `np.all`.
+- Before finalizing, mentally run your code on each training pair: ensure output shape matches exactly, colors are correct, and there are no shape off-by-ones or dtype issues.
+
 Respond with ONE or TWO python code blocks (```python ...```), each defining transform(grid: np.ndarray) -> np.ndarray."""
 
 USER_PROMPT = """Training examples (input -> output):
 {training_examples_text}
+
+Shapes (rows x cols):
+{shape_summary}
 
 Test inputs:
 {test_inputs_text}
@@ -95,11 +112,69 @@ def transform(grid: np.ndarray) -> np.ndarray
 
 def _extract_code_blocks(text: str) -> list[str]:
     """Return all python code blocks found in the LLM response."""
-    return re.findall(r"```python\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
+    blocks = re.findall(r"```python\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
+    _log_debug(f"Found {len(blocks)} code blocks")
+    return blocks
+
+
+def _validate_code_block(code: str) -> tuple[bool, str]:
+    """Reject code blocks that import anything other than numpy or use dangerous builtins."""
+    disallowed_tokens = [
+        "__import__",
+        "subprocess",
+        "os.",
+        "sys.",
+        "pathlib",
+        "shutil",
+        "open(",
+        "eval(",
+        "exec(",
+        "requests",
+        "httpx",
+        "importlib",
+        "pickle",
+        "json",
+    ]
+    for tok in disallowed_tokens:
+        if tok in code:
+            return False, f"Disallowed token '{tok}'"
+
+    import_re = re.compile(r"^\s*(from\s+([a-zA-Z0-9_\.]+)\s+import|import\s+([a-zA-Z0-9_\.]+))")
+    for line in code.splitlines():
+        m = import_re.match(line)
+        if not m:
+            continue
+        module = m.group(2) or m.group(3) or ""
+        if not module.startswith("numpy"):
+            return False, f"Disallowed import '{line.strip()}'"
+    return True, ""
 
 
 def _format_grid(grid: Sequence[Sequence[int]]) -> str:
     return "\n".join(" ".join(str(c) for c in row) for row in grid)
+
+
+def _grid_shape(grid: Sequence[Sequence[int]]) -> str:
+    try:
+        rows = len(grid)
+        cols = len(grid[0]) if rows else 0
+        # If ragged, flag it explicitly
+        ragged = any(len(r) != cols for r in grid)
+        shape = f"{rows}x{cols}"
+        return f"{shape}{' (ragged)' if ragged else ''}"
+    except Exception:
+        return "unknown"
+
+
+def _render_shape_summary(train_examples: list[dict[str, Any]], test_inputs: list[list[list[int]]]) -> str:
+    parts: list[str] = []
+    for idx, ex in enumerate(train_examples):
+        parts.append(
+            f"train {idx}: { _grid_shape(ex.get('input', [])) } -> { _grid_shape(ex.get('output', [])) }"
+        )
+    for idx, grid in enumerate(test_inputs):
+        parts.append(f"test {idx}: { _grid_shape(grid) }")
+    return "\n".join(parts)
 
 
 def _is_valid_matrix(matrix: Any, gold_matrix: list[list[int]]) -> tuple[bool, str]:
@@ -160,6 +235,11 @@ def _run_transform(code: str, grid: list[list[int]]) -> tuple[bool, Any, str]:
     """Exec transform(grid) defined in code; returns success flag, output or None, and error text."""
     locals_dict: dict[str, Any] = {}
     globals_dict = {"np": np}
+    _log_debug("Executing candidate transform on grid:")
+    _log_debug(_format_grid(grid))
+    # Validate input grid rectangularity to avoid ragged array conversion crashes.
+    if grid and any(len(row) != len(grid[0]) for row in grid):
+        return False, None, "Input grid is ragged (rows have different lengths)."
     try:
         exec(code, globals_dict, locals_dict)  # noqa: S102 - deliberate sandboxed exec
     except Exception:
@@ -174,6 +254,7 @@ def _run_transform(code: str, grid: list[list[int]]) -> tuple[bool, Any, str]:
         arr_out = transform_fn(arr_in)
         if not isinstance(arr_out, np.ndarray):
             return False, None, "transform must return a numpy array."
+        arr_out = np.asarray(arr_out, dtype=int)
         return True, arr_out, ""
     except Exception:
         return False, None, f"Runtime error: {traceback.format_exc(limit=1)}"
@@ -186,6 +267,8 @@ def _evaluate_code_candidate(
     test_in: list[list[list[int]]],
 ) -> dict[str, Any]:
     """Run a single code candidate on train/test and return scores + outputs + feedback."""
+    _log_debug("Evaluating code candidate:")
+    _log_debug(code[:500])
     train_feedback: list[str] = []
     exact_scores: list[float] = []
     soft_scores: list[float] = []
@@ -254,9 +337,26 @@ def arc_agi2_metric(
     train_in = [ex.get("input") for ex in train_examples]
     train_out = [ex.get("output") for ex in train_examples]
 
+    valid_blocks: list[str] = []
+    rejected: list[str] = []
+    for code in code_blocks:
+        ok, reason = _validate_code_block(code)
+        if ok:
+            valid_blocks.append(code)
+        else:
+            rejected.append(reason)
+
+    if not valid_blocks:
+        return score_result.ScoreResult(
+            name="arc_agi2_accuracy",
+            value=0.0,
+            scoring_failed=False,
+            reason=f"All code blocks rejected: {' | '.join(rejected[:3])}",
+        )
+
     candidates = [
         _evaluate_code_candidate(code, train_in, train_out, test_inputs)
-        for code in code_blocks
+        for code in valid_blocks
     ]
     # Pick best by train_exact then soft
     candidates_sorted = sorted(
@@ -331,6 +431,33 @@ def main() -> None:
         test_mode=TEST_MODE,
         seed=SEED,
     )
+
+    if DEBUG_LOG:
+        items = dataset.get_items(1)
+        if not items:
+            raise RuntimeError("Dataset returned no items")
+        first_item = items[0]
+        train_text = first_item.get("training_examples_text")
+        test_text = first_item.get("test_inputs_text")
+        shape_summary = _render_shape_summary(
+            first_item.get("training_examples") or [], first_item.get("test_inputs") or []
+        )
+        _log_debug(f"Sample task id: {first_item.get('task_id')}")
+        _log_debug("Train (ASCII):")
+        _log_debug(train_text or "<empty>")
+        _log_debug("Test (ASCII):")
+        _log_debug(test_text or "<empty>")
+        _log_debug("Prompt messages with templating applied:")
+        prompt = build_prompt()
+        msgs = prompt.get_messages(
+            {
+                **first_item,
+                "shape_summary": shape_summary,
+            }
+        )
+        for idx, msg in enumerate(msgs):
+            _log_debug(f"msg[{idx}] role={msg['role']} len={len(msg.get('content',''))}")
+            _log_debug(msg["content"])
 
     prompt = build_prompt()
 
