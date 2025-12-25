@@ -98,6 +98,7 @@ export interface Experiment {
   id: string;
   dataset_id: string;
   dataset_name: string;
+  project_id?: string;
   optimization_id?: string;
   type: EXPERIMENT_TYPE;
   status: string;

@@ -6,6 +6,7 @@ import {
   FileTerminal,
   FlaskConical,
   LayoutGrid,
+  ListTree,
   SparklesIcon,
   UserPen,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import useAppStore from "@/store/AppStore";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { TagProps } from "@/components/ui/tag";
+import { Filter } from "@/types/filters";
 
 export enum RESOURCE_TYPE {
   project,
@@ -27,6 +29,7 @@ export enum RESOURCE_TYPE {
   trial,
   annotationQueue,
   dashboard,
+  traces,
 }
 
 export const RESOURCE_MAP = {
@@ -94,20 +97,30 @@ export const RESOURCE_MAP = {
     label: "dashboard",
     color: "var(--color-blue)",
   },
+  [RESOURCE_TYPE.traces]: {
+    url: "/$workspaceName/projects/$projectId/traces",
+    icon: ListTree,
+    param: "projectId",
+    deleted: "Deleted traces",
+    label: "traces",
+    color: "var(--color-green)",
+  },
 };
 
 type ResourceLinkProps = {
   name?: string;
   id: string;
   resource: RESOURCE_TYPE;
-  search?: Record<string, string | number | string[]>;
+  search?: Record<string, string | number | string[] | Filter[]>;
   params?: Record<string, string | number | string[]>;
   variant?: TagProps["variant"];
+  size?: TagProps["size"];
   iconsSize?: number;
   gapSize?: number;
   tooltipContent?: string;
   asTag?: boolean;
   isDeleted?: boolean;
+  className?: string;
 };
 
 const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
@@ -117,11 +130,13 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   search,
   params,
   variant = "gray",
+  size = "md",
   iconsSize = 4,
   gapSize = 2,
   tooltipContent = "",
   asTag = false,
   isDeleted = false,
+  className,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
@@ -146,7 +161,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       {asTag ? (
         <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <Tag
-            size="md"
+            size={size}
             variant={variant}
             className={cn(
               "flex items-center",
@@ -155,6 +170,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               gapSize === 3 && "gap-3",
               gapSize === 4 && "gap-4",
               deleted && "opacity-50 cursor-default",
+              className,
             )}
           >
             <props.icon
