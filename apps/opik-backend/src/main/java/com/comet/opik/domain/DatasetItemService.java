@@ -8,7 +8,6 @@ import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
-import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
@@ -119,24 +118,6 @@ public interface DatasetItemService {
      * @return Mono completing when save operation finishes
      */
     Mono<Void> save(DatasetItemBatch batch);
-
-    /**
-     * Saves items and creates a new version on top of the latest version.
-     * <p>
-     * This operation is used when dataset versioning is enabled. Instead of saving to
-     * a legacy table, it directly creates a new version with the provided items.
-     * <ul>
-     *   <li>If batch is empty, returns immediately without creating a version</li>
-     *   <li>If no versions exist, creates the first version with all items as "added"</li>
-     *   <li>If versions exist, determines which items are new vs updated based on ID matching</li>
-     *   <li>Creates a new version on top of the latest one</li>
-     * </ul>
-     *
-     * @param batch the batch of items to save
-     * @param datasetId the resolved dataset ID
-     * @return Mono emitting the newly created version, or empty if batch is empty
-     */
-    Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId);
 }
 
 @Singleton
@@ -386,7 +367,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     UUID newVersionId = idGenerator.generateId();
 
                     // Get the existing item from the latest version
-                    return getVersionedItemById(datasetId, baseVersionId, datasetItemId)
+                    return versionDao.getItemByDatasetItemId(datasetId, baseVersionId, datasetItemId)
                             .flatMap(existingItem -> {
                                 // Apply patch to the existing item
                                 DatasetItem patchedItem = applyPatchToItem(
@@ -576,58 +557,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .then();
-    }
-
-    /**
-     * Fetches items from a specific version by their stable IDs (draftItemId) using a single batch query.
-     * This avoids N+1 queries by fetching all items in one database call.
-     */
-    private Flux<DatasetItem> fetchItemsFromVersionByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds) {
-        if (itemIds.isEmpty()) {
-            return Flux.empty();
-        }
-
-        log.debug("Fetching '{}' items by stable IDs from version '{}' in dataset '{}'",
-                itemIds.size(), versionId, datasetId);
-
-        // Use the batch method to fetch all items in a single query
-        return versionDao.getItemsByDatasetItemIds(datasetId, versionId, itemIds);
-    }
-
-    /**
-     * Gets a single item by its stable ID from a specific version.
-     */
-    private Mono<DatasetItem> getVersionedItemById(UUID datasetId, UUID versionId, UUID datasetItemId) {
-        // Use the DAO method that queries the versioned table directly
-        return versionDao.getItemByDatasetItemId(datasetId, versionId, datasetItemId);
-    }
-
-    /**
-     * Applies an update to an item, returning a new DatasetItem with the changes.
-     * The draftItemId field contains the stable ID (maintained across versions).
-     */
-    private DatasetItem applyUpdateToItem(DatasetItem item, DatasetItemUpdate update,
-            Boolean mergeTags, String userName) {
-        var builder = item.toBuilder()
-                .lastUpdatedAt(java.time.Instant.now())
-                .lastUpdatedBy(userName);
-
-        // Apply updates if provided
-        if (update.data() != null) {
-            builder.data(update.data());
-        }
-        if (update.tags() != null) {
-            if (Boolean.TRUE.equals(mergeTags) && item.tags() != null) {
-                // Merge tags
-                Set<String> mergedTags = new java.util.HashSet<>(item.tags());
-                mergedTags.addAll(update.tags());
-                builder.tags(mergedTags);
-            } else {
-                builder.tags(update.tags());
-            }
-        }
-
-        return builder.build();
     }
 
     @WithSpan
@@ -1322,9 +1251,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dataset.id();
     }
 
-    @Override
-    @WithSpan
-    public Mono<DatasetVersion> saveItemsWithVersion(@NonNull DatasetItemBatch batch, @NonNull UUID datasetId) {
+    private Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId) {
         if (batch.items() == null || batch.items().isEmpty()) {
             log.debug("Empty batch, skipping version creation for dataset '{}'", datasetId);
             return Mono.empty();
