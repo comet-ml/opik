@@ -348,14 +348,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     .flatMap(existingItem -> {
                         // Build patched item by merging provided fields with existing item
                         var builder = existingItem.toBuilder();
-
-                        // Apply patch fields if provided
-                        Optional.ofNullable(item.data()).ifPresent(builder::data);
-                        Optional.ofNullable(item.source()).ifPresent(builder::source);
-                        Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
-                        Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
-                        Optional.ofNullable(item.tags()).ifPresent(builder::tags);
-
+                        applyPatchFields(builder, item);
                         DatasetItem patchedItem = builder.build();
 
                         log.info("Patching item '{}' in legacy table for dataset '{}'",
@@ -432,6 +425,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
+     * Applies patch fields from patchData to a builder.
+     * Only non-null fields from patchData are applied.
+     */
+    private void applyPatchFields(DatasetItem.DatasetItemBuilder builder, DatasetItem patchData) {
+        Optional.ofNullable(patchData.data()).ifPresent(builder::data);
+        Optional.ofNullable(patchData.source()).ifPresent(builder::source);
+        Optional.ofNullable(patchData.traceId()).ifPresent(builder::traceId);
+        Optional.ofNullable(patchData.spanId()).ifPresent(builder::spanId);
+        Optional.ofNullable(patchData.tags()).ifPresent(builder::tags);
+    }
+
+    /**
      * Applies patch data to an item, returning a new DatasetItem with the changes.
      */
     private DatasetItem applyPatchToItem(DatasetItem existingItem, DatasetItem patchData,
@@ -440,12 +445,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .lastUpdatedAt(java.time.Instant.now())
                 .lastUpdatedBy(userName);
 
-        // Apply patch fields if provided (non-null)
-        Optional.ofNullable(patchData.data()).ifPresent(builder::data);
-        Optional.ofNullable(patchData.source()).ifPresent(builder::source);
-        Optional.ofNullable(patchData.traceId()).ifPresent(builder::traceId);
-        Optional.ofNullable(patchData.spanId()).ifPresent(builder::spanId);
-        Optional.ofNullable(patchData.tags()).ifPresent(builder::tags);
+        applyPatchFields(builder, patchData);
 
         return builder.build();
     }
