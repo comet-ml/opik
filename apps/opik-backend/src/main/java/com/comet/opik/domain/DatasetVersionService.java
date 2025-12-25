@@ -118,15 +118,7 @@ public interface DatasetVersionService {
 
     /**
      * Gets the latest version for a dataset.
-     *
-     * @param datasetId the dataset ID
-     * @return Optional containing the latest version, or empty if no versions exist
-     */
-    Optional<DatasetVersion> getLatestVersion(UUID datasetId);
-
-    /**
-     * Gets the latest version for a dataset.
-     * This overload is safe to call from reactive contexts where RequestContext is not available.
+     * Safe to call from reactive contexts where RequestContext is not available.
      *
      * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
@@ -232,8 +224,11 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    @Override
-    public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId) {
+    /**
+     * Gets the latest version for a dataset using RequestContext.
+     * Private helper method for internal use only.
+     */
+    private Optional<DatasetVersion> getLatestVersion(UUID datasetId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getLatestVersion(datasetId, workspaceId);
     }
