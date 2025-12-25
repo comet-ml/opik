@@ -258,7 +258,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Mono<Void> batchUpdate(@NonNull DatasetItemBatchUpdate batchUpdate) {
-        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.filters(), batchUpdate.update(),
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.datasetId(), batchUpdate.filters(), batchUpdate.update(),
                 batchUpdate.mergeTags());
     }
 
