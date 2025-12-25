@@ -372,8 +372,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Long> patchItemWithVersionById(UUID datasetItemId, DatasetItem patchData,
             String workspaceId, String userName) {
-        // First, get the dataset ID from the versioned table
-        return versionDao.getDatasetIdByItemId(datasetItemId)
+        // First, resolve which dataset contains this item
+        return versionDao.resolveDatasetIdFromItemId(datasetItemId)
                 .switchIfEmpty(Mono.defer(() -> {
                     log.warn("Item '{}' not found in versioned table", datasetItemId);
                     return Mono.error(failWithNotFound("Dataset item not found"));
@@ -392,7 +392,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     UUID newVersionId = idGenerator.generateId();
 
                     // Get the existing item from the latest version
-                    return getVersionedItemById(datasetId, datasetItemId)
+                    return getVersionedItemById(datasetId, baseVersionId, datasetItemId)
                             .flatMap(existingItem -> {
                                 // Apply patch to the existing item
                                 VersionedDatasetItem patchedItem = applyPatchToVersionedItem(
@@ -480,11 +480,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> batchUpdateWithVersion(DatasetItemBatchUpdate batchUpdate, String workspaceId, String userName) {
         // We need to determine the dataset ID from the first item
-        // For batch update by IDs, get the first item's dataset
+        // For batch update by IDs, resolve the dataset from the first item
         if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
             UUID firstItemId = batchUpdate.ids().iterator().next();
 
-            return versionDao.getDatasetIdByItemId(firstItemId)
+            return versionDao.resolveDatasetIdFromItemId(firstItemId)
                     .switchIfEmpty(dao.get(firstItemId).map(DatasetItem::datasetId))
                     .flatMap(datasetId -> batchUpdateByIdsWithVersion(datasetId, batchUpdate, workspaceId, userName));
         }
@@ -579,7 +579,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 itemIds.size(), versionId, datasetId);
 
         // Use the batch method to fetch all items in a single query
-        return versionDao.getItemsByDatasetItemIds(datasetId, itemIds)
+        return versionDao.getItemsByDatasetItemIds(datasetId, versionId, itemIds)
                 .map(this::mapDatasetItemToVersionedItem);
     }
 
@@ -603,11 +603,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Gets a single versioned item by its dataset_item_id from the latest version.
+     * Gets a single versioned item by its dataset_item_id from a specific version.
      */
-    private Mono<VersionedDatasetItem> getVersionedItemById(UUID datasetId, UUID datasetItemId) {
+    private Mono<VersionedDatasetItem> getVersionedItemById(UUID datasetId, UUID versionId, UUID datasetItemId) {
         // Use the DAO method that queries the versioned table directly
-        return versionDao.getItemByDatasetItemId(datasetId, datasetItemId)
+        return versionDao.getItemByDatasetItemId(datasetId, versionId, datasetItemId)
                 .map(this::mapDatasetItemToVersionedItem);
     }
 
@@ -900,13 +900,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Deletes items by dataset_item_id values (stable IDs), trying to find the dataset first.
+     * Deletes items by dataset_item_id values (stable IDs), first resolving which dataset they belong to.
      */
     private Mono<Void> deleteByDatasetItemIds(Set<UUID> datasetItemIds, String workspaceId, String userName) {
         UUID firstItemId = datasetItemIds.iterator().next();
 
-        // Try to get from versioned table by dataset_item_id
-        return versionDao.getDatasetIdByItemId(firstItemId)
+        // Resolve which dataset contains this item
+        return versionDao.resolveDatasetIdFromItemId(firstItemId)
                 .switchIfEmpty(
                         // Fall back to draft table if not found in versioned table
                         dao.get(firstItemId)
@@ -1104,7 +1104,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             Set<UUID> deletedRowIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
 
             // Prepare edited items and map deleted row IDs to dataset_item_ids (both reactive)
-            Mono<List<VersionedDatasetItem>> editedItemsMono = prepareEditedItemsWithMerge(changes, datasetId);
+            Mono<List<VersionedDatasetItem>> editedItemsMono = prepareEditedItemsWithMerge(changes, datasetId,
+                    baseVersionId);
             Mono<Set<UUID>> deletedItemIdsMono = mapRowIdsToDatasetItemIds(deletedRowIds);
 
             return Mono.zip(editedItemsMono, deletedItemIdsMono)
@@ -1156,7 +1157,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * The frontend may send partial updates (e.g., only the 'data' field), so we need to
      * fetch the existing item and merge the changes to preserve fields like 'source', 'tags', etc.
      */
-    private Mono<List<VersionedDatasetItem>> prepareEditedItemsWithMerge(DatasetItemChanges changes, UUID datasetId) {
+    private Mono<List<VersionedDatasetItem>> prepareEditedItemsWithMerge(DatasetItemChanges changes, UUID datasetId,
+            UUID baseVersionId) {
         if (changes.editedItems() == null || changes.editedItems().isEmpty()) {
             return Mono.just(List.of());
         }
@@ -1198,8 +1200,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
                             .collect(Collectors.toSet());
 
-                    // Fetch the existing items
-                    return versionDao.getItemsByDatasetItemIds(datasetId, datasetItemIds)
+                    // Fetch the existing items from the base version
+                    return versionDao.getItemsByDatasetItemIds(datasetId, baseVersionId, datasetItemIds)
                             .collectList()
                             .map(existingItems -> {
                                 // Create map from dataset_item_id to existing item
