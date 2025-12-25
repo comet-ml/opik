@@ -647,9 +647,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         Set<UUID> excludedIds = new HashSet<>(deletedIds);
         excludedIds.addAll(editedItemIds);
 
-        // Calculate expected unchanged items and generate UUID pool
-        int expectedUnchangedCount = Math.max(0, baseVersionItemCount - excludedIds.size());
-        List<UUID> unchangedUuids = generateUuidPool(idGenerator, expectedUnchangedCount);
+        // Generate UUID pool for worst-case scenario (all base items copied)
+        // We can't know how many excludedIds actually exist in base version,
+        // so we generate enough UUIDs for all items to prevent running out during copy
+        List<UUID> unchangedUuids = generateUuidPool(idGenerator, baseVersionItemCount);
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -834,13 +835,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         return Flux.from(statement.execute())
                                 .flatMap(Result::getRowsUpdated)
                                 .reduce(0L, Long::sum)
-                                .doOnError(e -> log.error("Insert failed for item draftItemId='{}': {}",
-                                        stableItemId, e.getMessage()));
+                                .doOnError(
+                                        e -> log.error("Insert failed for item dataset_item_id='{}'", stableItemId, e));
                     })
                     .collectList()
                     .map(results -> itemCount) // Return item count instead of sum of results
                     .doOnSuccess(count -> log.debug("Inserted '{}' items", count))
-                    .doOnError(e -> log.error("Insert items failed: {}", e.getMessage()))
+                    .doOnError(e -> log.error("Insert items failed", e))
                     .doFinally(signalType -> endSegment(segment));
         });
     }

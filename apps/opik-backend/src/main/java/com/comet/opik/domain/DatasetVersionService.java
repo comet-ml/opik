@@ -129,22 +129,24 @@ public interface DatasetVersionService {
     /**
      * Gets a specific version by its ID.
      *
-     * @param versionId the version ID
-     * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
+     * @param datasetId the dataset ID
+     * @param versionId the version ID
      * @return the version
      * @throws NotFoundException if the version is not found
      */
-    DatasetVersion getVersionById(UUID versionId, UUID datasetId, String workspaceId);
+    DatasetVersion getVersionById(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
      * Checks if the given version ID is the latest version for the dataset.
+     * Safe to call from reactive contexts where RequestContext is not available.
      *
+     * @param workspaceId the workspace ID
      * @param datasetId the dataset ID
      * @param versionId the version ID to check
      * @return true if versionId is the latest version, false otherwise
      */
-    boolean isLatestVersion(UUID datasetId, UUID versionId);
+    boolean isLatestVersion(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
      * Creates a new version from the result of applying delta changes.
@@ -214,8 +216,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    private Optional<DatasetVersion> getVersionByTag(@NonNull UUID datasetId, @NonNull String tag,
-            @NonNull String workspaceId) {
+    private Optional<DatasetVersion> getVersionByTag(@NonNull String workspaceId, @NonNull UUID datasetId,
+            @NonNull String tag) {
         log.info("Getting version by tag for dataset: '{}', tag: '{}'", datasetId, tag);
 
         return template.inTransaction(READ_ONLY, handle -> {
@@ -224,23 +226,14 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    /**
-     * Gets the latest version for a dataset using RequestContext.
-     * Private helper method for internal use only.
-     */
-    private Optional<DatasetVersion> getLatestVersion(UUID datasetId) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        return getLatestVersion(datasetId, workspaceId);
-    }
-
     @Override
     public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
-        return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
+        return getVersionByTag(workspaceId, datasetId, LATEST_TAG);
     }
 
     @Override
-    public DatasetVersion getVersionById(@NonNull UUID versionId, @NonNull UUID datasetId,
-            @NonNull String workspaceId) {
+    public DatasetVersion getVersionById(@NonNull String workspaceId, @NonNull UUID datasetId,
+            @NonNull UUID versionId) {
         log.info("Getting version by ID '{}' for dataset '{}'", versionId, datasetId);
 
         return template.inTransaction(READ_ONLY, handle -> {
@@ -252,8 +245,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
-    public boolean isLatestVersion(@NonNull UUID datasetId, @NonNull UUID versionId) {
-        return getLatestVersion(datasetId)
+    public boolean isLatestVersion(@NonNull String workspaceId, @NonNull UUID datasetId, @NonNull UUID versionId) {
+        return getLatestVersion(datasetId, workspaceId)
                 .map(latest -> latest.id().equals(versionId))
                 .orElse(false);
     }

@@ -1001,11 +1001,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
             UUID baseVersionId = changes.baseVersion();
 
             // Verify the base version exists and get its item count
-            DatasetVersion baseVersion = versionService.getVersionById(baseVersionId, datasetId, workspaceId);
+            DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
             int baseVersionItemCount = baseVersion.itemsTotal();
 
             // Check if baseVersion is the latest (unless override is set)
-            if (!override && !versionService.isLatestVersion(datasetId, baseVersionId)) {
+            if (!override && !versionService.isLatestVersion(workspaceId, datasetId, baseVersionId)) {
                 log.warn("Version conflict: baseVersion '{}' is not the latest for dataset '{}'",
                         changes.baseVersion(), datasetId);
                 return Mono.error(new ClientErrorException(
