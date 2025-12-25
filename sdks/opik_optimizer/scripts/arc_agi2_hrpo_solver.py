@@ -90,6 +90,7 @@ Safety and format constraints:
 - Use only NumPy (`import numpy as np` if you need it); no other imports or libraries are allowed.
 - Keep all helper logic inside the single code block with `transform`; no extra files, I/O, network, randomness, or subprocesses.
 - Ensure `transform` returns a NumPy array of ints matching the expected grid shape unless the rule requires a different shape.
+- CRITICAL OUTPUT ENCODING RULE: each cell must be exactly one plain integer color index. Never emit or represent cell values as strings, floats, fractions/ratios (e.g., `7/5`, `5/7`, `2/7`, `7/2`), tuples, lists, or any mixed/heterogeneous value types. Do not encode uncertainty with composite symbols—choose one integer per cell. Before returning, normalize and validate the output array so it is strictly integer-typed (e.g., `out = np.asarray(out, dtype=int)`) and contains only valid discrete cell values (prefer 0–9 unless the task shows otherwise).
 - Avoid any mention (even in comments/strings) of banned tokens: `os`, `sys`, `pathlib`, `subprocess`, `open`, `eval`, `exec`, `requests`, `httpx`, `pickle`, `json`, `importlib`, or `__import__`.
 - Output grids must contain only integer values 0–9; never emit overlays like `a/b`, strings, or floats. Do not print diffs—just return the grid.
 - Use safe NumPy checks: never do `if array:` or array comparisons to scalars without `.any()`/`.all()`; prefer `np.array_equal`, `np.any`, `np.all`.
