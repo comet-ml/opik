@@ -152,6 +152,33 @@ def _shuffle_and_slice(
     return records[start_idx : start_idx + count]
 
 
+def _filter_by_task_id(
+    records: list[dict[str, Any]],
+    filter_task_id: str | None,
+    *,
+    log_fn: callable | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Filter the loaded records so ARC_AGI2_TASK_ID can force a specific task while
+    keeping backwards compatibility with random sampling when unset.
+    """
+    if not filter_task_id:
+        return records
+
+    matched = [rec for rec in records if rec.get("task_id") == filter_task_id]
+    if matched:
+        if log_fn:
+            log_fn(f"Filtered down to task_id={filter_task_id} ({len(matched)} record).")
+        return matched
+
+    if log_fn:
+        log_fn(
+            f"ARC_AGI2_TASK_ID={filter_task_id} not found in loaded records; "
+            f"keeping {len(records)} item(s)."
+        )
+    return records
+
+
 def _load_arc_agi2_split(
     source_split: str,
     start: int,
@@ -171,6 +198,7 @@ def _load_arc_agi2_split(
         "false",
         "False",
     }
+    filter_task_id = os.getenv("ARC_AGI2_TASK_ID")
     last_exc: Exception | None = None
     repo_dir = Path(__file__).resolve().parents[5] / "external" / "ARC-AGI-2" / "data"
     data_dir = Path(data_dir_env).expanduser() if data_dir_env else None
@@ -199,6 +227,26 @@ def _load_arc_agi2_split(
                 f"ARC_AGI2_DATA_DIR={data_dir} missing split folder {split_dir}"
             )
 
+        if filter_task_id:
+            target_file = split_dir / f"{filter_task_id}.json"
+            if target_file.exists():
+                payload = json.loads(target_file.read_text())
+                rec = _normalize_record(payload, solutions=None)
+                if rec.get("task_id") == "unknown_task":
+                    rec["task_id"] = target_file.stem
+                if not rec.get("training_examples"):
+                    raise ValueError(
+                        f"Task {filter_task_id} under {target_file} has no training examples."
+                    )
+                _log(f"Loaded task_id={filter_task_id} directly from {target_file}.")
+                return [rec]
+            else:
+                logger.warning(
+                    "ARC_AGI2_TASK_ID=%s not found under %s; falling back to random sampling",
+                    filter_task_id,
+                    split_dir,
+                )
+
         json_files = sorted(split_dir.glob("*.json"))
         if not json_files:
             raise FileNotFoundError(f"No JSON files found under {split_dir}")
@@ -221,6 +269,7 @@ def _load_arc_agi2_split(
                 logger.warning("Failed to parse %s: %s", jf, exc)
 
         records = _validate(records, f"local JSON ({split_dir})")
+        records = _filter_by_task_id(records, filter_task_id, log_fn=_log)
         _log(
             f"Loaded {len(records)} ARC-AGI-2 items from {split_dir} "
             f"(requested count={count}, start={start})"
@@ -231,6 +280,7 @@ def _load_arc_agi2_split(
     try:
         hf_ds = load_dataset("arc-agi-community/arc-agi-2", split=source_split)
         records = _build_records(hf_ds.to_list(), solutions=None)
+        records = _filter_by_task_id(records, filter_task_id, log_fn=_log)
         _log(f"HF load succeeded: {len(records)} items for split {source_split}")
         sliced = _shuffle_and_slice(records, start=start, count=count, seed=seed)
         return _validate(sliced, "Hugging Face")
@@ -244,6 +294,26 @@ def _load_arc_agi2_split(
 
     if data_dir and data_dir.exists():
         split_dir = data_dir / ("training" if source_split == "train" else "evaluation")
+        if filter_task_id:
+            target_file = split_dir / f"{filter_task_id}.json"
+            if target_file.exists():
+                payload = json.loads(target_file.read_text())
+                rec = _normalize_record(payload, solutions=None)
+                if rec.get("task_id") == "unknown_task":
+                    rec["task_id"] = target_file.stem
+                if not rec.get("training_examples"):
+                    raise ValueError(
+                        f"Task {filter_task_id} under {target_file} has no training examples."
+                    )
+                _log(f"Loaded task_id={filter_task_id} directly from {target_file}.")
+                return [rec]
+            else:
+                logger.warning(
+                    "ARC_AGI2_TASK_ID=%s not found under %s; falling back to random sampling",
+                    filter_task_id,
+                    split_dir,
+                )
+
         json_files = sorted(split_dir.glob("*.json"))
         rng = random.Random(seed)
         rng.shuffle(json_files)
@@ -262,6 +332,7 @@ def _load_arc_agi2_split(
             except Exception as exc:
                 logger.warning("Failed to parse %s: %s", jf, exc)
         records = _validate(records, f"local JSON ({split_dir})")
+        records = _filter_by_task_id(records, filter_task_id, log_fn=_log)
         _log(
             f"Loaded {len(records)} ARC-AGI-2 items from {split_dir} "
             f"(requested count={count}, start={start})"
@@ -275,21 +346,16 @@ def _load_arc_agi2_split(
     ) from last_exc
 
 
-def _filter_by_task_id(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _records_transform_task_filter(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Optional filtering by ARC_AGI2_TASK_ID env var to pick a specific task."""
     task_id = os.getenv("ARC_AGI2_TASK_ID")
     if not task_id:
         return records
-    filtered = [r for r in records if r.get("task_id") == task_id]
-    if not filtered:
-        logger.warning(
-            "ARC_AGI2_TASK_ID=%s not found in loaded records; keeping %d item(s)",
-            task_id,
-            len(records),
-        )
-        return records
-    logger.info("ARC_AGI2_TASK_ID=%s filtered to %d item(s)", task_id, len(filtered))
-    return filtered
+
+    def _log(msg: str) -> None:
+        logger.info("[arc_agi2] %s", msg)
+
+    return _filter_by_task_id(records, task_id, log_fn=_log)
 
 
 ARC_AGI2_SPEC = DatasetSpec(
@@ -312,7 +378,7 @@ ARC_AGI2_SPEC = DatasetSpec(
         ),
     },
     custom_loader=_load_arc_agi2_split,
-    records_transform=_filter_by_task_id,
+    records_transform=_records_transform_task_filter,
 )
 
 _ARC_AGI2_HANDLE = DatasetHandle(ARC_AGI2_SPEC)
