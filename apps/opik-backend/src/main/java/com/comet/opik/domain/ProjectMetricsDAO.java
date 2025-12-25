@@ -7,6 +7,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.RowUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -811,7 +812,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result
                             .map((row, metadata) -> Optional
-                                    .ofNullable(getOptionalValue(row, "avg_feedback_score", BigDecimal.class))))
+                                    .ofNullable(
+                                            RowUtils.getOptionalValue(row, "avg_feedback_score", BigDecimal.class))))
                     .next()
                     .mapNotNull(opt -> opt.orElse(null))
                     .doFinally(signalType -> endSegment(segment));
@@ -858,20 +860,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result
                             .map((row, metadata) -> Optional
-                                    .ofNullable(getOptionalValue(row, rowName, BigDecimal.class))))
+                                    .ofNullable(RowUtils.getOptionalValue(row, rowName, BigDecimal.class))))
                     .next()
                     .mapNotNull(opt -> opt.orElse(null))
                     .doFinally(signalType -> endSegment(segment));
         });
-    }
-
-    private <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
-        try {
-            return row.get(columnName, type);
-        } catch (Exception e) {
-            // Column doesn't exist in this query result - return null
-            return null;
-        }
     }
 
     private Mono<? extends Result> getMetric(
