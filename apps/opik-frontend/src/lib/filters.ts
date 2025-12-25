@@ -103,6 +103,19 @@ export const generateProjectFilters = (projectId?: string) => {
   ] as Filter[];
 };
 
+export const generateExperimentIdFilter = (experimentId?: string) => {
+  if (!experimentId) return [];
+
+  return [
+    createFilter({
+      field: "experiment_id",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      value: experimentId,
+    }),
+  ];
+};
+
 const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
   switch (filter.operator) {
     case "=":

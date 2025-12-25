@@ -22,10 +22,12 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import { useExperimentsColumnsWithTraceCount } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
@@ -164,6 +166,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
+    cell: LinkCell as never,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
@@ -340,6 +343,9 @@ const ExperimentsPage: React.FC = () => {
     ? "There are no experiments yet"
     : "No search results";
 
+  const columnsWithCallback =
+    useExperimentsColumnsWithTraceCount(DEFAULT_COLUMNS);
+
   const {
     columns,
     selectedRows,
@@ -355,7 +361,7 @@ const ExperimentsPage: React.FC = () => {
     groupFieldNames,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
-    defaultColumns: DEFAULT_COLUMNS,
+    defaultColumns: columnsWithCallback,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
     groups,
     sortableBy,
