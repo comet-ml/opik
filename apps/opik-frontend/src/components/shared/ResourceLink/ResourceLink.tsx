@@ -114,11 +114,13 @@ type ResourceLinkProps = {
   search?: Record<string, string | number | string[] | Filter[]>;
   params?: Record<string, string | number | string[]>;
   variant?: TagProps["variant"];
+  size?: TagProps["size"];
   iconsSize?: number;
   gapSize?: number;
   tooltipContent?: string;
   asTag?: boolean;
   isDeleted?: boolean;
+  className?: string;
 };
 
 const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
@@ -128,11 +130,13 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   search,
   params,
   variant = "gray",
+  size = "md",
   iconsSize = 4,
   gapSize = 2,
   tooltipContent = "",
   asTag = false,
   isDeleted = false,
+  className,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
@@ -157,7 +161,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       {asTag ? (
         <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <Tag
-            size="md"
+            size={size}
             variant={variant}
             className={cn(
               "flex items-center",
@@ -166,6 +170,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               gapSize === 3 && "gap-3",
               gapSize === 4 && "gap-4",
               deleted && "opacity-50 cursor-default",
+              className,
             )}
           >
             <props.icon
