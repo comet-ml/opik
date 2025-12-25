@@ -521,38 +521,46 @@ class DatasetItemServiceImpl implements DatasetItemService {
         int baseItemsCount = latestVersion.get().itemsTotal();
         UUID newVersionId = idGenerator.generateId();
 
-        // Fetch items to be updated from the latest version
-        return fetchItemsFromVersionByIds(datasetId, baseVersionId, batchUpdate.ids())
-                .map(item -> applyUpdateToItem(item, batchUpdate.update(), batchUpdate.mergeTags(), userName))
-                .collectList()
-                .flatMap(editedItems -> {
-                    if (editedItems.isEmpty()) {
+        // Generate UUID pool for the batch update
+        List<UUID> updateUuids = generateUuidPool(idGenerator, batchUpdate.ids().size());
+
+        // Use efficient database-side batch update to create updated copies in new version
+        // Then use applyDelta to copy the unchanged items (it will exclude the updated IDs)
+        return versionDao.batchUpdateItems(datasetId, baseVersionId, newVersionId,
+                batchUpdate.ids(), batchUpdate.update(), batchUpdate.mergeTags(), updateUuids)
+                .flatMap(updatedCount -> {
+                    if (updatedCount == 0) {
                         log.info("No items found to update for dataset '{}'", datasetId);
                         return Mono.empty();
                     }
 
-                    log.info("Creating version with '{}' edited items for dataset '{}', baseVersion='{}'",
-                            editedItems.size(), datasetId, baseVersionId);
+                    log.info("Batch updated '{}' items for dataset '{}', baseVersion='{}'",
+                            updatedCount, datasetId, baseVersionId);
 
-                    // Apply delta with the edited items
+                    // Now copy unchanged items using applyDelta
+                    // Pass empty lists for added/edited since we already did the batch update
+                    // Pass the updated IDs as "deleted" so they're excluded from the copy
                     return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
                             List.of(), // No added items
-                            editedItems,
-                            Set.of(), // No deleted items
+                            List.of(), // No edited items (already done via batch update)
+                            batchUpdate.ids(), // Exclude updated items from copy
                             baseItemsCount)
-                            .map(itemsTotal -> {
-                                log.info("Applied batch update delta to dataset '{}': itemsTotal '{}'",
-                                        datasetId, itemsTotal);
+                            .map(unchangedCount -> {
+                                // Total items = updated items + unchanged items
+                                long itemsTotal = updatedCount + unchangedCount;
+                                log.info(
+                                        "Applied batch update delta to dataset '{}': updated='{}', unchanged='{}', total='{}'",
+                                        datasetId, updatedCount, unchangedCount, itemsTotal);
 
                                 // Create version metadata
-                                String changeDescription = editedItems.size() == 1
+                                String changeDescription = updatedCount == 1
                                         ? "Updated 1 item"
-                                        : "Updated " + editedItems.size() + " items";
+                                        : "Updated " + updatedCount + " items";
 
                                 versionService.createVersionFromDelta(
                                         datasetId,
                                         newVersionId,
-                                        itemsTotal.intValue(),
+                                        (int) itemsTotal,
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
@@ -564,6 +572,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 return itemsTotal;
                             });
                 })
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
                 .then();
     }
 
