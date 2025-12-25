@@ -28,18 +28,24 @@ def _format_grid(grid: list[list[int]]) -> str:
 
 def _render_examples(examples: list[dict[str, Any]]) -> str:
     sections = []
-    for idx, ex in enumerate(examples):
+    for idx, ex in enumerate(examples, start=1):
         inp = _format_grid(ex.get("input", []))
         out = _format_grid(ex.get("output", []))
-        sections.append(f"Train {idx} input:\n{inp}\nTrain {idx} output:\n{out}")
+        sections.append(
+            f"Example #{idx}\n"
+            f"Input:\n<ArcGrid>\n{inp}\n</ArcGrid>\n\n"
+            f"Output:\n<ArcGrid>\n{out}\n</ArcGrid>"
+        )
     return "\n\n".join(sections)
 
 
 def _render_test_inputs(test_inputs: list[list[list[int]]]) -> str:
-    return "\n\n".join(
-        f"Test {idx} input:\n{_format_grid(grid)}"
-        for idx, grid in enumerate(test_inputs)
-    )
+    sections = []
+    for idx, grid in enumerate(test_inputs, start=1):
+        sections.append(
+            f"Challenge #{idx}\nInput:\n<ArcGrid>\n{_format_grid(grid)}\n</ArcGrid>"
+        )
+    return "\n\n".join(sections)
 
 
 def _grid_shape(grid: list[list[int]]) -> str:
