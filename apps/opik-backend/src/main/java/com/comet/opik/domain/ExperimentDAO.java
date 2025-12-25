@@ -21,6 +21,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RowUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -910,7 +911,7 @@ class ExperimentDAO {
             return Experiment.builder()
                     .id(row.get("id", UUID.class))
                     .datasetId(row.get("dataset_id", UUID.class))
-                    .projectId(row.get("project_id", UUID.class))
+                    .projectId(RowUtils.getOptionalValue(row, "project_id", UUID.class))
                     .name(row.get("name", String.class))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .createdAt(row.get("created_at", Instant.class))
