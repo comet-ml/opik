@@ -4,7 +4,6 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetStatus;
-import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ConditionalGZipFilter;
@@ -16,10 +15,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
-import com.comet.opik.domain.DatasetItemDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Client;
@@ -110,12 +107,10 @@ class DatasetsCsvUploadResourceTest {
     private String baseURI;
     private Client registeredClient;
     private DatasetResourceClient datasetResourceClient;
-    private DatasetItemDAO datasetItemDAO;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, DatasetItemDAO datasetItemDAO) {
+    void setUpAll(ClientSupport client) {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.datasetItemDAO = datasetItemDAO;
 
         // Configure client but DON'T use GrizzlyConnectorProvider for multipart support
         // GrizzlyConnector doesn't properly handle multipart Content-Type headers
@@ -391,11 +386,8 @@ class DatasetsCsvUploadResourceTest {
     }
 
     private List<DatasetItem> getDatasetItems(UUID datasetId) {
-        return datasetItemDAO.getItems(datasetId, 10000, null)
-                .collectList()
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                        .put(RequestContext.USER_NAME, USER)
-                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .block();
+        // Use the API layer to fetch items, which correctly routes to versioned storage when enabled
+        return datasetResourceClient.getDatasetItems(datasetId, 1, 10000, null, API_KEY, TEST_WORKSPACE)
+                .content();
     }
 }

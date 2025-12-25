@@ -20,6 +20,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
@@ -118,6 +119,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
+    private final @NonNull FeatureFlags featureFlags;
 
     private static String formatDatasetAlreadyExistsMessage(String datasetName) {
         return "Dataset already exists with name '%s'".formatted(datasetName);
@@ -582,7 +584,7 @@ class DatasetServiceImpl implements DatasetService {
                 .toStream()
                 .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()));
 
-        Map<UUID, DatasetVersionSummary> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
+        Map<UUID, DatasetVersion> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
 
         return datasets.stream()
                 .map(dataset -> {
@@ -593,19 +595,29 @@ class DatasetServiceImpl implements DatasetService {
                             OptimizationDAO.OptimizationSummary::empty);
                     var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
+                    // When versioning is enabled and a latest version exists, use itemsTotal from the version
+                    // Otherwise, fall back to the legacy dataset_items count
+                    Long itemsCount;
+                    if (featureFlags.isDatasetVersioningEnabled() && latestVersion != null
+                            && latestVersion.itemsTotal() != null) {
+                        itemsCount = latestVersion.itemsTotal().longValue();
+                    } else {
+                        itemsCount = datasetItemSummary.datasetItemsCount();
+                    }
+
                     return dataset.toBuilder()
                             .experimentCount(resume.experimentCount())
-                            .datasetItemsCount(datasetItemSummary.datasetItemsCount())
+                            .datasetItemsCount(itemsCount)
                             .optimizationCount(optimizationSummary.optimizationCount())
                             .mostRecentExperimentAt(resume.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
-                            .latestVersion(latestVersion)
+                            .latestVersion(DatasetVersionSummary.from(latestVersion))
                             .build();
                 })
                 .toList();
     }
 
-    private Map<UUID, DatasetVersionSummary> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
+    private Map<UUID, DatasetVersion> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
         if (datasetIds.isEmpty()) {
             return Map.of();
         }
@@ -616,7 +628,7 @@ class DatasetServiceImpl implements DatasetService {
             var dao = handle.attach(DatasetVersionDAO.class);
             List<DatasetVersion> latestVersions = dao.findLatestVersionsByDatasetIds(datasetIds, workspaceId);
             return latestVersions.stream()
-                    .collect(toMap(DatasetVersion::datasetId, DatasetVersionSummary::from));
+                    .collect(toMap(DatasetVersion::datasetId, Function.identity()));
         });
     }
 
