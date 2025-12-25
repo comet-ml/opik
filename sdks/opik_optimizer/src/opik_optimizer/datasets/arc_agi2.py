@@ -275,6 +275,23 @@ def _load_arc_agi2_split(
     ) from last_exc
 
 
+def _filter_by_task_id(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Optional filtering by ARC_AGI2_TASK_ID env var to pick a specific task."""
+    task_id = os.getenv("ARC_AGI2_TASK_ID")
+    if not task_id:
+        return records
+    filtered = [r for r in records if r.get("task_id") == task_id]
+    if not filtered:
+        logger.warning(
+            "ARC_AGI2_TASK_ID=%s not found in loaded records; keeping %d item(s)",
+            task_id,
+            len(records),
+        )
+        return records
+    logger.info("ARC_AGI2_TASK_ID=%s filtered to %d item(s)", task_id, len(filtered))
+    return filtered
+
+
 ARC_AGI2_SPEC = DatasetSpec(
     name="arc_agi2",
     default_source_split="train",
@@ -295,6 +312,7 @@ ARC_AGI2_SPEC = DatasetSpec(
         ),
     },
     custom_loader=_load_arc_agi2_split,
+    records_transform=_filter_by_task_id,
 )
 
 _ARC_AGI2_HANDLE = DatasetHandle(ARC_AGI2_SPEC)
