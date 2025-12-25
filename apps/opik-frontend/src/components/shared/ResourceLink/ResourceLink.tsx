@@ -6,6 +6,7 @@ import {
   FileTerminal,
   FlaskConical,
   LayoutGrid,
+  ListTree,
   SparklesIcon,
   UserPen,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import useAppStore from "@/store/AppStore";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { TagProps } from "@/components/ui/tag";
+import { Filter } from "@/types/filters";
 
 export enum RESOURCE_TYPE {
   project,
@@ -27,6 +29,7 @@ export enum RESOURCE_TYPE {
   trial,
   annotationQueue,
   dashboard,
+  traces,
 }
 
 export const RESOURCE_MAP = {
@@ -94,13 +97,21 @@ export const RESOURCE_MAP = {
     label: "dashboard",
     color: "var(--color-blue)",
   },
+  [RESOURCE_TYPE.traces]: {
+    url: "/$workspaceName/projects/$projectId/traces",
+    icon: ListTree,
+    param: "projectId",
+    deleted: "Deleted traces",
+    label: "traces",
+    color: "var(--color-green)",
+  },
 };
 
 type ResourceLinkProps = {
   name?: string;
   id: string;
   resource: RESOURCE_TYPE;
-  search?: Record<string, string | number | string[]>;
+  search?: Record<string, string | number | string[] | Filter[]>;
   params?: Record<string, string | number | string[]>;
   variant?: TagProps["variant"];
   iconsSize?: number;
