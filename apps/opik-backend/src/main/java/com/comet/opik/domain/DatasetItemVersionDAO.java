@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -87,6 +88,24 @@ public interface DatasetItemVersionDAO {
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             List<DatasetItem> addedItems, List<DatasetItem> editedItems, Set<UUID> deletedIds,
             int baseVersionItemCount);
+
+    /**
+     * Applies batch updates to items from a base version, creating updated copies in a new version.
+     * This is an efficient database-side operation using INSERT ... SELECT with conditional updates.
+     * <p>
+     * Only non-null fields in the update are applied. Items not in the itemIds set are not updated.
+     *
+     * @param datasetId the dataset ID
+     * @param baseVersionId the base version to copy from
+     * @param newVersionId the new version to insert into
+     * @param itemIds the stable item IDs (draftItemId) to update
+     * @param update the update to apply
+     * @param mergeTags whether to merge tags or replace them
+     * @param uuids pre-generated UUIDv7 pool for new row IDs
+     * @return the number of items updated
+     */
+    Mono<Long> batchUpdateItems(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+            Set<UUID> itemIds, DatasetItemUpdate update, Boolean mergeTags, List<UUID> uuids);
 
     /**
      * Inserts items directly into a new version without copying from any base version.
@@ -258,6 +277,62 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 :last_updated_by,
                 :workspace_id
             )
+            """;
+
+    // Batch update items using INSERT ... SELECT with conditional field updates
+    // Similar to legacy table's bulk update but for versioned items
+    private static final String BATCH_UPDATE_ITEMS = """
+            INSERT INTO dataset_item_versions (
+                id,
+                dataset_item_id,
+                dataset_id,
+                dataset_version_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at,
+                item_last_updated_at,
+                item_created_by,
+                item_last_updated_by,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            )
+            SELECT
+                arrayElement(:uuids, row_number() OVER ()) as id,
+                src.dataset_item_id,
+                src.dataset_id,
+                :newVersionId as dataset_version_id,
+                <if(data)> :data <else> src.data <endif> as data,
+                src.metadata,
+                src.source,
+                src.trace_id,
+                src.span_id,
+                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
+                src.item_created_at,
+                now64(9) as item_last_updated_at,
+                src.item_created_by,
+                :userName as item_last_updated_by,
+                now64(9) as created_at,
+                now64(9) as last_updated_at,
+                :userName as created_by,
+                :userName as last_updated_by,
+                src.workspace_id
+            FROM (
+                SELECT *
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_version_id = :baseVersionId
+                AND dataset_item_id IN :itemIds
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY dataset_item_id
+            ) AS src
             """;
 
     // Copy items from source version to target version
@@ -641,6 +716,77 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .reduce(0L, Long::sum)
                     .doOnSuccess(count -> log.debug("Copied '{}' unchanged items", count))
                     .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> batchUpdateItems(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
+            @NonNull UUID newVersionId, @NonNull Set<UUID> itemIds, @NonNull DatasetItemUpdate update,
+            Boolean mergeTags, @NonNull List<UUID> uuids) {
+
+        if (itemIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        log.info("Batch updating '{}' items in dataset '{}' from version '{}' to version '{}'",
+                itemIds.size(), datasetId, baseVersionId, newVersionId);
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return asyncTemplate.nonTransaction(connection -> {
+                // Build query using StringTemplate for conditional fields
+                ST template = new ST(BATCH_UPDATE_ITEMS);
+
+                // Add conditional parameters based on what fields are being updated
+                if (update.data() != null) {
+                    template.add("data", true);
+                }
+                if (update.tags() != null) {
+                    template.add("tags", true);
+                    if (Boolean.TRUE.equals(mergeTags)) {
+                        template.add("merge_tags", true);
+                    }
+                }
+
+                String query = template.render();
+
+                // Convert UUIDs to strings for ClickHouse
+                String[] itemIdStrings = itemIds.stream()
+                        .map(UUID::toString)
+                        .toArray(String[]::new);
+                String[] uuidStrings = uuids.stream()
+                        .map(UUID::toString)
+                        .toArray(String[]::new);
+
+                var statement = connection.createStatement(query)
+                        .bind("workspace_id", workspaceId)
+                        .bind("datasetId", datasetId.toString())
+                        .bind("baseVersionId", baseVersionId.toString())
+                        .bind("newVersionId", newVersionId.toString())
+                        .bind("itemIds", itemIdStrings)
+                        .bind("uuids", uuidStrings)
+                        .bind("userName", userName);
+
+                // Bind optional update fields
+                if (update.data() != null) {
+                    Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(update.data());
+                    statement.bind("data", dataAsStrings);
+                }
+                if (update.tags() != null) {
+                    statement.bind("tags", update.tags().toArray(new String[0]));
+                }
+
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "batch_update_items");
+
+                return Flux.from(statement.execute())
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .doOnSuccess(count -> log.info("Batch updated '{}' items in dataset '{}'", count, datasetId))
+                        .doFinally(signalType -> endSegment(segment));
+            });
         });
     }
 
