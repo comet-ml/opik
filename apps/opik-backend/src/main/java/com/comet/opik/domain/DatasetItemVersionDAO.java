@@ -67,25 +67,33 @@ public interface DatasetItemVersionDAO {
      * This operation:
      * <ul>
      *   <li>Copies items from baseVersion that are NOT in deletedIds and NOT in editedItems</li>
-     *   <li>Inserts editedItems (with updated data but same datasetItemId)</li>
-     *   <li>Inserts addedItems (with new datasetItemIds)</li>
+     *   <li>Inserts editedItems (with updated data but same stable ID)</li>
+     *   <li>Inserts addedItems (with new stable IDs)</li>
      * </ul>
+     * <p>
+     * For items passed to this method:
+     * - Use {@code draftItemId} field as the stable ID (maintained across versions)
+     * - The {@code id} field is ignored (row IDs are generated internally)
      *
      * @param datasetId the dataset ID
      * @param baseVersionId the base version to apply changes from
      * @param newVersionId the new version ID to create
      * @param addedItems new items to add
      * @param editedItems existing items with updated data
-     * @param deletedIds item IDs (datasetItemId) to exclude from the new version
+     * @param deletedIds stable item IDs to exclude from the new version
      * @param baseVersionItemCount the item count in the base version (for UUID pool sizing)
      * @return the total number of items in the new version
      */
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
-            List<VersionedDatasetItem> addedItems, List<VersionedDatasetItem> editedItems, Set<UUID> deletedIds,
+            List<DatasetItem> addedItems, List<DatasetItem> editedItems, Set<UUID> deletedIds,
             int baseVersionItemCount);
 
     /**
      * Inserts items directly into a new version without copying from any base version.
+     * <p>
+     * For items passed to this method:
+     * - Use {@code draftItemId} field as the stable ID (maintained across versions)
+     * - The {@code id} field is ignored (row IDs are generated internally)
      *
      * @param datasetId the dataset ID
      * @param versionId the version ID to insert into
@@ -94,7 +102,7 @@ public interface DatasetItemVersionDAO {
      * @param userName the user name
      * @return the number of items inserted
      */
-    Mono<Long> insertItems(UUID datasetId, UUID versionId, List<VersionedDatasetItem> items,
+    Mono<Long> insertItems(UUID datasetId, UUID versionId, List<DatasetItem> items,
             String workspaceId, String userName);
 
     /**
@@ -546,8 +554,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
-            @NonNull UUID newVersionId, @NonNull List<VersionedDatasetItem> addedItems,
-            @NonNull List<VersionedDatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
+            @NonNull UUID newVersionId, @NonNull List<DatasetItem> addedItems,
+            @NonNull List<DatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
             int baseVersionItemCount) {
 
         log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
@@ -555,9 +563,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(),
                 deletedIds.size(), baseVersionItemCount);
 
-        // Collect all item IDs that are being edited (so we don't copy them from base)
+        // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
-                .map(VersionedDatasetItem::datasetItemId)
+                .map(DatasetItem::draftItemId)
                 .collect(Collectors.toSet());
 
         // Combine deleted and edited IDs for exclusion when copying
@@ -639,7 +647,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<Long> insertItems(@NonNull UUID datasetId, @NonNull UUID newVersionId,
-            @NonNull List<VersionedDatasetItem> items, @NonNull String workspaceId, @NonNull String userName) {
+            @NonNull List<DatasetItem> items, @NonNull String workspaceId, @NonNull String userName) {
 
         if (items.isEmpty()) {
             return Mono.just(0L);
@@ -655,10 +663,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Flux.fromIterable(items)
                     .flatMap(item -> {
                         UUID rowId = UUID.randomUUID();
+                        UUID stableItemId = item.draftItemId();
                         Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
                         var statement = connection.createStatement(INSERT_ITEM)
                                 .bind("id", rowId.toString())
-                                .bind("dataset_item_id", item.datasetItemId().toString())
+                                .bind("dataset_item_id", stableItemId.toString())
                                 .bind("dataset_id", datasetId.toString())
                                 .bind("dataset_version_id", newVersionId.toString())
                                 .bind("data", dataAsStrings)
@@ -679,8 +688,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         return Flux.from(statement.execute())
                                 .flatMap(Result::getRowsUpdated)
                                 .reduce(0L, Long::sum)
-                                .doOnError(e -> log.error("Insert failed for item datasetItemId='{}': {}",
-                                        item.datasetItemId(), e.getMessage()));
+                                .doOnError(e -> log.error("Insert failed for item draftItemId='{}': {}",
+                                        stableItemId, e.getMessage()));
                     })
                     .collectList()
                     .map(results -> itemCount) // Return item count instead of sum of results

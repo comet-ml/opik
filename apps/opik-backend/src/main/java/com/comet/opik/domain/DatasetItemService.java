@@ -36,6 +36,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -395,7 +396,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return getVersionedItemById(datasetId, baseVersionId, datasetItemId)
                             .flatMap(existingItem -> {
                                 // Apply patch to the existing item
-                                VersionedDatasetItem patchedItem = applyPatchToVersionedItem(
+                                DatasetItem patchedItem = applyPatchToItem(
                                         existingItem, patchData, datasetId, userName);
 
                                 log.info("Creating version with single item edit for dataset '{}', baseVersion='{}'",
@@ -431,9 +432,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Applies patch data to a versioned item, returning a new VersionedDatasetItem with the changes.
+     * Applies patch data to an item, returning a new DatasetItem with the changes.
      */
-    private VersionedDatasetItem applyPatchToVersionedItem(VersionedDatasetItem existingItem, DatasetItem patchData,
+    private DatasetItem applyPatchToItem(DatasetItem existingItem, DatasetItem patchData,
             UUID datasetId, String userName) {
         var builder = existingItem.toBuilder()
                 .lastUpdatedAt(java.time.Instant.now())
@@ -567,54 +568,34 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Fetches items from a specific version by their dataset_item_id using a single batch query.
+     * Fetches items from a specific version by their stable IDs (draftItemId) using a single batch query.
      * This avoids N+1 queries by fetching all items in one database call.
      */
-    private Flux<VersionedDatasetItem> fetchItemsFromVersionByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds) {
+    private Flux<DatasetItem> fetchItemsFromVersionByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds) {
         if (itemIds.isEmpty()) {
             return Flux.empty();
         }
 
-        log.debug("Fetching '{}' items by dataset_item_ids from version '{}' in dataset '{}'",
+        log.debug("Fetching '{}' items by stable IDs from version '{}' in dataset '{}'",
                 itemIds.size(), versionId, datasetId);
 
         // Use the batch method to fetch all items in a single query
-        return versionDao.getItemsByDatasetItemIds(datasetId, versionId, itemIds)
-                .map(this::mapDatasetItemToVersionedItem);
+        return versionDao.getItemsByDatasetItemIds(datasetId, versionId, itemIds);
     }
 
     /**
-     * Maps a DatasetItem (from the versioned table) to a VersionedDatasetItem.
+     * Gets a single item by its stable ID from a specific version.
      */
-    private VersionedDatasetItem mapDatasetItemToVersionedItem(DatasetItem item) {
-        return VersionedDatasetItem.builder()
-                .datasetItemId(item.draftItemId() != null ? item.draftItemId() : item.id())
-                .datasetId(item.datasetId())
-                .data(item.data())
-                .source(item.source())
-                .traceId(item.traceId())
-                .spanId(item.spanId())
-                .tags(item.tags())
-                .createdAt(item.createdAt())
-                .lastUpdatedAt(item.lastUpdatedAt())
-                .createdBy(item.createdBy())
-                .lastUpdatedBy(item.lastUpdatedBy())
-                .build();
-    }
-
-    /**
-     * Gets a single versioned item by its dataset_item_id from a specific version.
-     */
-    private Mono<VersionedDatasetItem> getVersionedItemById(UUID datasetId, UUID versionId, UUID datasetItemId) {
+    private Mono<DatasetItem> getVersionedItemById(UUID datasetId, UUID versionId, UUID datasetItemId) {
         // Use the DAO method that queries the versioned table directly
-        return versionDao.getItemByDatasetItemId(datasetId, versionId, datasetItemId)
-                .map(this::mapDatasetItemToVersionedItem);
+        return versionDao.getItemByDatasetItemId(datasetId, versionId, datasetItemId);
     }
 
     /**
-     * Applies an update to an item, returning a new VersionedDatasetItem with the changes.
+     * Applies an update to an item, returning a new DatasetItem with the changes.
+     * The draftItemId field contains the stable ID (maintained across versions).
      */
-    private VersionedDatasetItem applyUpdateToItem(VersionedDatasetItem item, DatasetItemUpdate update,
+    private DatasetItem applyUpdateToItem(DatasetItem item, DatasetItemUpdate update,
             Boolean mergeTags, String userName) {
         var builder = item.toBuilder()
                 .lastUpdatedAt(java.time.Instant.now())
@@ -1100,17 +1081,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Generated new version ID '{}' for dataset '{}'", newVersionId, datasetId);
 
             // Prepare added items (synchronous - no merging needed)
-            List<VersionedDatasetItem> addedItems = prepareAddedItems(changes, datasetId);
+            List<DatasetItem> addedItems = prepareAddedItems(changes, datasetId);
             Set<UUID> deletedRowIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
 
-            // Prepare edited items and map deleted row IDs to dataset_item_ids (both reactive)
-            Mono<List<VersionedDatasetItem>> editedItemsMono = prepareEditedItemsWithMerge(changes, datasetId,
+            // Prepare edited items and map deleted row IDs to stable IDs (both reactive)
+            Mono<List<DatasetItem>> editedItemsMono = prepareEditedItemsWithMerge(changes, datasetId,
                     baseVersionId);
             Mono<Set<UUID>> deletedItemIdsMono = mapRowIdsToDatasetItemIds(deletedRowIds);
 
             return Mono.zip(editedItemsMono, deletedItemIdsMono)
                     .flatMap(tuple -> {
-                        List<VersionedDatasetItem> editedItems = tuple.getT1();
+                        List<DatasetItem> editedItems = tuple.getT1();
                         Set<UUID> deletedIds = tuple.getT2();
 
                         // Apply delta changes via DAO
@@ -1138,16 +1119,24 @@ class DatasetItemServiceImpl implements DatasetItemService {
         });
     }
 
-    private List<VersionedDatasetItem> prepareAddedItems(DatasetItemChanges changes, UUID datasetId) {
+    /**
+     * Prepares added items by setting their stable IDs.
+     * For new items, we generate a new stable ID.
+     */
+    private List<DatasetItem> prepareAddedItems(DatasetItemChanges changes, UUID datasetId) {
         if (changes.addedItems() == null || changes.addedItems().isEmpty()) {
             return List.of();
         }
 
         return changes.addedItems().stream()
                 .map(item -> {
-                    // Generate new datasetItemId for new items
-                    UUID datasetItemId = idGenerator.generateId();
-                    return VersionedDatasetItem.fromDatasetItem(item, datasetItemId, datasetId);
+                    // Generate new stable ID for new items
+                    UUID stableId = idGenerator.generateId();
+                    // Use draftItemId as the stable ID field
+                    return item.toBuilder()
+                            .draftItemId(stableId)
+                            .datasetId(datasetId)
+                            .build();
                 })
                 .toList();
     }
@@ -1157,7 +1146,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * The frontend may send partial updates (e.g., only the 'data' field), so we need to
      * fetch the existing item and merge the changes to preserve fields like 'source', 'tags', etc.
      */
-    private Mono<List<VersionedDatasetItem>> prepareEditedItemsWithMerge(DatasetItemChanges changes, UUID datasetId,
+    private Mono<List<DatasetItem>> prepareEditedItemsWithMerge(DatasetItemChanges changes, UUID datasetId,
             UUID baseVersionId) {
         if (changes.editedItems() == null || changes.editedItems().isEmpty()) {
             return Mono.just(List.of());
@@ -1246,17 +1235,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Merges a DatasetItemEdit (partial update) with an existing item.
      * Fields from the edit override the existing item only if they are non-null.
      */
-    private VersionedDatasetItem mergeEditWithExisting(DatasetItem existingItem, DatasetItemEdit editItem,
+    private DatasetItem mergeEditWithExisting(DatasetItem existingItem, DatasetItemEdit editItem,
             UUID datasetItemId, UUID datasetId) {
-        return VersionedDatasetItem.builder()
-                .datasetItemId(datasetItemId)
+        return existingItem.toBuilder()
+                .draftItemId(datasetItemId) // Set stable ID
                 .datasetId(datasetId)
                 .data(editItem.data() != null ? editItem.data() : existingItem.data())
-                .source(existingItem.source()) // Source is always preserved from existing item
-                .traceId(existingItem.traceId()) // TraceId is always preserved from existing item
-                .spanId(existingItem.spanId()) // SpanId is always preserved from existing item
+                // Source, traceId, spanId are always preserved from existing item
                 .tags(editItem.tags() != null ? editItem.tags() : existingItem.tags())
-                .createdAt(existingItem.createdAt()) // Always preserve original creation time
+                // Always preserve original creation time
                 .lastUpdatedAt(existingItem.lastUpdatedAt() != null
                         ? existingItem.lastUpdatedAt()
                         : existingItem.lastUpdatedAt())
@@ -1363,10 +1350,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
         UUID newVersionId = idGenerator.generateId();
 
         // All items are "added" for the first version
-        List<VersionedDatasetItem> addedItems = items.stream()
+        // Set draftItemId as the stable ID for each item
+        List<DatasetItem> addedItems = items.stream()
                 .map(item -> {
-                    UUID datasetItemId = item.id() != null ? item.id() : idGenerator.generateId();
-                    return VersionedDatasetItem.fromDatasetItem(item, datasetItemId, datasetId);
+                    UUID stableId = item.id() != null ? item.id() : idGenerator.generateId();
+                    return item.toBuilder()
+                            .draftItemId(stableId)
+                            .datasetId(datasetId)
+                            .build();
                 })
                 .toList();
 
@@ -1409,18 +1400,24 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             .collect(Collectors.toSet());
 
                     // Classify incoming items as added or edited
-                    List<VersionedDatasetItem> addedItems = new java.util.ArrayList<>();
-                    List<VersionedDatasetItem> editedItems = new java.util.ArrayList<>();
+                    List<DatasetItem> addedItems = new ArrayList<>();
+                    List<DatasetItem> editedItems = new ArrayList<>();
 
                     for (DatasetItem item : items) {
                         UUID itemId = item.id();
                         if (itemId != null && existingItemIds.contains(itemId)) {
                             // Existing item - treat as edit
-                            editedItems.add(VersionedDatasetItem.fromDatasetItem(item, itemId, datasetId));
+                            editedItems.add(item.toBuilder()
+                                    .draftItemId(itemId)
+                                    .datasetId(datasetId)
+                                    .build());
                         } else {
                             // New item - treat as add
                             UUID newItemId = itemId != null ? itemId : idGenerator.generateId();
-                            addedItems.add(VersionedDatasetItem.fromDatasetItem(item, newItemId, datasetId));
+                            addedItems.add(item.toBuilder()
+                                    .draftItemId(newItemId)
+                                    .datasetId(datasetId)
+                                    .build());
                         }
                     }
 
