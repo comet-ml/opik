@@ -37,7 +37,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -60,7 +60,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PATCH;
@@ -112,7 +111,7 @@ public class DatasetsResource {
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
-    private final @NonNull OpikConfiguration config;
+    private final @NonNull FeatureFlags featureFlags;
 
     @GET
     @Path("/{id}")
@@ -524,7 +523,7 @@ public class DatasetsResource {
             @FormDataParam("file") @NotNull InputStream fileInputStream,
             @FormDataParam("dataset_id") @NotNull UUID datasetId) {
 
-        if (!config.getServiceToggles().isCsvUploadEnabled()) {
+        if (!featureFlags.isCsvUploadEnabled()) {
             log.warn("CSV upload feature is disabled, returning 404");
             throw new NotFoundException("CSV upload feature is not enabled");
         }
@@ -566,8 +565,8 @@ public class DatasetsResource {
             @PathParam("id") UUID datasetId,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemChanges.class))) @NotNull @Valid DatasetItemChanges changes,
             @QueryParam("override") @DefaultValue("false") boolean override) {
+        featureFlags.checkDatasetVersioningEnabled();
 
-        checkVersioningFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -584,13 +583,6 @@ public class DatasetsResource {
                 datasetId, newVersion.versionHash(), workspaceId);
 
         return Response.ok(newVersion).build();
-    }
-
-    private void checkVersioningFeatureEnabled() {
-        if (!config.getServiceToggles().isDatasetVersioningEnabled()) {
-            log.warn("Dataset versioning feature is disabled, returning 403");
-            throw new ForbiddenException("Dataset versioning feature is not enabled");
-        }
     }
 
     @POST
@@ -775,6 +767,6 @@ public class DatasetsResource {
      */
     @Path("/{id}/versions")
     public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
-        return new DatasetVersionsResource(datasetId, versionService, requestContext, config);
+        return new DatasetVersionsResource(datasetId, versionService, requestContext, featureFlags);
     }
 }

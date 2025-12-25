@@ -20,7 +20,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
@@ -119,7 +119,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
-    private final @NonNull OpikConfiguration config;
+    private final @NonNull FeatureFlags featureFlags;
 
     private static String formatDatasetAlreadyExistsMessage(String datasetName) {
         return "Dataset already exists with name '%s'".formatted(datasetName);
@@ -585,7 +585,6 @@ class DatasetServiceImpl implements DatasetService {
                 .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()));
 
         Map<UUID, DatasetVersion> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
-        boolean versioningEnabled = isVersioningEnabled();
 
         return datasets.stream()
                 .map(dataset -> {
@@ -599,7 +598,8 @@ class DatasetServiceImpl implements DatasetService {
                     // When versioning is enabled and a latest version exists, use itemsTotal from the version
                     // Otherwise, fall back to the legacy dataset_items count
                     Long itemsCount;
-                    if (versioningEnabled && latestVersion != null && latestVersion.itemsTotal() != null) {
+                    if (featureFlags.isDatasetVersioningEnabled() && latestVersion != null
+                            && latestVersion.itemsTotal() != null) {
                         itemsCount = latestVersion.itemsTotal().longValue();
                     } else {
                         itemsCount = datasetItemSummary.datasetItemsCount();
@@ -615,11 +615,6 @@ class DatasetServiceImpl implements DatasetService {
                             .build();
                 })
                 .toList();
-    }
-
-    private boolean isVersioningEnabled() {
-        return config.getServiceToggles() != null
-                && config.getServiceToggles().isDatasetVersioningEnabled();
     }
 
     private Map<UUID, DatasetVersion> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
