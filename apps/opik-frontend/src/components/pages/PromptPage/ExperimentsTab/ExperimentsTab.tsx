@@ -156,6 +156,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
+      tooltip: "View experiment traces",
     },
   },
   {
