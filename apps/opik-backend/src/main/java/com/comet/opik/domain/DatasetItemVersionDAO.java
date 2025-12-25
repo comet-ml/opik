@@ -207,8 +207,54 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             """;
 
+    // Insert new items directly (not copying from existing)
+    private static final String INSERT_ITEM = """
+            INSERT INTO dataset_item_versions (
+                id,
+                dataset_item_id,
+                dataset_id,
+                dataset_version_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at,
+                item_last_updated_at,
+                item_created_by,
+                item_last_updated_by,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            ) VALUES (
+                :id,
+                :dataset_item_id,
+                :dataset_id,
+                :dataset_version_id,
+                :data,
+                :metadata,
+                :source,
+                :trace_id,
+                :span_id,
+                :tags,
+                :item_created_at,
+                :item_last_updated_at,
+                :item_created_by,
+                :item_last_updated_by,
+                now64(9),
+                now64(9),
+                :created_by,
+                :last_updated_by,
+                :workspace_id
+            )
+            """;
+
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)
+    // Optionally excludes specific item IDs (when exclude_ids is set)
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -259,6 +305,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND workspace_id = :workspace_id
                 <if(exclude_filters)>
                 AND NOT (<exclude_filters>)
+                <endif>
+                <if(exclude_ids)>
+                AND dataset_item_id NOT IN :excludedIds
                 <endif>
                 ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -335,6 +384,29 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND id = :id
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            """;
+
+    private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
+            SELECT
+                id,
+                dataset_item_id,
+                dataset_id,
+                data,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at as created_at,
+                item_last_updated_at as last_updated_at,
+                item_created_by as created_by,
+                item_last_updated_by as last_updated_by
+            FROM dataset_item_versions
+            WHERE workspace_id = :workspace_id
+            AND dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND dataset_item_id IN :datasetItemIds
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -530,58 +602,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .put(RequestContext.USER_NAME, userName));
         }
 
-        // Uses pre-generated UUIDv7 pool for time-ordered IDs
-        String copyWithExclusionsQuery = """
-                INSERT INTO dataset_item_versions (
-                    id,
-                    dataset_item_id,
-                    dataset_id,
-                    dataset_version_id,
-                    data,
-                    metadata,
-                    source,
-                    trace_id,
-                    span_id,
-                    tags,
-                    item_created_at,
-                    item_last_updated_at,
-                    item_created_by,
-                    item_last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    created_by,
-                    last_updated_by,
-                    workspace_id
-                )
-                SELECT
-                    arrayElement(:uuids, row_number() OVER ()) as new_id,
-                    src.dataset_item_id,
-                    src.dataset_id,
-                    :newVersionId as dataset_version_id,
-                    src.data,
-                    src.metadata,
-                    src.source,
-                    src.trace_id,
-                    src.span_id,
-                    src.tags,
-                    src.item_created_at,
-                    src.item_last_updated_at,
-                    src.item_created_by,
-                    src.item_last_updated_by,
-                    now64(9) as created_at,
-                    now64(9) as last_updated_at,
-                    :user_name as created_by,
-                    :user_name as last_updated_by,
-                    src.workspace_id
-                FROM dataset_item_versions AS src
-                WHERE src.dataset_id = :datasetId
-                AND src.dataset_version_id = :baseVersionId
-                AND src.workspace_id = :workspace_id
-                AND src.dataset_item_id NOT IN (:excludedIds)
-                ORDER BY (src.workspace_id, src.dataset_id, src.dataset_version_id, src.id) DESC, src.last_updated_at DESC
-                LIMIT 1 BY src.id
-                """;
-
+        // Use the unified COPY_VERSION_ITEMS template with exclude_ids
         return asyncTemplate.nonTransaction(connection -> {
             String[] excludedIdStrings = excludedIds.stream()
                     .map(UUID::toString)
@@ -591,10 +612,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .map(UUID::toString)
                     .toArray(String[]::new);
 
-            var statement = connection.createStatement(copyWithExclusionsQuery)
+            // Build query using StringTemplate
+            ST template = new ST(COPY_VERSION_ITEMS);
+            template.add("exclude_ids", true);
+            String query = template.render();
+
+            var statement = connection.createStatement(query)
                     .bind("datasetId", datasetId.toString())
-                    .bind("baseVersionId", baseVersionId.toString())
-                    .bind("newVersionId", newVersionId.toString())
+                    .bind("sourceVersionId", baseVersionId.toString())
+                    .bind("targetVersionId", newVersionId.toString())
                     .bind("excludedIds", excludedIdStrings)
                     .bind("uuids", uuidStrings)
                     .bind("workspace_id", workspaceId)
@@ -619,50 +645,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Mono.just(0L);
         }
 
-        String insertQuery = """
-                INSERT INTO dataset_item_versions (
-                    id,
-                    dataset_item_id,
-                    dataset_id,
-                    dataset_version_id,
-                    data,
-                    metadata,
-                    source,
-                    trace_id,
-                    span_id,
-                    tags,
-                    item_created_at,
-                    item_last_updated_at,
-                    item_created_by,
-                    item_last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    created_by,
-                    last_updated_by,
-                    workspace_id
-                ) VALUES (
-                    :id,
-                    :dataset_item_id,
-                    :dataset_id,
-                    :dataset_version_id,
-                    :data,
-                    :metadata,
-                    :source,
-                    :trace_id,
-                    :span_id,
-                    :tags,
-                    :item_created_at,
-                    :item_last_updated_at,
-                    :item_created_by,
-                    :item_last_updated_by,
-                    now64(9),
-                    now64(9),
-                    :created_by,
-                    :last_updated_by,
-                    :workspace_id
-                )
-                """;
-
         // Note: ClickHouse with async inserts returns 0 immediately before commit.
         // We return the count of items we're inserting instead of relying on getRowsUpdated.
         long itemCount = items.size();
@@ -674,7 +656,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMap(item -> {
                         UUID rowId = UUID.randomUUID();
                         Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
-                        var statement = connection.createStatement(insertQuery)
+                        var statement = connection.createStatement(INSERT_ITEM)
                                 .bind("id", rowId.toString())
                                 .bind("dataset_item_id", item.datasetItemId().toString())
                                 .bind("dataset_id", datasetId.toString())
@@ -749,52 +731,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    private static final String SELECT_ITEM_BY_DATASET_ITEM_ID = """
-            SELECT
-                id,
-                dataset_item_id,
-                dataset_id,
-                data,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                item_created_at as created_at,
-                item_last_updated_at as last_updated_at,
-                item_created_by as created_by,
-                item_last_updated_by as last_updated_by
-            FROM dataset_item_versions
-            WHERE workspace_id = :workspace_id
-            AND dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND dataset_item_id = :datasetItemId
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT 1
-            """;
-
-    private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
-            SELECT
-                id,
-                dataset_item_id,
-                dataset_id,
-                data,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                item_created_at as created_at,
-                item_last_updated_at as last_updated_at,
-                item_created_by as created_by,
-                item_last_updated_by as last_updated_by
-            FROM dataset_item_versions
-            WHERE workspace_id = :workspace_id
-            AND dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND dataset_item_id IN :datasetItemIds
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY dataset_item_id
-            """;
-
     @Override
     @WithSpan
     public Mono<DatasetItem> getItemByDatasetItemId(@NonNull UUID datasetId, @NonNull UUID versionId,
@@ -802,32 +738,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting item by dataset_item_id '{}' from dataset '{}' version '{}'", datasetItemId, datasetId,
                 versionId);
 
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(SELECT_ITEM_BY_DATASET_ITEM_ID)
-                    .bind("datasetId", datasetId.toString())
-                    .bind("versionId", versionId.toString())
-                    .bind("datasetItemId", datasetItemId.toString());
-
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_item_by_dataset_item_id");
-
-            return makeMonoContextAware((userName, workspaceId) -> {
-                statement.bind("workspace_id", workspaceId);
-
-                return Flux.from(statement.execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
-                        .next()
-                        .doOnSuccess(item -> {
-                            if (item != null) {
-                                log.debug("Found item '{}' in dataset '{}' version '{}'", datasetItemId, datasetId,
-                                        versionId);
-                            } else {
-                                log.debug("Item '{}' not found in dataset '{}' version '{}'", datasetItemId, datasetId,
-                                        versionId);
-                            }
-                        })
-                        .doFinally(signalType -> endSegment(segment));
-            });
-        });
+        // Use the batch method with a single item for consistency
+        return getItemsByDatasetItemIds(datasetId, versionId, Set.of(datasetItemId)).next();
     }
 
     @Override
