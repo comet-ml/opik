@@ -25,7 +25,7 @@ from opik_optimizer.datasets import arc_agi2
 
 # Config knobs kept flat for simplicity. Pass@2 is handled via multiple code blocks.
 DATASET_SPLIT = "train"
-DATASET_COUNT = 20
+DATASET_COUNT = 1  # FIXME: run per-task; add a driver loop to iterate tasks when scaling out
 DATASET_START = 0
 TEST_MODE = False  # Set True to force embedded sample.
 ARC_AGI2_DATA_DIR = os.getenv("ARC_AGI2_DATA_DIR")  # optional override
@@ -91,10 +91,12 @@ Safety and format constraints:
 - Keep all helper logic inside the single code block with `transform`; no extra files, I/O, network, randomness, or subprocesses.
 - Ensure `transform` returns a NumPy array of ints matching the expected grid shape unless the rule requires a different shape.
 - Avoid any mention (even in comments/strings) of banned tokens: `os`, `sys`, `pathlib`, `subprocess`, `open`, `eval`, `exec`, `requests`, `httpx`, `pickle`, `json`, `importlib`, or `__import__`.
+- Output grids must contain only integer values 0–9; never emit overlays like `a/b`, strings, or floats. Do not print diffs—just return the grid.
 - Use safe NumPy checks: never do `if array:` or array comparisons to scalars without `.any()`/`.all()`; prefer `np.array_equal`, `np.any`, `np.all`.
-- Before finalizing, mentally run your code on each training pair: ensure output shape matches exactly, colors are correct, and there are no shape off-by-ones or dtype issues.
+- Before finalizing, mentally run your code on each training pair: ensure output shape matches exactly, colors are correct, dtype is integer, and there are no shape off-by-ones.
+- Respond ONLY with code blocks; avoid extra prose that could contain banned substrings. Before you answer, scan your entire response (code + comments) for any banned tokens and remove them.
 
-Respond with ONE or TWO python code blocks (```python ...```), each defining transform(grid: np.ndarray) -> np.ndarray."""
+Respond with ONE python code block (```python ...```), defining transform(grid: np.ndarray) -> np.ndarray."""
 
 USER_PROMPT = """Training examples (input -> output):
 {training_examples_text}
@@ -105,7 +107,7 @@ Shapes (rows x cols):
 Test inputs:
 {test_inputs_text}
 
-Respond with ONE or TWO python code blocks (```python ...```), each defining:
+Respond with ONE python code block (```python ...```), defining:
 def transform(grid: np.ndarray) -> np.ndarray
 """
 
@@ -213,6 +215,16 @@ def _is_valid_matrix(matrix: Any, gold_matrix: list[list[int]]) -> tuple[bool, s
         return True, "Exact match."
     preview = mismatches[:10]
     return False, f"{len(mismatches)} mismatches (first few: {preview})."
+
+
+def _likeness_score(pred: np.ndarray, truth: np.ndarray) -> float:
+    """Fraction of matching cells; requires same shape."""
+    if pred.shape != truth.shape:
+        return 0.0
+    if truth.size == 0:
+        return 1.0
+    raw = np.mean(pred == truth)
+    return float(np.nan_to_num(raw, posinf=0.0, neginf=0.0))
 
 
 def _format_diff(pred: np.ndarray, truth: np.ndarray) -> str:
@@ -374,37 +386,56 @@ def arc_agi2_metric(
     if best["test_errors"]:
         reason_parts.append(f"test_errors: {' | '.join(best['test_errors'][:3])}")
 
+    # Soft guidance weights (kept small so exact match still dominates)
+    SOFT_WEIGHT_TEST = 0.2
+    SOFT_WEIGHT_TRAIN = 0.2
+
     if not gold_outputs:
+        soft_reward = best["train_soft"] * SOFT_WEIGHT_TRAIN
+        value = max(best["train_exact"], soft_reward)
+        reason_parts.append(f"train_likeness_reward={soft_reward:.2f}")
         return score_result.ScoreResult(
             name="arc_agi2_accuracy",
-            value=best["train_exact"],
+            value=value,
             scoring_failed=False,
             reason=" | ".join(reason_parts),
         )
 
-    # Compute pass@k style: best candidate (pass@1) or any of top K (pass@2)
+    # Compute pass@k style: best candidate (pass@1) or any of top K (pass@2), tracking soft closeness.
     evaluated_candidates = candidates_sorted[:PASS_AT_K]
     best_score = 0.0
+    best_soft = 0.0
     best_reason = " | ".join(reason_parts)
     for cand in evaluated_candidates:
         if len(cand["test_outputs"]) != len(gold_outputs):
             continue
-        scores = []
+        exact_scores = []
+        soft_scores = []
         for pred, gold in zip(cand["test_outputs"], gold_outputs, strict=False):
             ok, _ = _is_valid_matrix(pred, gold)
-            scores.append(1.0 if ok else 0.0)
-        candidate_score = sum(scores) / len(scores) if scores else 0.0
-        if candidate_score >= best_score:
-            best_score = candidate_score
+            exact_scores.append(1.0 if ok else 0.0)
+            soft_scores.append(_likeness_score(np.array(pred, dtype=int), np.array(gold, dtype=int)))
+        candidate_exact = sum(exact_scores) / len(exact_scores) if exact_scores else 0.0
+        candidate_soft = sum(soft_scores) / len(soft_scores) if soft_scores else 0.0
+        if candidate_exact > best_score or (
+            candidate_exact == best_score and candidate_soft > best_soft
+        ):
+            best_score = candidate_exact
+            best_soft = candidate_soft
             best_reason = (
-                f"{'pass@2' if PASS_AT_K > 1 else 'pass@1'} score={best_score:.2f} | "
+                f"{'pass@2' if PASS_AT_K > 1 else 'pass@1'} "
+                f"exact={best_score:.2f} soft={candidate_soft:.2f} | "
                 f"train_exact={cand['train_exact']:.2f} | "
                 f"{cand['train_feedback']}"
             )
 
+    soft_reward = best_soft * SOFT_WEIGHT_TEST
+    value = max(best_score, soft_reward)
+    best_reason += f" | likeness_reward={soft_reward:.2f}"
+
     return score_result.ScoreResult(
         name="arc_agi2_accuracy",
-        value=best_score,
+        value=value,
         scoring_failed=False,
         reason=best_reason,
     )
