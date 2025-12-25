@@ -7,7 +7,7 @@ import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -24,7 +24,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
@@ -52,7 +51,7 @@ public class DatasetVersionsResource {
     private final @NonNull UUID datasetId;
     private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull OpikConfiguration config;
+    private final @NonNull FeatureFlags featureFlags;
 
     @GET
     @Operation(operationId = "listDatasetVersions", summary = "List dataset versions", description = "Get paginated list of versions for a dataset, ordered by creation time (newest first)", responses = {
@@ -63,8 +62,8 @@ public class DatasetVersionsResource {
     public Response listVersions(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+        featureFlags.checkDatasetVersioningEnabled();
 
-        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Listing versions for dataset '{}', page '{}', size '{}' on workspace '{}'", datasetId, page, size,
@@ -111,8 +110,8 @@ public class DatasetVersionsResource {
     public Response createTag(
             @PathParam("versionHash") String versionHash,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionTag.class))) @Valid @NotNull DatasetVersionTag tag) {
+        featureFlags.checkDatasetVersioningEnabled();
 
-        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating tag '{}' for version '{}' of dataset '{}' on workspace '{}'", tag.tag(), versionHash,
@@ -133,8 +132,8 @@ public class DatasetVersionsResource {
     public Response deleteTag(
             @PathParam("versionHash") String versionHash,
             @PathParam("tag") String tag) {
+        featureFlags.checkDatasetVersioningEnabled();
 
-        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting tag '{}' for version '{}' from dataset '{}' on workspace '{}'", tag, versionHash, datasetId,
@@ -153,8 +152,8 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "404", description = "Version not found")})
     @RateLimited
     public Response compareVersions() {
+        featureFlags.checkDatasetVersioningEnabled();
 
-        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Comparing latest version with draft for dataset='{}', workspace='{}'",
                 datasetId, workspaceId);
@@ -177,8 +176,8 @@ public class DatasetVersionsResource {
     @JsonView(DatasetVersion.View.Public.class)
     public Response restoreVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionRestore.class))) @Valid @NotNull DatasetVersionRestore request) {
+        featureFlags.checkDatasetVersioningEnabled();
 
-        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -193,12 +192,5 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.ok(version).build();
-    }
-
-    private void checkFeatureEnabled() {
-        if (!config.getServiceToggles().isDatasetVersioningEnabled()) {
-            log.warn("Dataset versioning feature is disabled, returning 403");
-            throw new ForbiddenException("Dataset versioning feature is not enabled");
-        }
     }
 }

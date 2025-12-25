@@ -17,7 +17,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -136,7 +136,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull TransactionTemplate template;
-    private final @NonNull OpikConfiguration config;
+    private final @NonNull FeatureFlags featureFlags;
 
     @Override
     @WithSpan
@@ -186,7 +186,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 .toList();
 
                         // Save dataset items - route to versioned or legacy based on toggle
-                        if (isVersioningEnabled()) {
+                        if (featureFlags.isDatasetVersioningEnabled()) {
                             log.info("Creating dataset items from traces with versioning for dataset '{}'", datasetId);
                             return saveItemsWithVersion(new DatasetItemBatch(null, datasetId, datasetItems), datasetId)
                                     .then(Mono.just(0L));
@@ -235,7 +235,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 .toList();
 
                         // Save dataset items - route to versioned or legacy based on toggle
-                        if (isVersioningEnabled()) {
+                        if (featureFlags.isDatasetVersioningEnabled()) {
                             log.info("Creating dataset items from spans with versioning for dataset '{}'", datasetId);
                             return saveItemsWithVersion(new DatasetItemBatch(null, datasetId, datasetItems), datasetId)
                                     .then(Mono.just(0L));
@@ -285,7 +285,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetItem> get(@NonNull UUID id) {
-        if (isVersioningEnabled()) {
+        if (featureFlags.isDatasetVersioningEnabled()) {
             // When versioning is enabled, only query the versioned table
             return versionDao.getItemById(id)
                     .flatMap(item -> Mono.deferContextual(ctx -> {
@@ -319,7 +319,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (isVersioningEnabled()) {
+            if (featureFlags.isDatasetVersioningEnabled()) {
                 log.info("Patching item '{}' with versioning", id);
                 return patchItemWithVersionById(id, item, workspaceId, userName);
             }
@@ -437,7 +437,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (isVersioningEnabled()) {
+            if (featureFlags.isDatasetVersioningEnabled()) {
                 log.info("Batch updating items with versioning, idsSize='{}', filtersSize='{}'",
                         batchUpdate.ids() != null ? batchUpdate.ids().size() : 0,
                         batchUpdate.filters() != null ? batchUpdate.filters().size() : 0);
@@ -587,7 +587,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
 
         // Route to versioned or legacy based on toggle
-        if (isVersioningEnabled()) {
+        if (featureFlags.isDatasetVersioningEnabled()) {
             log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
             return saveItemsWithVersion(batch, datasetId)
                     .map(version -> (long) items.size())
@@ -675,7 +675,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (isVersioningEnabled()) {
+            if (featureFlags.isDatasetVersioningEnabled()) {
                 log.info("Deleting items with versioning. datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
                         datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
                 return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
@@ -928,7 +928,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
                         .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
             });
-        } else if (isVersioningEnabled()) {
+        } else if (featureFlags.isDatasetVersioningEnabled()) {
             // Versioning toggle is ON: fetch items from the latest version
             log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
                     datasetItemSearchCriteria, page, size);
@@ -945,11 +945,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return dao.getItems(datasetItemSearchCriteria, page, size)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         }
-    }
-
-    private boolean isVersioningEnabled() {
-        return config.getServiceToggles() != null
-                && config.getServiceToggles().isDatasetVersioningEnabled();
     }
 
     private Mono<DatasetItemPage> getItemsFromLatestVersion(DatasetItemSearchCriteria criteria, int page, int size,
@@ -1224,7 +1219,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (isVersioningEnabled()) {
+            if (featureFlags.isDatasetVersioningEnabled()) {
                 UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
                 log.info("Saving items with versioning for dataset '{}'", datasetId);
                 return saveItemsWithVersion(batch, datasetId)

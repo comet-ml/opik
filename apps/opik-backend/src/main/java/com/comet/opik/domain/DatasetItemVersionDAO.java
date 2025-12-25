@@ -234,8 +234,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             """;
 
-    // Insert new items directly (not copying from existing)
-    private static final String INSERT_ITEM = """
+    // Batch insert items
+    private static final String BATCH_INSERT_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
                 dataset_item_id,
@@ -256,27 +256,30 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 created_by,
                 last_updated_by,
                 workspace_id
-            ) VALUES (
-                :id,
-                :dataset_item_id,
-                :dataset_id,
-                :dataset_version_id,
-                :data,
-                :metadata,
-                :source,
-                :trace_id,
-                :span_id,
-                :tags,
-                :item_created_at,
-                :item_last_updated_at,
-                :item_created_by,
-                :item_last_updated_by,
-                now64(9),
-                now64(9),
-                :created_by,
-                :last_updated_by,
-                :workspace_id
-            )
+            ) VALUES
+                <items:{item |
+                    (
+                        :id<item.index>,
+                        :dataset_item_id<item.index>,
+                        :dataset_id,
+                        :dataset_version_id,
+                        :data<item.index>,
+                        :metadata<item.index>,
+                        :source<item.index>,
+                        :trace_id<item.index>,
+                        :span_id<item.index>,
+                        :tags<item.index>,
+                        :item_created_at<item.index>,
+                        :item_last_updated_at<item.index>,
+                        :item_created_by<item.index>,
+                        :item_last_updated_by<item.index>,
+                        now64(9),
+                        now64(9),
+                        :created_by,
+                        :last_updated_by,
+                        :workspace_id
+                    )<if(item.hasNext)>,<endif>
+                }>
             """;
 
     // Batch update items using INSERT ... SELECT with conditional field updates
@@ -807,41 +810,50 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
 
-            return Flux.fromIterable(items)
-                    .flatMap(item -> {
-                        UUID rowId = UUID.randomUUID();
-                        UUID stableItemId = item.draftItemId();
-                        Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
-                        var statement = connection.createStatement(INSERT_ITEM)
-                                .bind("id", rowId.toString())
-                                .bind("dataset_item_id", stableItemId.toString())
-                                .bind("dataset_id", datasetId.toString())
-                                .bind("dataset_version_id", newVersionId.toString())
-                                .bind("data", dataAsStrings)
-                                .bind("metadata", "")
-                                .bind("source", item.source() != null ? item.source().getValue() : "sdk")
-                                .bind("trace_id", DatasetItemResultMapper.getOrDefault(item.traceId()))
-                                .bind("span_id", DatasetItemResultMapper.getOrDefault(item.spanId()))
-                                .bind("tags", item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
-                                .bind("item_created_at", formatTimestamp(item.createdAt()))
-                                .bind("item_last_updated_at", formatTimestamp(item.lastUpdatedAt()))
-                                .bind("item_created_by", item.createdBy() != null ? item.createdBy() : userName)
-                                .bind("item_last_updated_by",
-                                        item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName)
-                                .bind("created_by", userName)
-                                .bind("last_updated_by", userName)
-                                .bind("workspace_id", workspaceId);
+            // Build batch insert query using template
+            List<TemplateUtils.QueryItem> queryItems = TemplateUtils.getQueryItemPlaceHolder(items.size());
+            var template = TemplateUtils.newST(BATCH_INSERT_ITEMS)
+                    .add("items", queryItems);
 
-                        return Flux.from(statement.execute())
-                                .flatMap(Result::getRowsUpdated)
-                                .reduce(0L, Long::sum)
-                                .doOnError(
-                                        e -> log.error("Insert failed for item dataset_item_id='{}'", stableItemId, e));
-                    })
-                    .collectList()
+            var statement = connection.createStatement(template.render())
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("dataset_version_id", newVersionId.toString())
+                    .bind("created_by", userName)
+                    .bind("last_updated_by", userName)
+                    .bind("workspace_id", workspaceId);
+
+            // Bind all item-specific parameters
+            int i = 0;
+            for (DatasetItem item : items) {
+                UUID rowId = UUID.randomUUID();
+                UUID stableItemId = item.draftItemId();
+                Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
+
+                statement
+                        .bind("id" + i, rowId.toString())
+                        .bind("dataset_item_id" + i, stableItemId.toString())
+                        .bind("data" + i, dataAsStrings)
+                        .bind("metadata" + i, "")
+                        .bind("source" + i, item.source() != null ? item.source().getValue() : "sdk")
+                        .bind("trace_id" + i, DatasetItemResultMapper.getOrDefault(item.traceId()))
+                        .bind("span_id" + i, DatasetItemResultMapper.getOrDefault(item.spanId()))
+                        .bind("tags" + i, item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
+                        .bind("item_created_at" + i, formatTimestamp(item.createdAt()))
+                        .bind("item_last_updated_at" + i, formatTimestamp(item.lastUpdatedAt()))
+                        .bind("item_created_by" + i, item.createdBy() != null ? item.createdBy() : userName)
+                        .bind("item_last_updated_by" + i,
+                                item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName);
+
+                i++;
+            }
+
+            return Flux.from(statement.execute())
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum)
                     .map(results -> itemCount) // Return item count instead of sum of results
-                    .doOnSuccess(count -> log.debug("Inserted '{}' items", count))
-                    .doOnError(e -> log.error("Insert items failed", e))
+                    .doOnSuccess(count -> log.debug("Inserted '{}' items in batch", count))
+                    .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
+                            datasetId, newVersionId, e))
                     .doFinally(signalType -> endSegment(segment));
         });
     }
