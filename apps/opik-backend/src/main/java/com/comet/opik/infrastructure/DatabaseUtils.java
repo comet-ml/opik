@@ -143,9 +143,9 @@ public class DatabaseUtils {
 
     public static String getLogComment(String queryName, String workspaceId, Object details) {
         return TemplateUtils.newST(LOG_COMMENT)
-                .add("query_name", queryName)
-                .add("workspace_id", workspaceId)
-                .add("details", details)
+                .add("query_name", queryName != null ? queryName.replace("'", "''") : null)
+                .add("workspace_id", workspaceId != null ? workspaceId.replace("'", "''") : null)
+                .add("details", details != null ? details.toString().replace("'", "''") : null)
                 .render();
     }
 }
