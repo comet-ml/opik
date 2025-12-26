@@ -2566,19 +2566,17 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
-        return makeFluxContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("get_trace_details_by_id", workspaceId, "");
-            var template = TemplateUtils.newST(SELECT_DETAILS_BY_ID)
-                    .add("log_comment", logComment);
+        var logComment = getLogComment("get_trace_details_by_id", "", "");
+        var template = TemplateUtils.newST(SELECT_DETAILS_BY_ID)
+                .add("log_comment", logComment);
 
-            var statement = connection.createStatement(template.render())
-                    .bind("id", id);
+        var statement = connection.createStatement(template.render())
+                .bind("id", id);
 
-            Segment segment = startSegment("traces", "Clickhouse", "getDetailsById");
+        Segment segment = startSegment("traces", "Clickhouse", "getDetailsById");
 
-            return Flux.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment));
-        });
+        return Flux.from(statement.execute())
+                .doFinally(signalType -> endSegment(segment));
     }
 
     @Override
