@@ -4304,8 +4304,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Get the dataset ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            UUID datasetId = retrieved1.datasetId();
+
+            // Verify initial state
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
@@ -4317,6 +4320,7 @@ class DatasetsResourceTest {
 
             // Batch update by filters with merge
             var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
                     .filters(List.of(filter))
                     .update(DatasetItemUpdate.builder()
                             .tags(Set.of("newtag"))
@@ -4356,8 +4360,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Get the dataset ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            UUID datasetId = retrieved1.datasetId();
+
+            // Verify initial state
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
@@ -4369,6 +4376,7 @@ class DatasetsResourceTest {
 
             // Batch update by filters with mergeTags=false (should auto-set to true)
             var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
                     .filters(List.of(filter))
                     .update(DatasetItemUpdate.builder()
                             .tags(Set.of("newtag"))
@@ -4444,8 +4452,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Get the dataset ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            UUID datasetId = retrieved1.datasetId();
+
+            // Verify initial state
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("tag1");
@@ -4454,6 +4465,7 @@ class DatasetsResourceTest {
 
             // Batch update with empty filters - should update ALL items
             var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
                     .filters(List.of())
                     .update(DatasetItemUpdate.builder()
                             .tags(Set.of("newtag"))
@@ -4470,6 +4482,143 @@ class DatasetsResourceTest {
             assertThat(updated1.tags()).containsExactlyInAnyOrder("tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("tag3", "newtag");
+        }
+
+        @Test
+        @DisplayName("Success: batch update by filters with dataset_id only affects specified dataset")
+        void batchUpdateDatasetItems__whenFilterWithDatasetId__thenAffectsOnlySpecifiedDataset() {
+            // Create two separate datasets with items that have similar tags
+            var dataset1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(null)
+                    .datasetName("dataset-1")
+                    .build();
+
+            var dataset2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(null)
+                    .datasetName("dataset-2")
+                    .build();
+
+            // Create items with matching tags in both datasets
+            var dataset1Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("target-tag"))
+                    .build();
+            var dataset1Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other-tag"))
+                    .build();
+
+            var dataset2Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("target-tag"))
+                    .build();
+            var dataset2Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other-tag"))
+                    .build();
+
+            var batch1 = dataset1.toBuilder()
+                    .items(List.of(dataset1Item1, dataset1Item2))
+                    .build();
+
+            var batch2 = dataset2.toBuilder()
+                    .items(List.of(dataset2Item1, dataset2Item2))
+                    .build();
+
+            // Save both datasets
+            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
+            putAndAssert(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Get the actual dataset IDs that were created
+            var retrievedDataset1Item1 = datasetResourceClient.getDatasetItem(dataset1Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            UUID dataset1Id = retrievedDataset1Item1.datasetId();
+
+            // Verify initial state
+            var retrievedDataset1Item2 = datasetResourceClient.getDatasetItem(dataset1Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var retrievedDataset2Item1 = datasetResourceClient.getDatasetItem(dataset2Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var retrievedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(retrievedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag");
+            assertThat(retrievedDataset1Item2.tags()).containsExactlyInAnyOrder("other-tag");
+            assertThat(retrievedDataset2Item1.tags()).containsExactlyInAnyOrder("target-tag");
+            assertThat(retrievedDataset2Item2.tags()).containsExactlyInAnyOrder("other-tag");
+
+            // Create a filter that targets items with "target-tag"
+            var filter = DatasetItemFilter.builder()
+                    .field(DatasetItemField.TAGS)
+                    .operator(Operator.CONTAINS)
+                    .value("target-tag")
+                    .build();
+
+            // Batch update by filter WITH dataset_id specified - should only affect dataset1
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(dataset1Id)
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("updated-tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify: Only dataset1 items were updated, dataset2 items remain unchanged
+            var updatedDataset1Item1 = datasetResourceClient.getDatasetItem(dataset1Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var updatedDataset1Item2 = datasetResourceClient.getDatasetItem(dataset1Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var updatedDataset2Item1 = datasetResourceClient.getDatasetItem(dataset2Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var updatedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Dataset1 items with target-tag should be updated
+            assertThat(updatedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag", "updated-tag");
+            assertThat(updatedDataset1Item2.tags()).containsExactlyInAnyOrder("other-tag"); // unchanged
+
+            // Dataset2 items should NOT be updated (different dataset)
+            assertThat(updatedDataset2Item1.tags()).containsExactlyInAnyOrder("target-tag"); // NOT updated
+            assertThat(updatedDataset2Item2.tags()).containsExactlyInAnyOrder("other-tag"); // unchanged
+        }
+
+        @Test
+        @DisplayName("Error: batch update by filters without dataset_id should fail")
+        void batchUpdateDatasetItems__whenFilterWithoutDatasetId__thenFails() {
+            // Create a dataset with items
+            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("some-tag"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Create a filter
+            var filter = DatasetItemFilter.builder()
+                    .field(DatasetItemField.TAGS)
+                    .operator(Operator.CONTAINS)
+                    .value("some-tag")
+                    .build();
+
+            // Attempt to batch update by filter WITHOUT dataset_id - should fail
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("new-tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            // Should fail with validation error requiring dataset_id
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                var errorBody = actualResponse.readEntity(String.class);
+                assertThat(errorBody).contains("dataset_id");
+            }
         }
     }
 
