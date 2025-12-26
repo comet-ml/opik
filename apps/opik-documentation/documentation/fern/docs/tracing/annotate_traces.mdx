@@ -68,9 +68,9 @@ client = opik.Opik()
 
 # Log feedback scores to an existing trace
 client.log_traces_feedback_scores(
-  feedback_scores=[
-    {"id": "trace_id", "name": "user_feedback", "value": 1},
-    {"id": "trace_id", "name": "accuracy", "value": 1, "reason": "Good answer"} # Optional reason score
+  scores=[
+    {"id": "trace_id", "name": "user_feedback", "value": 1, "project_name": "my-project"},
+    {"id": "trace_id", "name": "accuracy", "value": 1, "reason": "Good answer", "project_name": "my-project"} # Optional reason score
   ]
 )
 

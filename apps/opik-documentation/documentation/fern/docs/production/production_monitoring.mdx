@@ -84,8 +84,15 @@ Once you have fetched the traces you want to annotate, you can update the feedba
 ```python
 for trace in traces:
     opik_client.log_traces_feedback_scores(
-        project_name="Default Project",
-        feedback_scores=[{"id": trace.id, "name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}],
+        scores=[
+            {
+                "id": trace.id,
+                "name": "user_feedback",
+                "value": 1.0,
+                "reason": "The response was helpful and accurate.",
+                "project_name": "Default Project"
+            }
+        ],
     )
 ```
 
