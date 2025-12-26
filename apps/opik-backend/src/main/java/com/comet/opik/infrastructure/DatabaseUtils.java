@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
 public class DatabaseUtils {
 
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
+    private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<details>";
 
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
         var filteredProperties = dataSourceFactory.getProperties()
@@ -138,5 +139,13 @@ public class DatabaseUtils {
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
+    }
+
+    public static String getLogComment(String queryName, String workspaceId, Object details) {
+        return TemplateUtils.newST(LOG_COMMENT)
+                .add("query_name", queryName != null ? queryName.replace("'", "''") : null)
+                .add("workspace_id", workspaceId != null ? workspaceId.replace("'", "''") : null)
+                .add("details", details != null ? details.toString().replace("'", "''") : null)
+                .render();
     }
 }
