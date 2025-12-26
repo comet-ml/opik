@@ -69,7 +69,7 @@ public interface DatasetItemDAO {
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
-    Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters, DatasetItemUpdate update,
+    Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
 
     Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
@@ -863,6 +863,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items AS s
             WHERE s.workspace_id = :workspace_id
             <if(ids)> AND s.id IN :ids <endif>
+            <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
@@ -1589,7 +1590,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters,
+    public Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters,
             @NonNull DatasetItemUpdate update, boolean mergeTags) {
         boolean hasIds = CollectionUtils.isNotEmpty(ids);
         // Empty filters array means "select all items", null means not provided
@@ -1600,7 +1601,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         if (hasIds) {
             log.info("Bulk updating '{}' dataset items by IDs", ids.size());
         } else {
-            log.info("Bulk updating dataset items by filters");
+            log.info("Bulk updating dataset items by filters for dataset '{}'", datasetId);
         }
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
@@ -1609,6 +1610,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         if (hasIds) {
             template.add("ids", true);
         } else {
+            // When using filters, dataset_id is required
+            template.add("dataset_id", true);
             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
                     .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
         }
@@ -1621,6 +1624,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             // Bind ids if provided
             if (hasIds) {
                 statement.bind("ids", ids);
+            } else {
+                // Bind dataset_id when using filters
+                statement.bind("dataset_id", datasetId);
             }
 
             bindBulkUpdateParams(update, statement);
@@ -1635,7 +1641,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             String successMessage = hasIds
                     ? "Completed bulk update for '%s' dataset items".formatted(ids.size())
-                    : "Completed bulk update for dataset items matching filters";
+                    : "Completed bulk update for dataset items matching filters in dataset '%s'".formatted(datasetId);
 
             return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
                     .doFinally(signalType -> endSegment(segment))
