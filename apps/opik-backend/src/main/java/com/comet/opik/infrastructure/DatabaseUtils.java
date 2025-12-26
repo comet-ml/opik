@@ -97,6 +97,9 @@ public class DatabaseUtils {
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
                             .ifPresent(traceAnnotationFilters -> template.add("annotation_queue_filters",
                                     traceAnnotationFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_AGGREGATION)
+                            .ifPresent(traceExperimentFilters -> template.add("experiment_filters",
+                                    traceExperimentFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
@@ -127,6 +130,7 @@ public class DatabaseUtils {
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);

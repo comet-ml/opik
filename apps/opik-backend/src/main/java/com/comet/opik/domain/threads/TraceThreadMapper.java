@@ -2,6 +2,7 @@ package com.comet.opik.domain.threads;
 
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.utils.RowUtils;
 import io.r2dbc.spi.Row;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -54,30 +55,16 @@ interface TraceThreadMapper {
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
                         .orElse(Map.of()))
                 .scoredAt(row.get("scored_at", Instant.class))
-                .startTime(getOptionalValue(row, "start_time", Instant.class))
-                .endTime(getOptionalValue(row, "end_time", Instant.class))
-                .duration(getOptionalValue(row, "duration", Double.class))
-                .feedbackScores(Optional.ofNullable(getOptionalValue(row, "feedback_scores", Map.class))
+                .startTime(RowUtils.getOptionalValue(row, "start_time", Instant.class))
+                .endTime(RowUtils.getOptionalValue(row, "end_time", Instant.class))
+                .duration(RowUtils.getOptionalValue(row, "duration", Double.class))
+                .feedbackScores(Optional.ofNullable(RowUtils.getOptionalValue(row, "feedback_scores", Map.class))
                         .map(scores -> (Map<String, Integer>) scores)
                         .orElse(Map.of()))
-                .firstMessage(getOptionalValue(row, "first_message", String.class))
-                .lastMessage(getOptionalValue(row, "last_message", String.class))
-                .numberOfMessages(getOptionalValue(row, "number_of_messages", Long.class))
+                .firstMessage(RowUtils.getOptionalValue(row, "first_message", String.class))
+                .lastMessage(RowUtils.getOptionalValue(row, "last_message", String.class))
+                .numberOfMessages(RowUtils.getOptionalValue(row, "number_of_messages", Long.class))
                 .build();
-    }
-
-    /**
-     * Helper method to safely get values from database rows that might not have certain columns.
-     * This is needed because some queries (e.g., simple trace_threads table) don't have execution time fields,
-     * while others (e.g., aggregated thread queries) do have them.
-     */
-    default <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
-        try {
-            return row.getMetadata().contains(columnName) ? row.get(columnName, type) : null;
-        } catch (Exception e) {
-            // Column doesn't exist in this query result - return null
-            return null;
-        }
     }
 
     default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosureThreads(Row row) {

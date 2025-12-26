@@ -12,11 +12,12 @@ import { cn } from "@/lib/utils";
 type CustomMeta<TData> = {
   callback: (row: TData) => void;
   asId: boolean;
+  tooltip?: string;
 };
 
 const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { callback, asId } = (custom ?? {}) as CustomMeta<TData>;
+  const { callback, asId, tooltip } = (custom ?? {}) as CustomMeta<TData>;
   const value = context.getValue() as string;
   const { toast } = useToast();
 
@@ -38,7 +39,7 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
       className="group py-1"
     >
       {value ? (
-        <TooltipWrapper content={value} stopClickPropagation>
+        <TooltipWrapper content={tooltip ?? value} stopClickPropagation>
           <div className="flex max-w-full items-center">
             <Button
               variant="tableLink"

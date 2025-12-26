@@ -27,8 +27,10 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
+import { useExperimentsColumnsWithTraceCount } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -150,9 +152,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
+    cell: LinkCell as never,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
+      tooltip: "View experiment traces",
     },
   },
   {
@@ -314,6 +318,9 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setExpanded: expandingConfig.setExpanded,
   });
 
+  const columnsWithCallback =
+    useExperimentsColumnsWithTraceCount(DEFAULT_COLUMNS);
+
   const {
     columns,
     selectedRows,
@@ -328,7 +335,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setColumnsOrder,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
-    defaultColumns: DEFAULT_COLUMNS,
+    defaultColumns: columnsWithCallback,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
     groups,
     sortableBy,
