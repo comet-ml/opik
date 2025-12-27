@@ -256,59 +256,6 @@ class OptimizationsClient:
         _response = self._raw_client.delete_optimizations_by_id(ids=ids, request_options=request_options)
         return _response.data
 
-    def find_studio_optimizations(
-        self,
-        *,
-        page: typing.Optional[int] = None,
-        size: typing.Optional[int] = None,
-        dataset_id: typing.Optional[str] = None,
-        name: typing.Optional[str] = None,
-        dataset_deleted: typing.Optional[bool] = None,
-        filters: typing.Optional[str] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> OptimizationPagePublic:
-        """
-        Find Studio optimizations
-
-        Parameters
-        ----------
-        page : typing.Optional[int]
-
-        size : typing.Optional[int]
-
-        dataset_id : typing.Optional[str]
-
-        name : typing.Optional[str]
-
-        dataset_deleted : typing.Optional[bool]
-
-        filters : typing.Optional[str]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        OptimizationPagePublic
-            Studio optimizations resource
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.optimizations.find_studio_optimizations()
-        """
-        _response = self._raw_client.find_studio_optimizations(
-            page=page,
-            size=size,
-            dataset_id=dataset_id,
-            name=name,
-            dataset_deleted=dataset_deleted,
-            filters=filters,
-            request_options=request_options,
-        )
-        return _response.data
-
     def get_optimization_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> OptimizationPublic:
@@ -371,33 +318,6 @@ class OptimizationsClient:
         _response = self._raw_client.update_optimizations_by_id(
             id, name=name, status=status, request_options=request_options
         )
-        return _response.data
-
-    def get_studio_optimization_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> OptimizationPublic:
-        """
-        Get Studio optimization with config included
-
-        Parameters
-        ----------
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        OptimizationPublic
-            Studio optimization resource
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.optimizations.get_studio_optimization_by_id(id='id', )
-        """
-        _response = self._raw_client.get_studio_optimization_by_id(id, request_options=request_options)
         return _response.data
 
     def get_studio_optimization_logs(
@@ -683,62 +603,6 @@ class AsyncOptimizationsClient:
         _response = await self._raw_client.delete_optimizations_by_id(ids=ids, request_options=request_options)
         return _response.data
 
-    async def find_studio_optimizations(
-        self,
-        *,
-        page: typing.Optional[int] = None,
-        size: typing.Optional[int] = None,
-        dataset_id: typing.Optional[str] = None,
-        name: typing.Optional[str] = None,
-        dataset_deleted: typing.Optional[bool] = None,
-        filters: typing.Optional[str] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> OptimizationPagePublic:
-        """
-        Find Studio optimizations
-
-        Parameters
-        ----------
-        page : typing.Optional[int]
-
-        size : typing.Optional[int]
-
-        dataset_id : typing.Optional[str]
-
-        name : typing.Optional[str]
-
-        dataset_deleted : typing.Optional[bool]
-
-        filters : typing.Optional[str]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        OptimizationPagePublic
-            Studio optimizations resource
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.optimizations.find_studio_optimizations()
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.find_studio_optimizations(
-            page=page,
-            size=size,
-            dataset_id=dataset_id,
-            name=name,
-            dataset_deleted=dataset_deleted,
-            filters=filters,
-            request_options=request_options,
-        )
-        return _response.data
-
     async def get_optimization_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> OptimizationPublic:
@@ -807,36 +671,6 @@ class AsyncOptimizationsClient:
         _response = await self._raw_client.update_optimizations_by_id(
             id, name=name, status=status, request_options=request_options
         )
-        return _response.data
-
-    async def get_studio_optimization_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> OptimizationPublic:
-        """
-        Get Studio optimization with config included
-
-        Parameters
-        ----------
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        OptimizationPublic
-            Studio optimization resource
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.optimizations.get_studio_optimization_by_id(id='id', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.get_studio_optimization_by_id(id, request_options=request_options)
         return _response.data
 
     async def get_studio_optimization_logs(
