@@ -164,6 +164,7 @@ const PlaygroundOutputTable = ({
         label: `Output ${getAlphabetLetter(promptIdx)}`,
         type: COLUMN_TYPE.string,
         cell: PlaygroundOutputCell as never,
+        minSize: 350,
         customMeta: {
           promptId: promptId,
         },
