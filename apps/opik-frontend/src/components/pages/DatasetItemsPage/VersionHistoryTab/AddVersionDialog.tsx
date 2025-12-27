@@ -24,6 +24,7 @@ type AddVersionDialogProps = {
   setOpen: (open: boolean) => void;
   datasetId: string;
   datasetName?: string;
+  onConfirm?: (tags?: string[], changeDescription?: string) => void;
 };
 
 const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
@@ -31,6 +32,7 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   setOpen,
   datasetId,
   datasetName,
+  onConfirm,
 }) => {
   const commitVersionMutation = useCommitDatasetVersionMutation();
   const { toast } = useToast();
@@ -75,6 +77,13 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   }, [toast, navigateToExperiment, datasetName, loadPlayground, datasetId]);
 
   const handleSubmit = (data: VersionFormData) => {
+    // If onConfirm is provided, use it (draft mode)
+    if (onConfirm) {
+      onConfirm(data.tags, data.versionNote);
+      return;
+    }
+
+    // Otherwise, use the legacy commit mutation
     commitVersionMutation.mutate(
       {
         datasetId,

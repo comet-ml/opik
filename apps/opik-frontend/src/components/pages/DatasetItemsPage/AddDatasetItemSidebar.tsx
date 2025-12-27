@@ -5,27 +5,22 @@ import Loader from "@/components/shared/Loader/Loader";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DATASET_ITEM_SOURCE, DatasetItemColumn } from "@/types/datasets";
-import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
-import useAppStore from "@/store/AppStore";
 import { useDatasetItemData } from "./DatasetItemEditor/hooks/useDatasetItemData";
 import { useDatasetItemFormState } from "./DatasetItemEditor/hooks/useDatasetItemFormState";
 import DatasetItemEditorForm from "./DatasetItemEditor/DatasetItemEditorForm";
+import { useAddItem } from "@/store/DatasetDraftStore";
 
 interface AddDatasetItemSidebarProps {
-  datasetId: string;
   open: boolean;
   setOpen: (open: boolean) => void;
   columns: DatasetItemColumn[];
 }
 
 const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
-  datasetId,
   open,
   setOpen,
   columns,
 }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
   // Fetch dataset item data (for create mode, no datasetItemId)
@@ -38,9 +33,8 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
   const { hasUnsavedChanges, setHasUnsavedChanges, formId } =
     useDatasetItemFormState({ datasetItemId: undefined });
 
-  // Mutations
-  const { isPending: isSubmitting, mutate: createDatasetItem } =
-    useDatasetItemBatchMutation();
+  // Draft store actions
+  const addItem = useAddItem();
 
   // Confirm dialog
   const {
@@ -52,32 +46,17 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
 
   const handleSave = useCallback(
     (data: Record<string, unknown>) => {
-      createDatasetItem(
-        {
-          datasetId,
-          datasetItems: [
-            {
-              data,
-              source: DATASET_ITEM_SOURCE.manual,
-            },
-          ],
-          workspaceName,
-        },
-        {
-          onSuccess: () => {
-            setHasUnsavedChanges(false);
-            handleClose();
-          },
-        },
-      );
+      addItem({
+        data,
+        source: DATASET_ITEM_SOURCE.manual,
+        tags: [],
+        created_at: new Date().toISOString(),
+        last_updated_at: new Date().toISOString(),
+      });
+      setHasUnsavedChanges(false);
+      handleClose();
     },
-    [
-      createDatasetItem,
-      datasetId,
-      workspaceName,
-      handleClose,
-      setHasUnsavedChanges,
-    ],
+    [addItem, handleClose, setHasUnsavedChanges],
   );
 
   const handleDiscard = useCallback(() => {
@@ -135,9 +114,8 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
                     form={formId}
                     variant="default"
                     size="sm"
-                    disabled={isSubmitting}
                   >
-                    {isSubmitting ? "Saving..." : "Save changes"}
+                    Save changes
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleDiscard}>
                     Cancel

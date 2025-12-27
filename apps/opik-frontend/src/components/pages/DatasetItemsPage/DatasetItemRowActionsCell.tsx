@@ -9,29 +9,20 @@ import { MoreHorizontal, Trash } from "lucide-react";
 import React, { useCallback } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { DatasetItem } from "@/types/datasets";
-import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
-import useAppStore from "@/store/AppStore";
-import useDatasetItemDeleteMutation from "@/api/datasets/useDatasetItemDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { useDeleteItem } from "@/store/DatasetDraftStore";
 
 export const DatasetItemRowActionsCell: React.FunctionComponent<
   CellContext<DatasetItem, unknown>
 > = (context) => {
-  const datasetId = useDatasetIdFromURL();
   const datasetItem = context.row.original;
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const datasetItemDeleteMutation = useDatasetItemDeleteMutation();
+  // Draft store actions
+  const deleteItem = useDeleteItem();
 
   const deleteDataset = useCallback(() => {
-    datasetItemDeleteMutation.mutate({
-      datasetId,
-      datasetItemId: datasetItem.id,
-      workspaceName,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasetItem.id, datasetId, workspaceName]);
+    deleteItem(datasetItem.id);
+  }, [datasetItem.id, deleteItem]);
 
   return (
     <CellWrapper
