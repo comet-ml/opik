@@ -7,14 +7,14 @@ This module contains all the prompt templates used by the optimizer for:
 """
 
 # Prompt template for analyzing a batch of test results
-BATCH_ANALYSIS_PROMPT = """You are analyzing evaluation results to identify failure patterns.
+BATCH_ANALYSIS_PROMPT = """You are analyzing ARC-AGI puzzle evaluation results. Each item represents a colored-grid transformation performed by an LLM-generated Python solver. Metrics such as exact, approx_match/likeness, label IoU, mismatch counts, and coordinate previews are authoritative.
 
 TEST RESULTS:
 ```
 {formatted_batch}
 ```
 
-Important constraint: Base your analysis exclusively on the TEST RESULTS shown above. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results.
+Important constraint: Base your analysis exclusively on the TEST RESULTS shown above. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results. Use ARC terminology (pixels, palette swaps, connected components, bounding boxes, etc.) when discussing failures.
 
 Think through the failures systematically:
 
@@ -33,14 +33,14 @@ Provide a list of failure modes, each with a name, description, and root cause."
 
 
 # Prompt template for synthesizing multiple batch analyses
-SYNTHESIS_PROMPT = """You are synthesizing root cause analyses from multiple batches of evaluation results.
+SYNTHESIS_PROMPT = """You are synthesizing ARC-AGI root-cause analyses from multiple batches of puzzle results.
 
 BATCH ANALYSES:
 ```
 {batch_summaries}
 ```
 
-Your task is to synthesize these batch-level analyses into a unified root cause analysis.
+Your task is to synthesize these batch-level analyses into a unified ARC-aware root cause analysis.
 
 1. MERGE similar failure modes across batches:
    - If multiple batches identify the same or very similar failure pattern, combine them into one unified failure mode
@@ -63,7 +63,7 @@ Provide:
 
 
 # Prompt template for improving prompts based on failure modes
-IMPROVE_PROMPT_TEMPLATE = """You are an expert prompt engineer. You are given one or more prompts and a failure mode identified during evaluation.
+IMPROVE_PROMPT_TEMPLATE = """You are an expert ARC-AGI prompt engineer. You are given one or more prompts and a failure mode identified during evaluation of grid-based puzzles. These prompts guide an LLM to analyze ARC training grids and emit Python `transform(grid: np.ndarray)` functions.
 Your task is to improve ALL prompts to address this failure mode.
 
 CURRENT PROMPTS:
@@ -91,6 +91,6 @@ INSTRUCTIONS FOR IMPROVING THE PROMPTS:
 
 6. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
 
-Do not remove any variables or placeholders from any prompt message. You can reposition them within the same message content if needed but never remove them.
+Do not remove any variables or placeholders from any prompt message. You can reposition them within the same message content if needed but never remove them. Reinforce ARC-specific requirements (pixel-perfect outputs, correct shapes, palette safety, deterministic testing across training grids) whenever helpful.
 
 Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompts for ALL prompt names provided above."""

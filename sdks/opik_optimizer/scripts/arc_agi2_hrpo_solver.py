@@ -836,8 +836,10 @@ def main() -> None:
         return_evaluation_result=True,
         verbose=1,
     )
-    baseline_score = 0.0
-    if getattr(baseline_eval, "test_results", None):
+    baseline_score = getattr(baseline_eval, "score", None)
+    if baseline_score is None:
+        baseline_score = 0.0
+    if baseline_score == 0.0 and getattr(baseline_eval, "test_results", None):
         baseline_scores = [
             sr.value
             for test in baseline_eval.test_results
