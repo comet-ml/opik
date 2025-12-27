@@ -93,6 +93,31 @@ def create_dataset_from_records(
     test_mode: bool,
 ) -> opik.Dataset:
     """Create or reuse an Opik dataset with the provided records and size checks."""
+    if os.getenv("OPIK_DATASET_OFFLINE", "0") not in {"", "0", "false", "False"}:
+        class _LocalDataset:
+            def __init__(self, name: str, items: list[dict[str, Any]]):
+                self._name = name
+                self._items = items
+                self.id = name
+
+            @property
+            def name(self) -> str:  # type: ignore
+                return self._name
+
+            def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
+                return self._items if nb_samples is None else self._items[:nb_samples]
+
+            def insert(self, items: Sequence[dict[str, Any]]) -> None:
+                self._items.extend(items)
+
+        full_name = dataset_name_for_mode(dataset_name, test_mode)
+        records_with_ids = attach_uuids(records)
+        if len(records_with_ids) != expected_size:
+            raise ValueError(
+                f"Dataset {full_name} contains {len(records_with_ids)} items, expected {expected_size}."
+            )
+        return _LocalDataset(full_name, list(records_with_ids))  # type: ignore[return-value]
+
     full_name = dataset_name_for_mode(dataset_name, test_mode)
     client = opik.Opik()
     dataset = client.get_or_create_dataset(full_name)

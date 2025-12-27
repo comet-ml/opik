@@ -54,6 +54,8 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         seed: int = 42,
         model_parameters: dict[str, Any] | None = None,
+        reasoning_model: str | None = None,
+        reasoning_model_parameters: dict[str, Any] | None = None,
         name: str | None = None,
     ) -> None:
         """
@@ -67,12 +69,17 @@ class BaseOptimizer(ABC):
                Common params: temperature, max_tokens, max_completion_tokens, top_p,
                presence_penalty, frequency_penalty.
                See: https://docs.litellm.ai/docs/completion/input
-               Note: These params control the optimizer's reasoning model, NOT the prompt evaluation.
+               Note: These params control the optimizer's default reasoning model, NOT the prompt evaluation.
+           reasoning_model: Optional override for the optimizer's reasoning/analysis model. Falls back to ``model``.
+           reasoning_model_parameters: Optional LiteLLM params for the reasoning model. Falls back to ``model_parameters``.
            name: Optional name for the optimizer instance. This will be used when creating optimizations.
         """
         self.model = model
-        self.reasoning_model = model
         self.model_parameters = model_parameters or {}
+        self.reasoning_model = reasoning_model or model
+        self.reasoning_model_parameters = (
+            reasoning_model_parameters or self.model_parameters
+        )
         self.verbose = verbose
         self.seed = seed
         self.name = name
