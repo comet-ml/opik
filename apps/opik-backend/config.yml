@@ -426,7 +426,7 @@ optimizationLogs:
   enabled: ${OPTIMIZATION_LOGS_ENABLED:-true}
   # Default: 2m
   # Description: Interval between log sync runs
-  syncInterval: ${OPTIMIZATION_LOGS_SYNC_INTERVAL:-2m}
+  syncInterval: ${OPTIMIZATION_LOGS_SYNC_INTERVAL:-30s}
   # Default: 30s
   # Description: Lock timeout for per-optimization distributed lock during sync
   lockTimeout: ${OPTIMIZATION_LOGS_LOCK_TIMEOUT:-30s}

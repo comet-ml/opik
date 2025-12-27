@@ -212,7 +212,12 @@ class IsolatedSubprocessExecutor:
         """
         env = os.environ.copy()
         if env_vars:
-            env.update(env_vars)
+            # Filter out None values and log them - subprocess.Popen requires all values to be strings
+            for key, value in env_vars.items():
+                if value is None:
+                    self.logger.warning(f"Skipping environment variable '{key}' with None value")
+                else:
+                    env[key] = value
 
         env["PYTHONUNBUFFERED"] = '1'
         env["LOG_FORMAT"] = 'json'
