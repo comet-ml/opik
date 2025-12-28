@@ -304,7 +304,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
       {remainingCount > 0 && (
         <HoverCard openDelay={200}>
           <HoverCardTrigger asChild>
-            <div className="comet-body-s-accented flex h-6 cursor-default items-center rounded-md border border-border px-1.5 text-muted-slate">
+            <div className="comet-body-s-accented flex h-6 cursor-pointer items-center rounded-md border border-border px-1.5 text-muted-slate" tabIndex={0}>
               +{remainingCount}
             </div>
           </HoverCardTrigger>
