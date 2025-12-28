@@ -72,7 +72,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   // - selectedRuleIds is null (explicitly "all" selected)
   // - selectedRuleIds is a non-empty array (specific rules selected)
   const selectingAllRules =
-    selectedRuleIds == null || selectedRuleIds === undefined;
+    selectedRuleIds == null;
   const hasSelectedRules = selectingAllRules || selectedRuleIds.length > 0;
 
   // Fetch playground project to get rules
