@@ -356,9 +356,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .collectList()
                 .flatMap(mappings -> {
                     if (mappings.isEmpty()) {
-                        // No mapping found - item was likely deleted, treat as successful no-op
-                        log.debug("No mapping found for row ID '{}', treating as already deleted", rowId);
-                        return Mono.just(0L);
+                        // No mapping found - item doesn't exist or was deleted
+                        log.warn("Item with row ID '{}' not found", rowId);
+                        return Mono.error(failWithNotFound("Dataset item not found"));
                     }
 
                     // Use the mapped dataset_item_id
@@ -393,6 +393,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                     // Get the existing item from the latest version
                     return versionDao.getItemByDatasetItemId(datasetId, baseVersionId, datasetItemId)
+                            .switchIfEmpty(Mono.defer(() -> {
+                                log.warn("Item '{}' not found in dataset '{}' version '{}'",
+                                        datasetItemId, datasetId, baseVersionId);
+                                return Mono.error(failWithNotFound("Dataset item not found"));
+                            }))
                             .flatMap(existingItem -> {
                                 // Apply patch to the existing item
                                 DatasetItem patchedItem = applyPatchToItem(
@@ -493,9 +498,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
         if (batchUpdate.datasetId() != null) {
             // Use the explicitly provided dataset ID (required for filter-based updates)
             datasetId = batchUpdate.datasetId();
-            log.info("Using provided dataset ID '{}' for batch update with versioning", datasetId);
+            log.info("Using provided dataset ID '{}' for batch update by filters with versioning", datasetId);
 
-            return batchUpdateWithVersioning(datasetId, batchUpdate, workspaceId, userName);
+            return batchUpdateByFiltersWithVersioning(datasetId, batchUpdate, workspaceId, userName);
         }
 
         // For batch update by IDs without explicit dataset ID, map row IDs to dataset_item_ids
@@ -505,10 +510,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     .collectList()
                     .flatMap(mappings -> {
                         if (mappings.isEmpty()) {
-                            // No mappings found - items were likely deleted, treat as successful no-op
-                            log.debug("No mappings found for provided row IDs, treating as already deleted");
-                            return Mono.empty();
+                            // No mappings found - items don't exist or were deleted
+                            log.warn("No mappings found for provided row IDs, items not found");
+                            return Mono.error(failWithNotFound("Dataset items not found"));
                         }
+
+                        // Verify all mappings belong to the same dataset
+                        validateMappingsBelongToSameDataset(mappings);
 
                         // Extract dataset_item_ids and dataset_id from mappings (NO additional query!)
                         Set<UUID> datasetItemIds = mappings.stream()
@@ -528,7 +536,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 .mergeTags(batchUpdate.mergeTags())
                                 .build();
 
-                        return batchUpdateWithVersioning(mappedDatasetId, mappedBatchUpdate, workspaceId, userName);
+                        return batchUpdateByIdsWithVersioning(mappedDatasetId, mappedBatchUpdate, workspaceId,
+                                userName);
                     });
         }
 
@@ -539,94 +548,147 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Batch updates items (by IDs or filters) and creates a new version.
-     * Supports both ID-based updates and filter-based updates through the batchUpdate parameter.
+     * Batch updates items by IDs and creates a new version.
      */
-    private Mono<Void> batchUpdateWithVersioning(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
+    private Mono<Void> batchUpdateByIdsWithVersioning(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
             String workspaceId, String userName) {
 
-        boolean isFilterBased = batchUpdate.filters() != null && !batchUpdate.filters().isEmpty();
-        int updateSize = isFilterBased ? -1 : batchUpdate.ids().size(); // -1 indicates unknown size for filter-based
-
-        log.info("Batch updating items with versioning for dataset '{}', type='{}', size='{}'",
-                datasetId, isFilterBased ? "filter" : "ids", isFilterBased ? "unknown" : updateSize);
+        int updateSize = batchUpdate.ids().size();
+        log.info("Batch updating '{}' items by IDs with versioning for dataset '{}'", updateSize, datasetId);
 
         // Get the latest version
-        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+        return getLatestVersionOrError(datasetId, workspaceId)
+                .flatMap(latestVersion -> {
+                    UUID baseVersionId = latestVersion.id();
+                    int baseItemsCount = latestVersion.itemsTotal();
+                    UUID newVersionId = idGenerator.generateId();
 
-        if (latestVersion.isEmpty()) {
-            // No versions exist - fall back to legacy update
-            log.info("No versions exist for dataset '{}', falling back to legacy batch update", datasetId);
-            return dao.bulkUpdate(
-                    batchUpdate.ids(),
-                    batchUpdate.datasetId(),
-                    batchUpdate.filters(),
-                    batchUpdate.update(),
-                    batchUpdate.mergeTags());
-        }
+                    // For ID-based: generate single UUID pool and split it
+                    int totalPoolSize = baseItemsCount * 2; // Conservative: 2x base count
+                    List<UUID> allUuids = generateUuidPool(idGenerator, totalPoolSize);
+                    List<UUID> updateUuids = allUuids.subList(0, updateSize);
+                    List<UUID> copyUuids = allUuids.subList(updateSize, allUuids.size());
 
-        UUID baseVersionId = latestVersion.get().id();
-        int baseItemsCount = latestVersion.get().itemsTotal();
-        UUID newVersionId = idGenerator.generateId();
+                    log.debug("Split UUID pool for ID-based update: updateSize='{}', copySize='{}'",
+                            updateUuids.size(), copyUuids.size());
 
-        // Generate UUID pool
-        // For ID-based: exact size needed
-        // For filter-based: 2x base count as buffer (we don't know exact match count)
-        int uuidPoolSize = isFilterBased ? baseItemsCount * 2 : batchUpdate.ids().size();
-        List<UUID> uuids = generateUuidPool(idGenerator, uuidPoolSize);
+                    // Perform batch update
+                    return versionDao.batchUpdateItems(datasetId, baseVersionId, newVersionId, batchUpdate, updateUuids)
+                            .flatMap(updatedCount -> {
+                                if (updatedCount == 0) {
+                                    log.info("No items found to update for dataset '{}'", datasetId);
+                                    return Mono.empty();
+                                }
 
-        // Perform batch update (works for both IDs and filters)
-        return versionDao.batchUpdateItems(datasetId, baseVersionId, newVersionId, batchUpdate, uuids)
-                .flatMap(updatedCount -> {
-                    if (updatedCount == 0) {
-                        log.info("No items found to update for dataset '{}'", datasetId);
-                        return Mono.empty();
-                    }
+                                log.info("Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
+                                        updatedCount, datasetId, baseVersionId);
 
-                    log.info("Batch updated '{}' items for dataset '{}', baseVersion='{}', type='{}'",
-                            updatedCount, datasetId, baseVersionId, isFilterBased ? "filter" : "ids");
-
-                    // Copy unchanged items
-                    // For ID-based: use applyDelta with updated IDs as "deleted" to exclude them
-                    // For filter-based: use copyVersionItems with excludeFilters to copy non-matching items
-                    Mono<Long> copyUnchangedMono = isFilterBased
-                            ? versionDao.copyVersionItems(datasetId, baseVersionId, newVersionId,
-                                    batchUpdate.filters(), uuids)
-                            : versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                                    List.of(), // No added items
-                                    List.of(), // No edited items (already done via batch update)
-                                    batchUpdate.ids(), // Exclude updated items from copy
-                                    baseItemsCount);
-
-                    return copyUnchangedMono.map(unchangedCount -> {
-                        // Total items = updated items + unchanged items
-                        long itemsTotal = updatedCount + unchangedCount;
-                        log.info(
-                                "Applied batch update delta to dataset '{}': updated='{}', unchanged='{}', total='{}', type='{}'",
-                                datasetId, updatedCount, unchangedCount, itemsTotal, isFilterBased ? "filter" : "ids");
-
-                        // Create version metadata
-                        String changeDescription = createChangeDescription(updatedCount, isFilterBased);
-
-                        versionService.createVersionFromDelta(
-                                datasetId,
-                                newVersionId,
-                                (int) itemsTotal,
-                                baseVersionId,
-                                null, // No tags
-                                changeDescription,
-                                workspaceId,
-                                userName);
-
-                        log.info("Created version '{}' for dataset '{}' after batch update",
-                                newVersionId, datasetId);
-                        return itemsTotal;
-                    });
+                                // Copy unchanged items using applyDelta (exclude updated IDs)
+                                return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                                        List.of(), // No added items
+                                        List.of(), // No edited items (already done via batch update)
+                                        batchUpdate.ids(), // Exclude updated items from copy
+                                        baseItemsCount)
+                                        .flatMap(unchangedCount -> createVersionMetadata(
+                                                datasetId, newVersionId, baseVersionId,
+                                                updatedCount, unchangedCount, false,
+                                                workspaceId, userName));
+                            });
                 })
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .then();
+    }
+
+    /**
+     * Batch updates items by filters and creates a new version.
+     */
+    private Mono<Void> batchUpdateByFiltersWithVersioning(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
+            String workspaceId, String userName) {
+
+        log.info("Batch updating items by filters with versioning for dataset '{}'", datasetId);
+
+        // Get the latest version
+        return getLatestVersionOrError(datasetId, workspaceId)
+                .flatMap(latestVersion -> {
+                    UUID baseVersionId = latestVersion.id();
+                    int baseItemsCount = latestVersion.itemsTotal();
+                    UUID newVersionId = idGenerator.generateId();
+
+                    // For filter-based: generate 2 separate UUID pools
+                    List<UUID> updateUuids = generateUuidPool(idGenerator, baseItemsCount * 2);
+                    List<UUID> copyUuids = generateUuidPool(idGenerator, baseItemsCount * 2);
+
+                    log.debug("Generated separate UUID pools for filter-based update: updateSize='{}', copySize='{}'",
+                            updateUuids.size(), copyUuids.size());
+
+                    // Perform batch update
+                    return versionDao.batchUpdateItems(datasetId, baseVersionId, newVersionId, batchUpdate, updateUuids)
+                            .flatMap(updatedCount -> {
+                                if (updatedCount == 0) {
+                                    log.info("No items found to update for dataset '{}'", datasetId);
+                                    return Mono.empty();
+                                }
+
+                                log.info("Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
+                                        updatedCount, datasetId, baseVersionId);
+
+                                // Copy unchanged items using copyVersionItems (exclude matching filters)
+                                return versionDao.copyVersionItems(datasetId, baseVersionId, newVersionId,
+                                        batchUpdate.filters(), copyUuids)
+                                        .flatMap(unchangedCount -> createVersionMetadata(
+                                                datasetId, newVersionId, baseVersionId,
+                                                updatedCount, unchangedCount, true,
+                                                workspaceId, userName));
+                            });
+                })
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .then();
+    }
+
+    /**
+     * Shared helper: Gets the latest version or returns an error if none exists.
+     */
+    private Mono<DatasetVersion> getLatestVersionOrError(UUID datasetId, String workspaceId) {
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+
+        if (latestVersion.isEmpty()) {
+            log.error("No versions exist for dataset '{}'", datasetId);
+            return Mono.error(failWithNotFound("No versions exist for dataset"));
+        }
+
+        return Mono.just(latestVersion.get());
+    }
+
+    /**
+     * Shared helper: Creates version metadata after a successful batch update.
+     */
+    private Mono<Void> createVersionMetadata(UUID datasetId, UUID newVersionId, UUID baseVersionId,
+            long updatedCount, long unchangedCount, boolean isFilterBased,
+            String workspaceId, String userName) {
+
+        long itemsTotal = updatedCount + unchangedCount;
+        log.info("Applied batch update delta to dataset '{}': updated='{}', unchanged='{}', total='{}', type='{}'",
+                datasetId, updatedCount, unchangedCount, itemsTotal, isFilterBased ? "filter" : "ids");
+
+        // Create version metadata
+        String changeDescription = createChangeDescription(updatedCount, isFilterBased);
+
+        versionService.createVersionFromDelta(
+                datasetId,
+                newVersionId,
+                (int) itemsTotal,
+                baseVersionId,
+                null, // No tags
+                changeDescription,
+                workspaceId,
+                userName);
+
+        log.info("Created version '{}' for dataset '{}' after batch update", newVersionId, datasetId);
+        return Mono.empty();
     }
 
     /**
@@ -639,6 +701,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return isFilterBased
                 ? "Updated " + count + " items by filters"
                 : "Updated " + count + " items";
+    }
+
+    /**
+     * Validates that all item mappings belong to the same dataset.
+     * Throws BadRequestException if items span multiple datasets.
+     */
+    private void validateMappingsBelongToSameDataset(List<DatasetItemIdMapping> mappings) {
+        Set<UUID> distinctDatasetIds = mappings.stream()
+                .map(DatasetItemIdMapping::datasetId)
+                .collect(Collectors.toSet());
+
+        if (distinctDatasetIds.size() > 1) {
+            log.error("Batch update with IDs spans multiple datasets: '{}'", distinctDatasetIds);
+            throw new BadRequestException("Cannot batch update items across multiple datasets");
+        }
     }
 
     @WithSpan
