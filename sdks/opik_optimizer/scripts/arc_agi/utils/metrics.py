@@ -2,8 +2,8 @@
 ARC-AGI metric helpers, registry, and canonical evaluation defaults.
 
 The HRPO pipeline optimizes Python programs that solve ARC puzzles.  Relying on
-a single scalar obscures *why* a candidate failed, so we collect three signals
-that describe different notions of success:
+a single scalar obscures *why* a candidate failed, so we collect multiple
+signals that describe different notions of success:
 
 ``arc_agi2_exact``
     Strict, pass@1-like accuracy.  Equals 1.0 only when every output grid
@@ -19,6 +19,11 @@ that describe different notions of success:
     Average per-label intersection-over-union.  Measures whether the correct
     color blobs appear in roughly the right locations—useful for rules that are
     structurally right but slightly misaligned.
+
+``arc_agi2_foreground_match``
+    Likeness computed only over the foreground (all cells whose gold value is
+    not the dominant background color).  This removes large blankets of
+    whitespace from the equation so geometry/palette mistakes count more.
 
 The optimizer typically samples *k* candidate programs and evaluates each one.
 We default to ``pass@k = 2`` to mirror Poetiq’s harness and to keep evaluation
@@ -87,6 +92,34 @@ def label_iou(pred: np.ndarray, truth: np.ndarray) -> float:
     return float(np.mean(ious))
 
 
+def foreground_match_score(
+    pred: np.ndarray,
+    truth: np.ndarray,
+    foreground_values: set[int] | None = None,
+) -> float:
+    """
+    Compute likeness while ignoring background cells.
+
+    ``foreground_values`` can be provided to explicitly specify which gold
+    colors count as signal.  When omitted we fall back to ignoring the dominant
+    background color per grid (same behavior as before).
+    """
+    if pred.shape != truth.shape:
+        return 0.0
+    flat_truth = truth.flatten()
+    if flat_truth.size == 0:
+        return 1.0
+    if foreground_values:
+        mask = np.isin(truth, list(foreground_values))
+    else:
+        values, counts = np.unique(flat_truth, return_counts=True)
+        background = values[np.argmax(counts)]
+        mask = truth != background
+    if not mask.any():
+        return 1.0
+    return float(np.mean(pred[mask] == truth[mask]))
+
+
 @dataclass(frozen=True)
 class MetricDefinition:
     """
@@ -127,10 +160,17 @@ METRIC_DEFINITIONS: dict[str, MetricDefinition] = {
     "arc_agi2_approx_match": MetricDefinition(
         name="arc_agi2_approx_match",
         extractor=_extract("arc_agi2_approx_match"),
-        weight=0.3,
+        weight=0.2,
     ),
     "arc_agi2_label_iou": MetricDefinition(
-        name="arc_agi2_label_iou", extractor=_extract("arc_agi2_label_iou"), weight=0.3
+        name="arc_agi2_label_iou",
+        extractor=_extract("arc_agi2_label_iou"),
+        weight=0.5,
+    ),
+    "arc_agi2_foreground_match": MetricDefinition(
+        name="arc_agi2_foreground_match",
+        extractor=_extract("arc_agi2_foreground_match"),
+        weight=0.4,
     ),
 }
 
@@ -139,10 +179,12 @@ DEFAULT_METRIC_SEQUENCE: tuple[str, ...] = (
     "arc_agi2_exact",
     "arc_agi2_approx_match",
     "arc_agi2_label_iou",
+    "arc_agi2_foreground_match",
 )
 DEFAULT_PASS_AT_K: int = 2
 LIKENESS_REWARD_WEIGHT: float = METRIC_DEFINITIONS["arc_agi2_approx_match"].weight
 LABEL_IOU_REWARD_WEIGHT: float = METRIC_DEFINITIONS["arc_agi2_label_iou"].weight
+FOREGROUND_REWARD_WEIGHT: float = METRIC_DEFINITIONS["arc_agi2_foreground_match"].weight
 
 
 def get_metric_definition(name: str) -> MetricDefinition:
@@ -205,9 +247,9 @@ def build_multi_metric_objective(
     Parameters
     ----------
     names:
-        Metric identifiers to include.  The default call site uses ``[
-        "arc_agi2_exact", "arc_agi2_approx_match", "arc_agi2_label_iou" ]`` and
-        mirrors the weights documented in :data:`METRIC_DEFINITIONS`.
+        Metric identifiers to include.  The default call site uses
+        ``DEFAULT_METRIC_SEQUENCE`` and mirrors the weights documented in
+        :data:`METRIC_DEFINITIONS`.
     evaluation_fn:
         Callable that executes the Python candidate, returning the evaluation
         payload consumed by each metric extractor.  In practice this is
@@ -247,7 +289,9 @@ __all__ = [
     "DEFAULT_PASS_AT_K",
     "LIKENESS_REWARD_WEIGHT",
     "LABEL_IOU_REWARD_WEIGHT",
+    "FOREGROUND_REWARD_WEIGHT",
     "approx_match_score",
     "label_iou",
+    "foreground_match_score",
     "get_metric_definition",
 ]

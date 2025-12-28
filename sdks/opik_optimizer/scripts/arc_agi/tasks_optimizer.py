@@ -33,6 +33,7 @@ try:  # pragma: no cover - satisfied in package context
         DEFAULT_PASS_AT_K,
         LABEL_IOU_REWARD_WEIGHT,
         LIKENESS_REWARD_WEIGHT,
+        FOREGROUND_REWARD_WEIGHT,
         normalized_weights,
         build_multi_metric_objective,
     )
@@ -56,6 +57,7 @@ except ImportError:  # pragma: no cover - when executed as a script
         DEFAULT_PASS_AT_K,
         LABEL_IOU_REWARD_WEIGHT,
         LIKENESS_REWARD_WEIGHT,
+        FOREGROUND_REWARD_WEIGHT,
         normalized_weights,
         build_multi_metric_objective,
     )
@@ -78,7 +80,7 @@ HRPO_MAX_TRIALS = 15
 HRPO_THREADS = 8
 SEED = 42
 DEBUG_LOG = True
-N_SAMPLES_PER_TRIAL = 4
+N_SAMPLES_PER_TRIAL = 6
 EVAL_COMPLETIONS_PER_CALL = 4
 SANDBOX_TIMEOUT_S = 5.0
 RAISE_SCORING_ERRORS = False
@@ -95,6 +97,7 @@ EVAL_CONTEXT = EvaluationConfig(
     likeness_weight_train=LIKENESS_REWARD_WEIGHT,
     likeness_weight_test=LIKENESS_REWARD_WEIGHT,
     label_iou_weight=LABEL_IOU_REWARD_WEIGHT,
+    foreground_weight_test=FOREGROUND_REWARD_WEIGHT,
     sandbox_timeout_s=SANDBOX_TIMEOUT_S,
     debug_log=DEBUG_LOG,
 )
@@ -188,6 +191,10 @@ def main() -> None:
 
     items = dataset.get_items(1)
     if not items:
+        if ARC_AGI2_TASK_ID:
+            raise RuntimeError(
+                f"Task id '{ARC_AGI2_TASK_ID}' was not found in this dataset slice."
+            )
         raise RuntimeError("Dataset returned no items")
     first_item = items[0]
 
@@ -197,6 +204,11 @@ def main() -> None:
             first_item.get("training_examples") or [],
             first_item.get("test_inputs") or [],
         )
+        if DATASET_COUNT == 1 or len(items) == 1:
+            debug_print(
+                "Single-task dataset detected; hierarchical analysis will report a single batch (expected).",
+                True,
+            )
 
     prompt = build_prompt()
 

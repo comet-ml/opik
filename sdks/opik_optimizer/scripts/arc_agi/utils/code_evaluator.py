@@ -10,13 +10,14 @@ import sys
 import tempfile
 import textwrap
 import traceback
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 from .logging_utils import CONSOLE, debug_print
-from .metrics import approx_match_score, label_iou
+from .metrics import approx_match_score, label_iou, foreground_match_score
 from .visualization import print_grid_triplet, render_grid
 
 
@@ -28,6 +29,7 @@ class EvaluationConfig:
     likeness_weight_train: float = 0.3
     likeness_weight_test: float = 0.3
     label_iou_weight: float = 0.3
+    foreground_weight_test: float = 0.3
     sandbox_timeout_s: float = 5.0
     debug_log: bool = False
 
@@ -142,6 +144,40 @@ def _run_transform(
         return True, arr_out, ""
     except Exception:
         return False, None, f"Runtime error: {traceback.format_exc(limit=1)}"
+
+
+def _infer_foreground_colors(train_examples: list[dict[str, Any]]) -> set[int]:
+    """Infer which colors should be treated as foreground for this task."""
+    colors: set[int] = set()
+    background_votes: list[int] = []
+    for example in train_examples:
+        output = np.array(example.get("output") or [], dtype=int)
+        if output.size == 0:
+            continue
+        vals, counts = np.unique(output, return_counts=True)
+        background_color = int(vals[np.argmax(counts)])
+        background_votes.append(background_color)
+        colors.update(int(v) for v in vals if v != background_color)
+
+        input_grid = example.get("input")
+        if input_grid is None:
+            continue
+        inp = np.array(input_grid, dtype=int)
+        if inp.shape != output.shape:
+            continue
+        diff_mask = inp != output
+        if diff_mask.any():
+            colors.update(int(v) for v in output[diff_mask])
+            colors.update(int(v) for v in inp[diff_mask])
+
+    if not colors and background_votes:
+        background_mode = Counter(background_votes).most_common(1)[0][0]
+        all_colors: set[int] = set()
+        for example in train_examples:
+            output = np.array(example.get("output") or [], dtype=int)
+            all_colors.update(int(v) for v in np.unique(output))
+        colors = {val for val in all_colors if val != background_mode}
+    return colors
 
 
 def _evaluate_code_candidate(
@@ -262,6 +298,7 @@ def evaluate_arc_response(
                 "arc_agi2_exact": 0.0,
                 "arc_agi2_approx_match": 0.0,
                 "arc_agi2_label_iou": 0.0,
+                "arc_agi2_foreground_match": 0.0,
             },
             "reason": "No python code block found in response.",
             "metadata": {},
@@ -271,6 +308,7 @@ def evaluate_arc_response(
 
     train_in = [ex.get("input") for ex in train_examples]
     train_out = [ex.get("output") for ex in train_examples]
+    foreground_colors = _infer_foreground_colors(train_examples)
 
     valid_blocks: list[str] = []
     rejected: list[str] = []
@@ -288,6 +326,7 @@ def evaluate_arc_response(
                 "arc_agi2_exact": 0.0,
                 "arc_agi2_approx_match": 0.0,
                 "arc_agi2_label_iou": 0.0,
+                "arc_agi2_foreground_match": 0.0,
             },
             "reason": f"All code blocks rejected: {' | '.join(rejected[:3])}",
             "metadata": {},
@@ -322,6 +361,7 @@ def evaluate_arc_response(
                 "arc_agi2_exact": best["train_exact"],
                 "arc_agi2_approx_match": best["train_soft"],
                 "arc_agi2_label_iou": 0.0,
+                "arc_agi2_foreground_match": 0.0,
             },
             "reason": " | ".join(reason_parts),
             "metadata": {},
@@ -336,6 +376,7 @@ def evaluate_arc_response(
     exact_scores: list[float] = []
     likeness_scores: list[float] = []
     iou_scores: list[float] = []
+    foreground_scores: list[float] = []
     mismatch_counts: list[int] = []
     mismatch_coords: list[str] = []
     swap_counts: dict[tuple[int, int], int] = {}
@@ -346,12 +387,14 @@ def evaluate_arc_response(
         best_exact = 0.0
         best_likeness = 0.0
         best_iou = 0.0
+        best_foreground = 0.0
         best_pred_arr: np.ndarray | None = None
 
         for pred in attempts_by_test[test_idx]:
             if not pred:
                 continue
             pred_arr = np.array(pred, dtype=int)
+            candidate_foreground = 0.0
             if pred_arr.shape != gold_arr.shape:
                 candidate_exact = 0.0
                 candidate_likeness = 0.0
@@ -360,6 +403,9 @@ def evaluate_arc_response(
                 candidate_exact = 1.0 if np.array_equal(pred_arr, gold_arr) else 0.0
                 candidate_likeness = approx_match_score(pred_arr, gold_arr)
                 candidate_iou = label_iou(pred_arr, gold_arr)
+                candidate_foreground = foreground_match_score(
+                    pred_arr, gold_arr, foreground_colors
+                )
 
             if candidate_exact > best_exact or (
                 candidate_exact == best_exact and candidate_likeness > best_likeness
@@ -367,11 +413,13 @@ def evaluate_arc_response(
                 best_exact = candidate_exact
                 best_likeness = candidate_likeness
                 best_iou = candidate_iou
+                best_foreground = candidate_foreground
                 best_pred_arr = pred_arr
 
         exact_scores.append(best_exact)
         likeness_scores.append(best_likeness)
         iou_scores.append(best_iou)
+        foreground_scores.append(best_foreground)
 
         if best_pred_arr is not None and best_pred_arr.shape == gold_arr.shape:
             mism_idx = np.argwhere(best_pred_arr != gold_arr)
@@ -395,6 +443,9 @@ def evaluate_arc_response(
         sum(likeness_scores) / len(likeness_scores) if likeness_scores else 0.0
     )
     best_candidate_iou = sum(iou_scores) / len(iou_scores) if iou_scores else 0.0
+    best_foreground_match = (
+        sum(foreground_scores) / len(foreground_scores) if foreground_scores else 0.0
+    )
     best_mismatch_summary = (
         f"test_mismatches={mismatch_counts} sample_coords={mismatch_coords[:5]}"
     )
@@ -406,20 +457,24 @@ def evaluate_arc_response(
 
     best_reason = (
         f"pass@{config.pass_at_k} exact={best_score:.2f} approx_match={best_likeness:.2f} "
-        f"label_iou={best_candidate_iou:.2f} | {' | '.join(reason_parts)}"
+        f"label_iou={best_candidate_iou:.2f} foreground={best_foreground_match:.2f} | {' | '.join(reason_parts)}"
     )
 
     likeness_reward = best_likeness * config.likeness_weight_test
     iou_reward = best_candidate_iou * config.label_iou_weight
+    foreground_reward = best_foreground_match * config.foreground_weight_test
     value = max(
         best_score,
         likeness_reward,
         iou_reward,
+        foreground_reward,
         best["train_soft"] * config.likeness_weight_train,
     )
     best_reason += (
         f" | {best_mismatch_summary} | {best_swap_summary} | "
-        f"approx_match_reward={likeness_reward:.2f} label_iou_reward={iou_reward:.2f}"
+        f"approx_match_reward={likeness_reward:.2f} "
+        f"label_iou_reward={iou_reward:.2f} "
+        f"foreground_reward={foreground_reward:.2f}"
     )
 
     test_inputs = dataset_item.get("test_inputs")
@@ -435,7 +490,8 @@ def evaluate_arc_response(
 
     config.log(
         f"Test metrics: exact={best_score:.2f} approx_match={best_likeness:.2f} "
-        f"label_iou={best_candidate_iou:.2f} | {best_mismatch_summary} {best_swap_summary}"
+        f"label_iou={best_candidate_iou:.2f} foreground={best_foreground_match:.2f} | "
+        f"{best_mismatch_summary} {best_swap_summary}"
     )
 
     result = {
@@ -444,11 +500,13 @@ def evaluate_arc_response(
             "arc_agi2_exact": best_score,
             "arc_agi2_approx_match": best_likeness,
             "arc_agi2_label_iou": best_candidate_iou,
+            "arc_agi2_foreground_match": best_foreground_match,
         },
         "reason": best_reason,
         "metadata": {
             "approx_match_reward": likeness_reward,
             "label_iou_reward": iou_reward,
+            "foreground_reward": foreground_reward,
             "pass_at_k": config.pass_at_k,
             "test_mismatches": best_mismatch_summary,
             "swaps": best_swap_summary,

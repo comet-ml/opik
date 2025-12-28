@@ -1,11 +1,14 @@
 from typing import Any
 
 import pytest
+import numpy as np
 
 from ..utils.metrics import (
+    DEFAULT_METRIC_SEQUENCE,
     build_metric_function,
     build_multi_metric_objective,
     get_metric_definition,
+    foreground_match_score,
     normalized_weights,
 )
 
@@ -17,6 +20,7 @@ def test_metric_function_uses_evaluation_data() -> None:
             "arc_agi2_exact": 0.8,
             "arc_agi2_approx_match": 0.6,
             "arc_agi2_label_iou": 0.5,
+            "arc_agi2_foreground_match": 0.4,
         },
         "reason": "ok",
         "metadata": {"foo": "bar"},
@@ -45,9 +49,7 @@ def test_metric_function_uses_evaluation_data() -> None:
 
 
 def test_normalized_weights_sum_to_one() -> None:
-    weights = normalized_weights(
-        ["arc_agi2_exact", "arc_agi2_approx_match", "arc_agi2_label_iou"]
-    )
+    weights = normalized_weights(DEFAULT_METRIC_SEQUENCE)
     assert pytest.approx(sum(weights), rel=1e-9) == 1.0
 
 
@@ -61,6 +63,7 @@ def test_build_multi_metric_objective_returns_expected_shape() -> None:
                 "arc_agi2_exact": 1.0,
                 "arc_agi2_approx_match": 1.0,
                 "arc_agi2_label_iou": 1.0,
+                "arc_agi2_foreground_match": 1.0,
             },
         }
 
@@ -76,3 +79,24 @@ def test_build_multi_metric_objective_returns_expected_shape() -> None:
 
     assert len(objective.metrics) == 2
     assert pytest.approx(sum(objective.weights), rel=1e-9) == 1.0
+
+
+def test_foreground_match_score_ignores_background() -> None:
+    truth = np.array(
+        [
+            [0, 0, 0],
+            [0, 3, 3],
+            [0, 3, 0],
+        ]
+    )
+    pred = np.array(
+        [
+            [0, 0, 0],
+            [0, 3, 4],
+            [0, 3, 0],
+        ]
+    )
+    # Only one foreground cell wrong out of three.
+    assert pytest.approx(foreground_match_score(pred, truth), rel=1e-9) == pytest.approx(
+        2 / 3
+    )
