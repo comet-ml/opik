@@ -131,6 +131,10 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   const rulesStillLoading =
     hasSpecificRulesSelected && !rulesLoaded && selectedRules.length === 0;
 
+  // Check if selected rules were deleted (specific rules selected, loaded, but none found)
+  const selectedRulesDeleted =
+    hasSpecificRulesSelected && rulesLoaded && selectedRules.length === 0;
+
   // Store values in refs for access in refetchInterval
   const expectedScoreNamesRef = useRef<Set<string>>(expectedScoreNames);
   expectedScoreNamesRef.current = expectedScoreNames;
@@ -138,10 +142,11 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   rulesStillLoadingRef.current = rulesStillLoading;
 
   // Fetch trace to get scores
+  // Disable query if selected rules were deleted (nothing to poll for)
   const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
-      enabled: !!traceId && hasSelectedRules,
+      enabled: !!traceId && hasSelectedRules && !selectedRulesDeleted,
       refetchInterval: (query) => {
         // Use ref to track elapsed time since polling started
         const startTime = pollingStartTimeRef.current || Date.now();
@@ -196,20 +201,26 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   }, [feedbackScores]);
 
   // Build list of expected metrics with their display info, sorted by score name
+  // Note: We deduplicate by score name because TraceFeedbackScore doesn't include rule_id,
+  // so if multiple rules produce the same metric name, we can only show one entry
   const expectedMetrics = useMemo(() => {
     const metrics: Array<{
       scoreName: string;
       score: TraceFeedbackScore | null;
     }> = [];
+    const seenScoreNames = new Set<string>();
 
     // If selectedRuleIds is null/undefined (meaning "all" was selected or legacy data),
     // only show scores that actually exist in the trace - no loading spinners
     if (selectingAllRules) {
       for (const score of feedbackScores) {
-        metrics.push({
-          scoreName: score.name,
-          score,
-        });
+        if (!seenScoreNames.has(score.name)) {
+          seenScoreNames.add(score.name);
+          metrics.push({
+            scoreName: score.name,
+            score,
+          });
+        }
       }
     } else {
       // Specific rules were selected - need rules to load to know expected scores
@@ -218,10 +229,14 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
       for (const rule of selectedRules) {
         const scoreNames = getScoreNamesFromRule(rule);
         for (const scoreName of scoreNames) {
-          metrics.push({
-            scoreName,
-            score: scoresByName[scoreName] || null,
-          });
+          // Deduplicate: if multiple rules produce the same metric name, show only once
+          if (!seenScoreNames.has(scoreName)) {
+            seenScoreNames.add(scoreName);
+            metrics.push({
+              scoreName,
+              score: scoresByName[scoreName] || null,
+            });
+          }
         }
       }
     }
