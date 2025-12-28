@@ -1,25 +1,53 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
-from pathlib import Path
 from typing import Any
-from collections.abc import Iterable
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 
 import opik
 from datasets import load_dataset
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, resolve_dataset_seed
+from opik_optimizer.utils.dataset_utils import (
+    DatasetHandle,
+    FilterBy,
+    resolve_dataset_seed,
+)
+from opik_optimizer.utils.image_utils import encode_image_to_base64_uri
 
 logger = logging.getLogger(__name__)
 
-# We load ARC-AGI-2 from HF when available and fall back to a local JSON drop
-# (e.g., ARC Prize dumps) if HF is unavailable. Set ARC_AGI2_DATA_DIR to a folder
-# containing arc-agi_* JSON files to force local loading.
+# ARC-AGI-2 is loaded from Hugging Face. ARC_AGI2_GROUP_BY_TASK can disable
+# per-task grouping. ARC_AGI2_INCLUDE_IMAGES can embed base64 PNGs.
+
+ARC_AGI2_HF_PATH = "vincentkoc/arc-agi-2"
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value not in {"", "0", "false", "False"}
+
+
+def _normalize_list_field(value: Any) -> list[Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _encode_image_list(
+    values: list[Any] | None, *, image_format: str
+) -> list[str | None] | None:
+    if values is None:
+        return None
+    return [
+        encode_image_to_base64_uri(item, image_format=image_format) for item in values
+    ]
 
 
 def _format_grid(grid: list[list[int]]) -> str:
@@ -72,7 +100,10 @@ def _render_shape_summary(
 
 
 def _normalize_record(
-    record: Mapping[str, Any], solutions: Mapping[str, Any] | None
+    record: Mapping[str, Any],
+    *,
+    include_images: bool,
+    image_format: str,
 ) -> dict[str, Any]:
     """
     Normalize ARC-AGI-2 record into a consistent shape:
@@ -81,9 +112,8 @@ def _normalize_record(
         training_examples: list[{input, output}],
         test_inputs: list[input],
         test_outputs: list[output] | None,
-        training_examples_text: str,
-        test_inputs_text: str,
     }
+    Derived text fields are added by `_finalize_record`.
     """
     task_id = (
         record.get("task_id")
@@ -92,13 +122,17 @@ def _normalize_record(
         or record.get("hash")
         or "unknown_task"
     )
+    row_id = record.get("id")
+    split = record.get("split")
     train_examples = record.get("train") or record.get("training_examples") or []
     test_examples_raw = record.get("test") or record.get("test_inputs") or []
 
     # Ensure test_inputs is a list of grids
     if test_examples_raw and isinstance(test_examples_raw[0], dict):
         test_inputs = [ex.get("input") for ex in test_examples_raw]
-        inferred_outputs = [ex.get("output") for ex in test_examples_raw if "output" in ex]
+        inferred_outputs = [
+            ex.get("output") for ex in test_examples_raw if "output" in ex
+        ]
     else:
         test_inputs = list(test_examples_raw)
         inferred_outputs = []
@@ -106,24 +140,271 @@ def _normalize_record(
     test_outputs = record.get("test_outputs") or record.get("outputs") or None
     if test_outputs is None and inferred_outputs:
         test_outputs = inferred_outputs
-    if test_outputs is None and solutions is not None:
-        test_outputs = solutions.get(task_id)
 
-    record_out = {
+    record_out: dict[str, Any] = {
         "task_id": task_id,
         "training_examples": train_examples,
         "test_inputs": test_inputs,
         "test_outputs": test_outputs,
-        "training_examples_text": _render_examples(train_examples),
-        "test_inputs_text": _render_test_inputs(test_inputs),
-        "shape_summary": _render_shape_summary(train_examples, test_inputs),
     }
+    if row_id:
+        record_out["id"] = row_id
+        record_out["test_ids"] = [row_id]
+    if split:
+        record_out["split"] = split
+    test_text_fields = (
+        "test_input_texts",
+        "test_output_texts",
+        "test_prompts",
+        "test_targets",
+        "test_conversations",
+    )
+    for field in test_text_fields:
+        values = _normalize_list_field(record.get(field))
+        if values is not None:
+            record_out[field] = values
+    if include_images:
+        image_fields = (
+            "train_input_image_color",
+            "train_input_image_annotated",
+            "train_output_image_color",
+            "train_output_image_annotated",
+            "test_input_image_color",
+            "test_input_image_annotated",
+            "test_output_image_color",
+            "test_output_image_annotated",
+        )
+        for field in image_fields:
+            values = _normalize_list_field(record.get(field))
+            if values is not None:
+                record_out[field] = _encode_image_list(
+                    values, image_format=image_format
+                )
     return record_out
+
+
+def _finalize_record(record: dict[str, Any]) -> dict[str, Any]:
+    training_examples = record.get("training_examples") or []
+    test_inputs = record.get("test_inputs") or []
+    record["training_examples_text"] = _render_examples(training_examples)
+    record["test_inputs_text"] = _render_test_inputs(test_inputs)
+    record["shape_summary"] = _render_shape_summary(training_examples, test_inputs)
+    return record
+
+
+def _parse_test_index(record_id: str | None) -> int | None:
+    if not record_id:
+        return None
+    marker = "__test_"
+    if marker not in record_id:
+        return None
+    suffix = record_id.rsplit(marker, 1)[-1]
+    try:
+        return int(suffix)
+    except ValueError:
+        return None
+
+
+def _extend_list_field(
+    entry: dict[str, Any],
+    field: str,
+    values: Any,
+    *,
+    test_count: int,
+    existing_tests: int,
+    log_fn: Callable[[str], None] | None = None,
+) -> None:
+    if values is None:
+        if field in entry and entry[field] is not None:
+            entry[field].extend([None] * test_count)
+        return
+
+    values_list = values if isinstance(values, list) else [values]
+    if len(values_list) != test_count and log_fn:
+        log_fn(
+            f"ARC-AGI-2 {field} length mismatch: "
+            f"expected {test_count}, got {len(values_list)}"
+        )
+    if len(values_list) < test_count:
+        values_list = values_list + [None] * (test_count - len(values_list))
+    if len(values_list) > test_count:
+        values_list = values_list[:test_count]
+    if field not in entry or entry[field] is None:
+        entry[field] = [None] * existing_tests
+    entry[field].extend(values_list)
+
+
+def _merge_test_record(
+    entry: dict[str, Any],
+    record: dict[str, Any],
+    *,
+    allow_missing_outputs: bool = True,
+    log_fn: Callable[[str], None] | None = None,
+) -> None:
+    test_inputs = record.get("test_inputs") or []
+    existing_tests = len(entry["test_inputs"])
+    entry["test_inputs"].extend(test_inputs)
+    test_count = len(test_inputs)
+
+    record_outputs = record.get("test_outputs")
+    if record_outputs is None:
+        if allow_missing_outputs:
+            entry["test_outputs"] = None
+    else:
+        if entry["test_outputs"] is not None:
+            _extend_list_field(
+                entry,
+                "test_outputs",
+                record_outputs,
+                test_count=test_count,
+                existing_tests=existing_tests,
+                log_fn=log_fn,
+            )
+
+    test_list_fields = (
+        "test_ids",
+        "test_input_texts",
+        "test_output_texts",
+        "test_prompts",
+        "test_targets",
+        "test_conversations",
+        "test_input_image_color",
+        "test_input_image_annotated",
+        "test_output_image_color",
+        "test_output_image_annotated",
+    )
+    for field in test_list_fields:
+        _extend_list_field(
+            entry,
+            field,
+            record.get(field),
+            test_count=test_count,
+            existing_tests=existing_tests,
+            log_fn=log_fn,
+        )
+
+
+def _group_hf_rows_by_task_id(
+    rows: list[Mapping[str, Any]],
+    *,
+    include_images: bool,
+    image_format: str,
+    log_fn: Callable[[str], None] | None = None,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    indexed_tests: dict[str, dict[int, dict[str, Any]]] = {}
+
+    image_fields_train = (
+        "train_input_image_color",
+        "train_input_image_annotated",
+        "train_output_image_color",
+        "train_output_image_annotated",
+    )
+    test_list_fields = (
+        "test_ids",
+        "test_input_texts",
+        "test_output_texts",
+        "test_prompts",
+        "test_targets",
+        "test_conversations",
+        "test_input_image_color",
+        "test_input_image_annotated",
+        "test_output_image_color",
+        "test_output_image_annotated",
+    )
+
+    for row in rows:
+        record = _normalize_record(
+            row,
+            include_images=include_images,
+            image_format=image_format,
+        )
+        task_id = record.get("task_id") or "unknown_task"
+        entry = grouped.get(task_id)
+        if entry is None:
+            entry = {
+                "task_id": task_id,
+                "training_examples": [],
+                "test_inputs": [],
+                "test_outputs": [],
+            }
+            grouped[task_id] = entry
+            indexed_tests[task_id] = {}
+
+        split = record.get("split")
+        if split:
+            if "split" not in entry:
+                entry["split"] = split
+            elif entry["split"] != split and log_fn:
+                log_fn(
+                    f"ARC-AGI-2 task_id={task_id} has mismatched split values in HF rows."
+                )
+
+        training_examples = record.get("training_examples") or []
+        if training_examples:
+            if (
+                entry["training_examples"]
+                and entry["training_examples"] != training_examples
+            ):
+                if log_fn:
+                    log_fn(
+                        f"ARC-AGI-2 task_id={task_id} has mismatched training examples in HF rows."
+                    )
+            if not entry["training_examples"]:
+                entry["training_examples"] = training_examples
+
+        for field in image_fields_train:
+            value = record.get(field)
+            if value is None:
+                continue
+            if field not in entry:
+                entry[field] = value
+            elif entry[field] != value and log_fn:
+                log_fn(
+                    f"ARC-AGI-2 task_id={task_id} has mismatched {field} values in HF rows."
+                )
+
+        test_index = _parse_test_index(row.get("id"))
+        if test_index is not None and len(record.get("test_inputs") or []) == 1:
+            indexed_tests[task_id][test_index] = record
+        else:
+            _merge_test_record(entry, record, log_fn=log_fn)
+
+    for task_id, tests in indexed_tests.items():
+        entry = grouped[task_id]
+        for idx in sorted(tests):
+            _merge_test_record(entry, tests[idx], log_fn=log_fn)
+
+    records: list[dict[str, Any]] = []
+    for task_id, entry in grouped.items():
+        training_examples = entry.get("training_examples") or []
+        test_inputs = entry.get("test_inputs") or []
+        record_out: dict[str, Any] = {
+            "task_id": task_id,
+            "training_examples": training_examples,
+            "test_inputs": test_inputs,
+            "test_outputs": entry.get("test_outputs"),
+        }
+        if "split" in entry:
+            record_out["split"] = entry["split"]
+        for field in image_fields_train:
+            if field in entry:
+                record_out[field] = entry[field]
+        for field in test_list_fields:
+            if field in entry:
+                record_out[field] = entry[field]
+        records.append(_finalize_record(record_out))
+
+    if not records:
+        raise ValueError("No ARC-AGI-2 records loaded from HF rows.")
+    return records
 
 
 def _build_records(
     challenges: Mapping[str, Any] | list[Mapping[str, Any]],
-    solutions: Mapping[str, Any] | None,
+    *,
+    include_images: bool,
+    image_format: str,
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     if isinstance(challenges, Mapping):
@@ -132,10 +413,14 @@ def _build_records(
         iterator = [(None, payload) for payload in challenges]
 
     for task_id, payload in iterator:
-        record = _normalize_record(payload, solutions if solutions else None)
+        record = _normalize_record(
+            payload,
+            include_images=include_images,
+            image_format=image_format,
+        )
         if task_id is not None and record.get("task_id") == "unknown_task":
             record["task_id"] = task_id
-        records.append(record)
+        records.append(_finalize_record(record))
     if not records:
         raise ValueError("No ARC-AGI-2 records loaded.")
     return records
@@ -152,31 +437,14 @@ def _shuffle_and_slice(
     return records[start_idx : start_idx + count]
 
 
-def _filter_by_task_id(
-    records: list[dict[str, Any]],
-    filter_task_id: str | None,
-    *,
-    log_fn: callable | None = None,
-) -> list[dict[str, Any]]:
-    """
-    Filter the loaded records so ARC_AGI2_TASK_ID can force a specific task while
-    keeping backwards compatibility with random sampling when unset.
-    """
-    if not filter_task_id:
-        return records
-
-    matched = [rec for rec in records if rec.get("task_id") == filter_task_id]
-    if matched:
-        if log_fn:
-            log_fn(f"Filtered down to task_id={filter_task_id} ({len(matched)} record).")
-        return matched
-
-    if log_fn:
-        log_fn(
-            f"ARC_AGI2_TASK_ID={filter_task_id} not found in loaded records; "
-            f"keeping {len(records)} item(s)."
-        )
-    return records
+def _load_hf_rows(source_split: str, *, use_streaming: bool) -> list[Mapping[str, Any]]:
+    load_kwargs = {"path": ARC_AGI2_HF_PATH, "split": source_split}
+    if use_streaming:
+        try:
+            return list(load_dataset(streaming=True, **load_kwargs))
+        except Exception:
+            return load_dataset(**load_kwargs).to_list()
+    return load_dataset(**load_kwargs).to_list()
 
 
 def _load_arc_agi2_split(
@@ -185,25 +453,11 @@ def _load_arc_agi2_split(
     count: int | None,
     seed: int,
 ) -> list[dict[str, Any]]:
-    data_dir_env = os.getenv("ARC_AGI2_DATA_DIR")
-    debug_load = os.getenv("ARC_AGI2_DATA_DEBUG", "0") not in {
-        "",
-        "0",
-        "false",
-        "False",
-    }
-    prefer_local = os.getenv("ARC_AGI2_PREFER_LOCAL", "1") not in {
-        "",
-        "0",
-        "false",
-        "False",
-    }
-    filter_task_id = os.getenv("ARC_AGI2_TASK_ID")
-    last_exc: Exception | None = None
-    repo_dir = Path(__file__).resolve().parents[5] / "external" / "ARC-AGI-2" / "data"
-    data_dir = Path(data_dir_env).expanduser() if data_dir_env else None
-    if data_dir is None and repo_dir.exists():
-        data_dir = repo_dir
+    debug_load = _bool_env("ARC_AGI2_DATA_DEBUG", False)
+    group_by_task = _bool_env("ARC_AGI2_GROUP_BY_TASK", True)
+    include_images = _bool_env("ARC_AGI2_INCLUDE_IMAGES", False)
+    image_format = os.getenv("ARC_AGI2_IMAGE_FORMAT", "PNG")
+    use_streaming = _bool_env("OPIK_USE_HF_STREAMING", True)
 
     def _log(msg: str) -> None:
         if debug_load:
@@ -215,170 +469,58 @@ def _load_arc_agi2_split(
         if count is not None and len(records) < count:
             raise RuntimeError(
                 f"{source} provided {len(records)} items, fewer than requested {count}. "
-                "Adjust ARC_AGI2_DATA_DIR/ARC_AGI2_PREFER_LOCAL or reduce count."
+                "Reduce count or relax filters."
             )
         return records
 
-    # Prefer local JSON if available (most reliable in restricted envs).
-    if prefer_local and data_dir and data_dir.exists():
-        split_dir = data_dir / ("training" if source_split == "train" else "evaluation")
-        if not split_dir.exists():
-            raise FileNotFoundError(
-                f"ARC_AGI2_DATA_DIR={data_dir} missing split folder {split_dir}"
-            )
-
-        if filter_task_id:
-            target_file = split_dir / f"{filter_task_id}.json"
-            if target_file.exists():
-                payload = json.loads(target_file.read_text())
-                rec = _normalize_record(payload, solutions=None)
-                if rec.get("task_id") == "unknown_task":
-                    rec["task_id"] = target_file.stem
-                if not rec.get("training_examples"):
-                    raise ValueError(
-                        f"Task {filter_task_id} under {target_file} has no training examples."
-                    )
-                _log(f"Loaded task_id={filter_task_id} directly from {target_file}.")
-                return [rec]
-            else:
-                logger.warning(
-                    "ARC_AGI2_TASK_ID=%s not found under %s; falling back to random sampling",
-                    filter_task_id,
-                    split_dir,
-                )
-
-        json_files = sorted(split_dir.glob("*.json"))
-        if not json_files:
-            raise FileNotFoundError(f"No JSON files found under {split_dir}")
-
-        rng = random.Random(seed)
-        rng.shuffle(json_files)
-        selected = json_files[start:] if count is None else json_files[start : start + count]
-        records: list[dict[str, Any]] = []
-        for jf in selected:
-            try:
-                payload = json.loads(jf.read_text())
-                rec = _normalize_record(payload, solutions=None)
-                if rec.get("task_id") == "unknown_task":
-                    rec["task_id"] = jf.stem
-                if rec.get("training_examples"):
-                    records.append(rec)
-                else:
-                    logger.warning("Skipping %s because it has no training examples", jf)
-            except Exception as exc:
-                logger.warning("Failed to parse %s: %s", jf, exc)
-
-        records = _validate(records, f"local JSON ({split_dir})")
-        records = _filter_by_task_id(records, filter_task_id, log_fn=_log)
-        _log(
-            f"Loaded {len(records)} ARC-AGI-2 items from {split_dir} "
-            f"(requested count={count}, start={start})"
-        )
-        return records
-
-    # HF path (optional, falls back to local)
+    # Hugging Face path (required).
     try:
-        hf_ds = load_dataset("arc-agi-community/arc-agi-2", split=source_split)
-        records = _build_records(hf_ds.to_list(), solutions=None)
-        records = _filter_by_task_id(records, filter_task_id, log_fn=_log)
-        _log(f"HF load succeeded: {len(records)} items for split {source_split}")
-        sliced = _shuffle_and_slice(records, start=start, count=count, seed=seed)
-        return _validate(sliced, "Hugging Face")
-    except Exception as exc:  # pragma: no cover - network/gated dataset dependent
-        last_exc = exc
-        logger.warning(
-            "HF load failed for ARC-AGI-2 split '%s' (%s); attempting local JSON fallback",
-            source_split,
-            exc,
-        )
-
-    if data_dir and data_dir.exists():
-        split_dir = data_dir / ("training" if source_split == "train" else "evaluation")
-        if filter_task_id:
-            target_file = split_dir / f"{filter_task_id}.json"
-            if target_file.exists():
-                payload = json.loads(target_file.read_text())
-                rec = _normalize_record(payload, solutions=None)
-                if rec.get("task_id") == "unknown_task":
-                    rec["task_id"] = target_file.stem
-                if not rec.get("training_examples"):
-                    raise ValueError(
-                        f"Task {filter_task_id} under {target_file} has no training examples."
-                    )
-                _log(f"Loaded task_id={filter_task_id} directly from {target_file}.")
-                return [rec]
-            else:
-                logger.warning(
-                    "ARC_AGI2_TASK_ID=%s not found under %s; falling back to random sampling",
-                    filter_task_id,
-                    split_dir,
-                )
-
-        json_files = sorted(split_dir.glob("*.json"))
-        rng = random.Random(seed)
-        rng.shuffle(json_files)
-        selected = json_files[start:] if count is None else json_files[start : start + count]
-        records = []
-        for jf in selected:
-            try:
-                payload = json.loads(jf.read_text())
-                rec = _normalize_record(payload, solutions=None)
-                if rec.get("task_id") == "unknown_task":
-                    rec["task_id"] = jf.stem
-                if rec.get("training_examples"):
-                    records.append(rec)
-                else:
-                    logger.warning("Skipping %s because it has no training examples", jf)
-            except Exception as exc:
-                logger.warning("Failed to parse %s: %s", jf, exc)
-        records = _validate(records, f"local JSON ({split_dir})")
-        records = _filter_by_task_id(records, filter_task_id, log_fn=_log)
+        hf_rows = _load_hf_rows(source_split, use_streaming=use_streaming)
+        if group_by_task:
+            records = _group_hf_rows_by_task_id(
+                hf_rows,
+                include_images=include_images,
+                image_format=image_format,
+                log_fn=_log,
+            )
+        else:
+            records = _build_records(
+                hf_rows,
+                include_images=include_images,
+                image_format=image_format,
+            )
         _log(
-            f"Loaded {len(records)} ARC-AGI-2 items from {split_dir} "
-            f"(requested count={count}, start={start})"
+            f"HF load succeeded: {len(records)} items for split {source_split} "
+            f"(group_by_task={group_by_task}, include_images={include_images})"
         )
-        return records
-
-    raise RuntimeError(
-        "Failed to load ARC-AGI-2 from HF and no local JSON fallback available. "
-        "Set ARC_AGI2_DATA_DIR to the folder containing arc-agi_* JSON files or "
-        "ensure HF access to arc-agi-community/arc-agi-2."
-    ) from last_exc
-
-
-def _records_transform_task_filter(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Optional filtering by ARC_AGI2_TASK_ID env var to pick a specific task."""
-    task_id = os.getenv("ARC_AGI2_TASK_ID")
-    if not task_id:
-        return records
-
-    def _log(msg: str) -> None:
-        logger.info("[arc_agi2] %s", msg)
-
-    return _filter_by_task_id(records, task_id, log_fn=_log)
+        sliced = _shuffle_and_slice(records, start=start, count=count, seed=seed)
+        return _validate(sliced, f"Hugging Face ({ARC_AGI2_HF_PATH})")
+    except Exception as exc:  # pragma: no cover - network/gated dataset dependent
+        raise RuntimeError(
+            f"Failed to load ARC-AGI-2 from Hugging Face ({ARC_AGI2_HF_PATH}): {exc}"
+        ) from exc
 
 
 ARC_AGI2_SPEC = DatasetSpec(
     name="arc_agi2",
     default_source_split="train",
-    hf_path="arc-agi-community/arc-agi-2",
+    hf_path=ARC_AGI2_HF_PATH,
     prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train", start=0, count=200, dataset_name="arc_agi2_train"
         ),
         "validation": DatasetSplitPreset(
-            source_split="validation",
+            source_split="evaluation",
             start=0,
-            count=200,
+            count=120,
             dataset_name="arc_agi2_validation",
         ),
         "test": DatasetSplitPreset(
-            source_split="test", start=0, count=100, dataset_name="arc_agi2_test"
+            source_split="evaluation", start=0, count=120, dataset_name="arc_agi2_test"
         ),
     },
     custom_loader=_load_arc_agi2_split,
-    records_transform=_records_transform_task_filter,
 )
 
 _ARC_AGI2_HANDLE = DatasetHandle(ARC_AGI2_SPEC)
@@ -394,9 +536,10 @@ def arc_agi2(
     seed: int | None = None,
     test_mode_count: int | None = None,
     prefer_presets: bool | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """
-    Load slices of the ARC-AGI-2 dataset from Hugging Face (arc-agi-community/arc-agi-2).
+    Load slices of the ARC-AGI-2 dataset from Hugging Face (vincentkoc/arc-agi-2).
     """
     resolved_seed = resolve_dataset_seed(seed)
     return _ARC_AGI2_HANDLE.load(
@@ -408,4 +551,5 @@ def arc_agi2(
         seed=resolved_seed,
         test_mode_count=test_mode_count,
         prefer_presets=prefer_presets,
+        filter_by=filter_by,
     )
