@@ -44,9 +44,59 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
     hotpot = datasets.hotpot(count=300)
     tiny = datasets.tiny_test()
     ```
-    These datasets live in `sdks/opik_optimizer/src/opik_optimizer/datasets` and mirror the notebook examples.
+    These datasets live in `sdks/opik_optimizer/src/opik_optimizer/datasets` and mirror the notebook examples. Most helpers accept common slice controls like:
+    - `split` (e.g., `"train"`, `"validation"`)
+    - `count` and `start` (slice size + offset after shuffling)
+    - `seed` (deterministic shuffle)
+    - `prefer_presets` (use dataset-defined presets unless you override)
+    - `filter_by` (filter rows before slicing)
   </Step>
 </Steps>
+
+## Filter dataset rows
+
+Use `filter_by` to select a subset of rows before slicing. Filters support:
+- exact match (`{"task_id": "e57337a4"}`)
+- membership (`{"type": {"bridge", "comparison"}}`)
+- callables (`{"task_id": lambda value: value.startswith("e57")}`)
+
+```python
+from opik_optimizer.datasets import arc_agi2, hotpot
+
+dataset = arc_agi2(
+    split="train",
+    count=1,
+    prefer_presets=False,
+    filter_by={"task_id": "e57337a4"},
+)
+
+dataset = hotpot(
+    split="validation",
+    count=100,
+    filter_by={"type": {"bridge", "comparison"}},
+)
+```
+
+## Use Hugging Face datasets
+
+If you already have a Hugging Face dataset, you can ingest it into Opik and use it with any optimizer:
+
+```python
+from datasets import load_dataset
+import opik
+
+hf = load_dataset("your-org/your-dataset", split="train")
+records = [
+    {"question": row["question"], "answer": row["answer"]}
+    for row in hf.select(range(200))
+]
+
+client = opik.Opik()
+dataset = client.get_or_create_dataset("your-hf-train")
+dataset.insert(records)
+```
+
+You can also wrap Hugging Face datasets with a custom helper by following the patterns in `sdks/opik_optimizer/src/opik_optimizer/datasets` (using `DatasetSpec` + `DatasetHandle`) if you want the same `split`/`count`/`filter_by` interface as the built-in datasets.
 
 ## Train/validation splits
 
