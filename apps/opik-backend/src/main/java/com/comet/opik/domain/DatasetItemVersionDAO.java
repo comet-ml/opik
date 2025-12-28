@@ -3,7 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
-import com.comet.opik.api.DatasetItemUpdate;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -93,19 +93,18 @@ public interface DatasetItemVersionDAO {
      * Applies batch updates to items from a base version, creating updated copies in a new version.
      * This is an efficient database-side operation using INSERT ... SELECT with conditional updates.
      * <p>
-     * Only non-null fields in the update are applied. Items not in the itemIds set are not updated.
+     * Supports both ID-based updates (via batchUpdate.ids()) and filter-based updates (via batchUpdate.filters()).
+     * Only non-null fields in the update are applied.
      *
      * @param datasetId the dataset ID
      * @param baseVersionId the base version to copy from
      * @param newVersionId the new version to insert into
-     * @param itemIds the stable item IDs (draftItemId) to update
-     * @param update the update to apply
-     * @param mergeTags whether to merge tags or replace them
+     * @param batchUpdate the batch update containing either IDs or filters and the update to apply
      * @param uuids pre-generated UUIDv7 pool for new row IDs
      * @return the number of items updated
      */
     Mono<Long> batchUpdateItems(UUID datasetId, UUID baseVersionId, UUID newVersionId,
-            Set<UUID> itemIds, DatasetItemUpdate update, Boolean mergeTags, List<UUID> uuids);
+            DatasetItemBatchUpdate batchUpdate, List<UUID> uuids);
 
     /**
      * Inserts items directly into a new version without copying from any base version.
@@ -284,6 +283,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     // Batch update items using INSERT ... SELECT with conditional field updates
     // Similar to legacy table's bulk update but for versioned items
+    // Supports both ID-based and filter-based updates
     private static final String BATCH_UPDATE_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -332,7 +332,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :datasetId
                 AND dataset_version_id = :baseVersionId
+                <if(item_ids)>
                 AND dataset_item_id IN :itemIds
+                <endif>
+                <if(dataset_item_filters)>
+                AND <dataset_item_filters>
+                <endif>
                 ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY dataset_item_id
             ) AS src
@@ -497,6 +502,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     @WithSpan
@@ -726,15 +732,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<Long> batchUpdateItems(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
-            @NonNull UUID newVersionId, @NonNull Set<UUID> itemIds, @NonNull DatasetItemUpdate update,
-            Boolean mergeTags, @NonNull List<UUID> uuids) {
+            @NonNull UUID newVersionId, @NonNull DatasetItemBatchUpdate batchUpdate, @NonNull List<UUID> uuids) {
 
-        if (itemIds.isEmpty()) {
+        // Early return if no IDs or filters provided
+        if ((batchUpdate.ids() == null || batchUpdate.ids().isEmpty())
+                && (batchUpdate.filters() == null || batchUpdate.filters().isEmpty())) {
             return Mono.just(0L);
         }
 
-        log.info("Batch updating '{}' items in dataset '{}' from version '{}' to version '{}'",
-                itemIds.size(), datasetId, baseVersionId, newVersionId);
+        log.info(
+                "Batch updating items in dataset '{}' from version '{}' to version '{}', idsSize='{}', filtersSize='{}'",
+                datasetId, baseVersionId, newVersionId,
+                batchUpdate.ids() != null ? batchUpdate.ids().size() : 0,
+                batchUpdate.filters() != null ? batchUpdate.filters().size() : 0);
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -745,22 +755,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ST template = new ST(BATCH_UPDATE_ITEMS);
 
                 // Add conditional parameters based on what fields are being updated
-                if (update.data() != null) {
+                if (batchUpdate.update().data() != null) {
                     template.add("data", true);
                 }
-                if (update.tags() != null) {
+                if (batchUpdate.update().tags() != null) {
                     template.add("tags", true);
-                    if (Boolean.TRUE.equals(mergeTags)) {
+                    if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
                         template.add("merge_tags", true);
                     }
+                }
+
+                // Add either item IDs or filters based on what's provided
+                if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
+                    template.add("item_ids", true);
+                } else if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
+                    filterQueryBuilder.toAnalyticsDbFilters(batchUpdate.filters(), FilterStrategy.DATASET_ITEM)
+                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
                 }
 
                 String query = template.render();
 
                 // Convert UUIDs to strings for ClickHouse
-                String[] itemIdStrings = itemIds.stream()
-                        .map(UUID::toString)
-                        .toArray(String[]::new);
                 String[] uuidStrings = uuids.stream()
                         .map(UUID::toString)
                         .toArray(String[]::new);
@@ -770,17 +785,30 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .bind("datasetId", datasetId.toString())
                         .bind("baseVersionId", baseVersionId.toString())
                         .bind("newVersionId", newVersionId.toString())
-                        .bind("itemIds", itemIdStrings)
                         .bind("uuids", uuidStrings)
                         .bind("userName", userName);
 
+                // Bind item IDs if provided
+                if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
+                    String[] itemIdStrings = batchUpdate.ids().stream()
+                            .map(UUID::toString)
+                            .toArray(String[]::new);
+                    statement.bind("itemIds", itemIdStrings);
+                }
+
+                // Bind filter parameters if provided
+                if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
+                    filterQueryBuilder.bind(statement, batchUpdate.filters(), FilterStrategy.DATASET_ITEM);
+                }
+
                 // Bind optional update fields
-                if (update.data() != null) {
-                    Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(update.data());
+                if (batchUpdate.update().data() != null) {
+                    Map<String, String> dataAsStrings = DatasetItemResultMapper
+                            .getOrDefault(batchUpdate.update().data());
                     statement.bind("data", dataAsStrings);
                 }
-                if (update.tags() != null) {
-                    statement.bind("tags", update.tags().toArray(new String[0]));
+                if (batchUpdate.update().tags() != null) {
+                    statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "batch_update_items");

@@ -17,7 +17,9 @@ import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -1416,6 +1418,115 @@ class DatasetVersionResourceTest {
                 }
             }
             assertThat(updatedCount).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Success: Batch update by filters creates new version with edits")
+        void batchUpdateByFilters__whenVersioningEnabled__thenCreateNewVersionWithEdits() {
+            // Given - Create dataset with items having different tags
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create items with specific tags for filtering
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("filter-me", "tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("filter-me", "tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("keep-me", "tag3"))
+                    .build();
+            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("filter-me", "tag4"))
+                    .build();
+            var item5 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("keep-me", "tag5"))
+                    .build();
+
+            var batch = new DatasetItemBatch(null, datasetId, List.of(item1, item2, item3, item4, item5));
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(5);
+
+            // Tag v1 for later reference
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // When - Batch update by filters (update items with "filter-me" tag)
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "filter-me");
+
+            var newTags = Set.of("batch-updated-by-filter", "new-tag");
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder().tags(newTags).build())
+                    .mergeTags(true) // Merge tags (note: for filter-based updates, mergeTags is always true per DatasetItemBatchUpdate accessor)
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(5);
+
+            // Verify v1 items still have original tags (immutable)
+            var v1ItemsAfter = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            int v1FilterMeCount = 0;
+            for (var item : v1ItemsAfter) {
+                if (item.tags() != null && item.tags().contains("filter-me")) {
+                    v1FilterMeCount++;
+                    assertThat(item.tags()).doesNotContain("batch-updated-by-filter");
+                }
+            }
+            assertThat(v1FilterMeCount).isEqualTo(3); // 3 items had "filter-me" tag
+
+            // Verify latest version has updated tags only on filtered items
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            int updatedCount = 0;
+            int unchangedCount = 0;
+            for (var item : latestItems) {
+                if (item.tags() != null) {
+                    if (item.tags().contains("batch-updated-by-filter")) {
+                        // These are the items that matched the filter - tags should be merged
+                        assertThat(item.tags()).containsAll(newTags);
+                        assertThat(item.tags()).contains("filter-me"); // Original tags preserved (merged)
+                        updatedCount++;
+                    } else if (item.tags().contains("keep-me")) {
+                        // These items should remain unchanged
+                        assertThat(item.tags()).doesNotContain("batch-updated-by-filter");
+                        unchangedCount++;
+                    }
+                }
+            }
+            assertThat(updatedCount).isEqualTo(3); // 3 items matched the filter
+            assertThat(unchangedCount).isEqualTo(2); // 2 items were not filtered
         }
     }
 
