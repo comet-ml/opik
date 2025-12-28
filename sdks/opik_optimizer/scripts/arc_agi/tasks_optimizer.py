@@ -33,6 +33,7 @@ try:  # pragma: no cover - satisfied in package context
         DEFAULT_PASS_AT_K,
         LABEL_IOU_REWARD_WEIGHT,
         LIKENESS_REWARD_WEIGHT,
+        normalized_weights,
         build_multi_metric_objective,
     )
     from .utils.prompt_loader import load_prompts
@@ -55,6 +56,7 @@ except ImportError:  # pragma: no cover - when executed as a script
         DEFAULT_PASS_AT_K,
         LABEL_IOU_REWARD_WEIGHT,
         LIKENESS_REWARD_WEIGHT,
+        normalized_weights,
         build_multi_metric_objective,
     )
     from scripts.arc_agi.utils.prompt_loader import load_prompts  # type: ignore
@@ -80,6 +82,13 @@ N_SAMPLES_PER_TRIAL = 4
 EVAL_COMPLETIONS_PER_CALL = 4
 SANDBOX_TIMEOUT_S = 5.0
 RAISE_SCORING_ERRORS = False
+COMPOSITE_METRIC_NAME = "arc_agi2_multi"
+METRIC_WEIGHTS = dict(
+    zip(
+        DEFAULT_METRIC_SEQUENCE,
+        normalized_weights(DEFAULT_METRIC_SEQUENCE),
+    )
+)
 
 EVAL_CONTEXT = EvaluationConfig(
     pass_at_k=DEFAULT_PASS_AT_K,
@@ -147,11 +156,24 @@ def _maybe_log_baseline_reason(baseline_eval: Any) -> None:
         )
 
 
+def _print_run_summary(
+    *, context: str, score: float, trials: int | str, llm_calls: int | None
+) -> None:
+    """Emit a concise Rich line summarizing the completed run."""
+    calls_display = llm_calls if llm_calls is not None else "unknown"
+    CONSOLE.print(
+        f"{context} | score={score:.3f} | trials={trials} | llm_calls={calls_display}"
+    )
+
+
 def main() -> None:
     """Run baseline evaluation followed by HRPO if improvement is needed."""
 
     composite_metric = build_multi_metric_objective(
-        DEFAULT_METRIC_SEQUENCE, _evaluation_fn, _handle_scoring_exception
+        DEFAULT_METRIC_SEQUENCE,
+        _evaluation_fn,
+        _handle_scoring_exception,
+        objective_name=COMPOSITE_METRIC_NAME,
     )
 
     dataset = arc_agi2(
@@ -195,23 +217,36 @@ def main() -> None:
         verbose=1,
     )
     baseline_score = getattr(baseline_eval, "score", None)
-    if baseline_score is None and getattr(baseline_eval, "test_results", None):
-        baseline_scores = [
-            sr.value
-            for test in baseline_eval.test_results
-            for sr in getattr(test, "score_results", [])
-        ]
-        baseline_score = (
-            sum(baseline_scores) / len(baseline_scores) if baseline_scores else 0.0
-        )
-    elif baseline_score is None:
-        baseline_score = 0.0
+
+    def _composite_from_results() -> float:
+        if not getattr(baseline_eval, "test_results", None):
+            return 0.0
+        per_item_scores: list[float] = []
+        for test in baseline_eval.test_results:
+            score_map = {
+                getattr(sr, "name", ""): getattr(sr, "value", 0.0)
+                for sr in getattr(test, "score_results", [])
+            }
+            if not score_map:
+                continue
+            composite = sum(
+                score_map.get(metric_name, 0.0) * METRIC_WEIGHTS[metric_name]
+                for metric_name in DEFAULT_METRIC_SEQUENCE
+            )
+            per_item_scores.append(composite)
+        return sum(per_item_scores) / len(per_item_scores) if per_item_scores else 0.0
+
+    if baseline_score is None:
+        baseline_score = _composite_from_results()
 
     _maybe_log_baseline_reason(baseline_eval)
 
     if baseline_score >= 0.999:
-        CONSOLE.print(
-            f"Baseline is perfect (score={baseline_score:.3f}); skipping HRPO trials."
+        _print_run_summary(
+            context="ARC-AGI run summary (baseline perfect)",
+            score=baseline_score,
+            trials=0,
+            llm_calls=getattr(optimizer, "llm_call_counter", None),
         )
         return
 
@@ -225,10 +260,19 @@ def main() -> None:
     )
 
     trials_used = len(result.history) if getattr(result, "history", None) else "unknown"
-    CONSOLE.print(
-        f"ARC-AGI-2 HRPO complete. Final score: {result.score:.3f} | trials: {trials_used}"
+    llm_calls = result.llm_calls or getattr(optimizer, "llm_call_counter", None)
+    _print_run_summary(
+        context="ARC-AGI-2 HRPO complete",
+        score=result.score,
+        trials=trials_used,
+        llm_calls=llm_calls,
     )
-    CONSOLE.print(f"Best prompt name: {result.prompt.name}")
+    prompt_result = result.prompt
+    if isinstance(prompt_result, dict):
+        prompt_name = next(iter(prompt_result.values())).name
+    else:
+        prompt_name = prompt_result.name
+    CONSOLE.print(f"Best prompt name: {prompt_name}")
 
 
 if __name__ == "__main__":

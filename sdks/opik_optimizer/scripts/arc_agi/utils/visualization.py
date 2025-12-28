@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from rich.columns import Columns
 from rich.panel import Panel
@@ -89,4 +89,10 @@ def print_grid_triplet(
     CONSOLE.print(Columns(panels, expand=True, padding=2))
 
 
-__all__ = ["CONSOLE", "grid_panel", "print_task_preview", "print_grid_triplet", "render_grid"]
+__all__ = [
+    "CONSOLE",
+    "grid_panel",
+    "print_task_preview",
+    "print_grid_triplet",
+    "render_grid",
+]

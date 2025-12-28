@@ -1,11 +1,10 @@
-from ..utils.code_evaluator import (
-    EvaluationConfig,
-    evaluate_arc_response,
-)
+from typing import Any
+
+from ..utils.code_evaluator import EvaluationConfig, evaluate_arc_response
 
 
-def test_evaluate_arc_response_handles_missing_code_block():
-    dataset_item = {
+def test_evaluate_arc_response_handles_missing_code_block() -> None:
+    dataset_item: dict[str, Any] = {
         "training_examples": [],
         "test_outputs": [],
         "test_inputs": [],

@@ -34,7 +34,8 @@ the reward weighting.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Any
+from collections.abc import Callable, Iterable
 
 import numpy as np
 from opik.evaluation.metrics import score_result
@@ -114,15 +115,19 @@ def _extract(name: str) -> Callable[[dict[str, Any]], float]:
     return lambda data: data["metrics"][name]
 
 
-METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
+METRIC_DEFINITIONS: dict[str, MetricDefinition] = {
     "arc_agi2_accuracy": MetricDefinition(
-        name="arc_agi2_accuracy", extractor=lambda data: data["composite_value"], weight=1.0
+        name="arc_agi2_accuracy",
+        extractor=lambda data: data["composite_value"],
+        weight=1.0,
     ),
     "arc_agi2_exact": MetricDefinition(
         name="arc_agi2_exact", extractor=_extract("arc_agi2_exact"), weight=1.0
     ),
     "arc_agi2_approx_match": MetricDefinition(
-        name="arc_agi2_approx_match", extractor=_extract("arc_agi2_approx_match"), weight=0.3
+        name="arc_agi2_approx_match",
+        extractor=_extract("arc_agi2_approx_match"),
+        weight=0.3,
     ),
     "arc_agi2_label_iou": MetricDefinition(
         name="arc_agi2_label_iou", extractor=_extract("arc_agi2_label_iou"), weight=0.3
@@ -151,7 +156,9 @@ def build_metric_function(
 ) -> Callable[[dict[str, Any], str], score_result.ScoreResult]:
     """Create a score_result-producing function for MultiMetricObjective."""
 
-    def metric(dataset_item: dict[str, Any], llm_output: str) -> score_result.ScoreResult:
+    def metric(
+        dataset_item: dict[str, Any], llm_output: str
+    ) -> score_result.ScoreResult:
         try:
             data = evaluation_fn(dataset_item, llm_output)
         except Exception as exc:  # pragma: no cover - delegated upstream
@@ -171,9 +178,11 @@ def build_metric_functions(
     names: Iterable[str],
     evaluation_fn: Callable[[dict[str, Any], str], dict[str, Any]],
     handle_exception: Callable[[str, Exception], score_result.ScoreResult],
-) -> List[Callable[[dict[str, Any], str], score_result.ScoreResult]]:
+) -> list[Callable[[dict[str, Any], str], score_result.ScoreResult]]:
     return [
-        build_metric_function(get_metric_definition(name), evaluation_fn, handle_exception)
+        build_metric_function(
+            get_metric_definition(name), evaluation_fn, handle_exception
+        )
         for name in names
     ]
 

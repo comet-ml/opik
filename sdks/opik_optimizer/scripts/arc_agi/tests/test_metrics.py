@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from ..utils.metrics import (
@@ -8,8 +10,8 @@ from ..utils.metrics import (
 )
 
 
-def test_metric_function_uses_evaluation_data():
-    evaluation_data = {
+def test_metric_function_uses_evaluation_data() -> None:
+    evaluation_data: dict[str, Any] = {
         "composite_value": 0.42,
         "metrics": {
             "arc_agi2_exact": 0.8,
@@ -20,13 +22,15 @@ def test_metric_function_uses_evaluation_data():
         "metadata": {"foo": "bar"},
     }
 
-    calls = []
+    calls: list[tuple[dict[str, Any], str]] = []
 
-    def evaluation_fn(dataset_item, llm_output):  # noqa: D401 - simple stub
+    def evaluation_fn(dataset_item: dict[str, Any], llm_output: str) -> dict[str, Any]:  # noqa: D401 - simple stub
         calls.append((dataset_item, llm_output))
         return evaluation_data
 
-    def handle_exception(name, exc):  # pragma: no cover - not hit
+    def handle_exception(
+        name: str, exc: Exception
+    ) -> None:  # pragma: no cover - not hit
         pytest.fail(f"Unexpected exception for {name}: {exc}")
 
     definition = get_metric_definition("arc_agi2_exact")
@@ -40,15 +44,17 @@ def test_metric_function_uses_evaluation_data():
     assert calls, "evaluation_fn should be invoked"
 
 
-def test_normalized_weights_sum_to_one():
+def test_normalized_weights_sum_to_one() -> None:
     weights = normalized_weights(
         ["arc_agi2_exact", "arc_agi2_approx_match", "arc_agi2_label_iou"]
     )
     assert pytest.approx(sum(weights), rel=1e-9) == 1.0
 
 
-def test_build_multi_metric_objective_returns_expected_shape():
-    def evaluation_fn(dataset_item, llm_output):  # pragma: no cover - simple stub
+def test_build_multi_metric_objective_returns_expected_shape() -> None:
+    def evaluation_fn(
+        dataset_item: dict[str, Any], llm_output: str
+    ) -> dict[str, Any]:  # pragma: no cover - simple stub
         return {
             "composite_value": 1.0,
             "metrics": {
@@ -58,7 +64,7 @@ def test_build_multi_metric_objective_returns_expected_shape():
             },
         }
 
-    def handle_exception(name, exc):  # pragma: no cover - not triggered
+    def handle_exception(name: str, exc: Exception) -> None:  # pragma: no cover
         raise exc
 
     objective = build_multi_metric_objective(

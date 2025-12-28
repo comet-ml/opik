@@ -11,7 +11,7 @@ import tempfile
 import textwrap
 import traceback
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -143,6 +143,7 @@ def _run_transform(
     except Exception:
         return False, None, f"Runtime error: {traceback.format_exc(limit=1)}"
 
+
 def _evaluate_code_candidate(
     code: str,
     train_in: list[list[list[int]]],
@@ -153,7 +154,9 @@ def _evaluate_code_candidate(
     """Run a candidate transform across train/test grids and collect stats."""
     snippet = code.splitlines()
     preview = "\n".join(snippet[: min(8, len(snippet))])
-    debug_print(f"Candidate preview (lines={len(snippet)}):\n{preview}", config.debug_log)
+    debug_print(
+        f"Candidate preview (lines={len(snippet)}):\n{preview}", config.debug_log
+    )
 
     train_feedback: list[str] = []
     exact_scores: list[float] = []
@@ -419,15 +422,11 @@ def evaluate_arc_response(
         f"approx_match_reward={likeness_reward:.2f} label_iou_reward={iou_reward:.2f}"
     )
 
-    if (
-        config.debug_log
-        and gold_outputs
-        and best_debug_pred
-        and dataset_item.get("test_inputs")
-    ):
+    test_inputs = dataset_item.get("test_inputs")
+    if config.debug_log and gold_outputs and best_debug_pred and test_inputs:
         try:
             print_grid_triplet(
-                dataset_item.get("test_inputs")[0],
+                test_inputs[0],
                 gold_outputs[0],
                 best_debug_pred,
             )
