@@ -69,9 +69,9 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   // - selectedRuleIds is undefined (legacy outputs without stored selection - treat as "all")
   // - selectedRuleIds is null (explicitly "all" selected)
   // - selectedRuleIds is a non-empty array (specific rules selected)
-  const selectingAllRules = selectedRuleIds == null;
-  const hasSelectedRules =
-    selectingAllRules || selectedRuleIds.length > 0;
+  const selectingAllRules =
+    selectedRuleIds == null || selectedRuleIds === undefined;
+  const hasSelectedRules = selectingAllRules || selectedRuleIds.length > 0;
 
   // Fetch playground project to get rules
   const { data: playgroundProject } = useProjectByName(
@@ -102,12 +102,12 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
     // If selectedRuleIds is null or undefined, return empty - we'll handle this case
     // differently by only showing actual scores from the trace
-    if (selectedRuleIds === null || selectedRuleIds === undefined) {
+    if (selectingAllRules) {
       return [];
     }
 
     return rules.filter((r) => selectedRuleIds.includes(r.id));
-  }, [hasSelectedRules, rules, selectedRuleIds]);
+  }, [hasSelectedRules, rules, selectedRuleIds, selectingAllRules]);
 
   // Calculate expected score names from selected rules (for polling logic)
   const expectedScoreNames = useMemo(() => {
@@ -123,10 +123,11 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
   // Track if we're waiting for specific rules to load
   // This prevents premature polling stop when rules haven't loaded yet
+  // Note: if rulesLoaded is true but selectedRules is empty, the rules were deleted
   const hasSpecificRulesSelected =
     Array.isArray(selectedRuleIds) && selectedRuleIds.length > 0;
   const rulesStillLoading =
-    hasSpecificRulesSelected && selectedRules.length === 0;
+    hasSpecificRulesSelected && !rulesLoaded && selectedRules.length === 0;
 
   // Store values in refs for access in refetchInterval
   const expectedScoreNamesRef = useRef<Set<string>>(expectedScoreNames);
@@ -201,7 +202,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
 
     // If selectedRuleIds is null/undefined (meaning "all" was selected or legacy data),
     // only show scores that actually exist in the trace - no loading spinners
-    if (selectedRuleIds === null || selectedRuleIds === undefined) {
+    if (selectingAllRules) {
       for (const score of feedbackScores) {
         metrics.push({
           scoreName: score.name,
@@ -229,7 +230,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     rulesLoaded,
     selectedRules,
     scoresByName,
-    selectedRuleIds,
+    selectingAllRules,
     feedbackScores,
   ]);
 
