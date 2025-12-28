@@ -136,6 +136,33 @@ scripts/dev-runner.sh --logs
 
 Access the UI at http://localhost:5174 (Vite dev server with hot reload)
 
+#### Testing on Mobile Devices
+
+The local development server supports testing from mobile devices on the same network:
+
+1. **Find your computer's IP address:**
+   ```bash
+   # macOS/Linux
+   ipconfig getifaddr en0  # or ifconfig
+   
+   # Windows
+   ipconfig  # Look for IPv4 Address
+   ```
+
+2. **Access from your mobile device:**
+   ```
+   http://YOUR_COMPUTER_IP:5174
+   ```
+   Example: `http://192.168.1.100:5174`
+
+3. **How it works:**
+   - The Vite dev server listens on `0.0.0.0` (all network interfaces)
+   - A proxy automatically forwards `/api/*` requests to the backend
+   - No configuration or hardcoded IP addresses needed
+   - Works from any device on your local network
+
+**Security Note:** Only use on trusted networks (home/office WiFi, not public WiFi)
+
 ### BE-Only Mode (Backend Development)
 
 Best for backend-focused work. Frontend runs in Docker, backend as a local process.
