@@ -4,7 +4,7 @@ import opik
 from typing import Any
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
 
 
 def _tiny_records_transform(records: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -52,6 +52,7 @@ def tiny_test(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Tiny QA benchmark slices (core_en subset)."""
     return _TINY_TEST_HANDLE.load(
@@ -62,4 +63,5 @@ def tiny_test(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

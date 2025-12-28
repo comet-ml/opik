@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 import time
 import warnings
 import itertools
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
@@ -20,6 +21,47 @@ from opik_optimizer.api_objects.types import DatasetSpec
 
 
 logger = logging.getLogger(__name__)
+
+FilterBy = Mapping[str, Any]
+
+
+def _normalize_filter_value(value: Any) -> Any:
+    if isinstance(value, (set, frozenset, tuple)):
+        return [str(item) for item in sorted(value, key=str)]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if callable(value):
+        return getattr(value, "__qualname__", getattr(value, "__name__", "callable"))
+    return value
+
+
+def filter_by_fingerprint(filter_by: FilterBy) -> str:
+    payload = json.dumps(
+        [(key, _normalize_filter_value(filter_by[key])) for key in sorted(filter_by)],
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.md5(payload.encode("utf-8")).hexdigest()[:8]
+
+
+def record_matches_filter_by(record: dict[str, Any], filter_by: FilterBy) -> bool:
+    """
+    Check if a record matches the filter_by mapping.
+
+    Supports equality, membership (list/tuple/set), and per-field callables.
+    """
+    for key, expected in filter_by.items():
+        value = record.get(key)
+        if isinstance(expected, (list, tuple, set, frozenset)):
+            if value not in expected:
+                return False
+        elif callable(expected):
+            if not expected(value):
+                return False
+        else:
+            if value != expected:
+                return False
+    return True
 
 
 @lru_cache(maxsize=None)
@@ -94,6 +136,7 @@ def create_dataset_from_records(
 ) -> opik.Dataset:
     """Create or reuse an Opik dataset with the provided records and size checks."""
     if os.getenv("OPIK_DATASET_OFFLINE", "0") not in {"", "0", "false", "False"}:
+
         class _LocalDataset:
             def __init__(self, name: str, items: list[dict[str, Any]]):
                 self._name = name
@@ -143,6 +186,7 @@ def download_and_slice_hf_dataset(
     start: int,
     count: int | None,
     seed: int,
+    filter_by: FilterBy | None = None,
 ) -> list[dict[str, Any]]:
     """Download a HF dataset split, shuffle deterministically, and slice.
 
@@ -152,8 +196,13 @@ def download_and_slice_hf_dataset(
         start: Starting index within the shuffled split.
         count: Number of rows to return. If ``None`` we include everything from
             ``start`` to the end of the split.
+        filter_by: Optional mapping to filter rows before slicing.
     """
     hf_dataset = load_fn(**load_kwargs)
+    if filter_by:
+        hf_dataset = hf_dataset.filter(
+            lambda record: record_matches_filter_by(record, filter_by)
+        )
     shuffled = hf_dataset.shuffle(seed=seed)
     total = len(shuffled)
 
@@ -164,9 +213,11 @@ def download_and_slice_hf_dataset(
 
     end_index = total if count is None else start + count
     if end_index > total:
-        raise ValueError(
-            f"Requested slice [{start}, {end_index}) exceeds dataset size {total}."
-        )
+        if filter_by is None:
+            raise ValueError(
+                f"Requested slice [{start}, {end_index}) exceeds dataset size {total}."
+            )
+        end_index = total
 
     subset = shuffled.select(range(start, end_index))
     return subset.to_list()
@@ -178,12 +229,15 @@ def stream_records_for_slice(
     load_kwargs: dict[str, Any],
     start: int,
     count: int | None,
+    filter_by: FilterBy | None = None,
 ) -> list[dict[str, Any]]:
     """
     Stream from HF without downloading full shards.
     """
     streaming_set = load_fn(streaming=True, **load_kwargs)
     iterator = iter(streaming_set)
+    if filter_by:
+        iterator = (row for row in iterator if record_matches_filter_by(row, filter_by))
 
     if start:
         iterator = itertools.islice(iterator, start, None)
@@ -201,6 +255,7 @@ def fetch_records_for_slice(
     seed: int,
     custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]]
     | None = None,
+    filter_by: FilterBy | None = None,
     load_fn: Callable[..., Any] = load_dataset,
 ) -> list[dict[str, Any]]:
     """
@@ -211,15 +266,33 @@ def fetch_records_for_slice(
         load_kwargs_resolver: Callable producing kwargs for ``load_dataset``.
         seed: Deterministic shuffle seed.
         custom_loader: Optional callable overriding the default HF download path.
+        filter_by: Optional mapping to filter rows before slicing.
         load_fn: Loader function (defaults to ``datasets.load_dataset``).
     """
     if custom_loader is not None:
-        return custom_loader(
+        if filter_by is None:
+            return custom_loader(
+                slice_request.source_split,
+                slice_request.start,
+                slice_request.count,
+                seed,
+            )
+        records = custom_loader(
             slice_request.source_split,
-            slice_request.start,
-            slice_request.count,
+            0,
+            None,
             seed,
         )
+        filtered = [
+            record for record in records if record_matches_filter_by(record, filter_by)
+        ]
+        start = slice_request.start
+        count = slice_request.count
+        if start:
+            filtered = filtered[start:]
+        if count is not None:
+            filtered = filtered[:count]
+        return filtered
 
     load_kwargs = load_kwargs_resolver(slice_request.source_split)
 
@@ -234,6 +307,7 @@ def fetch_records_for_slice(
                 load_kwargs=load_kwargs,
                 start=slice_request.start,
                 count=slice_request.count,
+                filter_by=filter_by,
             )
         except Exception:
             # If streaming is unavailable for this dataset, fall back to full download.
@@ -245,6 +319,7 @@ def fetch_records_for_slice(
         start=slice_request.start,
         count=slice_request.count,
         seed=seed,
+        filter_by=filter_by,
     )
 
 
@@ -301,7 +376,7 @@ def resolve_slice_request(
     normalized_split = (requested_split or default_source_split).lower()
     normalized_split = _SPLIT_ALIASES.get(normalized_split, normalized_split)
     preset = presets.get(normalized_split)
-    if requested_split is None and not prefer_presets:
+    if not prefer_presets:
         preset = None
 
     source_split = _resolve_slice_field(
@@ -406,12 +481,14 @@ def load_hf_dataset_slice(
     | None = None,
     custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]]
     | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Shared helper to download an HF slice and create an Opik dataset.
 
     The ``seed`` parameter is threaded all the way from public dataset helpers,
     ensuring callers can deterministically reproduce any slice by setting a
-    global env var or passing ``seed=...`` explicitly.
+    global env var or passing ``seed=...`` explicitly. Use ``filter_by`` to
+    select rows before slicing.
     """
     use_presets = (
         prefer_presets if prefer_presets is not None else requested_split is not None
@@ -432,10 +509,17 @@ def load_hf_dataset_slice(
 
     resolved_seed = resolve_dataset_seed(seed)
     effective_test_count = resolve_test_mode_count(test_mode_count)
+    explicit_dataset_name = dataset_name is not None
+    dataset_name_suffix = None
+    if filter_by:
+        dataset_name_suffix = f"filtered_{filter_by_fingerprint(filter_by)}"
+    resolved_dataset_name = slice_request.dataset_name
+    if dataset_name_suffix and not explicit_dataset_name:
+        resolved_dataset_name = f"{resolved_dataset_name}_{dataset_name_suffix}"
 
     logger.info(
         "Dataset slice resolved: %s (split=%s start=%s count=%s test_mode=%s streaming=%s seed=%s)",
-        slice_request.dataset_name,
+        resolved_dataset_name,
         slice_request.source_split,
         slice_request.start,
         slice_request.count,
@@ -449,6 +533,7 @@ def load_hf_dataset_slice(
         load_kwargs_resolver=load_kwargs_resolver,
         seed=resolved_seed,
         custom_loader=custom_loader,
+        filter_by=filter_by,
         load_fn=load_fn,
     )
 
@@ -460,7 +545,7 @@ def load_hf_dataset_slice(
         expected_items = effective_test_count if test_mode else slice_size
     logger.info(
         "Dataset fetch complete: %s (split=%s fetched=%s expected=%s test_mode=%s)",
-        slice_request.dataset_name,
+        resolved_dataset_name,
         slice_request.source_split,
         slice_size,
         expected_items,
@@ -470,7 +555,7 @@ def load_hf_dataset_slice(
         records = records[:expected_items]
 
     return create_dataset_from_records(
-        dataset_name=slice_request.dataset_name,
+        dataset_name=resolved_dataset_name,
         records=records,
         expected_size=expected_items,
         test_mode=test_mode,
@@ -500,6 +585,7 @@ class DatasetHandle:
         seed: int | None = None,
         test_mode_count: int | None = None,
         prefer_presets: bool | None = None,
+        filter_by: FilterBy | None = None,
     ) -> opik.Dataset:
         """
         Load the dataset slice described by this spec.
@@ -507,7 +593,7 @@ class DatasetHandle:
         Args mirror the public dataset helpers; notably ``seed`` controls the
         deterministic shuffle performed inside ``download_and_slice_hf_dataset``,
         so callers can fully reproduce slices by passing ``seed`` all the way
-        through the public API.
+        through the public API. Use ``filter_by`` to select rows before slicing.
         """
         if prefer_presets is None:
             no_overrides = (
@@ -515,6 +601,7 @@ class DatasetHandle:
                 and start is None
                 and count is None
                 and dataset_name is None
+                and filter_by is None
             )
             pref = self.spec.prefer_presets and no_overrides
         else:
@@ -535,6 +622,7 @@ class DatasetHandle:
             prefer_presets=pref,
             records_transform=self.spec.records_transform,
             custom_loader=self.spec.custom_loader,
+            filter_by=filter_by,
         )
 
 
@@ -574,6 +662,9 @@ __all__ = [
     "fetch_records_for_slice",
     "default_dataset_name",
     "add_record_index",
+    "filter_by_fingerprint",
+    "record_matches_filter_by",
+    "FilterBy",
     "SliceRequest",
     "resolve_slice_request",
     "resolve_preset_split",

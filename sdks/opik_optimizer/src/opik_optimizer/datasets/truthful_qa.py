@@ -4,7 +4,7 @@ import opik
 from typing import Any
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
 
 
 def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -107,6 +107,7 @@ def truthful_qa(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """TruthfulQA slices combining generation and multiple-choice views."""
     return _TRUTHFUL_QA_HANDLE.load(
@@ -117,4 +118,5 @@ def truthful_qa(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

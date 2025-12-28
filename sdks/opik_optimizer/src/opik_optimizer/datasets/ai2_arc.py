@@ -3,7 +3,7 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
 
 AI2_ARC_SPEC = DatasetSpec(
     name="ai2_arc",
@@ -45,6 +45,7 @@ def ai2_arc(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """
     Load slices of the AI2 ARC Challenge dataset.
@@ -61,4 +62,5 @@ def ai2_arc(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )
