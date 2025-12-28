@@ -35,7 +35,9 @@ def test_load_hf_dataset_slice_appends_filter_suffix(
         captured["dataset_name"] = dataset_name
         return mock.Mock(name="dataset")
 
-    monkeypatch.setattr(dataset_utils, "fetch_records_for_slice", _fake_fetch_records_for_slice)
+    monkeypatch.setattr(
+        dataset_utils, "fetch_records_for_slice", _fake_fetch_records_for_slice
+    )
     monkeypatch.setattr(
         dataset_utils, "create_dataset_from_records", _fake_create_dataset_from_records
     )
