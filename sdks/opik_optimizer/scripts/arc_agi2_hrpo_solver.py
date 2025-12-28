@@ -11,15 +11,18 @@ Workflow:
 
 from __future__ import annotations
 
+import json
 import os
-import time
 import re
+import subprocess
+import sys
+import tempfile
+import textwrap
 import traceback
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
-import opik_optimizer
 from opik.evaluation.metrics import score_result
 from opik_optimizer import (
     ChatPrompt,
@@ -27,6 +30,7 @@ from opik_optimizer import (
     MultiMetricObjective,
 )
 from opik_optimizer.datasets import arc_agi2
+
 try:  # Optional pretty debug output
     from rich.console import Console
     from rich.text import Text
@@ -35,7 +39,11 @@ try:  # Optional pretty debug output
 
     _RICH_AVAILABLE = True
     _rich_console = Console(
-        force_terminal=True, color_system="truecolor", force_jupyter=False, soft_wrap=True, width=120
+        force_terminal=True,
+        color_system="truecolor",
+        force_jupyter=False,
+        soft_wrap=True,
+        width=120,
     )
     _RICH_INIT_ERROR = None
 except Exception:  # pragma: no cover - rich not always installed
@@ -45,10 +53,12 @@ except Exception:  # pragma: no cover - rich not always installed
 
 # Config knobs kept flat for simplicity. Pass@2 is handled via multiple code blocks.
 DATASET_SPLIT = "train"
-DATASET_COUNT = 1  # FIXME: run per-task; add a driver loop to iterate tasks when scaling out
+DATASET_COUNT = (
+    1  # FIXME: run per-task; add a driver loop to iterate tasks when scaling out
+)
 DATASET_START = 0
 TEST_MODE = False  # Set True to force embedded sample.
-ARC_AGI2_DATA_DIR = os.getenv("ARC_AGI2_DATA_DIR")  # optional override
+ARC_AGI2_TASK_ID = os.getenv("ARC_AGI2_TASK_ID")
 
 EVAL_MODEL = "openai/gpt-5.2"
 REASONING_MODEL = "openai/gpt-5.2"
@@ -58,13 +68,13 @@ HRPO_MAX_TRIALS = 15
 HRPO_THREADS = 8
 SEED = 42
 PASS_AT_K = 2
-DEBUG_LOG = os.getenv("ARC_AGI2_DEBUG", "0") not in {"", "0", "false", "False"}
-N_SAMPLES_PER_TRIAL = 4  # sample multiple completions per trial to approximate pass@2 across runs
-EVAL_COMPLETIONS_PER_CALL = 4  # request multiple completions per model call; metric will evaluate all code blocks
-
-DATASET_NAME = os.getenv("ARC_AGI2_DATASET_NAME") or (
-    f"arc_agi2_{DATASET_SPLIT}_{DATASET_COUNT}_{int(time.time())}"
+DEBUG_LOG = True
+N_SAMPLES_PER_TRIAL = (
+    4  # sample multiple completions per trial to approximate pass@2 across runs
 )
+EVAL_COMPLETIONS_PER_CALL = 4  # request multiple completions per model call; metric will evaluate all code blocks
+SANDBOX_TIMEOUT_S = 5.0
+RAISE_SCORING_ERRORS = False
 # Multi-metric weights (normalized) used for the composite objective.
 LIKENESS_WEIGHT_TEST = 0.3
 LIKENESS_WEIGHT_TRAIN = 0.3
@@ -72,9 +82,30 @@ LABEL_IOU_WEIGHT = 0.3
 _WEIGHTS_RAW = [1.0, LIKENESS_WEIGHT_TEST, LABEL_IOU_WEIGHT]
 _WEIGHTS_NORM = [w / sum(_WEIGHTS_RAW) for w in _WEIGHTS_RAW]
 
+
 def _log_debug(message: str) -> None:
     if DEBUG_LOG:
         print(message)
+
+
+def _handle_scoring_exception(
+    metric_name: str, exc: Exception
+) -> score_result.ScoreResult:
+    tb = traceback.format_exc()
+    message = f"Scoring error: {type(exc).__name__}: {exc}"
+    if DEBUG_LOG:
+        _log_debug(message)
+        _log_debug(tb)
+    if RAISE_SCORING_ERRORS:
+        raise exc
+    return score_result.ScoreResult(
+        name=metric_name,
+        value=0.0,
+        scoring_failed=True,
+        reason=message,
+        metadata={"exception": str(exc), "traceback": tb},
+    )
+
 
 # MIT-licensed baseline prompt adapted from Poetiq ARC-AGI solver (SOLVER_PROMPT_1).
 SYSTEM_PROMPT = """You are an expert in solving Abstract Reasoning Corpus (ARC) tasks by writing Python code. Your goal is to analyze input-output examples and create a 'transform' function that correctly transforms any given input grid into the corresponding output grid.
@@ -110,20 +141,17 @@ Here's how to approach the problem:
   *   Ensure your code handles edge cases and invalid inputs gracefully.
 
 **5. Output:**
-  *   Provide a brief explanation of your solution.
-  *   Include the complete Python code for the `transform` function within a single markdown code block.
+  *   Provide the complete Python code for the `transform` function within a single markdown code block.
   *   Do not include any `__name__ == "__main__"` block or any code outside the function definition.
 
 Safety and format constraints:
-- Use only NumPy (`import numpy as np` if you need it); no other imports or libraries are allowed.
-- Keep all helper logic inside the single code block with `transform`; no extra files, I/O, network, randomness, or subprocesses.
+- You may use NumPy, SciPy, OpenCV (`cv2`), and the Python standard library as needed.
+- Keep all helper logic inside the single code block with `transform`; no extra files, network access, randomness, or subprocesses.
 - Ensure `transform` returns a NumPy array of ints matching the expected grid shape unless the rule requires a different shape.
 - CRITICAL OUTPUT ENCODING RULE: each cell must be exactly one plain integer color index. Never emit or represent cell values as strings, floats, fractions/ratios (e.g., `7/5`, `5/7`, `2/7`, `7/2`), tuples, lists, or any mixed/heterogeneous value types. Do not encode uncertainty with composite symbols—choose one integer per cell. Before returning, normalize and validate the output array so it is strictly integer-typed (e.g., `out = np.asarray(out, dtype=int)`) and contains only valid discrete cell values (prefer 0–9 unless the task shows otherwise).
-- Avoid any mention (even in comments/strings) of banned tokens: `os`, `sys`, `pathlib`, `subprocess`, `open`, `eval`, `exec`, `requests`, `httpx`, `pickle`, `json`, `importlib`, or `__import__`.
 - Output grids must contain only integer values 0–9; never emit overlays like `a/b`, strings, or floats. Do not print diffs—just return the grid.
 - Use safe NumPy checks: never do `if array:` or array comparisons to scalars without `.any()`/`.all()`; prefer `np.array_equal`, `np.any`, `np.all`.
 - Before finalizing, mentally run your code on each training pair: ensure output shape matches exactly, colors are correct, dtype is integer, and there are no shape off-by-ones.
-- Respond ONLY with code blocks; avoid extra prose that could contain banned substrings. Before you answer, scan your entire response (code + comments) for any banned tokens and remove them.
 
 Respond with ONE python code block (```python ...```), defining transform(grid: np.ndarray) -> np.ndarray."""
 
@@ -142,42 +170,20 @@ def transform(grid: np.ndarray) -> np.ndarray
 
 
 def _extract_code_blocks(text: str) -> list[str]:
-    """Return all python code blocks found in the LLM response."""
-    blocks = re.findall(r"```python\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
+    """Return all code blocks found in the LLM response."""
+    blocks = re.findall(
+        r"```(?:python|py|python3)\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE
+    )
+    if not blocks:
+        blocks = re.findall(r"```\s*(.*?)```", text, flags=re.DOTALL)
     _log_debug(f"Found {len(blocks)} code blocks")
     return blocks
 
 
 def _validate_code_block(code: str) -> tuple[bool, str]:
-    """Reject code blocks that import anything other than numpy or use dangerous builtins."""
-    disallowed_tokens = [
-        "__import__",
-        "subprocess",
-        "os.",
-        "sys.",
-        "pathlib",
-        "shutil",
-        "open(",
-        "eval(",
-        "exec(",
-        "requests",
-        "httpx",
-        "importlib",
-        "pickle",
-        "json",
-    ]
-    for tok in disallowed_tokens:
-        if tok in code:
-            return False, f"Disallowed token '{tok}'"
-
-    import_re = re.compile(r"^\s*(from\s+([a-zA-Z0-9_\.]+)\s+import|import\s+([a-zA-Z0-9_\.]+))")
-    for line in code.splitlines():
-        m = import_re.match(line)
-        if not m:
-            continue
-        module = m.group(2) or m.group(3) or ""
-        if not module.startswith("numpy"):
-            return False, f"Disallowed import '{line.strip()}'"
+    """Sanity-check that a transform function exists."""
+    if "def transform" not in code:
+        return False, "Missing transform(grid) definition."
     return True, ""
 
 
@@ -220,37 +226,19 @@ def _render_legend(values: set[int]) -> Text:
     return legend
 
 
-def _grid_shape(grid: Sequence[Sequence[int]]) -> str:
-    try:
-        rows = len(grid)
-        cols = len(grid[0]) if rows else 0
-        # If ragged, flag it explicitly
-        ragged = any(len(r) != cols for r in grid)
-        shape = f"{rows}x{cols}"
-        return f"{shape}{' (ragged)' if ragged else ''}"
-    except Exception:
-        return "unknown"
-
-
-def _render_shape_summary(train_examples: list[dict[str, Any]], test_inputs: list[list[list[int]]]) -> str:
-    parts: list[str] = []
-    for idx, ex in enumerate(train_examples):
-        parts.append(
-            f"train {idx}: { _grid_shape(ex.get('input', [])) } -> { _grid_shape(ex.get('output', [])) }"
-        )
-    for idx, grid in enumerate(test_inputs):
-        parts.append(f"test {idx}: { _grid_shape(grid) }")
-    return "\n".join(parts)
-
-
 def _render_ascii_columns(columns: list[str], headers: list[str]) -> str:
     """Render multiple text columns side-by-side with headers."""
     split_cols = [col.splitlines() if col else [] for col in columns]
-    widths = [max((len(line) for line in col), default=len(head)) for col, head in zip(split_cols, headers, strict=False)]
+    widths = [
+        max((len(line) for line in col), default=len(head))
+        for col, head in zip(split_cols, headers, strict=False)
+    ]
     rows = max((len(col) for col in split_cols), default=0)
 
     lines: list[str] = []
-    header_line = " │ ".join(head.center(width) for head, width in zip(headers, widths, strict=False))
+    header_line = " │ ".join(
+        head.center(width) for head, width in zip(headers, widths, strict=False)
+    )
     separator = "─┼─".join("─" * width for width in widths)
     lines.append(header_line)
     lines.append(separator)
@@ -348,10 +336,43 @@ def _format_diff(pred: np.ndarray, truth: np.ndarray) -> str:
     return "\n".join(lines)
 
 
+def _build_sandbox_script(code: str) -> str:
+    return f"""
+# generated file
+{code}
+if __name__ == "__main__":
+    import json
+    import numpy as np
+    import sys
+    data = json.load(sys.stdin)
+    grid = np.array(data["input"], dtype=int)
+    result = transform(grid)
+    if not isinstance(result, np.ndarray):
+        result = np.asarray(result)
+    print(json.dumps({{"ok": True, "result": result.tolist()}}))
+"""
+
+
+def _extract_json_payload(output: str) -> dict[str, Any] | None:
+    candidate = output.strip()
+    if candidate:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    for line in reversed(output.splitlines()):
+        line = line.strip()
+        if not (line.startswith("{") and line.endswith("}")):
+            continue
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
 def _run_transform(code: str, grid: list[list[int]]) -> tuple[bool, Any, str]:
     """Exec transform(grid) defined in code; returns success flag, output or None, and error text."""
-    locals_dict: dict[str, Any] = {}
-    globals_dict = {"np": np}
     if _RICH_AVAILABLE and _rich_console:
         _rich_console.print("Executing candidate transform on grid (colorized):")
         _rich_console.print(_render_rich_grid(grid))
@@ -361,21 +382,38 @@ def _run_transform(code: str, grid: list[list[int]]) -> tuple[bool, Any, str]:
     # Validate input grid rectangularity to avoid ragged array conversion crashes.
     if grid and any(len(row) != len(grid[0]) for row in grid):
         return False, None, "Input grid is ragged (rows have different lengths)."
+    script = textwrap.dedent(_build_sandbox_script(code))
+    payload = json.dumps({"input": grid})
+    env = os.environ.copy()
+    env["PYTHONHASHSEED"] = "0"
     try:
-        exec(code, globals_dict, locals_dict)  # noqa: S102 - deliberate sandboxed exec
-    except Exception:
-        return False, None, f"Exec error: {traceback.format_exc(limit=1)}"
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "sandbox.py")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(script)
+            proc = subprocess.run(
+                [sys.executable, path],
+                input=payload,
+                capture_output=True,
+                text=True,
+                cwd=td,
+                env=env,
+                timeout=SANDBOX_TIMEOUT_S,
+            )
+    except subprocess.TimeoutExpired:
+        return False, None, "Sandbox timeout."
 
-    transform_fn = locals_dict.get("transform") or globals_dict.get("transform")
-    if not callable(transform_fn):
-        return False, None, "No transform(grid) function defined."
+    if proc.returncode != 0:
+        stderr = (proc.stderr or proc.stdout).strip()
+        return False, None, f"Sandbox error: {stderr}"
 
+    payload_out = _extract_json_payload(proc.stdout)
+    if not payload_out:
+        return False, None, "Sandbox returned non-JSON output."
+    if not payload_out.get("ok", False):
+        return False, None, "Sandbox returned ok=False."
     try:
-        arr_in = np.array(grid, dtype=int)
-        arr_out = transform_fn(arr_in)
-        if not isinstance(arr_out, np.ndarray):
-            return False, None, "transform must return a numpy array."
-        arr_out = np.asarray(arr_out)
+        arr_out = np.asarray(payload_out.get("result"))
         if not np.isfinite(arr_out).all():
             return False, None, "transform returned non-finite values."
         arr_out = arr_out.astype(int, copy=False)
@@ -457,6 +495,31 @@ def _evaluate_code_candidate(
         "test_outputs": test_outputs,
         "test_errors": test_errors,
     }
+
+
+def _select_attempts_by_test(
+    candidates: list[dict[str, Any]], num_tests: int, max_attempts: int
+) -> list[list[list[list[int]]]]:
+    attempts: list[list[list[list[int]]]] = [[] for _ in range(num_tests)]
+    if num_tests <= 0:
+        return attempts
+
+    for cand in candidates:
+        outputs = cand.get("test_outputs") or []
+        if len(outputs) != num_tests:
+            continue
+        for idx, pred in enumerate(outputs):
+            if len(attempts[idx]) >= max_attempts:
+                continue
+            if pred:
+                attempts[idx].append(pred)
+        if all(len(attempt) >= max_attempts for attempt in attempts):
+            break
+
+    for idx in range(num_tests):
+        while len(attempts[idx]) < max_attempts:
+            attempts[idx].append([])
+    return attempts
 
 
 def _compute_arc_agi2_scores(
@@ -541,70 +604,84 @@ def _compute_arc_agi2_scores(
         return result
 
     evaluated_candidates = candidates_sorted[:PASS_AT_K]
-    best_score = 0.0
-    best_likeness = 0.0
-    best_mismatch_summary = ""
-    best_reason = " | ".join(reason_parts)
-    best_candidate_for_debug: dict[str, Any] | None = None
-    best_candidate_likeness = 0.0
-    best_candidate_exact = 0.0
-    best_candidate_iou = 0.0
-    best_swap_summary = ""
-    for cand in evaluated_candidates:
-        if len(cand["test_outputs"]) != len(gold_outputs):
-            continue
-        exact_scores = []
-        likeness_scores = []
-        iou_scores = []
-        mismatch_counts: list[int] = []
-        mismatch_coords: list[str] = []
-        swap_counts: dict[tuple[int, int], int] = {}
-        for pred, gold in zip(cand["test_outputs"], gold_outputs, strict=False):
-            ok, _ = _is_valid_matrix(pred, gold)
-            exact_scores.append(1.0 if ok else 0.0)
+    attempts_by_test = _select_attempts_by_test(
+        evaluated_candidates, len(gold_outputs), PASS_AT_K
+    )
+    exact_scores: list[float] = []
+    likeness_scores: list[float] = []
+    iou_scores: list[float] = []
+    mismatch_counts: list[int] = []
+    mismatch_coords: list[str] = []
+    swap_counts: dict[tuple[int, int], int] = {}
+    best_debug_pred: list[list[int]] | None = None
+
+    for test_idx, gold in enumerate(gold_outputs):
+        gold_arr = np.array(gold, dtype=int)
+        best_exact = 0.0
+        best_likeness = 0.0
+        best_iou = 0.0
+        best_pred_arr: np.ndarray | None = None
+
+        for pred in attempts_by_test[test_idx]:
+            if not pred:
+                continue
             pred_arr = np.array(pred, dtype=int)
-            gold_arr = np.array(gold, dtype=int)
-            likeness_scores.append(_approx_match_score(pred_arr, gold_arr))
-            iou_scores.append(_label_iou(pred_arr, gold_arr))
-            if pred_arr.shape == gold_arr.shape:
-                mism_idx = np.argwhere(pred_arr != gold_arr)
-                mismatch_counts.append(int(mism_idx.shape[0]))
-                for coord in mism_idx[:3]:
-                    mismatch_coords.append(
-                        f"{tuple(int(x) for x in coord)}:{int(pred_arr[tuple(coord)])}|{int(gold_arr[tuple(coord)])}"
-                    )
-                for coord in mism_idx:
-                    key = (int(pred_arr[tuple(coord)]), int(gold_arr[tuple(coord)]))
-                    swap_counts[key] = swap_counts.get(key, 0) + 1
+            if pred_arr.shape != gold_arr.shape:
+                candidate_exact = 0.0
+                candidate_likeness = 0.0
+                candidate_iou = 0.0
             else:
-                mismatch_counts.append(-1)
-        candidate_exact = sum(exact_scores) / len(exact_scores) if exact_scores else 0.0
-        candidate_likeness = (
-            sum(likeness_scores) / len(likeness_scores) if likeness_scores else 0.0
-        )
-        candidate_iou = sum(iou_scores) / len(iou_scores) if iou_scores else 0.0
-        if candidate_exact > best_score or (
-            candidate_exact == best_score and candidate_likeness > best_likeness
-        ):
-            best_score = candidate_exact
-            best_likeness = candidate_likeness
-            best_candidate_iou = candidate_iou
-            best_candidate_exact = candidate_exact
-            best_candidate_likeness = candidate_likeness
-            best_candidate_for_debug = cand
-            best_mismatch_summary = (
-                f"test_mismatches={mismatch_counts} sample_coords={mismatch_coords[:5]}"
-            )
-            if swap_counts:
-                swap_parts = [f"{k[0]}→{k[1]}:{v}" for k, v in sorted(swap_counts.items())]
-                best_swap_summary = "swaps={" + ", ".join(swap_parts) + "}"
-            else:
-                best_swap_summary = ""
-            best_reason = (
-                f"{'pass@2' if PASS_AT_K > 1 else 'pass@1'} "
-                f"exact={best_score:.2f} approx_match={candidate_likeness:.2f} label_iou={candidate_iou:.2f} | "
-                f"train_exact={cand['train_exact']:.2f} | {cand['train_feedback']}"
-            )
+                candidate_exact = 1.0 if np.array_equal(pred_arr, gold_arr) else 0.0
+                candidate_likeness = _approx_match_score(pred_arr, gold_arr)
+                candidate_iou = _label_iou(pred_arr, gold_arr)
+
+            if candidate_exact > best_exact or (
+                candidate_exact == best_exact and candidate_likeness > best_likeness
+            ):
+                best_exact = candidate_exact
+                best_likeness = candidate_likeness
+                best_iou = candidate_iou
+                best_pred_arr = pred_arr
+
+        exact_scores.append(best_exact)
+        likeness_scores.append(best_likeness)
+        iou_scores.append(best_iou)
+
+        if best_pred_arr is not None and best_pred_arr.shape == gold_arr.shape:
+            mism_idx = np.argwhere(best_pred_arr != gold_arr)
+            mismatch_counts.append(int(mism_idx.shape[0]))
+            for coord in mism_idx[:3]:
+                mismatch_coords.append(
+                    f"t{test_idx}:{tuple(int(x) for x in coord)}:"
+                    f"{int(best_pred_arr[tuple(coord)])}|{int(gold_arr[tuple(coord)])}"
+                )
+            for coord in mism_idx:
+                key = (int(best_pred_arr[tuple(coord)]), int(gold_arr[tuple(coord)]))
+                swap_counts[key] = swap_counts.get(key, 0) + 1
+        else:
+            mismatch_counts.append(-1)
+
+        if test_idx == 0 and best_pred_arr is not None:
+            best_debug_pred = best_pred_arr.astype(int).tolist()
+
+    best_score = sum(exact_scores) / len(exact_scores) if exact_scores else 0.0
+    best_likeness = (
+        sum(likeness_scores) / len(likeness_scores) if likeness_scores else 0.0
+    )
+    best_candidate_iou = sum(iou_scores) / len(iou_scores) if iou_scores else 0.0
+    best_mismatch_summary = (
+        f"test_mismatches={mismatch_counts} sample_coords={mismatch_coords[:5]}"
+    )
+    if swap_counts:
+        swap_parts = [f"{k[0]}→{k[1]}:{v}" for k, v in sorted(swap_counts.items())]
+        best_swap_summary = "swaps={" + ", ".join(swap_parts) + "}"
+    else:
+        best_swap_summary = ""
+
+    best_reason = (
+        f"pass@{PASS_AT_K} exact={best_score:.2f} approx_match={best_likeness:.2f} "
+        f"label_iou={best_candidate_iou:.2f} | {' | '.join(reason_parts)}"
+    )
 
     likeness_reward = best_likeness * LIKENESS_WEIGHT_TEST
     iou_reward = best_candidate_iou * LABEL_IOU_WEIGHT
@@ -619,17 +696,30 @@ def _compute_arc_agi2_scores(
         f"approx_match_reward={likeness_reward:.2f} label_iou_reward={iou_reward:.2f}"
     )
 
-    if DEBUG_LOG and gold_outputs and best_candidate_for_debug and dataset_item.get("test_inputs"):
+    if (
+        DEBUG_LOG
+        and gold_outputs
+        and best_debug_pred
+        and dataset_item.get("test_inputs")
+    ):
         test_inputs = dataset_item.get("test_inputs") or []
         ascii_input = _format_grid(test_inputs[0])
         ascii_expected = _format_grid(gold_outputs[0])
-        ascii_predicted = _format_grid(best_candidate_for_debug["test_outputs"][0])
+        ascii_predicted = _format_grid(best_debug_pred)
         if _RICH_AVAILABLE and _rich_console:
             try:
-                inp = Panel(_render_rich_grid(test_inputs[0]), title="input", border_style="white")
-                exp = Panel(_render_rich_grid(gold_outputs[0]), title="expected", border_style="white")
+                inp = Panel(
+                    _render_rich_grid(test_inputs[0]),
+                    title="input",
+                    border_style="white",
+                )
+                exp = Panel(
+                    _render_rich_grid(gold_outputs[0]),
+                    title="expected",
+                    border_style="white",
+                )
                 pred = Panel(
-                    _render_rich_grid(best_candidate_for_debug["test_outputs"][0]),
+                    _render_rich_grid(best_debug_pred),
                     title="predicted",
                     border_style="white",
                 )
@@ -644,11 +734,13 @@ def _compute_arc_agi2_scores(
                 [ascii_input, ascii_expected, ascii_predicted],
                 ["input", "expected", "predicted"],
             )
-            _log_debug("Best candidate vs expected for test[0] (input │ expected │ predicted):")
+            _log_debug(
+                "Best candidate vs expected for test[0] (input │ expected │ predicted):"
+            )
             for line in ascii_table.splitlines():
                 _log_debug(line)
         _log_debug(
-            f"Test metrics: exact={best_candidate_exact:.2f} approx_match={best_candidate_likeness:.2f} "
+            f"Test metrics: exact={best_score:.2f} approx_match={best_likeness:.2f} "
             f"label_iou={best_candidate_iou:.2f} | {best_mismatch_summary} {best_swap_summary}"
         )
 
@@ -661,6 +753,7 @@ def _compute_arc_agi2_scores(
         "metadata": {
             "approx_match_reward": likeness_reward,
             "label_iou_reward": iou_reward,
+            "pass_at_k": PASS_AT_K,
             "test_mismatches": best_mismatch_summary,
             "swaps": best_swap_summary,
             "train_exact": best.get("train_exact", 0.0),
@@ -674,7 +767,10 @@ def _compute_arc_agi2_scores(
 def arc_agi2_metric(
     dataset_item: dict[str, Any], llm_output: str
 ) -> score_result.ScoreResult:
-    scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    try:
+        scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    except Exception as exc:
+        return _handle_scoring_exception("arc_agi2_accuracy", exc)
     return score_result.ScoreResult(
         name="arc_agi2_accuracy",
         value=scores["value"],
@@ -692,7 +788,10 @@ def arc_agi2_metric(
 def arc_agi2_exact_metric(
     dataset_item: dict[str, Any], llm_output: str
 ) -> score_result.ScoreResult:
-    scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    try:
+        scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    except Exception as exc:
+        return _handle_scoring_exception("arc_agi2_exact", exc)
     return score_result.ScoreResult(
         name="arc_agi2_exact",
         value=scores["exact"],
@@ -705,7 +804,10 @@ def arc_agi2_exact_metric(
 def arc_agi2_approx_metric(
     dataset_item: dict[str, Any], llm_output: str
 ) -> score_result.ScoreResult:
-    scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    try:
+        scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    except Exception as exc:
+        return _handle_scoring_exception("arc_agi2_approx_match", exc)
     return score_result.ScoreResult(
         name="arc_agi2_approx_match",
         value=scores["approx"],
@@ -718,7 +820,10 @@ def arc_agi2_approx_metric(
 def arc_agi2_iou_metric(
     dataset_item: dict[str, Any], llm_output: str
 ) -> score_result.ScoreResult:
-    scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    try:
+        scores = _compute_arc_agi2_scores(dataset_item, llm_output)
+    except Exception as exc:
+        return _handle_scoring_exception("arc_agi2_label_iou", exc)
     return score_result.ScoreResult(
         name="arc_agi2_label_iou",
         value=scores["label_iou"],
@@ -726,6 +831,7 @@ def arc_agi2_iou_metric(
         reason=scores["reason"],
         metadata=scores.get("metadata"),
     )
+
 
 # TODO: Optionally surface dtype/range validation status in the reason string if more diagnostic signal is needed.
 
@@ -738,7 +844,10 @@ def build_prompt() -> ChatPrompt:
             {"role": "user", "content": USER_PROMPT},
         ],
         model=EVAL_MODEL,
-        model_parameters={"temperature": EVAL_TEMPERATURE, "n": EVAL_COMPLETIONS_PER_CALL},
+        model_parameters={
+            "temperature": EVAL_TEMPERATURE,
+            "n": EVAL_COMPLETIONS_PER_CALL,
+        },
     )
 
 
@@ -755,19 +864,19 @@ def main() -> None:
         split=DATASET_SPLIT,
         count=DATASET_COUNT,
         start=DATASET_START,
-        dataset_name=DATASET_NAME,
         test_mode=TEST_MODE,
         seed=SEED,
         prefer_presets=False,
+        filter_by={"task_id": ARC_AGI2_TASK_ID} if ARC_AGI2_TASK_ID else None,
     )
 
+    items = dataset.get_items(1)
+    if not items:
+        raise RuntimeError("Dataset returned no items")
+    first_item = items[0]
+    train_examples = first_item.get("training_examples") or []
+    test_inputs = first_item.get("test_inputs") or []
     if DEBUG_LOG:
-        items = dataset.get_items(1)
-        if not items:
-            raise RuntimeError("Dataset returned no items")
-        first_item = items[0]
-        train_examples = first_item.get("training_examples") or []
-        test_inputs = first_item.get("test_inputs") or []
         _log_debug(f"Sample task id: {first_item.get('task_id')}")
         if _RICH_AVAILABLE and _rich_console:
             if train_examples:
@@ -816,7 +925,6 @@ def main() -> None:
             if ascii_columns:
                 ascii_table = _render_ascii_columns(ascii_columns, headers)
                 _log_debug(ascii_table)
-
     prompt = build_prompt()
 
     optimizer = HierarchicalReflectiveOptimizer(
@@ -858,7 +966,9 @@ def main() -> None:
                 f"Baseline composite metric reason: {first_sr.reason or '<none>'}"
             )
     if baseline_score >= 0.999:
-        print(f"Baseline is perfect (score={baseline_score:.3f}); skipping HRPO trials.")
+        print(
+            f"Baseline is perfect (score={baseline_score:.3f}); skipping HRPO trials."
+        )
         return
 
     result = optimizer.optimize_prompt(
