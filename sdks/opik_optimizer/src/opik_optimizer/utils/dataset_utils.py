@@ -379,8 +379,10 @@ def resolve_slice_request(
     if not prefer_presets:
         preset = None
 
+    explicit_source_split = normalized_split if preset is None else None
     source_split = _resolve_slice_field(
-        explicit=None,  # Don't override - let preset's source_split determine the HF split
+        explicit=explicit_source_split,
+        # When a preset is available, use its source_split unless explicitly overridden.
         preset=preset,
         preset_key="source_split",
         default=default_source_split,
