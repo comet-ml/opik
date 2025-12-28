@@ -47,6 +47,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
 import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -343,12 +344,29 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Patches a single item by its dataset_item_id and creates a new version.
-     * First looks up the item in the versioned table to get its current state.
+     * Patches a single item by its row ID and creates a new version.
+     * The frontend sends 'id' (row ID) but patching works on dataset_item_id (stable IDs).
+     * This method first maps the row ID to dataset_item_id, then performs the patch.
      */
-    private Mono<Long> patchItemWithVersionById(UUID datasetItemId, DatasetItem patchData,
+    private Mono<Long> patchItemWithVersionById(UUID rowId, DatasetItem patchData,
             String workspaceId, String userName) {
-        // First, resolve which dataset contains this item
+        // Map row ID to dataset_item_id
+        // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for patching
+        return versionDao.mapRowIdsToDatasetItemIds(Set.of(rowId))
+                .collectList()
+                .flatMap(mappings -> {
+                    // Use the mapped dataset_item_id
+                    UUID datasetItemId = mappings.get(0).datasetItemId();
+                    return patchItemWithVersion(datasetItemId, patchData, workspaceId, userName);
+                });
+    }
+
+    /**
+     * Patches a single item by its stable dataset_item_id and creates a new version.
+     */
+    private Mono<Long> patchItemWithVersion(UUID datasetItemId, DatasetItem patchData,
+            String workspaceId, String userName) {
+        // Resolve which dataset contains this item
         return versionDao.resolveDatasetIdFromItemId(datasetItemId)
                 .switchIfEmpty(Mono.defer(() -> {
                     log.warn("Item '{}' not found in versioned table", datasetItemId);
@@ -474,14 +492,32 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return batchUpdateWithVersioning(datasetId, batchUpdate, workspaceId, userName);
         }
 
-        // For batch update by IDs without explicit dataset ID, resolve from the first item
+        // For batch update by IDs without explicit dataset ID, map row IDs to dataset_item_ids
+        // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for updates
         if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
-            UUID firstItemId = batchUpdate.ids().iterator().next();
+            return versionDao.mapRowIdsToDatasetItemIds(batchUpdate.ids())
+                    .collectList()
+                    .flatMap(mappings -> {
+                        // Extract dataset_item_ids and dataset_id from mappings (NO additional query!)
+                        Set<UUID> datasetItemIds = mappings.stream()
+                                .map(DatasetItemIdMapping::datasetItemId)
+                                .collect(Collectors.toSet());
+                        UUID mappedDatasetId = mappings.get(0).datasetId();
 
-            return versionDao.resolveDatasetIdFromItemId(firstItemId)
-                    .switchIfEmpty(dao.get(firstItemId).map(DatasetItem::datasetId))
-                    .flatMap(resolvedDatasetId -> batchUpdateWithVersioning(resolvedDatasetId, batchUpdate,
-                            workspaceId, userName));
+                        log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset '{}'",
+                                batchUpdate.ids().size(), datasetItemIds.size(), mappedDatasetId);
+
+                        // Create a new batchUpdate with mapped dataset_item_ids
+                        DatasetItemBatchUpdate mappedBatchUpdate = DatasetItemBatchUpdate.builder()
+                                .ids(datasetItemIds)
+                                .filters(batchUpdate.filters())
+                                .datasetId(batchUpdate.datasetId())
+                                .update(batchUpdate.update())
+                                .mergeTags(batchUpdate.mergeTags())
+                                .build();
+
+                        return batchUpdateWithVersioning(mappedDatasetId, mappedBatchUpdate, workspaceId, userName);
+                    });
         }
 
         // This should not happen due to validation, but handle it gracefully

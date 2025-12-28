@@ -1326,7 +1326,7 @@ class DatasetVersionResourceTest {
             var patchItem = DatasetItem.builder()
                     .data(newData)
                     .build();
-            datasetResourceClient.patchDatasetItem(itemToPatch.draftItemId(), patchItem, API_KEY, TEST_WORKSPACE);
+            datasetResourceClient.patchDatasetItem(itemToPatch.id(), patchItem, API_KEY, TEST_WORKSPACE);
 
             // Then - Verify new version was created
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
@@ -1376,8 +1376,14 @@ class DatasetVersionResourceTest {
             var v1Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
 
-            // Select 3 items to batch update
+            // Select 3 items to batch update (using row IDs as frontend would)
             var itemsToUpdate = Set.of(
+                    v1Items.get(0).id(),
+                    v1Items.get(1).id(),
+                    v1Items.get(2).id());
+
+            // Keep track of stable IDs for verification
+            var stableIdsToUpdate = Set.of(
                     v1Items.get(0).draftItemId(),
                     v1Items.get(1).draftItemId(),
                     v1Items.get(2).draftItemId());
@@ -1408,11 +1414,13 @@ class DatasetVersionResourceTest {
             }
 
             // Verify latest version has updated tags on the 3 items
+            // Note: Compare using draftItemId (stable ID) since row IDs change across versions
             var latestItems = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
             int updatedCount = 0;
             for (var item : latestItems) {
-                if (itemsToUpdate.contains(item.draftItemId())) {
+                if (stableIdsToUpdate.contains(item.draftItemId())) {
                     assertThat(item.tags()).containsAll(newTags);
                     updatedCount++;
                 }
