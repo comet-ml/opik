@@ -407,9 +407,13 @@ start_frontend() {
         log_debug "Frontend debug mode enabled - NODE_ENV=development"
     fi
 
-    # Configure frontend to talk to local backend
-    export VITE_BASE_API_URL="http://localhost:8080"
-    log_info "Frontend API base URL (VITE_BASE_API_URL) set to: $VITE_BASE_API_URL"
+    # Configure frontend API base URL (defaults to /api in frontend code if not set)
+    # The Vite dev server proxy will forward /api/* requests to the backend
+    if [ -z "$VITE_BASE_API_URL" ]; then
+        log_debug "Frontend API base URL (VITE_BASE_API_URL) not set, will use default from frontend code: /api"
+    else
+        log_info "Frontend API base URL (VITE_BASE_API_URL) set to: $VITE_BASE_API_URL"
+    fi    
 
     log_debug "Starting frontend with: npm run start"
 
