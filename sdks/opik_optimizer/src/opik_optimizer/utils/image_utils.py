@@ -12,6 +12,12 @@ def encode_image_to_base64_uri(
     image_format: str,
     quality: int | None = None,
 ) -> str | None:
+    """Convert common image payloads into a data URI.
+
+    Accepts raw bytes, a dict with ``bytes`` or ``path`` keys, or objects that
+    implement ``save`` (PIL-like). Returns ``None`` when the payload cannot be
+    encoded.
+    """
     if image is None:
         return None
     if isinstance(image, str) and image.startswith("data:image/"):
@@ -49,3 +55,6 @@ def encode_image_to_base64_uri(
         mime = "image/jpeg"
     encoded = base64.b64encode(payload).decode("utf-8")
     return f"data:{mime};base64,{encoded}"
+
+
+__all__ = ["encode_image_to_base64_uri"]
