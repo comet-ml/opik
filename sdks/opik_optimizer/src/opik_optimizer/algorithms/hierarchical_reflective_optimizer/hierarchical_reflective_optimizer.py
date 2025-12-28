@@ -54,6 +54,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self,
         model: str = "gpt-4o",
         model_parameters: dict[str, Any] | None = None,
+        reasoning_model: str | None = None,
+        reasoning_model_parameters: dict[str, Any] | None = None,
         max_parallel_batches: int = 5,
         batch_size: int = 25,
         convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
@@ -67,6 +69,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             verbose=verbose,
             seed=seed,
             model_parameters=model_parameters,
+            reasoning_model=reasoning_model,
+            reasoning_model_parameters=reasoning_model_parameters,
             name=name,
         )
         self.n_threads = n_threads
@@ -77,12 +81,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
-            reasoning_model=self.model,
+            reasoning_model=self.reasoning_model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
             batch_size=self.batch_size,
             verbose=self.verbose,
-            model_parameters=self.model_parameters,
+            model_parameters=self.reasoning_model_parameters,
         )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -94,6 +98,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         return {
             "model": self.model,
+            "reasoning_model": self.reasoning_model,
             "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "convergence_threshold": self.convergence_threshold,
@@ -184,9 +189,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         improve_prompt_response = _llm_calls.call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
-            model=self.model,
+            model=self.reasoning_model,
             seed=attempt_seed,
-            model_parameters=self.model_parameters,
+            model_parameters=self.reasoning_model_parameters,
             response_model=DynamicImprovedPromptsResponse,
         )
 
@@ -593,7 +598,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     f"below threshold ({self.convergence_threshold:.2%}). "
                     f"Stopping after {iteration} iterations."
                 )
-                break
+                # Do not break early; continue until max_trials are exhausted for stubborn cases
+                # break
 
             # Update previous score for next iteration
             previous_iteration_score = best_score

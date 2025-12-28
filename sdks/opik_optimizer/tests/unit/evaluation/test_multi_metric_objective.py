@@ -2,6 +2,7 @@ import pytest
 from typing import Any
 from collections.abc import Callable
 
+from opik.evaluation.metrics import base_metric
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik_optimizer.multi_metric_objective import MultiMetricObjective
 
@@ -303,3 +304,104 @@ class TestMultiMetricObjective:
         raw_scores = result.metadata["raw_score_results"]
         assert len(raw_scores) == 3, "All metrics should be in metadata"
         assert raw_scores[1].name == "metric_returning_0_2"
+
+    def test_default_reason_is_generated(self) -> None:
+        """Test that a default reason is generated when none is provided"""
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+        multi_metric = MultiMetricObjective(metrics=metrics)
+
+        result = multi_metric(dataset_item={}, llm_output="test output")
+
+        assert result.reason == (
+            "metric_returning_0_5=0.500 (w=0.50) | metric_returning_0_2=0.200 (w=0.50)"
+        )
+
+    def test_reason_override_takes_precedence(self) -> None:
+        """Test that reason overrides are respected"""
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+        multi_metric = MultiMetricObjective(metrics=metrics, reason="static reason")
+
+        result_static = multi_metric(dataset_item={}, llm_output="test output")
+        result_override = multi_metric(
+            dataset_item={}, llm_output="test output", reason="call reason"
+        )
+
+        assert result_static.reason == "static reason"
+        assert result_override.reason == "call reason"
+
+    def test_reason_builder_overrides_default(self) -> None:
+        """Test that reason_builder can customize the reason"""
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+
+        def build_reason(
+            score_results: list[ScoreResult],
+            weights: list[float],
+            total: float,
+        ) -> str:
+            return f"total={total:.2f}"
+
+        multi_metric = MultiMetricObjective(
+            metrics=metrics, reason_builder=build_reason
+        )
+
+        result = multi_metric(dataset_item={}, llm_output="test output")
+
+        assert result.reason == "total=0.35"
+
+    def test_float_metric_is_wrapped_in_score_result(self) -> None:
+        """Test that float metric results are normalized to ScoreResult"""
+
+        def metric_returning_float(
+            dataset_item: dict[str, Any], llm_output: str
+        ) -> float:
+            return 0.7
+
+        multi_metric = MultiMetricObjective(metrics=[metric_returning_float])
+
+        result = multi_metric(dataset_item={}, llm_output="test output")
+
+        raw_scores = result.metadata["raw_score_results"]
+        assert len(raw_scores) == 1
+        assert raw_scores[0].name == "metric_returning_float"
+        assert raw_scores[0].value == pytest.approx(0.7)
+
+    def test_base_metric_is_supported(self) -> None:
+        """Test that BaseMetric instances can be used directly"""
+
+        class DummyMetric(base_metric.BaseMetric):
+            def __init__(self) -> None:
+                super().__init__(name="dummy_metric", track=False)
+
+            def score(self, output: str, expected: str, **kwargs: Any) -> ScoreResult:
+                value = 1.0 if output == expected else 0.0
+                return ScoreResult(name=self.name, value=value)
+
+        multi_metric = MultiMetricObjective(metrics=[DummyMetric()])
+        result = multi_metric(dataset_item={"expected": "ok"}, llm_output="ok")
+
+        assert result.value == pytest.approx(1.0)
+
+    def test_list_returning_metric_raises(self) -> None:
+        """Test that list-returning metrics raise when multiple results are returned"""
+
+        def metric_returning_list(
+            dataset_item: dict[str, Any], llm_output: str
+        ) -> list[ScoreResult]:
+            return [
+                ScoreResult(name="first", value=0.1),
+                ScoreResult(name="second", value=0.2),
+            ]
+
+        multi_metric = MultiMetricObjective(metrics=[metric_returning_list])
+
+        with pytest.raises(ValueError, match="single ScoreResult"):
+            multi_metric(dataset_item={}, llm_output="test output")
