@@ -82,6 +82,7 @@ export type ColumnData<T> = {
   disabled?: boolean;
   accessorFn?: (row: T) => string | number | object | boolean | undefined;
   size?: number;
+  minSize?: number;
   type?: COLUMN_TYPE;
   scoreType?: ScoreType;
   customMeta?: object;
