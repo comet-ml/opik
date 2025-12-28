@@ -27,6 +27,7 @@ const useDatasetItemBatchUpdateMutation = () => {
 
   return useMutation({
     mutationFn: async ({
+      datasetId,
       itemIds,
       item,
       mergeTags,
@@ -43,6 +44,7 @@ const useDatasetItemBatchUpdateMutation = () => {
         ];
 
         payload = {
+          dataset_id: datasetId,
           filters: processFiltersArray(combinedFilters),
           update: item,
           merge_tags: mergeTags,
