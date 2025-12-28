@@ -593,7 +593,7 @@ public class DatasetResourceClient {
     public DatasetVersion applyDatasetItemChanges(UUID datasetId, DatasetItemChanges changes, boolean override,
             String apiKey, String workspaceName) {
         try (var response = callApplyDatasetItemChanges(datasetId, changes, override, apiKey, workspaceName)) {
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
             return response.readEntity(DatasetVersion.class);
         }
     }

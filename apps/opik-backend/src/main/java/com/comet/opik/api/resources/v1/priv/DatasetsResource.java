@@ -554,7 +554,7 @@ public class DatasetsResource {
 
             Use `override=true` query parameter to force version creation even with stale baseVersion.
             """, responses = {
-            @ApiResponse(responseCode = "200", description = "Changes applied successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "201", description = "Version created successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Dataset or version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Version conflict - baseVersion is not the latest", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -582,7 +582,14 @@ public class DatasetsResource {
         log.info("Applied changes to dataset '{}', created version '{}' on workspaceId '{}'",
                 datasetId, newVersion.versionHash(), workspaceId);
 
-        return Response.ok(newVersion).build();
+        // Build location header pointing to the newly created version
+        String location = String.format("/v1/private/datasets/%s/versions/%s",
+                datasetId, newVersion.id());
+
+        return Response.status(Response.Status.CREATED)
+                .entity(newVersion)
+                .header("Location", location)
+                .build();
     }
 
     @POST
