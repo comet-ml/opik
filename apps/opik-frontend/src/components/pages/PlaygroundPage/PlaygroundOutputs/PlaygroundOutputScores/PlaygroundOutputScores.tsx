@@ -44,6 +44,7 @@ interface PlaygroundOutputScoresProps {
   selectedRuleIds: string[] | null | undefined;
   stale?: boolean;
   className?: string;
+  outputReady?: boolean;
 }
 
 const REFETCH_INTERVAL = 5000; // 5 seconds
@@ -54,6 +55,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   selectedRuleIds,
   stale = false,
   className,
+  outputReady = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -234,8 +236,17 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     feedbackScores,
   ]);
 
-  // Don't render anything if no rules are selected or no traceId
-  if (!hasSelectedRules || !traceId) {
+  // Don't render anything if no rules are selected
+  if (!hasSelectedRules) {
+    return null;
+  }
+
+  // For specific rules selected: show when output is ready (even before traceId)
+  // For "all" selection: only show when we have traceId (to get actual scores)
+  const hasSpecificRules = !selectingAllRules;
+  const canShowMetrics = traceId || (outputReady && hasSpecificRules);
+
+  if (!canShowMetrics) {
     return null;
   }
 

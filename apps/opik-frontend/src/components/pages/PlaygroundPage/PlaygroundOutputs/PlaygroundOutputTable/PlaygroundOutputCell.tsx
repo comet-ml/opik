@@ -125,6 +125,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
             traceId={traceId}
             selectedRuleIds={selectedRuleIds}
             stale={stale}
+            outputReady={!isLoading || !!value}
           />
         </div>
         <div className="flex-1 overflow-y-auto">{renderContent()}</div>
