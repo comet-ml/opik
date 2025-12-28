@@ -65,6 +65,7 @@ public class ExperimentService {
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull DatasetVersionService datasetVersionService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
@@ -355,34 +356,81 @@ public class ExperimentService {
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
         return datasetService.getOrCreateDataset(experiment.datasetName())
                 .flatMap(datasetId -> {
-                    if (hasPromptVersionLinks(experiment)) {
-                        return validatePromptVersion(experiment).flatMap(promptVersionMap -> {
-                            var builder = experiment.toBuilder();
-                            // add prompt versions to new prompt version map field
-                            builder.promptVersions(promptVersionMap.values().stream()
-                                    .map(promptVersion -> PromptVersionLink.builder()
-                                            .id(promptVersion.id())
-                                            .commit(promptVersion.commit())
-                                            .promptId(promptVersion.promptId())
-                                            .build())
-                                    .toList());
-                            // add prompt version to old prompt version field (to be deprecated soon)
-                            if (experiment.promptVersion() != null) {
-                                var promptVersion = promptVersionMap.get(experiment.promptVersion().id());
-                                builder.promptVersion(PromptVersionLink.builder()
-                                        .id(promptVersion.id())
-                                        .commit(promptVersion.commit())
-                                        .promptId(promptVersion.promptId())
-                                        .build());
-                            }
-                            return create(builder.build(), id, name, datasetId);
-                        });
-                    }
-                    return create(experiment, id, name, datasetId);
+                    return resolveDatasetVersion(experiment, datasetId)
+                            .flatMap(resolvedVersionId -> {
+                                var experimentWithVersion = experiment.toBuilder()
+                                        .datasetVersionId(resolvedVersionId)
+                                        .build();
+
+                                if (hasPromptVersionLinks(experimentWithVersion)) {
+                                    return validatePromptVersion(experimentWithVersion).flatMap(promptVersionMap -> {
+                                        var builder = experimentWithVersion.toBuilder();
+                                        // add prompt versions to new prompt version map field
+                                        builder.promptVersions(promptVersionMap.values().stream()
+                                                .map(promptVersion -> PromptVersionLink.builder()
+                                                        .id(promptVersion.id())
+                                                        .commit(promptVersion.commit())
+                                                        .promptId(promptVersion.promptId())
+                                                        .build())
+                                                .toList());
+                                        // add prompt version to old prompt version field (to be deprecated soon)
+                                        if (experimentWithVersion.promptVersion() != null) {
+                                            var promptVersion = promptVersionMap
+                                                    .get(experimentWithVersion.promptVersion().id());
+                                            builder.promptVersion(PromptVersionLink.builder()
+                                                    .id(promptVersion.id())
+                                                    .commit(promptVersion.commit())
+                                                    .promptId(promptVersion.promptId())
+                                                    .build());
+                                        }
+                                        return create(builder.build(), id, name, datasetId);
+                                    });
+                                }
+                                return create(experimentWithVersion, id, name, datasetId);
+                            });
                 })
                 // If a conflict occurs, we just return the id of the existing experiment.
                 // If any other error occurs, we throw it. The event is not posted for both cases.
                 .onErrorResume(throwable -> handleCreateError(throwable, id));
+    }
+
+    /**
+     * Resolves the dataset version ID for an experiment using 3-tier logic.
+     * <p>
+     * In the new versioning system, all dataset items are stored in dataset_item_versions.
+     * The resolution logic is:
+     * 1. If experiment.datasetVersionId is explicitly provided, use it
+     * 2. Otherwise, use the latest version ID (always available after migration)
+     *
+     * @param experiment the experiment being created
+     * @param datasetId the dataset ID
+     * @return Mono emitting the resolved version ID
+     */
+    private Mono<UUID> resolveDatasetVersion(Experiment experiment, UUID datasetId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            // Case 1: Version ID explicitly provided - use it
+            if (experiment.datasetVersionId() != null) {
+                log.info("Using explicitly provided dataset version ID '{}' for experiment on dataset '{}'",
+                        experiment.datasetVersionId(), datasetId);
+                return Mono.just(experiment.datasetVersionId());
+            }
+
+            // Case 2: No version specified - use latest version
+            return Mono.fromCallable(() -> {
+                var latestVersion = datasetVersionService.getLatestVersion(datasetId, workspaceId);
+                if (latestVersion.isPresent()) {
+                    log.info("No version specified, using latest version '{}' for experiment on dataset '{}'",
+                            latestVersion.get().id(), datasetId);
+                    return latestVersion.get().id();
+                }
+                // This should not happen after migration, but handle gracefully
+                log.warn("No latest version found for dataset '{}', experiment will have null dataset_version_id",
+                        datasetId);
+                return null;
+            }).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     private boolean hasPromptVersionLinks(Experiment experiment) {

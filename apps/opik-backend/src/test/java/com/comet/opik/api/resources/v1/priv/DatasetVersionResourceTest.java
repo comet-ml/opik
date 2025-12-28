@@ -14,6 +14,7 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
@@ -31,6 +32,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.DatasetVersionService;
@@ -118,6 +120,7 @@ class DatasetVersionResourceTest {
     private String baseURI;
     private ClientSupport client;
     private DatasetResourceClient datasetResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
 
@@ -131,6 +134,7 @@ class DatasetVersionResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         datasetResourceClient = new DatasetResourceClient(client, baseURI);
+        experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
         spanResourceClient = new SpanResourceClient(client, baseURI);
     }
@@ -1755,6 +1759,150 @@ class DatasetVersionResourceTest {
                     .toList();
             assertThat(spanItems).hasSize(2);
             assertThat(spanItems).allMatch(item -> item.spanId() != null);
+        }
+    }
+
+    @Nested
+    @DisplayName("Experiment Dataset Version Linking:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentDatasetVersionLinking {
+
+        private Experiment getExperiment(UUID id) {
+            try (var response = client.target("%s/v1/private/experiments/%s".formatted(baseURI, id))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                return response.readEntity(Experiment.class);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: Create experiment with explicit dataset version ID")
+        void createExperiment_whenExplicitVersionId_thenVersionIdPersisted() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 1);
+
+            var version1 = getLatestVersion(datasetId);
+
+            // when - create experiment with explicit version ID
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version1.id())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // then - experiment should have the specified version ID
+            var createdExperiment = getExperiment(experimentId);
+            assertThat(createdExperiment.datasetVersionId()).isEqualTo(version1.id());
+        }
+
+        @Test
+        @DisplayName("Success: Create experiment without version ID uses latest version")
+        void createExperiment_whenNoVersionId_thenLatestVersionUsed() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 1);
+
+            // when - create experiment WITHOUT specifying version ID
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // then - experiment should have a version ID from the dataset
+            var createdExperiment = getExperiment(experimentId);
+            assertThat(createdExperiment.datasetVersionId()).isNotNull();
+            assertThat(createdExperiment.datasetId()).isEqualTo(datasetId);
+
+            // Verify the version belongs to this dataset
+            var allVersions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            var versionIds = allVersions.content().stream().map(DatasetVersion::id).toList();
+            assertThat(versionIds).contains(createdExperiment.datasetVersionId());
+        }
+
+        @Test
+        @DisplayName("Success: List experiments returns correct version IDs")
+        void listExperiments_whenLinkedToVersion_thenCorrectVersionIdReturned() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 1);
+
+            var version1 = getLatestVersion(datasetId);
+
+            // Create experiment with explicit version
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version1.id())
+                    .build();
+            experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - list experiments
+            var experimentsList = experimentResourceClient.findExperiments(
+                    1, 10, datasetId, null, null, null, false, null, null, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+
+            // then - version ID should be present in the list
+            assertThat(experimentsList.content())
+                    .hasSize(1)
+                    .first()
+                    .extracting(Experiment::datasetVersionId)
+                    .isEqualTo(version1.id());
+        }
+
+        @Test
+        @DisplayName("Success: Multiple experiments linked to different versions")
+        void listExperiments_whenMultipleVersions_thenCorrectVersionIdsReturned() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 1);
+
+            var version1 = getLatestVersion(datasetId);
+
+            // Create another version
+            createDatasetItems(datasetId, 1);
+            var version2 = getLatestVersion(datasetId);
+
+            // Create experiment 1 linked to version 1
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version1.id())
+                    .build();
+            var experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+
+            // Create experiment 2 linked to version 2
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version2.id())
+                    .build();
+            var experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+
+            // when - list experiments
+            var experimentsList = experimentResourceClient.findExperiments(
+                    1, 10, datasetId, null, null, null, false, null, null, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+
+            // then - each experiment should have its correct version ID
+            assertThat(experimentsList.content()).hasSize(2);
+
+            var exp1FromList = experimentsList.content().stream()
+                    .filter(e -> e.id().equals(experimentId1))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(exp1FromList.datasetVersionId()).isEqualTo(version1.id());
+
+            var exp2FromList = experimentsList.content().stream()
+                    .filter(e -> e.id().equals(experimentId2))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(exp2FromList.datasetVersionId()).isEqualTo(version2.id());
         }
     }
 }

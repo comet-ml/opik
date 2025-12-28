@@ -92,7 +92,8 @@ class ExperimentDAO {
                 type,
                 optimization_id,
                 status,
-                experiment_scores
+                experiment_scores,
+                dataset_version_id
             )
             SELECT
                 if(
@@ -112,7 +113,8 @@ class ExperimentDAO {
                 new.type,
                 new.optimization_id,
                 new.status,
-                new.experiment_scores
+                new.experiment_scores,
+                new.dataset_version_id
             FROM (
                 SELECT
                 :id AS id,
@@ -128,7 +130,8 @@ class ExperimentDAO {
                 :type AS type,
                 :optimization_id AS optimization_id,
                 :status AS status,
-                :experiment_scores AS experiment_scores
+                :experiment_scores AS experiment_scores,
+                :dataset_version_id AS dataset_version_id
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -405,6 +408,7 @@ class ExperimentDAO {
                 e.type as type,
                 e.status as status,
                 e.experiment_scores as experiment_scores,
+                e.dataset_version_id as dataset_version_id,
                 fs.feedback_scores as feedback_scores,
                 es.experiment_scores as experiment_scores_agg,
                 ed.trace_count as trace_count,
@@ -673,7 +677,8 @@ class ExperimentDAO {
                 null AS total_estimated_cost,
                 null AS total_estimated_cost_avg,
                 null AS usage,
-                null AS comments_array_agg
+                null AS comments_array_agg,
+                dataset_version_id
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
@@ -812,6 +817,9 @@ class ExperimentDAO {
                 .bind("experiment_scores", Optional.ofNullable(experiment.experimentScores())
                         .filter(scores -> !scores.isEmpty())
                         .map(JsonUtils::writeValueAsString)
+                        .orElse(""))
+                .bind("dataset_version_id", Optional.ofNullable(experiment.datasetVersionId())
+                        .map(UUID::toString)
                         .orElse(""));
 
         if (experiment.promptVersion() != null) {
@@ -934,6 +942,10 @@ class ExperimentDAO {
                     .type(ExperimentType.fromString(row.get("type", String.class)))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .experimentScores(getExperimentScores(row))
+                    .datasetVersionId(Optional.ofNullable(row.get("dataset_version_id", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(UUID::fromString)
+                            .orElse(null))
                     .build();
         });
     }
