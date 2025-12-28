@@ -355,6 +355,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return versionDao.mapRowIdsToDatasetItemIds(Set.of(rowId))
                 .collectList()
                 .flatMap(mappings -> {
+                    if (mappings.isEmpty()) {
+                        // No mapping found - item was likely deleted, treat as successful no-op
+                        log.debug("No mapping found for row ID '{}', treating as already deleted", rowId);
+                        return Mono.just(0L);
+                    }
+
                     // Use the mapped dataset_item_id
                     UUID datasetItemId = mappings.get(0).datasetItemId();
                     return patchItemWithVersion(datasetItemId, patchData, workspaceId, userName);
@@ -498,6 +504,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return versionDao.mapRowIdsToDatasetItemIds(batchUpdate.ids())
                     .collectList()
                     .flatMap(mappings -> {
+                        if (mappings.isEmpty()) {
+                            // No mappings found - items were likely deleted, treat as successful no-op
+                            log.debug("No mappings found for provided row IDs, treating as already deleted");
+                            return Mono.empty();
+                        }
+
                         // Extract dataset_item_ids and dataset_id from mappings (NO additional query!)
                         Set<UUID> datasetItemIds = mappings.stream()
                                 .map(DatasetItemIdMapping::datasetItemId)
