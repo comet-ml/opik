@@ -181,7 +181,7 @@ const useModelSelection = ({
   const modelSelectProps: ModelSelectProps = useMemo(
     () => ({
       value: model as PROVIDER_MODEL_TYPE | "",
-      provider: provider,
+      provider,
       onChange: handleModelChange,
       onAddProvider: handleAddProvider,
       onDeleteProvider: handleDeleteProvider,
