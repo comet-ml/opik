@@ -9,7 +9,10 @@ import isArray from "lodash/isArray";
 import { COLUMN_FEEDBACK_SCORES_ID, ROW_HEIGHT } from "@/types/shared";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
-import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
+import {
+  IN_PROGRESS_OPTIMIZATION_STATUSES,
+  OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
+} from "@/lib/optimizations";
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
@@ -17,7 +20,6 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { useOptimizationScores } from "@/components/pages-shared/experiments/useOptimizationScores";
 
 const REFETCH_INTERVAL = 30000;
-const ACTIVE_REFETCH_INTERVAL = 3000;
 const MAX_EXPERIMENTS_LOADED = 1000;
 
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
@@ -98,7 +100,7 @@ export const useCompareOptimizationsData = () => {
             status as OPTIMIZATION_STATUS,
           )
         ) {
-          return ACTIVE_REFETCH_INTERVAL;
+          return OPTIMIZATION_ACTIVE_REFETCH_INTERVAL;
         }
         return REFETCH_INTERVAL;
       },
@@ -133,7 +135,7 @@ export const useCompareOptimizationsData = () => {
     {
       placeholderData: keepPreviousData,
       refetchInterval: isActiveOptimization
-        ? ACTIVE_REFETCH_INTERVAL
+        ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
         : REFETCH_INTERVAL,
     },
   );
