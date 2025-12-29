@@ -1,22 +1,48 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TraceSearchCriteria;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.utils.template.TemplateUtils;
 import io.dropwizard.db.DataSourceFactory;
+import io.r2dbc.spi.Statement;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.stringtemplate.v4.ST;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @UtilityClass
 @Slf4j
 public class DatabaseUtils {
 
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
+    public static final int UUID_POOL_MULTIPLIER = 2;
+
+    /**
+     * Generates a pool of UUIDv7 identifiers for batch operations.
+     * The pool is sized at 2x the expected count for safety margin.
+     *
+     * @param idGenerator the ID generator to use for UUIDv7 generation
+     * @param expectedCount the expected number of items
+     * @return a list of UUIDv7 identifiers
+     */
+    public static List<UUID> generateUuidPool(IdGenerator idGenerator, int expectedCount) {
+        int poolSize = Math.max(1, expectedCount * UUID_POOL_MULTIPLIER);
+        return IntStream.range(0, poolSize)
+                .mapToObj(i -> idGenerator.generateId())
+                .toList();
+    }
 
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
         var filteredProperties = dataSourceFactory.getProperties()
@@ -71,5 +97,65 @@ public class DatabaseUtils {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm not available", e);
         }
+    }
+
+    public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
+        var template = TemplateUtils.newST(query);
+        Optional.ofNullable(traceSearchCriteria.filters())
+                .ifPresent(filters -> {
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                            .ifPresent(traceFilters -> template.add("filters", traceFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_AGGREGATION)
+                            .ifPresent(traceAggregationFilters -> template.add("trace_aggregation_filters",
+                                    traceAggregationFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                            .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                            .ifPresent(spanScoresFilters -> template.add("span_feedback_scores_filters",
+                                    spanScoresFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
+                            .ifPresent(traceAnnotationFilters -> template.add("annotation_queue_filters",
+                                    traceAnnotationFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                            .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                            .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                    feedbackScoreIsEmptyFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                            .ifPresent(feedbackScoreIsEmptyFilters -> template.add("span_feedback_scores_empty_filters",
+                                    feedbackScoreIsEmptyFilters));
+                    FilterQueryBuilder.hasGuardrailsFilter(filters)
+                            .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
+                });
+        Optional.ofNullable(traceSearchCriteria.lastReceivedId())
+                .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
+
+        // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
+        return template;
+    }
+
+    public static void bindTraceThreadSearchCriteria(TraceSearchCriteria traceSearchCriteria, Statement statement) {
+        Optional.ofNullable(traceSearchCriteria.filters())
+                .ifPresent(filters -> {
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
+                });
+        Optional.ofNullable(traceSearchCriteria.lastReceivedId())
+                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
+        // Bind UUID BETWEEN bounds for time-based filtering
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
     }
 }

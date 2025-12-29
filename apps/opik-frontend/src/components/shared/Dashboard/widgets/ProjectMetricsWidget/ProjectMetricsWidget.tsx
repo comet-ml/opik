@@ -89,6 +89,21 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.TRACE_COUNT ||
     metricName === METRIC_NAME_TYPE.THREAD_COUNT;
 
+  const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
+
+  const filterLineCallback = useCallback(
+    (lineName: string) => {
+      if (
+        metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
+        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
+      )
+        return true;
+      if (!feedbackScores || feedbackScores.length === 0) return true;
+      return feedbackScores.includes(lineName);
+    },
+    [feedbackScores, metricName],
+  );
+
   if (!widget) {
     return null;
   }
@@ -148,6 +163,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
+          filterLineCallback={filterLineCallback}
           renderValue={
             isCostMetric
               ? renderCostTooltipValue
@@ -172,22 +188,23 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   return (
     <DashboardWidget>
-      <DashboardWidget.Header
-        title={widget.title}
-        subtitle={widget.subtitle}
-        infoMessage={infoMessage}
-        preview={preview}
-        actions={
-          !preview ? (
+      {preview ? (
+        <DashboardWidget.PreviewHeader />
+      ) : (
+        <DashboardWidget.Header
+          title={widget.title || widget.generatedTitle || ""}
+          subtitle={widget.subtitle}
+          infoMessage={infoMessage}
+          actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}
               widgetId={widgetId!}
               widgetTitle={widget.title}
             />
-          ) : undefined
-        }
-        dragHandle={!preview ? <DashboardWidget.DragHandle /> : undefined}
-      />
+          }
+          dragHandle={<DashboardWidget.DragHandle />}
+        />
+      )}
       <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
     </DashboardWidget>
   );

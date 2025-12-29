@@ -11,8 +11,6 @@ import {
   DashboardSections,
   DashboardState,
   DashboardWidget,
-  AddWidgetConfig,
-  UpdateWidgetConfig,
   WidgetResolver,
   AddEditWidgetCallbackParams,
 } from "@/types/dashboard";
@@ -21,16 +19,15 @@ import {
   generateEmptySection,
   generateEmptyConfig,
   getSectionById,
+  updateWidgetWithGeneratedTitle,
 } from "@/lib/dashboard/utils";
 import {
   calculateLayoutForAddingWidget,
   removeWidgetFromLayout,
+  getLayoutItemSize,
 } from "@/lib/dashboard/layout";
 import { migrateDashboardConfig } from "@/lib/dashboard/migrations";
 
-/**
- * Dashboard Store State
- */
 interface DashboardStoreState<TConfig = BaseDashboardConfig> {
   sections: DashboardSections;
   version: number;
@@ -45,11 +42,7 @@ interface DashboardStoreState<TConfig = BaseDashboardConfig> {
   hasUnsavedChanges: boolean;
 }
 
-/**
- * Dashboard Store Actions
- */
 interface DashboardActions<TConfig = BaseDashboardConfig> {
-  // Section operations
   addSection: (title?: string) => string;
   addSectionAtPosition: (position: number, title?: string) => string;
   deleteSection: (sectionId: string) => void;
@@ -62,14 +55,16 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
     overId: UniqueIdentifier,
   ) => void;
 
-  // Widget operations
-  addWidget: (sectionId: string, config: AddWidgetConfig) => string | undefined;
+  addWidget: (
+    sectionId: string,
+    config: Omit<DashboardWidget, "id">,
+  ) => string | undefined;
   duplicateWidget: (sectionId: string, widgetId: string) => string | undefined;
   deleteWidget: (sectionId: string, widgetId: string) => void;
   updateWidget: (
     sectionId: string,
     widgetId: string,
-    config: UpdateWidgetConfig,
+    config: Partial<DashboardWidget>,
   ) => void;
   moveWidget: (
     sourceSectionId: string,
@@ -78,32 +73,25 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
   ) => void;
   updateLayout: (sectionId: string, layout: DashboardLayout) => void;
 
-  // Config operations
   setConfig: (config: TConfig) => void;
   setRuntimeConfig: (runtimeConfig: Partial<TConfig>) => void;
 
-  // Callback operations
   setOnAddEditWidgetCallback: (
     callback: ((params: AddEditWidgetCallbackParams) => void) | null,
   ) => void;
 
-  // Widget resolver operations
   setWidgetResolver: (resolver: WidgetResolver | null) => void;
 
-  // Preview widget operations
   setPreviewWidget: (widget: DashboardWidget | null) => void;
+  updatePreviewWidget: (data: Partial<DashboardWidget>) => void;
 
-  // Unsaved changes operations
   setHasUnsavedChanges: (hasChanges: boolean) => void;
 
-  // Utility operations
   clearDashboard: () => void;
 
-  // Backend sync operations
   loadDashboardFromBackend: (dashboardState: DashboardState) => void;
   getDashboard: () => DashboardState;
 
-  // Getters (computed values)
   getSectionById: (sectionId: string) => DashboardSection | undefined;
   getWidgetById: (
     sectionId: string,
@@ -111,28 +99,32 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
   ) => DashboardWidget | undefined;
 }
 
-/**
- * Combined Dashboard Store Type
- */
 export type DashboardStore<TConfig = BaseDashboardConfig> =
   DashboardStoreState<TConfig> & DashboardActions<TConfig>;
 
-/**
- * Dashboard Store with Zustand
- *
- * Key features:
- * - Devtools middleware for debugging
- * - Stable action references (no recreating functions)
- * - Centralized state management
- * - Normalized state updates
- */
 export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
   devtools(
     (set, get) => {
       const initialDashboard = generateEmptyDashboard();
 
+      const updateSectionById = (
+        sectionId: string,
+        updateFn: (section: DashboardSection) => DashboardSection,
+        actionName: string,
+      ) => {
+        set(
+          (state) => ({
+            sections: state.sections.map((s) =>
+              s.id === sectionId ? updateFn(s) : s,
+            ),
+            lastModified: Date.now(),
+          }),
+          false,
+          actionName,
+        );
+      };
+
       return {
-        // State
         sections: initialDashboard.sections,
         version: initialDashboard.version,
         lastModified: initialDashboard.lastModified,
@@ -143,7 +135,6 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         previewWidget: null,
         hasUnsavedChanges: false,
 
-        // Section Actions
         addSection: (title?: string) => {
           const newSection = generateEmptySection(title);
           set(
@@ -197,14 +188,9 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           sectionId: string,
           updates: Partial<DashboardSection>,
         ) => {
-          set(
-            (state) => ({
-              sections: state.sections.map((section) =>
-                section.id === sectionId ? { ...section, ...updates } : section,
-              ),
-              lastModified: Date.now(),
-            }),
-            false,
+          updateSectionById(
+            sectionId,
+            (section) => ({ ...section, ...updates }),
             "updateSection",
           );
         },
@@ -234,18 +220,14 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
-        // Widget Actions
         addWidget: (sectionId: string, widgetConfig) => {
           const state = get();
           const section = getSectionById(state.sections, sectionId);
           if (!section) return undefined;
 
           const newWidget: DashboardWidget = {
+            ...widgetConfig,
             id: uniqid(),
-            type: widgetConfig.type,
-            title: widgetConfig.title,
-            subtitle: widgetConfig.subtitle,
-            config: widgetConfig.config || {},
           };
 
           const updatedLayout = calculateLayoutForAddingWidget(
@@ -253,20 +235,13 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
             newWidget,
           );
 
-          set(
-            (state) => ({
-              sections: state.sections.map((s) =>
-                s.id === sectionId
-                  ? {
-                      ...s,
-                      widgets: [...s.widgets, newWidget],
-                      layout: updatedLayout,
-                    }
-                  : s,
-              ),
-              lastModified: Date.now(),
+          updateSectionById(
+            sectionId,
+            (s) => ({
+              ...s,
+              widgets: [...s.widgets, newWidget],
+              layout: updatedLayout,
             }),
-            false,
             "addWidget",
           );
 
@@ -281,19 +256,13 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const widget = section.widgets.find((w) => w.id === widgetId);
           if (!widget) return undefined;
 
-          const layoutItem = section.layout.find((item) => item.i === widgetId);
-
           const newWidget: DashboardWidget = {
+            ...widget,
             id: uniqid(),
-            type: widget.type,
-            title: widget.title,
-            subtitle: widget.subtitle,
-            config: widget.config || {},
+            title: `${widget.title} (copy)`,
           };
 
-          const size = layoutItem
-            ? { w: layoutItem.w, h: layoutItem.h }
-            : undefined;
+          const size = getLayoutItemSize(section.layout, widgetId);
 
           const updatedLayout = calculateLayoutForAddingWidget(
             section.layout,
@@ -301,20 +270,13 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
             size,
           );
 
-          set(
-            (state) => ({
-              sections: state.sections.map((s) =>
-                s.id === sectionId
-                  ? {
-                      ...s,
-                      widgets: [...s.widgets, newWidget],
-                      layout: updatedLayout,
-                    }
-                  : s,
-              ),
-              lastModified: Date.now(),
+          updateSectionById(
+            sectionId,
+            (s) => ({
+              ...s,
+              widgets: [...s.widgets, newWidget],
+              layout: updatedLayout,
             }),
-            false,
             "duplicateWidget",
           );
 
@@ -334,53 +296,34 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
             widgetId,
           );
 
-          set(
-            (state) => ({
-              sections: state.sections.map((s) =>
-                s.id === sectionId
-                  ? {
-                      ...s,
-                      widgets: updatedWidgets,
-                      layout: updatedLayout,
-                    }
-                  : s,
-              ),
-              lastModified: Date.now(),
+          updateSectionById(
+            sectionId,
+            (s) => ({
+              ...s,
+              widgets: updatedWidgets,
+              layout: updatedLayout,
             }),
-            false,
             "deleteWidget",
           );
         },
 
         updateWidget: (sectionId: string, widgetId: string, widgetConfig) => {
-          set(
-            (state) => ({
-              sections: state.sections.map((s) =>
-                s.id === sectionId
-                  ? {
-                      ...s,
-                      widgets: s.widgets.map((w) =>
-                        w.id === widgetId
-                          ? {
-                              ...w,
-                              ...(widgetConfig.title !== undefined && {
-                                title: widgetConfig.title,
-                              }),
-                              ...(widgetConfig.subtitle !== undefined && {
-                                subtitle: widgetConfig.subtitle,
-                              }),
-                              ...(widgetConfig.config !== undefined && {
-                                config: { ...w.config, ...widgetConfig.config },
-                              }),
-                            }
-                          : w,
-                      ),
-                    }
-                  : s,
+          const widgetResolver = get().widgetResolver;
+
+          updateSectionById(
+            sectionId,
+            (s) => ({
+              ...s,
+              widgets: s.widgets.map((w) =>
+                w.id === widgetId
+                  ? updateWidgetWithGeneratedTitle(
+                      w,
+                      widgetConfig,
+                      widgetResolver,
+                    )
+                  : w,
               ),
-              lastModified: Date.now(),
             }),
-            false,
             "updateWidget",
           );
         },
@@ -405,12 +348,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const widget = sourceSection.widgets.find((w) => w.id === widgetId);
           if (!widget) return;
 
-          const layoutItem = sourceSection.layout.find(
-            (item) => item.i === widgetId,
-          );
-          const size = layoutItem
-            ? { w: layoutItem.w, h: layoutItem.h }
-            : undefined;
+          const size = getLayoutItemSize(sourceSection.layout, widgetId);
 
           const updatedSourceWidgets = sourceSection.widgets.filter(
             (w) => w.id !== widgetId,
@@ -452,19 +390,13 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         },
 
         updateLayout: (sectionId: string, layout: DashboardLayout) => {
-          set(
-            (state) => ({
-              sections: state.sections.map((s) =>
-                s.id === sectionId ? { ...s, layout } : s,
-              ),
-              lastModified: Date.now(),
-            }),
-            false,
+          updateSectionById(
+            sectionId,
+            (s) => ({ ...s, layout }),
             "updateLayout",
           );
         },
 
-        // Config Actions
         setConfig: (config) => {
           set({ config }, false, "setConfig");
         },
@@ -473,7 +405,6 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           set({ runtimeConfig }, false, "setRuntimeConfig");
         },
 
-        // Callback Actions
         setOnAddEditWidgetCallback: (callback) => {
           set(
             { onAddEditWidgetCallback: callback },
@@ -482,22 +413,32 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
-        // Widget Resolver Actions
         setWidgetResolver: (resolver) => {
           set({ widgetResolver: resolver }, false, "setWidgetResolver");
         },
 
-        // Preview Widget Actions
         setPreviewWidget: (widget) => {
           set({ previewWidget: widget }, false, "setPreviewWidget");
         },
 
-        // Unsaved Changes Actions
+        updatePreviewWidget: (data) => {
+          const currentPreview = get().previewWidget;
+          if (!currentPreview) return;
+
+          const widgetResolver = get().widgetResolver;
+          const previewWidget = updateWidgetWithGeneratedTitle(
+            currentPreview,
+            data,
+            widgetResolver,
+          );
+
+          set({ previewWidget }, false, "updatePreviewWidget");
+        },
+
         setHasUnsavedChanges: (hasChanges) => {
           set({ hasUnsavedChanges: hasChanges }, false, "setHasUnsavedChanges");
         },
 
-        // Utility Actions
         clearDashboard: () => {
           const emptyDashboard = generateEmptyDashboard();
           set(
@@ -512,9 +453,9 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
-        // Backend Sync Actions
         loadDashboardFromBackend: (dashboardState: DashboardState) => {
           const migratedDashboard = migrateDashboardConfig(dashboardState);
+
           set(
             {
               sections: migratedDashboard.sections,
@@ -537,7 +478,6 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           };
         },
 
-        // Getters
         getSectionById: (sectionId: string) => {
           const state = get();
           return getSectionById(state.sections, sectionId);
@@ -558,27 +498,10 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
   ),
 );
 
-/**
- * Selective Selectors for Performance Optimization
- *
- * These selectors allow components to subscribe only to specific parts
- * of the store, preventing unnecessary re-renders.
- *
- * Usage with useShallow:
- * const sectionIds = useDashboardStore(useShallow(state => selectSectionIds(state)));
- */
-
 export const selectSectionIds = (state: DashboardStore) =>
   state.sections.map((s) => s.id);
 
 export const selectSections = (state: DashboardStore) => state.sections;
-
-/**
- * Action Selectors (stable references)
- *
- * These selectors return action functions that never change,
- * preventing unnecessary re-renders in child components.
- */
 
 export const selectAddSection = (state: DashboardStore) => state.addSection;
 export const selectAddSectionAtPosition = (state: DashboardStore) =>
@@ -622,7 +545,6 @@ export const selectClearDashboard = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.clearDashboard;
 
-// Callback selectors
 export const selectOnAddEditWidgetCallback = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.onAddEditWidgetCallback;
@@ -630,7 +552,6 @@ export const selectSetOnAddEditWidgetCallback = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.setOnAddEditWidgetCallback;
 
-// Widget resolver selectors
 export const selectWidgetResolver = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.widgetResolver;
@@ -638,7 +559,6 @@ export const selectSetWidgetResolver = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.setWidgetResolver;
 
-// Preview widget selectors
 export const selectPreviewWidget = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.previewWidget;
@@ -646,7 +566,10 @@ export const selectSetPreviewWidget = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.setPreviewWidget;
 
-// Unsaved changes selectors
+export const selectUpdatePreviewWidget = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.updatePreviewWidget;
+
 export const selectHasUnsavedChanges = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.hasUnsavedChanges;

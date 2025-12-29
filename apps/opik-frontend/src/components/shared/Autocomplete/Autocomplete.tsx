@@ -168,6 +168,7 @@ const AutoComplete = <T extends string>({
                     <CommandItem
                       key={option}
                       value={option}
+                      className="items-start"
                       onMouseDown={(e) => e.preventDefault()}
                       onSelect={(inputValue: string) => {
                         const selectedValue = inputValue as T;
@@ -176,7 +177,7 @@ const AutoComplete = <T extends string>({
                         setOpen(false);
                       }}
                     >
-                      <span className="truncate">{option}</span>
+                      <span className="line-clamp-3 break-words">{option}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

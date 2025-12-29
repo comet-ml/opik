@@ -105,6 +105,8 @@ def _word_level_mutation_prompt(
         messages=mutated_messages,
         tools=prompt.tools,
         function_map=prompt.function_map,
+        model=prompt.model,
+        model_parameters=prompt.model_kwargs,
     )
 
 
@@ -170,6 +172,8 @@ def _structural_mutation(
         messages=mutated_messages,
         tools=prompt.tools,
         function_map=prompt.function_map,
+        model=prompt.model,
+        model_parameters=prompt.model_kwargs,
     )
 
 
@@ -241,6 +245,8 @@ def _semantic_mutation(
             messages=messages,
             tools=prompt.tools,
             function_map=prompt.function_map,
+            model=prompt.model,
+            model_parameters=prompt.model_kwargs,
         )
     except Exception as e:
         reporting.display_error(
@@ -296,6 +302,8 @@ def _radical_innovation_mutation(
             messages=new_messages,
             tools=prompt.tools,
             function_map=prompt.function_map,
+            model=prompt.model,
+            model_parameters=prompt.model_kwargs,
         )
     except Exception as e:
         logger.warning(
@@ -321,6 +329,8 @@ def deap_mutation(
         messages=individual,
         tools=initial_prompt.tools,
         function_map=initial_prompt.function_map,
+        model=initial_prompt.model,
+        model_parameters=initial_prompt.model_kwargs,
     )
 
     mcp_context = mcp_context

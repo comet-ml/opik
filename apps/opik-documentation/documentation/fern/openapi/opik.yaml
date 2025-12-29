@@ -1018,7 +1018,7 @@ paths:
               style: simple
               schema:
                 type: string
-              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
+              example: "${basePath}/v1/private/automations/evaluators/{evaluatorId}"
   /v1/private/automations/evaluators/delete:
     post:
       tags:
@@ -1560,7 +1560,12 @@ paths:
       tags:
       - Datasets
       summary: Delete dataset items
-      description: Delete dataset items
+      description: |
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
       operationId: deleteDatasetItems
       requestBody:
         content:
@@ -1570,6 +1575,8 @@ paths:
       responses:
         "204":
           description: No content
+        "400":
+          description: Bad request - invalid parameters or conflicting fields
   /v1/private/datasets/delete-batch:
     post:
       tags:
@@ -6705,7 +6712,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -6715,10 +6721,30 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference"
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Project IDs for write operations (used when creating/updating
+            rules)
+          items:
+            type: string
+            description: Project IDs for write operations (used when creating/updating
+              rules)
+            format: uuid
         name:
           minLength: 1
           type: string
@@ -6768,7 +6794,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6786,7 +6811,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6804,7 +6828,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6822,7 +6845,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6840,7 +6862,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6858,7 +6879,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6975,6 +6995,21 @@ components:
           - DOUBLE
         description:
           type: string
+    ProjectReference:
+      required:
+      - project_id
+      - project_name
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+        project_name:
+          type: string
+          description: Project name
+      description: Project reference with ID and name
+      readOnly: true
     SpanFilter:
       type: object
       properties:
@@ -7138,7 +7173,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7156,7 +7190,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7174,7 +7207,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7192,7 +7224,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7210,7 +7241,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7228,7 +7258,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7245,13 +7274,23 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Project IDs for write operations (used when creating/updating
+            rules)
+          items:
+            type: string
+            description: Project IDs for write operations (used when creating/updating
+              rules)
+            format: uuid
         name:
           minLength: 1
           type: string
@@ -7549,7 +7588,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7566,7 +7604,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -7576,10 +7613,20 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference_Public"
         name:
           minLength: 1
           type: string
@@ -7649,7 +7696,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7667,7 +7713,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7685,7 +7730,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7703,7 +7747,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7721,7 +7764,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7838,6 +7880,21 @@ components:
           - DOUBLE
         description:
           type: string
+    ProjectReference_Public:
+      required:
+      - project_id
+      - project_name
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+        project_name:
+          type: string
+          description: Project name
+      description: Project reference with ID and name
+      readOnly: true
     SpanFilter_Public:
       type: object
       properties:
@@ -7993,7 +8050,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -8003,10 +8059,20 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference_Public"
         name:
           minLength: 1
           type: string
@@ -8100,7 +8166,6 @@ components:
       required:
       - action
       - name
-      - project_id
       type: object
       properties:
         name:
@@ -8113,7 +8178,17 @@ components:
           type: boolean
         project_id:
           type: string
+          description: "Primary project ID (legacy field, maintained for backwards\
+            \ compatibility)"
           format: uuid
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Multiple project IDs (new field for multi-project support)
+          items:
+            type: string
+            description: Multiple project IDs (new field for multi-project support)
+            format: uuid
         type:
           type: string
           enum:
@@ -8141,7 +8216,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8158,7 +8232,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8175,7 +8248,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8192,7 +8264,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8209,7 +8280,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8226,7 +8296,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8627,6 +8696,9 @@ components:
           type: string
         value:
           type: string
+      description: Filters to select dataset items to delete within the specified
+        dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'.
+        Empty array means 'delete all items in the dataset'.
     DatasetItemUpdate:
       type: object
       properties:
@@ -9141,17 +9213,35 @@ components:
           minLength: 1
           type: string
     DatasetItemsDelete:
-      required:
-      - item_ids
       type: object
       properties:
         item_ids:
           maxItems: 1000
           minItems: 1
+          uniqueItems: true
           type: array
+          description: List of dataset item IDs to delete (max 1000). Use this to
+            delete specific items by their IDs. Mutually exclusive with 'dataset_id'
+            and 'filters'.
           items:
             type: string
+            description: List of dataset item IDs to delete (max 1000). Use this to
+              delete specific items by their IDs. Mutually exclusive with 'dataset_id'
+              and 'filters'.
             format: uuid
+        dataset_id:
+          type: string
+          description: Dataset ID to scope the deletion. Required when using 'filters'.
+            Mutually exclusive with 'item_ids'.
+          format: uuid
+        filters:
+          type: array
+          description: Filters to select dataset items to delete within the specified
+            dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'.
+            Empty array means 'delete all items in the dataset'.
+          items:
+            $ref: "#/components/schemas/DatasetItemFilter"
+      description: Request to delete multiple dataset items
     DatasetExpansionResponse:
       type: object
       properties:
@@ -11912,7 +12002,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -11976,7 +12066,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -12036,7 +12126,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -12659,6 +12749,10 @@ components:
           type: integer
           format: int64
           readOnly: true
+        thread_count:
+          type: integer
+          format: int64
+          readOnly: true
         guardrails_failed_count:
           type: integer
           format: int64
@@ -12870,6 +12964,9 @@ components:
         trace_count:
           type: integer
           format: int64
+        thread_count:
+          type: integer
+          format: int64
         guardrails_failed_count:
           type: integer
           format: int64
@@ -12972,6 +13069,10 @@ components:
             readOnly: true
           readOnly: true
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        thread_count:
           type: integer
           format: int64
           readOnly: true
@@ -13542,7 +13643,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - opikbuiltinProviderEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -13589,8 +13689,6 @@ components:
         vertexaiProviderEnabled:
           type: boolean
         customllmProviderEnabled:
-          type: boolean
-        opikbuiltinProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean

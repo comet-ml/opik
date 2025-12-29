@@ -330,6 +330,9 @@ navigation:
           - page: Alerts
             path: docs/production/alerts.mdx
             slug: alerts
+          - page: Dashboards
+            path: docs/production/dashboards.mdx
+            slug: dashboards
       - section: Configuration
         slug: /configuration
         contents:
@@ -779,6 +782,9 @@ navigation:
       - page: Kubernetes deployment
         path: docs/self-host/kubernetes.mdx
         slug: kubernetes
+      - page: Helm chart migration
+        path: docs/self-host/helm.mdx
+        slug: helm
       - page: Platform Architecture
         path: docs/self-host/architecture.mdx
         slug: architecture

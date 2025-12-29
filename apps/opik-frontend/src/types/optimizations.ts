@@ -36,7 +36,7 @@ export interface EqualsMetricParameters {
 }
 
 export interface JsonSchemaValidatorMetricParameters {
-  schema?: Record<string, unknown>;
+  reference_key?: string;
 }
 
 export interface GEvalMetricParameters {
@@ -137,8 +137,4 @@ export interface Optimization {
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
-}
-
-export interface OptimizationStudio extends Optimization {
-  studio_config: OptimizationStudioConfig;
 }

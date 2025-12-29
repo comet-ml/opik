@@ -261,6 +261,45 @@ git checkout main
 git branch -D username/OPIK-1234-some-task
 ```
 
+## **Sensitive Information Protection**
+
+**NEVER include any of the following in publicly published content** (commits, PRs, PR titles/descriptions, issues, branch names, comments, or any other GitHub-visible information):
+
+### **Prohibited Content**
+- **Customer names**: Real company or customer names (use generic placeholders like "Customer A", "Acme Corp", etc.)
+- **User names**: Real usernames, email addresses, or personal identifiers
+- **Credentials**: Passwords, API keys, tokens, secrets, or authentication data
+- **Internal URLs**: Production URLs, internal endpoints, or private infrastructure details
+- **PII (Personally Identifiable Information)**: Phone numbers, addresses, or any personal data
+- **Proprietary business data**: Revenue figures, customer counts, or confidential metrics
+- **Internal identifiers**: Real database IDs, user IDs, or internal reference numbers that could be traced back
+
+### **Best Practices for Sanitization**
+
+```bash
+# ✅ DO: Use generic placeholders
+git commit -m "[OPIK-1234] Fix validation error for large dataset imports"
+git commit -m "[OPIK-1234] Resolve timeout issue with long-running queries"
+
+# ❌ DON'T: Include customer or sensitive details
+git commit -m "[OPIK-1234] Fix issue reported by Acme Corp with their production data"
+git commit -m "[OPIK-1234] Fix bug in user john.doe@company.com's account"
+```
+
+### **PR Description Guidelines**
+```markdown
+# ✅ DO: Describe the issue generically
+## Details
+Fixed an issue where users with large datasets (>10M rows) experienced timeouts.
+
+# ❌ DON'T: Reference specific customers or internal data
+## Details
+Fixed the timeout issue reported by BigCustomer Inc. affecting their 15M row dataset
+at https://internal.opik.com/customer/12345
+```
+
+---
+
 ## **Best Practices**
 
 ### **Before Starting Work**

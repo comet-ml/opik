@@ -11,9 +11,11 @@ import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
@@ -35,7 +37,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -109,7 +111,7 @@ public class DatasetsResource {
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
-    private final @NonNull OpikConfiguration config;
+    private final @NonNull FeatureFlags featureFlags;
 
     @GET
     @Path("/{id}")
@@ -443,12 +445,15 @@ public class DatasetsResource {
 
         log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
                 batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.verifyDatasetExistsAndSave(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+
+        DatasetItemBatch batchWithIds = new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items);
+
+        itemService.save(batchWithIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
-        log.info("Created dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+        log.info("Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -518,7 +523,7 @@ public class DatasetsResource {
             @FormDataParam("file") @NotNull InputStream fileInputStream,
             @FormDataParam("dataset_id") @NotNull UUID datasetId) {
 
-        if (!config.getServiceToggles().isCsvUploadEnabled()) {
+        if (!featureFlags.isCsvUploadEnabled()) {
             log.warn("CSV upload feature is disabled, returning 404");
             throw new NotFoundException("CSV upload feature is not enabled");
         }
@@ -535,6 +540,56 @@ public class DatasetsResource {
                 workspaceId);
 
         return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    @POST
+    @Path("/{id}/items/changes")
+    @Operation(operationId = "applyDatasetItemChanges", summary = "Apply changes to dataset items", description = """
+            Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+            This endpoint:
+            - Creates a new version with the applied changes
+            - Validates that baseVersion matches the latest version (unless override=true)
+            - Returns 409 Conflict if baseVersion is stale and override is not set
+
+            Use `override=true` query parameter to force version creation even with stale baseVersion.
+            """, responses = {
+            @ApiResponse(responseCode = "201", description = "Version created successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Dataset or version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Version conflict - baseVersion is not the latest", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response applyDatasetItemChanges(
+            @PathParam("id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemChanges.class))) @NotNull @Valid DatasetItemChanges changes,
+            @QueryParam("override") @DefaultValue("false") boolean override) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Applying dataset item changes for dataset '{}', baseVersion '{}', override '{}' on workspaceId '{}'",
+                datasetId, changes.baseVersion(), override, workspaceId);
+
+        DatasetVersion newVersion = itemService.applyDeltaChanges(datasetId, changes, override)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+
+        log.info("Applied changes to dataset '{}', created version '{}' on workspaceId '{}'",
+                datasetId, newVersion.versionHash(), workspaceId);
+
+        // Build location header pointing to the newly created version
+        String location = String.format("/v1/private/datasets/%s/versions/%s",
+                datasetId, newVersion.id());
+
+        return Response.status(Response.Status.CREATED)
+                .entity(newVersion)
+                .header("Location", location)
+                .build();
     }
 
     @POST
@@ -719,6 +774,6 @@ public class DatasetsResource {
      */
     @Path("/{id}/versions")
     public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
-        return new DatasetVersionsResource(datasetId, versionService, requestContext, config);
+        return new DatasetVersionsResource(datasetId, versionService, requestContext, featureFlags);
     }
 }

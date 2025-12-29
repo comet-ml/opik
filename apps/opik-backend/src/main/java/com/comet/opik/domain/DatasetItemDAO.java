@@ -60,8 +60,6 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
-    Mono<Long> deleteAllNonVersionedDatasetItems(UUID datasetId);
-
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -71,16 +69,10 @@ public interface DatasetItemDAO {
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
-    Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters, DatasetItemUpdate update,
+    Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
 
     Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
-
-    Mono<ItemsHash> getDraftItemsHashAgg(UUID datasetId);
-
-    Mono<Long> countDraftItems(UUID datasetId);
-
-    Mono<Long> restoreFromVersion(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -168,13 +160,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(ids)> AND id IN :ids <endif>
             <if(dataset_id)> AND dataset_id = :dataset_id <endif>
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
-            ;
-            """;
-
-    private static final String DELETE_ALL_NON_VERSIONED_DATASET_ITEMS = """
-            DELETE FROM dataset_items
-            WHERE dataset_id = :datasetId
-            AND workspace_id = :workspace_id
             ;
             """;
 
@@ -878,6 +863,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items AS s
             WHERE s.workspace_id = :workspace_id
             <if(ids)> AND s.id IN :ids <endif>
+            <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
@@ -891,65 +877,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            """;
-
-    private static final String SELECT_DRAFT_ITEMS_HASH = """
-            SELECT
-                groupBitXor(xxHash64(id)) as id_hash,
-                groupBitXor(data_hash) as data_hash
-            FROM (
-                SELECT data_hash, id
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            )
-            """;
-
-    private static final String COUNT_DRAFT_ITEMS = """
-            SELECT count(DISTINCT id) as count
-            FROM dataset_items
-            WHERE dataset_id = :datasetId
-            AND workspace_id = :workspace_id
-            """;
-
-    private static final String RESTORE_FROM_VERSION = """
-            INSERT INTO dataset_items (
-                id,
-                dataset_id,
-                data,
-                metadata,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                workspace_id
-            )
-            SELECT
-                dataset_item_id as id,
-                dataset_id,
-                data,
-                metadata,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                item_created_at as created_at,
-                now64(9) as last_updated_at,
-                item_created_by as created_by,
-                :user_name as last_updated_by,
-                workspace_id
-            FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             """;
 
@@ -1530,7 +1457,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
                                     items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
-                                            sortingFactory.getSortableFields(), false)));
+                                            sortingFactory.getSortableFields())));
                 }));
     }
 
@@ -1663,7 +1590,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters,
+    public Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters,
             @NonNull DatasetItemUpdate update, boolean mergeTags) {
         boolean hasIds = CollectionUtils.isNotEmpty(ids);
         // Empty filters array means "select all items", null means not provided
@@ -1674,7 +1601,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         if (hasIds) {
             log.info("Bulk updating '{}' dataset items by IDs", ids.size());
         } else {
-            log.info("Bulk updating dataset items by filters");
+            log.info("Bulk updating dataset items by filters for dataset '{}'", datasetId);
         }
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
@@ -1683,6 +1610,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         if (hasIds) {
             template.add("ids", true);
         } else {
+            // When using filters, dataset_id is required
+            template.add("dataset_id", true);
             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
                     .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
         }
@@ -1695,6 +1624,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             // Bind ids if provided
             if (hasIds) {
                 statement.bind("ids", ids);
+            } else {
+                // Bind dataset_id when using filters
+                statement.bind("dataset_id", datasetId);
             }
 
             bindBulkUpdateParams(update, statement);
@@ -1709,7 +1641,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             String successMessage = hasIds
                     ? "Completed bulk update for '%s' dataset items".formatted(ids.size())
-                    : "Completed bulk update for dataset items matching filters";
+                    : "Completed bulk update for dataset items matching filters in dataset '%s'".formatted(datasetId);
 
             return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
                     .doFinally(signalType -> endSegment(segment))
@@ -1770,96 +1702,4 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .build()));
         }).doFinally(signalType -> endSegment(segment));
     }
-
-    @Override
-    @WithSpan
-    public Mono<Long> deleteAllNonVersionedDatasetItems(@NonNull UUID datasetId) {
-        log.info("Deleting all draft items for dataset: '{}'", datasetId);
-
-        return asyncTemplate.nonTransaction(connection -> {
-
-            Statement statement = connection.createStatement(DELETE_ALL_NON_VERSIONED_DATASET_ITEMS);
-
-            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "delete_all_draft_items");
-
-            statement.bind("datasetId", datasetId);
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum)
-                    .doFinally(signalType -> endSegment(segment));
-        });
-    }
-
-    @Override
-    @WithSpan
-    public Mono<ItemsHash> getDraftItemsHashAgg(@NonNull UUID datasetId) {
-        log.debug("Computing hash for draft items of dataset: '{}'", datasetId);
-
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_items_hash_agg");
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(SELECT_DRAFT_ITEMS_HASH)
-                    .bind("datasetId", datasetId);
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, metadata) -> {
-                        long idHash = row.get("id_hash", Long.class);
-                        long dataHash = row.get("data_hash", Long.class);
-                        return ItemsHash.builder().idHash(idHash).dataHash(dataHash).build();
-                    }))
-                    .singleOrEmpty()
-                    .defaultIfEmpty(ItemsHash.builder().idHash(0L).dataHash(0L).build());
-        });
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Long> countDraftItems(@NonNull UUID datasetId) {
-        log.debug("Counting draft items for dataset: '{}'", datasetId);
-
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "count_draft_items");
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(COUNT_DRAFT_ITEMS)
-                    .bind("datasetId", datasetId);
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
-                    .singleOrEmpty()
-                    .defaultIfEmpty(0L);
-        });
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Long> restoreFromVersion(@NonNull UUID datasetId, @NonNull UUID versionId) {
-        log.info("Restoring draft items from version '{}' for dataset '{}'", versionId, datasetId);
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(RESTORE_FROM_VERSION)
-                    .bind("datasetId", datasetId)
-                    .bind("versionId", versionId);
-
-            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "restore_from_version");
-
-            return makeMonoContextAware((userName, workspaceId) -> {
-                statement.bind("workspace_id", workspaceId);
-                statement.bind("user_name", userName);
-                log.debug("Restoring items: datasetId='{}', versionId='{}', workspaceId='{}', userName='{}'",
-                        datasetId, versionId, workspaceId, userName);
-
-                return Flux.from(statement.execute())
-                        .flatMap(Result::getRowsUpdated)
-                        .reduce(0L, Long::sum)
-                        .doOnSuccess(insertedCount -> log.info(
-                                "Restored '{}' items from version '{}' to dataset '{}'",
-                                insertedCount, versionId, datasetId))
-                        .doFinally(signalType -> endSegment(segment));
-            });
-        });
-    }
-
 }

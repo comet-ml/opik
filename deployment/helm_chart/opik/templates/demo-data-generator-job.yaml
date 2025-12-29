@@ -35,6 +35,10 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:          
+      - name: wait-for-backend-service
+        image: curlimages/curl:8.12.1
+        command: ["/bin/sh", "-c"]
+        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-backend:8080/health-check?name=all&type=ready" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Backend is not available. Waiting for the Opik Backend..."; done']
       - name: wait-for-python-backend-service
         image: curlimages/curl:8.12.1
         command: ["/bin/sh", "-c"]

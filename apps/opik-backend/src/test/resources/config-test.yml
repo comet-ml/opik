@@ -432,12 +432,12 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
-  # Default: false
+  # Default: true
   # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: "false"
-  # Default: true for testing
+  dashboardsEnabled: "true"
+  # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: "true"
+  datasetVersioningEnabled: "false"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
@@ -459,9 +459,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"
-  # Default: true
-  # Description: Whether or not Opik Built-in provider is enabled
-  opikbuiltinProviderEnabled: "true"
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"

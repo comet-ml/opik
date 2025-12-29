@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -15,7 +16,8 @@ import java.util.List;
  * Configuration for Optimization Studio runs.
  * This represents the full payload sent from the frontend to create a Studio optimization.
  *
- * The opikApiKey is only required for cloud deployments, as it'll be used to automate SDK in behalf of the user.
+ * The opikApiKey is internal-only: populated server-side from the request header, never serialized to clients.
+ * Required for cloud deployments, as it'll be used to automate SDK in behalf of the user.
  */
 @Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -25,7 +27,7 @@ public record OptimizationStudioConfig(
         @NotNull @Valid StudioLlmModel llmModel,
         @NotNull @Valid StudioEvaluation evaluation,
         @NotNull @Valid StudioOptimizer optimizer,
-        String opikApiKey) {
+        @JsonIgnore String opikApiKey) {
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)

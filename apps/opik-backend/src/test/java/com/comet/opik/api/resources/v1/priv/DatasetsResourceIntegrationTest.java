@@ -15,8 +15,7 @@ import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
-import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
@@ -65,7 +64,7 @@ class DatasetsResourceIntegrationTest {
     private static final RequestContext requestContext = mock(RequestContext.class);
     private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
     private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
-    private static final OpikConfiguration config = mock(OpikConfiguration.class);
+    private static final FeatureFlags featureFlags = mock(FeatureFlags.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
@@ -73,7 +72,7 @@ class DatasetsResourceIntegrationTest {
                     service, itemService, expansionService, versionService, () -> requestContext,
                     new FiltersFactory(new FilterQueryBuilder()),
                     new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
-                    config))
+                    featureFlags))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .addProvider(MultiPartFeature.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
@@ -198,9 +197,7 @@ class DatasetsResourceIntegrationTest {
     @Test
     void testCsvUploadFeatureToggleDisabled() {
         // Given: Feature toggle is disabled
-        ServiceTogglesConfig serviceToggles = mock(ServiceTogglesConfig.class);
-        when(serviceToggles.isCsvUploadEnabled()).thenReturn(false);
-        when(config.getServiceToggles()).thenReturn(serviceToggles);
+        when(featureFlags.isCsvUploadEnabled()).thenReturn(false);
 
         UUID datasetId = UUID.randomUUID();
         String csvContent = "input,output\nQuestion,Answer\n";

@@ -145,7 +145,20 @@ public class OptimizationsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 optimization.id(), optimization.name(), optimization.datasetName(), workspaceId);
-        var id = optimizationService.upsert(optimization)
+
+        // For Studio optimizations, inject the API key from the request header
+        var optimizationToCreate = optimization;
+        if (optimization.studioConfig() != null) {
+            var opikApiKey = requestContext.get().getHeaders().getFirst(RequestContext.OPIK_API_KEY);
+            var enrichedConfig = optimization.studioConfig().toBuilder()
+                    .opikApiKey(opikApiKey)
+                    .build();
+            optimizationToCreate = optimization.toBuilder()
+                    .studioConfig(enrichedConfig)
+                    .build();
+        }
+
+        var id = optimizationService.upsert(optimizationToCreate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
@@ -187,58 +200,6 @@ public class OptimizationsResource {
     }
 
     // ==================== Studio Endpoints ====================
-
-    @GET
-    @Path("/studio")
-    @Operation(operationId = "findStudioOptimizations", summary = "Find Studio optimizations", description = "Find Studio optimizations", responses = {
-            @ApiResponse(responseCode = "200", description = "Studio optimizations resource", content = @Content(schema = @Schema(implementation = Optimization.OptimizationPage.class))),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-    })
-    @JsonView(Optimization.View.Public.class)
-    public Response findStudio(
-            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("dataset_id") UUID datasetId,
-            @QueryParam("name") String name,
-            @QueryParam("dataset_deleted") Boolean datasetDeleted,
-            @QueryParam("filters") String filters) {
-
-        List<OptimizationFilter> parsedFilters = (List<OptimizationFilter>) filtersFactory.newFilters(filters,
-                OptimizationFilter.LIST_TYPE_REFERENCE);
-
-        var searchCriteria = OptimizationSearchCriteria.builder()
-                .datasetId(datasetId)
-                .name(name)
-                .datasetDeleted(datasetDeleted)
-                .studioOnly(true)
-                .filters(parsedFilters)
-                .entityType(EntityType.TRACE)
-                .build();
-
-        log.info("Finding Studio optimizations by '{}', page '{}', size '{}'", searchCriteria, page, size);
-        var optimizations = optimizationService.find(page, size, searchCriteria)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        log.info("Found Studio optimizations by '{}', count '{}', page '{}', size '{}'",
-                searchCriteria, optimizations.size(), page, size);
-        return Response.ok().entity(optimizations).build();
-    }
-
-    @GET
-    @Path("/studio/{id}")
-    @Operation(operationId = "getStudioOptimizationById", summary = "Get Studio optimization by id", description = "Get Studio optimization with config included", responses = {
-            @ApiResponse(responseCode = "200", description = "Studio optimization resource", content = @Content(schema = @Schema(implementation = Optimization.class))),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    @JsonView(Optimization.View.Public.class)
-    public Response getStudio(@PathParam("id") UUID id) {
-        log.info("Getting Studio optimization by id '{}'", id);
-        var optimization = optimizationService.getById(id, true)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-        log.info("Got Studio optimization by id '{}', datasetId '{}'", optimization.id(), optimization.datasetId());
-        return Response.ok().entity(optimization).build();
-    }
 
     @GET
     @Path("/studio/{id}/cancel")

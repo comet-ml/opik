@@ -37,6 +37,14 @@ public class DatasetItemBatchUpdateValidator
             return false;
         }
 
+        // Validate that datasetId is provided when using filters
+        if (hasFilters && batchUpdate.datasetId() == null) {
+            context.buildConstraintViolationWithTemplate(
+                    "'dataset_id' is required when using 'filters'. This ensures updates are scoped to a specific dataset.")
+                    .addConstraintViolation();
+            return false;
+        }
+
         return true;
     }
 }

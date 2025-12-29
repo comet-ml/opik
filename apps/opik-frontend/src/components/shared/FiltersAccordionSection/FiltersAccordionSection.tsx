@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Description } from "@/components/ui/description";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
@@ -34,6 +33,7 @@ type FiltersAccordionSectionProps<TColumnData> = {
   description?: string;
   className?: string;
   errors?: (FilterValidationError | undefined)[];
+  hideBorder?: boolean;
 };
 
 const FiltersAccordionSection = <TColumnData,>({
@@ -45,6 +45,7 @@ const FiltersAccordionSection = <TColumnData,>({
   description = "Add filters",
   className = "",
   errors,
+  hideBorder = false,
 }: FiltersAccordionSectionProps<TColumnData>) => {
   const handleAddFilter = useCallback(() => {
     const newFilter: Filter = {
@@ -54,15 +55,29 @@ const FiltersAccordionSection = <TColumnData,>({
     onChange((prev) => [...prev, newFilter]);
   }, [onChange]);
 
-  const hasErrors = errors && errors.length > 0;
+  const hasErrors =
+    errors &&
+    errors.some((error) => {
+      if (!error) return false;
+      return (
+        error.field?.message ||
+        error.operator?.message ||
+        error.value?.message ||
+        error.key?.message
+      );
+    });
 
   return (
     <Accordion type="single" collapsible className={cn("w-full", className)}>
-      <AccordionItem value="filters" className="border-t">
-        <AccordionTrigger className="py-3 hover:no-underline">
-          <Label className="text-sm font-medium">
-            {label} {filters.length > 0 && `(${filters.length})`}
-          </Label>
+      <AccordionItem value="filters" className={hideBorder ? "" : "border-t"}>
+        <AccordionTrigger
+          className={cn(
+            "py-3 hover:no-underline",
+            hasErrors &&
+              "text-destructive hover:text-destructive active:text-destructive",
+          )}
+        >
+          {label} {filters.length > 0 && `(${filters.length})`}
         </AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
           <Description>{description}</Description>

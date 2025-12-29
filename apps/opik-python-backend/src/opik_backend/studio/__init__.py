@@ -16,6 +16,7 @@ from .config import (
     OPTIMIZER_RUNTIME_PARAMS,
     DEFAULT_REFERENCE_KEY,
     DEFAULT_CASE_SENSITIVE,
+    OPTIMIZATION_TIMEOUT_SECS,
 )
 from .types import OptimizationJobContext, OptimizationConfig, OptimizationResult
 from .exceptions import (
@@ -43,6 +44,7 @@ __all__ = [
     "OPTIMIZER_RUNTIME_PARAMS",
     "DEFAULT_REFERENCE_KEY",
     "DEFAULT_CASE_SENSITIVE",
+    "OPTIMIZATION_TIMEOUT_SECS",
     # Types
     "OptimizationJobContext",
     "OptimizationConfig",

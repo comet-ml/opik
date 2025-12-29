@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
@@ -56,6 +56,48 @@ const isValidMessage = (msg: unknown): boolean => {
   return true;
 };
 
+interface ValidationResult {
+  isValid: boolean;
+  messages?: LLMMessage[];
+}
+
+export const validateAndParseJson = (jsonValue: string): ValidationResult => {
+  if (!jsonValue) {
+    return { isValid: false };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonValue);
+
+    // Must be an array
+    if (!Array.isArray(parsed)) {
+      return { isValid: false };
+    }
+
+    // Must not be empty
+    if (parsed.length === 0) {
+      return { isValid: false };
+    }
+
+    // All messages must be valid
+    if (!parsed.every(isValidMessage)) {
+      return { isValid: false };
+    }
+
+    // Convert to LLMMessage format
+    const messages: LLMMessage[] = parsed.map((msg, index) => ({
+      id: `msg-${index}`,
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    return { isValid: true, messages };
+  } catch {
+    // Invalid JSON
+    return { isValid: false };
+  }
+};
+
 interface ChatPromptRawViewProps {
   value: string;
   onMessagesChange: (messages: LLMMessage[]) => void;
@@ -72,6 +114,20 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
   const theme = useCodemirrorTheme({
     editable: true,
   });
+  const [isValid, setIsValid] = useState(true);
+
+  const processWithValidation = useCallback(
+    (jsonValue: string) => {
+      const result = validateAndParseJson(jsonValue);
+      setIsValid(result.isValid);
+      onValidationChange?.(result.isValid);
+
+      if (result.isValid && result.messages) {
+        onMessagesChange(result.messages);
+      }
+    },
+    [onMessagesChange, onValidationChange],
+  );
 
   return (
     <>
@@ -82,47 +138,18 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
           onChange={(newValue) => {
             // Update the raw value immediately for smooth typing
             onRawValueChange(newValue);
-
-            // Try to parse and validate
-            try {
-              const parsed = JSON.parse(newValue);
-
-              // Must be an array
-              if (!Array.isArray(parsed)) {
-                onValidationChange?.(false);
-                return;
-              }
-
-              // Must not be empty
-              if (parsed.length === 0) {
-                onValidationChange?.(false);
-                return;
-              }
-
-              // All messages must be valid
-              const allValid = parsed.every(isValidMessage);
-
-              if (allValid) {
-                onValidationChange?.(true);
-                onMessagesChange(
-                  parsed.map((msg, index) => ({
-                    id: `msg-${index}`,
-                    role: msg.role,
-                    content: msg.content,
-                  })),
-                );
-              } else {
-                onValidationChange?.(false);
-              }
-            } catch {
-              // Invalid JSON
-              onValidationChange?.(false);
-            }
+            // Validate and update messages if valid
+            processWithValidation(newValue);
           }}
           extensions={[jsonLanguage, EditorView.lineWrapping]}
           basicSetup={CODEMIRROR_BASIC_SETUP}
         />
       </div>
+      {!isValid && (
+        <p className="mt-2 text-sm text-destructive" role="alert">
+          Message format is invalid.
+        </p>
+      )}
       <Description>
         Edit the raw JSON representation of chat messages. Must be a valid JSON
         array with at least one object. Each object must have a &quot;role&quot;

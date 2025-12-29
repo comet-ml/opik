@@ -15,15 +15,21 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
+import FeedbackDefinitionsAndScoresSelectBox, {
+  ScoreSource,
+} from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 
 import { cn } from "@/lib/utils";
-import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
+import {
+  useDashboardStore,
+  selectMixedConfig,
+  selectUpdatePreviewWidget,
+} from "@/store/DashboardStore";
 import {
   UNSET_PROJECT_OPTION,
   UNSET_PROJECT_VALUE,
@@ -34,7 +40,7 @@ import get from "lodash/get";
 
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import {
-  AddWidgetConfig,
+  DashboardWidget,
   ProjectMetricsWidget,
   WidgetEditorHandle,
 } from "@/types/dashboard";
@@ -42,16 +48,13 @@ import {
   ProjectMetricsWidgetSchema,
   ProjectMetricsWidgetFormData,
 } from "./schema";
-
-type ProjectMetricsEditorProps = AddWidgetConfig & {
-  onChange: (data: Partial<AddWidgetConfig>) => void;
-  onValidationChange?: (isValid: boolean) => void;
-};
+import WidgetEditorBaseLayout from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetEditorBaseLayout";
+import { CHART_TYPE } from "@/constants/chart";
 
 const METRIC_OPTIONS = [
   {
     value: METRIC_NAME_TYPE.FEEDBACK_SCORES,
-    label: "Trace feedback scores",
+    label: "Trace metrics",
     filterType: "trace" as const,
   },
   {
@@ -91,32 +94,38 @@ const METRIC_OPTIONS = [
   },
   {
     value: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
-    label: "Thread feedback scores",
+    label: "Thread metrics",
     filterType: "thread" as const,
   },
 ];
 
 const CHART_TYPE_OPTIONS = [
-  { value: "line", label: "Line chart" },
-  { value: "bar", label: "Bar chart" },
+  { value: CHART_TYPE.line, label: "Line chart" },
+  { value: CHART_TYPE.bar, label: "Bar chart" },
 ];
 
-const ProjectMetricsEditor = forwardRef<
-  WidgetEditorHandle,
-  ProjectMetricsEditorProps
->(({ title, subtitle, config, onChange }, ref) => {
-  const widgetConfig = config as ProjectMetricsWidget["config"];
-  const metricType = widgetConfig?.metricType || "";
-  const chartType = widgetConfig?.chartType || "line";
-  const localProjectId = widgetConfig?.projectId;
+const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
+  const widgetData = useDashboardStore(
+    (state) => state.previewWidget!,
+  ) as DashboardWidget & ProjectMetricsWidget;
+  const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
+
+  const { config } = widgetData;
+  const metricType = config.metricType || "";
+  const chartType = config.chartType || CHART_TYPE.line;
+  const localProjectId = config.projectId;
 
   const traceFilters = useMemo(
-    () => widgetConfig?.traceFilters || [],
-    [widgetConfig?.traceFilters],
+    () => config.traceFilters || [],
+    [config.traceFilters],
   );
   const threadFilters = useMemo(
-    () => widgetConfig?.threadFilters || [],
-    [widgetConfig?.threadFilters],
+    () => config.threadFilters || [],
+    [config.threadFilters],
+  );
+  const feedbackScores = useMemo(
+    () => config.feedbackScores || [],
+    [config.feedbackScores],
   );
 
   const globalProjectId = useDashboardStore((state) => {
@@ -128,18 +137,20 @@ const ProjectMetricsEditor = forwardRef<
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
   const isThreadMetric = metricType && selectedMetric?.filterType === "thread";
+  const isFeedbackScoreMetric =
+    metricType === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
+    metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES;
 
   const form = useForm<ProjectMetricsWidgetFormData>({
     resolver: zodResolver(ProjectMetricsWidgetSchema),
     mode: "onTouched",
     defaultValues: {
-      title,
-      subtitle: subtitle || "",
       metricType,
       chartType,
       projectId: localProjectId,
       traceFilters,
       threadFilters,
+      feedbackScores,
     },
   });
 
@@ -158,37 +169,13 @@ const ProjectMetricsEditor = forwardRef<
 
   useImperativeHandle(ref, () => ({
     submit: async () => {
-      const isValid = await form.trigger();
-      if (isValid) {
-        const values = form.getValues();
-        onChange({
-          title: values.title,
-          subtitle: values.subtitle,
-          config: {
-            ...config,
-            metricType: values.metricType,
-            chartType: values.chartType,
-            projectId: values.projectId,
-            traceFilters: values.traceFilters,
-            threadFilters: values.threadFilters,
-          },
-        });
-      }
-      return isValid;
+      return await form.trigger();
     },
     isValid: form.formState.isValid,
   }));
 
-  const handleTitleChange = (value: string) => {
-    onChange({ title: value });
-  };
-
-  const handleSubtitleChange = (value: string) => {
-    onChange({ subtitle: value });
-  };
-
   const handleMetricTypeChange = (value: string) => {
-    onChange({
+    updatePreviewWidget({
       config: {
         ...config,
         metricType: value,
@@ -197,16 +184,16 @@ const ProjectMetricsEditor = forwardRef<
   };
 
   const handleChartTypeChange = (value: string) => {
-    onChange({
+    updatePreviewWidget({
       config: {
         ...config,
-        chartType: value as "line" | "bar",
+        chartType: value as CHART_TYPE.line | CHART_TYPE.bar,
       },
     });
   };
 
   const handleProjectChange = (projectId: string) => {
-    onChange({
+    updatePreviewWidget({
       config: {
         ...config,
         projectId,
@@ -214,66 +201,19 @@ const ProjectMetricsEditor = forwardRef<
     });
   };
 
+  const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
+    updatePreviewWidget({
+      config: {
+        ...config,
+        feedbackScores: newFeedbackScores,
+      },
+    });
+  };
+
   return (
     <Form {...form}>
-      <div className="space-y-4">
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["title"]);
-            return (
-              <FormItem>
-                <FormLabel>Widget title</FormLabel>
-                <FormControl>
-                  <Input
-                    className={cn({
-                      "border-destructive": Boolean(validationErrors?.message),
-                    })}
-                    placeholder="Enter widget title"
-                    {...field}
-                    onChange={(e) => {
-                      field.onChange(e);
-                      handleTitleChange(e.target.value);
-                    }}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-
-        <FormField
-          control={form.control}
-          name="subtitle"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Widget subtitle (optional)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="Enter widget subtitle"
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    handleSubtitleChange(e.target.value);
-                  }}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <h3 className="comet-body-accented">Widget settings</h3>
-            <Description>
-              Configure the data source and visualization options for this
-              widget.
-            </Description>
-          </div>
-
+      <WidgetEditorBaseLayout>
+        <div className="space-y-4">
           <FormField
             control={form.control}
             name="projectId"
@@ -313,7 +253,7 @@ const ProjectMetricsEditor = forwardRef<
               const validationErrors = get(formState.errors, ["metricType"]);
               return (
                 <FormItem>
-                  <FormLabel>Metric</FormLabel>
+                  <FormLabel>Metric type</FormLabel>
                   <FormControl>
                     <SelectBox
                       className={cn({
@@ -327,11 +267,11 @@ const ProjectMetricsEditor = forwardRef<
                         handleMetricTypeChange(value);
                       }}
                       options={METRIC_OPTIONS}
-                      placeholder="Select a metric"
+                      placeholder="Select a metric type"
                     />
                   </FormControl>
                   <Description>
-                    Select the metric you want this widget to display.
+                    Select the metric type you want this widget to display.
                   </Description>
                   <FormMessage />
                 </FormItem>
@@ -339,13 +279,58 @@ const ProjectMetricsEditor = forwardRef<
             }}
           />
 
+          {isFeedbackScoreMetric && projectId && (
+            <FormField
+              control={form.control}
+              name="feedbackScores"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, [
+                  "feedbackScores",
+                ]);
+                return (
+                  <FormItem>
+                    <FormLabel>Metrics</FormLabel>
+                    <FormControl>
+                      <FeedbackDefinitionsAndScoresSelectBox
+                        value={field.value || []}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          handleFeedbackScoresChange(value);
+                        }}
+                        scoreSource={
+                          metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
+                            ? ScoreSource.THREADS
+                            : ScoreSource.TRACES
+                        }
+                        entityIds={[projectId]}
+                        multiselect={true}
+                        showSelectAll={true}
+                        placeholder="All metrics"
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                      />
+                    </FormControl>
+                    <Description>
+                      Select specific metrics to display. Leave empty to show
+                      all available metrics.
+                    </Description>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          )}
+
           <ProjectWidgetFiltersSection
             control={form.control}
             fieldName={isTraceMetric ? "traceFilters" : "threadFilters"}
             projectId={projectId}
             filterType={isTraceMetric ? "trace" : "thread"}
             onFiltersChange={(filters) => {
-              onChange({
+              updatePreviewWidget({
                 config: {
                   ...config,
                   ...(isTraceMetric
@@ -386,7 +371,7 @@ const ProjectMetricsEditor = forwardRef<
             }}
           />
         </div>
-      </div>
+      </WidgetEditorBaseLayout>
     </Form>
   );
 });

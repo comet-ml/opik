@@ -29,9 +29,9 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
       className={className}
     >
       <TooltipWrapper content={label} stopClickPropagation>
-        <div className="flex items-center gap-1">
-          {IconComponent && <IconComponent className="size-3" />}
-          <span>{label}</span>
+        <div className="flex min-w-0 items-center gap-1">
+          {IconComponent && <IconComponent className="size-3 shrink-0" />}
+          <span className="truncate">{label}</span>
         </div>
       </TooltipWrapper>
     </Tag>

@@ -15,26 +15,19 @@ import {
   selectConfig,
   selectSetConfig,
 } from "@/store/DashboardStore";
-import {
-  UNSET_PROJECT_OPTION,
-  UNSET_PROJECT_VALUE,
-} from "@/lib/dashboard/utils";
-
-const NONE_VALUE = UNSET_PROJECT_VALUE;
 
 const DashboardProjectSettingsButton: React.FC = () => {
   const config = useDashboardStore(selectConfig);
   const setConfig = useDashboardStore(selectSetConfig);
 
-  const selectedProjectValue = config?.projectIds?.[0] || NONE_VALUE;
+  const selectedProjectValue = config?.projectIds?.[0] || "";
   const selectedExperimentIds = config?.experimentIds || [];
 
   const handleProjectChange = useCallback(
     (value: string) => {
       if (!config) return;
 
-      const projectIds = value === NONE_VALUE ? [] : [value];
-      setConfig({ ...config, projectIds });
+      setConfig({ ...config, projectIds: [value] });
     },
     [config, setConfig],
   );
@@ -50,7 +43,7 @@ const DashboardProjectSettingsButton: React.FC = () => {
 
   return (
     <Popover>
-      <TooltipWrapper content="Global dashboard configuration">
+      <TooltipWrapper content="Dashboard defaults">
         <PopoverTrigger asChild>
           <Button size="icon-sm" variant="outline">
             <Settings className="size-3.5" />
@@ -60,13 +53,10 @@ const DashboardProjectSettingsButton: React.FC = () => {
       <PopoverContent align="end" className="w-80">
         <div className="space-y-4">
           <div>
-            <h3 className="comet-title-s mb-2">
-              Global dashboard configuration
-            </h3>
+            <h3 className="comet-title-s mb-2">Dashboard defaults</h3>
             <Description>
               Set the default project and experiments for all widgets.
-              Individual widgets can override these settings with their own
-              configuration.
+              Individual widgets can override these settings if needed.
             </Description>
           </div>
           <div>
@@ -74,7 +64,6 @@ const DashboardProjectSettingsButton: React.FC = () => {
             <ProjectsSelectBox
               value={selectedProjectValue}
               onValueChange={handleProjectChange}
-              customOptions={UNSET_PROJECT_OPTION}
               minWidth={280}
             />
           </div>

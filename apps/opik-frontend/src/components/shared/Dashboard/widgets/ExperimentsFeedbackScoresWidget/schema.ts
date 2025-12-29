@@ -15,17 +15,12 @@ const GroupSchema = z.object({
 });
 
 export const ExperimentsFeedbackScoresWidgetSchema = z.object({
-  title: z
-    .string({
-      required_error: "Widget title is required",
-    })
-    .min(1, { message: "Widget title is required" }),
-  subtitle: z.string().optional(),
   dataSource: z.nativeEnum(EXPERIMENT_DATA_SOURCE).optional(),
   filters: FiltersArraySchema.optional(),
   groups: z.array(GroupSchema).optional(),
   experimentIds: z.array(z.string()).optional(),
   chartType: z.nativeEnum(CHART_TYPE).optional(),
+  feedbackScores: z.array(z.string()).optional(),
 });
 
 export type ExperimentsFeedbackScoresWidgetFormData = z.infer<

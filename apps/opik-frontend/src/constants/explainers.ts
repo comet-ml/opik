@@ -83,6 +83,10 @@ export enum EXPLAINER_ID {
   whats_an_alert = "whats_an_alert",
   what_are_dashboards = "what_are_dashboards",
   whats_the_optimization_studio = "whats_the_optimization_studio",
+  whats_the_optimization_config = "whats_the_optimization_config",
+  whats_the_algorithm_section = "whats_the_algorithm_section",
+  whats_the_dataset_section = "whats_the_dataset_section",
+  whats_the_metric_section = "whats_the_metric_section",
   whats_the_metric_settings = "whats_the_metric_settings",
   whats_the_algorithm_settings = "whats_the_algorithm_settings",
   // Metric config explainers
@@ -90,7 +94,6 @@ export enum EXPLAINER_ID {
   geval_evaluation_criteria = "geval_evaluation_criteria",
   metric_reference_key = "metric_reference_key",
   metric_case_sensitive = "metric_case_sensitive",
-  metric_json_schema = "metric_json_schema",
   // Optimizer config explainers
   optimizer_verbose = "optimizer_verbose",
   optimizer_adaptive_mutation = "optimizer_adaptive_mutation",
@@ -380,7 +383,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.whats_an_optimization_run]: {
     id: EXPLAINER_ID.whats_an_optimization_run,
     description:
-      "Optimization runs test multiple prompt variations to find the best one based on your metrics.",
+      "Automatically test prompt variations and find the best-performing one.",
     docLink: "/agent_optimization/overview",
   },
   [EXPLAINER_ID.whats_the_best_score]: {
@@ -589,7 +592,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_dashboards]: {
     id: EXPLAINER_ID.what_are_dashboards,
     description:
-      "Set up a new dashboard to organize, isolate, and monitor different scenarios.",
+      "Set up dashboards to monitor quality, cost, and performance of your projects and share experiment results",
     docLink: "/production/dashboards",
   },
   [EXPLAINER_ID.whats_the_optimization_studio]: {
@@ -597,6 +600,24 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Test multiple variations for your agent or prompt to find the best one based on your metrics.",
     docLink: "/agent_optimization/overview",
+  },
+  [EXPLAINER_ID.whats_the_optimization_config]: {
+    id: EXPLAINER_ID.whats_the_optimization_config,
+    description:
+      "Configure your setup and let Opik automatically find the best prompt.",
+    docLink: "/agent_optimization/overview",
+  },
+  [EXPLAINER_ID.whats_the_algorithm_section]: {
+    id: EXPLAINER_ID.whats_the_algorithm_section,
+    description: "How Opik explores and improves prompt variations.",
+  },
+  [EXPLAINER_ID.whats_the_dataset_section]: {
+    id: EXPLAINER_ID.whats_the_dataset_section,
+    description: "Data Opik uses to evaluate prompt variations.",
+  },
+  [EXPLAINER_ID.whats_the_metric_section]: {
+    id: EXPLAINER_ID.whats_the_metric_section,
+    description: "How Opik measures and compares prompt performance.",
   },
   [EXPLAINER_ID.whats_the_metric_settings]: {
     id: EXPLAINER_ID.whats_the_metric_settings,
@@ -626,11 +647,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.metric_case_sensitive]: {
     id: EXPLAINER_ID.metric_case_sensitive,
     description: "Enable case-sensitive comparison when evaluating outputs.",
-  },
-  [EXPLAINER_ID.metric_json_schema]: {
-    id: EXPLAINER_ID.metric_json_schema,
-    description:
-      "Define a JSON schema to validate the structure of the LLM output.",
   },
   // Optimizer config explainers
   [EXPLAINER_ID.optimizer_verbose]: {

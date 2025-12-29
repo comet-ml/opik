@@ -38,6 +38,29 @@ export const getTextFromMessageContent = (content: MessageContent): string => {
   return content.find((c): c is TextPart => c.type === "text")?.text || "";
 };
 
+export const appendTextToMessageContent = (
+  content: MessageContent,
+  textToAppend: string,
+): MessageContent => {
+  if (typeof content === "string") {
+    return content + textToAppend;
+  }
+
+  const lastTextPartIndex = content.findLastIndex(
+    (part): part is TextPart => part.type === "text",
+  );
+
+  if (lastTextPartIndex !== -1) {
+    return content.map((part, index) =>
+      index === lastTextPartIndex && part.type === "text"
+        ? { ...part, text: part.text + textToAppend }
+        : part,
+    );
+  }
+
+  return [...content, { type: "text" as const, text: textToAppend }];
+};
+
 export const getImagesFromMessageContent = (
   content: MessageContent,
 ): string[] => {
@@ -222,6 +245,15 @@ export const parsePromptVersionContent = (promptVersion?: {
   return template;
 };
 
+export const extractDisplayMessages = (
+  messages?: Array<{ role: string; content: string }>,
+): Array<{ role: string; content: string }> | undefined => {
+  return messages?.map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+  }));
+};
+
 /**
  * Parse chat template JSON string into LLMMessage array
  * Factory method that converts chat template to LLMMessage format with optional metadata
@@ -235,6 +267,7 @@ export const parsePromptVersionContent = (promptVersion?: {
  *
  * Note: Content is kept as-is (string or array format) as per MessageContent type definition
  */
+
 export const parseChatTemplateToLLMMessages = (
   template: string,
   options: {

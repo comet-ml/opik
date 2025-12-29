@@ -1,0 +1,185 @@
+{{- if .Values.chartMigration.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration-sa
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-15"
+    {{- else }}
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration-role
+  namespace: {{ .Release.Namespace }}
+  annotations:
+   {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-15"
+    {{- else }}
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "deployments"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration-rb
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-15"
+    {{- else }}
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opik.fullname" . }}-chart-migration-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opik.fullname" . }}-chart-migration-sa
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: {{ include "opik.name" $ }}-chart-migration
+    {{- with $.Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}  
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-10"
+    {{- else }}
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: pre-upgrade-cleanup
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.chartMigration.serviceAccountName | default (printf "%s-chart-migration-sa" (include "opik.fullname" .)) }}
+      {{- with (.Values.chartMigration.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.chartMigration.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migration
+          image: {{ .Values.chartMigration.image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              
+              echo "=== Pre-Upgrade Chart Migration ==="
+              NAMESPACE="{{ .Release.Namespace }}"
+              BACKEND_DEPLOYMENT="{{ include "opik.name" . }}-backend"
+              
+              # Track if any Bitnami components were removed
+              COMPONENTS_REMOVED=0
+              
+              echo ""
+              
+              {{- if .Values.mysql.enabled }}
+              # Delete MySQL StatefulSet (if exists and uses Bitnami image)
+              MYSQL_STS="{{ .Values.mysql.fullnameOverride | default "opik-mysql" }}"
+              echo "Checking MySQL StatefulSet: $MYSQL_STS"
+              if kubectl get statefulset $MYSQL_STS -n $NAMESPACE -o yaml 2>/dev/null | grep -q "bitnami"; then
+                echo "MySQL StatefulSet $MYSQL_STS is using Bitnami image, deleting..."
+                kubectl delete statefulset $MYSQL_STS -n $NAMESPACE --wait=true
+                echo "MySQL StatefulSet $MYSQL_STS deleted (PVCs are preserved)"
+                COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
+              else
+                echo "MySQL StatefulSet $MYSQL_STS not found or not using Bitnami image, skipping"
+              fi
+              echo ""
+              {{- end }}
+              
+              {{- if .Values.zookeeper.enabled }}
+              # Delete Zookeeper StatefulSet (if exists and uses Bitnami image)
+              ZOOKEEPER_STS="{{ .Values.zookeeper.fullnameOverride | default "opik-zookeeper" }}"
+              echo "Checking Zookeeper StatefulSet: $ZOOKEEPER_STS"
+              if kubectl get statefulset $ZOOKEEPER_STS -n $NAMESPACE -o yaml 2>/dev/null | grep -q "bitnami"; then
+                echo "Zookeeper StatefulSet $ZOOKEEPER_STS is using Bitnami image, deleting..."
+                kubectl delete statefulset $ZOOKEEPER_STS -n $NAMESPACE --wait=true
+                echo "Zookeeper StatefulSet $ZOOKEEPER_STS deleted (PVCs are preserved)"
+                COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
+              else
+                echo "Zookeeper StatefulSet $ZOOKEEPER_STS not found or not using Bitnami image, skipping"
+              fi
+              echo ""
+              {{- end }}
+              
+              {{- if .Values.redis.enabled }}
+              # Delete Redis StatefulSet (if exists and uses Bitnami image)
+              REDIS_STS="{{ .Values.redis.fullnameOverride | default "opik-redis-master" }}"
+              echo "Checking Redis StatefulSet: $REDIS_STS"
+              if kubectl get statefulset $REDIS_STS -n $NAMESPACE -o yaml 2>/dev/null | grep -q "bitnami"; then
+                echo "Redis StatefulSet $REDIS_STS is using Bitnami image, deleting..."
+                kubectl delete statefulset $REDIS_STS -n $NAMESPACE --wait=true
+                echo "Redis StatefulSet $REDIS_STS deleted (PVCs are preserved)"
+                COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
+              else
+                echo "Redis StatefulSet $REDIS_STS not found or not using Bitnami image, skipping"
+              fi
+              echo ""
+              {{- end }}
+              
+              # Delete opik-backend deployment only if at least one Bitnami component was removed
+              echo "Checking backend deployment: $BACKEND_DEPLOYMENT"
+              if [ $COMPONENTS_REMOVED -gt 0 ]; then
+                if kubectl get deployment $BACKEND_DEPLOYMENT -n $NAMESPACE 2>/dev/null; then
+                  echo "At least one Bitnami component was removed ($COMPONENTS_REMOVED), deleting backend deployment: $BACKEND_DEPLOYMENT"
+                  kubectl delete deployment $BACKEND_DEPLOYMENT -n $NAMESPACE --wait=true
+                  echo "Backend deployment $BACKEND_DEPLOYMENT deleted"
+                else
+                  echo "Backend deployment $BACKEND_DEPLOYMENT not found, skipping"
+                fi
+              else
+                echo "No Bitnami components were removed, skipping backend deployment deletion"
+              fi
+              echo ""
+              
+              echo "=== Migration Completed Successfully ==="
+
+{{- end }}
+
