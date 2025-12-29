@@ -203,6 +203,7 @@ const usePromptDatasetItemCombination = ({
       try {
         updateOutput(prompt.id, datasetItemId, {
           isLoading: true,
+          selectedRuleIds,
         });
 
         const providerMessages = prompt.messages.map((m) =>

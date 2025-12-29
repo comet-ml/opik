@@ -13,6 +13,7 @@ interface PlaygroundOutput {
   value: string | null;
   stale: boolean;
   traceId?: string;
+  selectedRuleIds?: string[] | null;
 }
 
 interface PlaygroundOutputWithDatasetItem {
@@ -459,6 +460,14 @@ export const useTraceIdByPromptDatasetItemId = (
   return (
     useOutputByPromptDatasetItemId(promptId, datasetItemId)?.traceId ?? null
   );
+};
+
+export const useSelectedRuleIdsByPromptDatasetItemId = (
+  promptId: string,
+  datasetItemId?: string,
+): string[] | null | undefined => {
+  return useOutputByPromptDatasetItemId(promptId, datasetItemId)
+    ?.selectedRuleIds;
 };
 
 export const useDatasetVariables = () =>
