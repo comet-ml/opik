@@ -42,7 +42,7 @@ def load_conversation_thread(
         project_name=project_name,
         filter_string=f'thread_id = "{thread.id}"',
         max_results=max_results,
-        truncate=False
+        truncate=False,
     )
     return conversation_factory.create_conversation_from_traces(
         traces=traces,
