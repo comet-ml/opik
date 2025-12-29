@@ -31,9 +31,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useDatasetExpansionMutation from "@/api/datasets/useDatasetExpansionMutation";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useAppStore from "@/store/AppStore";
-import useLastPickedModel from "@/hooks/useLastPickedModel";
-import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import useModelSelection from "@/hooks/useModelSelection";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 
 const DATASET_EXPANSION_PROGRESS_MESSAGES = [
@@ -43,7 +41,6 @@ const DATASET_EXPANSION_PROGRESS_MESSAGES = [
   "Finalizing generated data...",
 ];
 import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
-import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 const DATASET_EXPANSION_LAST_PICKED_MODEL = "opik-dataset-expansion-model";
 const SAMPLE_COUNT_MIN = 1;
@@ -65,56 +62,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
 > = ({ datasetId: initialDatasetId, open, setOpen, onSamplesGenerated }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const [lastPickedModel, setLastPickedModel] = useLastPickedModel({
-    key: DATASET_EXPANSION_LAST_PICKED_MODEL,
+  // Model selection with persistence using the reusable hook
+  const { model, modelSelectProps } = useModelSelection({
+    persistenceKey: DATASET_EXPANSION_LAST_PICKED_MODEL,
   });
-
-  const { data: providerKeysData } = useProviderKeys({
-    workspaceName,
-  });
-
-  const providerKeys = useMemo(() => {
-    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
-  }, [providerKeysData]);
-
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
-
-  const { model, provider } = useMemo(() => {
-    const calculatedModel = calculateDefaultModel(
-      lastPickedModel,
-      providerKeys,
-    ) as PROVIDER_MODEL_TYPE;
-    const calculatedProvider = calculateModelProvider(calculatedModel);
-    return {
-      model: calculatedModel,
-      provider: calculatedProvider,
-    };
-  }, [
-    calculateDefaultModel,
-    calculateModelProvider,
-    lastPickedModel,
-    providerKeys,
-  ]);
-
-  const handleAddProvider = useCallback(
-    (provider: COMPOSED_PROVIDER_TYPE) => {
-      if (!model) {
-        setLastPickedModel(calculateDefaultModel(model, [provider], provider));
-      }
-    },
-    [calculateDefaultModel, model, setLastPickedModel],
-  );
-
-  const handleDeleteProvider = useCallback(
-    (provider: COMPOSED_PROVIDER_TYPE) => {
-      const currentProvider = calculateModelProvider(model);
-      if (currentProvider === provider) {
-        setLastPickedModel("");
-      }
-    },
-    [calculateModelProvider, model, setLastPickedModel],
-  );
 
   const [sampleCount, setSampleCount] = useState<number>(5);
   const [variationInstructions, setVariationInstructions] =
@@ -325,11 +276,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
     complete,
   ]);
 
-  const handleModelChange = useCallback(
-    (model: PROVIDER_MODEL_TYPE) => setLastPickedModel(model),
-    [setLastPickedModel],
-  );
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-2xl">
@@ -539,12 +485,8 @@ const DatasetExpansionDialog: React.FunctionComponent<
           <div className="mt-6 space-y-2">
             <Label htmlFor="model">Model</Label>
             <PromptModelSelect
-              value={model}
               workspaceName={workspaceName}
-              onChange={handleModelChange}
-              provider={provider}
-              onAddProvider={handleAddProvider}
-              onDeleteProvider={handleDeleteProvider}
+              {...modelSelectProps}
             />
           </div>
 
