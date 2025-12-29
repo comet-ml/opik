@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import { getFieldType } from "./useDatasetItemFormHelpers";
+import { useAddedDatasetItemById } from "@/store/DatasetDraftStore";
 
 export enum FIELD_TYPE {
   SIMPLE = "simple",
@@ -30,12 +31,16 @@ export const useDatasetItemData = ({
   datasetItemId,
   columns,
 }: UseDatasetItemDataParams): UseDatasetItemDataReturn => {
-  const { data: datasetItem, isPending } = useDatasetItemById(
+  const draftItem = useAddedDatasetItemById(datasetItemId);
+
+  const { data: apiDatasetItem, isPending } = useDatasetItemById(
     { datasetItemId: datasetItemId || "" },
     {
-      enabled: !!datasetItemId,
+      enabled: !!datasetItemId && !draftItem,
     },
   );
+
+  const datasetItem = draftItem || apiDatasetItem;
 
   const fields = useMemo(() => {
     if (!datasetItemId) {
@@ -78,7 +83,7 @@ export const useDatasetItemData = ({
 
   return {
     fields,
-    isPending: !!datasetItemId && isPending,
+    isPending: draftItem ? false : !!datasetItemId && isPending,
     datasetItem,
   };
 };

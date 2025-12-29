@@ -175,6 +175,9 @@ export const selectIsDraftMode = (state: DatasetDraftState) =>
   state.editedItems.size > 0 ||
   state.deletedIds.size > 0;
 
+export const selectAddedItemById = (id: string) => (state: DatasetDraftState) =>
+  state.addedItems.get(id);
+
 // Custom hooks (following AppStore.ts pattern)
 export const useAddItem = () => useDatasetDraftStore((state) => state.addItem);
 export const useEditItem = () =>
@@ -199,6 +202,8 @@ export const useEditedItems = () =>
 export const useDeletedIds = () =>
   useDatasetDraftStore((state) => state.deletedIds);
 
+export const useAddedDatasetItemById = (id?: string) =>
+  useDatasetDraftStore((state) => state.addedItems.get(id || ""));
 export const useIsDraftMode = () => useDatasetDraftStore(selectIsDraftMode);
 
 export default useDatasetDraftStore;
