@@ -20,7 +20,6 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Description } from "@/components/ui/description";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -457,9 +456,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
         </DialogHeader>
         <DialogAutoScrollBody>
           <div className="mb-4 flex items-center gap-3">
-            <Label htmlFor="model-select" className="shrink-0">
-              Model
-            </Label>
+            <div className="comet-body-accented shrink-0">Model</div>
             <div className="w-64">
               <PromptModelSelect
                 workspaceName={workspaceName}
