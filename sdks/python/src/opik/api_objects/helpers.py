@@ -155,11 +155,13 @@ def parse_feedback_score_messages(
 
     score_messages = [
         parsed_item_class(
+            id=score_dict["id"],
+            name=score_dict["name"],
+            value=score_dict["value"],
             source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-            **{
-                **score_dict,
-                "project_name": score_dict.get("project_name") or project_name,
-            },
+            project_name=score_dict.get("project_name") or project_name,
+            reason=score_dict.get("reason"),
+            category_name=score_dict.get("category_name"),
         )
         for score_dict in valid_scores
     ]
