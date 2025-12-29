@@ -409,7 +409,7 @@ start_frontend() {
 
     # Configure frontend API base URL (defaults to /api in frontend code if not set)
     # The Vite dev server proxy will forward /api/* requests to the backend
-    if [ -z "$VITE_BASE_API_URL" ]; then
+    if [ -z "${VITE_BASE_API_URL:-}" ]; then
         log_debug "Frontend API base URL (VITE_BASE_API_URL) not set, will use default from frontend code: /api"
     else
         log_info "Frontend API base URL (VITE_BASE_API_URL) set to: $VITE_BASE_API_URL"
