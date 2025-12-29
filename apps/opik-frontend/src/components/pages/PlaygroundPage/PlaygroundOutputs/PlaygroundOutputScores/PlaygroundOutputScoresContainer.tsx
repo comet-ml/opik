@@ -28,10 +28,11 @@ const PlaygroundOutputScoresContainer: React.FC<
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
-  // Check if we should show metrics AFTER early return check
+  // Show metrics when: all rules selected (null) OR specific rules selected (non-empty array)
+  // Don't show when: undefined OR empty array (no rules selected)
   const shouldShowMetrics =
-    selectedRuleIds !== undefined &&
-    !(Array.isArray(selectedRuleIds) && selectedRuleIds.length === 0);
+    selectedRuleIds === null ||
+    (Array.isArray(selectedRuleIds) && selectedRuleIds.length > 0);
 
   const hasRulesSelected =
     selectedRuleIds == null || selectedRuleIds.length > 0;
@@ -71,15 +72,10 @@ const PlaygroundOutputScoresContainer: React.FC<
   const expectedScoreNamesRef = useRef<Set<string>>(new Set());
   expectedScoreNamesRef.current = new Set(expectedMetricNames);
 
-  const rulesWereDeleted =
-    Array.isArray(selectedRuleIds) &&
-    selectedRuleIds.length > 0 &&
-    selectedRules.length === 0;
-
   const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
-      enabled: !!traceId && hasRulesSelected && !rulesWereDeleted,
+      enabled: !!traceId && hasRulesSelected,
       refetchInterval: (query) => {
         const elapsed =
           Date.now() - (pollingStartTimeRef.current || Date.now());

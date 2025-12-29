@@ -20,20 +20,11 @@ export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
  * Returns empty array if no name can be extracted.
  */
 const extractMetricNameFromPythonCode = (code: string): string[] => {
-  // Match: def __init__(self, name: str = "metric_name") or name: str = 'metric_name'
-  const patterns = [
-    /def\s+__init__\s*\([^)]*name\s*:\s*str\s*=\s*["']([^"']+)["']/,
-    /def\s+__init__\s*\([^)]*name\s*=\s*["']([^"']+)["']/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = code.match(pattern);
-    if (match && match[1]) {
-      return [match[1]];
-    }
-  }
-
-  return [];
+  // Match: def __init__(self, name: str = "metric_name") or name = 'metric_name'
+  const pattern =
+    /def\s+__init__\s*\([^)]*name(?:\s*:\s*str)?\s*=\s*["']([^"']+)["']/;
+  const match = code.match(pattern);
+  return match?.[1] ? [match[1]] : [];
 };
 
 export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {

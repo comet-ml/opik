@@ -40,15 +40,11 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
     return null;
   }
 
-  const metricColors = metricNames.reduce(
-    (acc, name) => {
+  const metricColors = Object.fromEntries(
+    metricNames.map((name) => {
       const variant = generateTagVariant(name);
-      acc[name] =
-        (variant && TAG_VARIANTS_COLOR_MAP[variant]) ||
-        TAG_VARIANTS_COLOR_MAP.gray;
-      return acc;
-    },
-    {} as Record<string, string>,
+      return [name, TAG_VARIANTS_COLOR_MAP[variant ?? "gray"]];
+    }),
   );
 
   const visibleMetrics = metricNames.slice(0, MAX_VISIBLE_METRICS);
