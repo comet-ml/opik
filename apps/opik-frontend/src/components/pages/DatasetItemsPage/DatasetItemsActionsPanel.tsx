@@ -16,6 +16,7 @@ import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
+import { useBulkDeleteItems } from "@/store/DatasetDraftStore";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -28,6 +29,7 @@ type DatasetItemsActionsPanelProps = {
   filters?: Filters;
   search?: string;
   totalCount?: number;
+  isDraftMode?: boolean;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -43,6 +45,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   filters = [],
   search = "",
   totalCount = 0,
+  isDraftMode = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [expansionDialogOpen, setExpansionDialogOpen] =
@@ -55,15 +58,23 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+  const bulkDeleteItems = useBulkDeleteItems();
 
   const deleteDatasetItemsHandler = useCallback(() => {
-    mutate({
-      datasetId,
-      ids: selectedDatasetItems.map((i) => i.id),
-      isAllItemsSelected,
-      filters,
-      search,
-    });
+    if (!isAllItemsSelected) {
+      // Use draft store for specific IDs
+      const ids = selectedDatasetItems.map((i) => i.id);
+      bulkDeleteItems(ids);
+    } else {
+      // Use API for filter-based deletion
+      mutate({
+        datasetId,
+        ids: selectedDatasetItems.map((i) => i.id),
+        isAllItemsSelected,
+        filters,
+        search,
+      });
+    }
   }, [
     datasetId,
     selectedDatasetItems,
@@ -71,6 +82,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     isAllItemsSelected,
     filters,
     search,
+    bulkDeleteItems,
   ]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
@@ -168,7 +180,12 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       </TooltipWrapper>
 
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
+        disabled={
+          disabled ||
+          columnsToExport.length === 0 ||
+          !isExportEnabled ||
+          isDraftMode
+        }
         getData={mapRowData}
         generateFileName={generateFileName}
         tooltipContent={
