@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
@@ -133,17 +134,30 @@ public class ExperimentService {
     private Mono<List<Experiment>> enrichExperiments(List<Experiment> experiments) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            var ids = experiments.stream().map(Experiment::datasetId).collect(Collectors.toUnmodifiableSet());
+            var datasetIds = experiments.stream().map(Experiment::datasetId).collect(Collectors.toUnmodifiableSet());
+            var versionIds = experiments.stream()
+                    .map(Experiment::datasetVersionId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toUnmodifiableSet());
+
             return Mono.zip(
                     promptService.getVersionsInfoByVersionsIds(getPromptVersionIds(experiments)),
-                    Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
+                    Mono.fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
                             .subscribeOn(Schedulers.boundedElastic())
-                            .map(this::getDatasetMap))
+                            .map(this::getDatasetMap),
+                    Mono.fromCallable(() -> datasetVersionService.findByIds(versionIds, workspaceId))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .map(this::getDatasetVersionMap))
                     .map(tuple -> experiments.stream()
                             .map(experiment -> experiment.toBuilder()
                                     .datasetName(Optional
                                             .ofNullable(tuple.getT2().get(experiment.datasetId()))
                                             .map(Dataset::name)
+                                            .orElse(null))
+                                    .datasetVersionName(Optional
+                                            .ofNullable(experiment.datasetVersionId())
+                                            .map(tuple.getT3()::get)
+                                            .map(DatasetVersion::versionName)
                                             .orElse(null))
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
@@ -154,6 +168,10 @@ public class ExperimentService {
 
     private Map<UUID, Dataset> getDatasetMap(List<Dataset> datasets) {
         return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
+    }
+
+    private Map<UUID, DatasetVersion> getDatasetVersionMap(List<DatasetVersion> versions) {
+        return versions.stream().collect(Collectors.toMap(DatasetVersion::id, Function.identity()));
     }
 
     private List<PromptVersionLink> buildPromptVersions(Map<UUID, PromptVersionInfo> promptVersionsInfo,
