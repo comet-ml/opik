@@ -67,6 +67,7 @@
     "@uiw/codemirror-extensions-hyper-link": "^4.25.1",
     "@uiw/codemirror-theme-github": "^4.23.3",
     "@uiw/react-codemirror": "^4.23.10",
+    "ansi-to-html": "^0.7.2",
     "async": "^3.2.6",
     "axios": "^1.8.2",
     "class-variance-authority": "^0.7.0",
