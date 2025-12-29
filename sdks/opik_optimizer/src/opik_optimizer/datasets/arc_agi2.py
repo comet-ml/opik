@@ -164,6 +164,8 @@ def _normalize_record(
         if values is not None:
             record_out[field] = values
     if include_images:
+        # Preserve raw image fields (encoded to data URIs) and build canonical
+        # shortcuts `train_images`, `train_output_images`, `test_images`.
         image_fields = (
             "train_input_image_color",
             "train_input_image_annotated",
@@ -180,6 +182,45 @@ def _normalize_record(
                 record_out[field] = _encode_image_list(
                     values, image_format=image_format
                 )
+
+        def _first_list(names: list[str]) -> list[Any] | None:
+            for name in names:
+                vals = record_out.get(name) or record.get(name)
+                if isinstance(vals, list) and vals:
+                    return _encode_image_list(vals, image_format=image_format)
+            return None
+
+        train_images = _first_list(
+            [
+                "train_input_image_color",
+                "train_input_image_annotated",
+                "train_images",
+                "train_input_images",
+            ]
+        )
+        if train_images:
+            record_out["train_images"] = train_images
+
+        train_output_images = _first_list(
+            [
+                "train_output_image_color",
+                "train_output_image_annotated",
+                "train_output_images",
+            ]
+        )
+        if train_output_images:
+            record_out["train_output_images"] = train_output_images
+
+        test_images = _first_list(
+            [
+                "test_input_image_color",
+                "test_input_image_annotated",
+                "test_images",
+                "test_input_images",
+            ]
+        )
+        if test_images:
+            record_out["test_images"] = test_images
     return record_out
 
 

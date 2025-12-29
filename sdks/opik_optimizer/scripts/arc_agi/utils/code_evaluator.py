@@ -32,6 +32,7 @@ class EvaluationConfig:
     foreground_weight_test: float = 0.3
     sandbox_timeout_s: float = 5.0
     debug_log: bool = False
+    show_execution_grids: bool = False  # print every grid execution (noisy)
 
     def log(self, message: str) -> None:
         """Print a debug message when ``debug_log`` is enabled."""
@@ -93,11 +94,13 @@ def _extract_json_payload(output: str) -> dict[str, Any] | None:
 
 
 def _run_transform(
-    code: str, grid: list[list[int]], config: EvaluationConfig
+    code: str, grid: list[list[int]], config: EvaluationConfig, label: str | None = None
 ) -> tuple[bool, Any, str]:
     """Execute ``transform`` and return (ok, np.ndarray | None, error_message)."""
-    CONSOLE.print("Executing candidate transform on grid (colorized):")
-    CONSOLE.print(render_grid(grid))
+    if config.show_execution_grids:
+        prefix = f"{label}: " if label else ""
+        CONSOLE.print(f"{prefix}Executing candidate transform on grid (colorized):")
+        CONSOLE.print(render_grid(grid))
 
     if grid and any(len(row) != len(grid[0]) for row in grid):
         return False, None, "Input grid is ragged (rows have different lengths)."
@@ -186,6 +189,8 @@ def _evaluate_code_candidate(
     train_out: list[list[list[int]]],
     test_in: list[list[list[int]]],
     config: EvaluationConfig,
+    cand_idx: int,
+    total_cands: int,
 ) -> dict[str, Any]:
     """Run a candidate transform across train/test grids and collect stats."""
     snippet = code.splitlines()
@@ -199,7 +204,9 @@ def _evaluate_code_candidate(
     soft_scores: list[float] = []
 
     for idx, (iin, oout) in enumerate(zip(train_in, train_out, strict=True)):
-        ok, pred, err = _run_transform(code, iin, config)
+        ok, pred, err = _run_transform(
+            code, iin, config, label=f"cand {cand_idx}/{total_cands} train {idx}"
+        )
         if not ok or pred is None:
             train_feedback.append(f"Train {idx}: fail - {err}")
             exact_scores.append(0.0)
@@ -234,7 +241,9 @@ def _evaluate_code_candidate(
     test_outputs: list[list[list[int]]] = []
     test_errors: list[str] = []
     for idx, iin in enumerate(test_in):
-        ok, pred, err = _run_transform(code, iin, config)
+        ok, pred, err = _run_transform(
+            code, iin, config, label=f"cand {cand_idx}/{total_cands} test {idx}"
+        )
         if not ok or pred is None:
             test_errors.append(f"Test {idx}: {err}")
             test_outputs.append([])
@@ -247,6 +256,7 @@ def _evaluate_code_candidate(
         "train_feedback": " | ".join(train_feedback[:5]),
         "test_outputs": test_outputs,
         "test_errors": test_errors,
+        "code": code,
     }
 
 
@@ -335,8 +345,16 @@ def evaluate_arc_response(
         return result
 
     candidates = [
-        _evaluate_code_candidate(code, train_in, train_out, test_inputs, config)
-        for code in valid_blocks
+        _evaluate_code_candidate(
+            code,
+            train_in,
+            train_out,
+            test_inputs,
+            config,
+            cand_idx=idx + 1,
+            total_cands=len(valid_blocks),
+        )
+        for idx, code in enumerate(valid_blocks)
     ]
     candidates_sorted = sorted(
         candidates, key=lambda c: (c["train_exact"], c["train_soft"]), reverse=True
@@ -380,7 +398,6 @@ def evaluate_arc_response(
     mismatch_counts: list[int] = []
     mismatch_coords: list[str] = []
     swap_counts: dict[tuple[int, int], int] = {}
-    best_debug_pred: list[list[int]] | None = None
 
     for test_idx, gold in enumerate(gold_outputs):
         gold_arr = np.array(gold, dtype=int)
@@ -435,9 +452,6 @@ def evaluate_arc_response(
         else:
             mismatch_counts.append(-1)
 
-        if test_idx == 0 and best_pred_arr is not None:
-            best_debug_pred = best_pred_arr.astype(int).tolist()
-
     best_score = sum(exact_scores) / len(exact_scores) if exact_scores else 0.0
     best_likeness = (
         sum(likeness_scores) / len(likeness_scores) if likeness_scores else 0.0
@@ -478,13 +492,19 @@ def evaluate_arc_response(
     )
 
     test_inputs = dataset_item.get("test_inputs")
-    if config.debug_log and gold_outputs and best_debug_pred and test_inputs:
+    if config.debug_log and gold_outputs and test_inputs:
         try:
-            print_grid_triplet(
-                test_inputs[0],
-                gold_outputs[0],
-                best_debug_pred,
-            )
+            for cand_idx, cand in enumerate(
+                candidates_sorted[: min(config.pass_at_k, len(candidates_sorted))]
+            ):
+                preds = cand.get("test_outputs") or []
+                if preds and preds[0]:
+                    print_grid_triplet(
+                        test_inputs[0],
+                        gold_outputs[0],
+                        preds[0],
+                        label=f"Candidate {cand_idx + 1} preview on test[0] (input | expected | predicted):",
+                    )
         except Exception:
             pass
 
@@ -512,6 +532,7 @@ def evaluate_arc_response(
             "swaps": best_swap_summary,
             "train_exact": best.get("train_exact", 0.0),
             "train_soft": best.get("train_soft", 0.0),
+            "best_code": best.get("code"),
         },
     }
     cache[llm_output] = result

@@ -76,6 +76,8 @@ def print_grid_triplet(
     input_grid: Sequence[Sequence[int]],
     expected_grid: Sequence[Sequence[int]],
     predicted_grid: Sequence[Sequence[int]],
+    *,
+    label: str | None = None,
 ) -> None:
     """Show input/expected/predicted grids side by side."""
     panels = [
@@ -83,9 +85,11 @@ def print_grid_triplet(
         grid_panel(expected_grid, "expected"),
         grid_panel(predicted_grid, "predicted"),
     ]
-    CONSOLE.print(
-        "\nBest candidate vs expected for test[0] (input | expected | predicted):"
+    header = (
+        label
+        or "Best candidate vs expected for test[0] (input | expected | predicted):"
     )
+    CONSOLE.print(f"\n{header}")
     CONSOLE.print(Columns(panels, expand=True, padding=2))
 
 

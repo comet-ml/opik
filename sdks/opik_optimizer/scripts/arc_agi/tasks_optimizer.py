@@ -27,6 +27,7 @@ from opik_optimizer.datasets import arc_agi2
 
 try:  # pragma: no cover - satisfied in package context
     from .utils.code_evaluator import EvaluationConfig, evaluate_arc_response
+    from .utils.image_agent import ArcAgiImageAgent
     from .utils.logging_utils import CONSOLE, debug_print
     from .utils.metrics import (
         DEFAULT_METRIC_SEQUENCE,
@@ -51,6 +52,7 @@ except ImportError:  # pragma: no cover - when executed as a script
         EvaluationConfig,
         evaluate_arc_response,
     )
+    from scripts.arc_agi.utils.image_agent import ArcAgiImageAgent  # type: ignore
     from scripts.arc_agi.utils.logging_utils import CONSOLE, debug_print  # type: ignore
     from scripts.arc_agi.utils.metrics import (  # type: ignore
         DEFAULT_METRIC_SEQUENCE,
@@ -81,10 +83,22 @@ HRPO_THREADS = 8
 SEED = 42
 DEBUG_LOG = True
 N_SAMPLES_PER_TRIAL = 6
-EVAL_COMPLETIONS_PER_CALL = 4
+EVAL_COMPLETIONS_PER_CALL = 6
 SANDBOX_TIMEOUT_S = 5.0
 RAISE_SCORING_ERRORS = False
 COMPOSITE_METRIC_NAME = "arc_agi2_multi"
+INCLUDE_IMAGES = os.getenv("ARC_AGI2_INCLUDE_IMAGES", "0") not in {
+    "",
+    "0",
+    "false",
+    "False",
+}
+INCLUDE_IMAGES_HRPO_EVAL = os.getenv("ARC_AGI2_INCLUDE_IMAGES_EVAL", "0") not in {
+    "",
+    "0",
+    "false",
+    "False",
+}
 METRIC_WEIGHTS = dict(
     zip(
         DEFAULT_METRIC_SEQUENCE,
@@ -220,10 +234,24 @@ def main() -> None:
         n_threads=HRPO_THREADS,
     )
 
+    # Baseline stays text-only; HRPO evaluation can optionally use images
+    # (off by default to avoid extra cost).
+    baseline_agent = None
+    hrpo_agent = (
+        ArcAgiImageAgent(
+            project_name="ARC-AGI-2 HRPO",
+            include_images=INCLUDE_IMAGES and INCLUDE_IMAGES_HRPO_EVAL,
+            debug_log=DEBUG_LOG,
+        )
+        if (INCLUDE_IMAGES and INCLUDE_IMAGES_HRPO_EVAL)
+        else None
+    )
+
     baseline_eval = optimizer.evaluate_prompt(
         prompt=prompt,
         dataset=dataset,
         metric=composite_metric,
+        agent=baseline_agent,
         n_samples=N_SAMPLES_PER_TRIAL,
         return_evaluation_result=True,
         verbose=1,
@@ -235,10 +263,15 @@ def main() -> None:
             return 0.0
         per_item_scores: list[float] = []
         for test in baseline_eval.test_results:
+            score_results = getattr(test, "score_results", []) or []
             score_map = {
                 getattr(sr, "name", ""): getattr(sr, "value", 0.0)
-                for sr in getattr(test, "score_results", [])
+                for sr in score_results
             }
+            # Prefer the composite metric directly if it is present.
+            if COMPOSITE_METRIC_NAME in score_map:
+                per_item_scores.append(score_map[COMPOSITE_METRIC_NAME])
+                continue
             if not score_map:
                 continue
             composite = sum(
@@ -269,6 +302,7 @@ def main() -> None:
         n_samples=N_SAMPLES_PER_TRIAL,
         max_trials=HRPO_MAX_TRIALS,
         project_name="ARC-AGI-2 HRPO",
+        agent=hrpo_agent,
     )
 
     trials_used = len(result.history) if getattr(result, "history", None) else "unknown"

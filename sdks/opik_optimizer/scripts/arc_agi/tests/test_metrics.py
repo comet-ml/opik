@@ -97,6 +97,6 @@ def test_foreground_match_score_ignores_background() -> None:
         ]
     )
     # Only one foreground cell wrong out of three.
-    assert pytest.approx(foreground_match_score(pred, truth), rel=1e-9) == pytest.approx(
-        2 / 3
-    )
+    assert pytest.approx(
+        foreground_match_score(pred, truth), rel=1e-9
+    ) == pytest.approx(2 / 3)
