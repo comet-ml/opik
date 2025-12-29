@@ -7,9 +7,9 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
@@ -76,6 +76,21 @@ public class DatasetResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
             return actualResponse.readEntity(Dataset.class);
+        }
+    }
+
+    public DatasetPage getDatasets(String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", 1)
+                .queryParam("size", 100)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetPage.class);
         }
     }
 
@@ -402,21 +417,6 @@ public class DatasetResourceClient {
         }
     }
 
-    public DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate versionCreate, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(datasetId.toString())
-                .path("versions")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(versionCreate))) {
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(DatasetVersion.class);
-        }
-    }
-
     public DatasetVersion.DatasetVersionPage listVersions(UUID datasetId, String apiKey, String workspaceName) {
         return listVersions(datasetId, apiKey, workspaceName, null, null);
     }
@@ -467,17 +467,6 @@ public class DatasetResourceClient {
 
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
-    }
-
-    public Response callCommitVersion(UUID datasetId, DatasetVersionCreate versionCreate, String apiKey,
-            String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(datasetId.toString())
-                .path("versions")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(versionCreate));
     }
 
     public Response callCreateVersionTag(UUID datasetId, String versionHash, DatasetVersionTag tag, String apiKey,
@@ -599,5 +588,26 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(deleteRequest));
+    }
+
+    public DatasetVersion applyDatasetItemChanges(UUID datasetId, DatasetItemChanges changes, boolean override,
+            String apiKey, String workspaceName) {
+        try (var response = callApplyDatasetItemChanges(datasetId, changes, override, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callApplyDatasetItemChanges(UUID datasetId, DatasetItemChanges changes, boolean override,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("changes")
+                .queryParam("override", override)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(changes));
     }
 }
