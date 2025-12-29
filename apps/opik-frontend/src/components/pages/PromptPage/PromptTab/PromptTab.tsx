@@ -22,10 +22,10 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
+import TextPromptView from "./TextPromptView";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
 
@@ -187,50 +187,12 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           {isChatPrompt ? (
             <ChatPromptView template={activeVersion?.template || ""} />
           ) : (
-            <>
-              <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-                {displayText}
-              </code>
-              {extractedImages.length > 0 && (
-                <>
-                  <p className="comet-body-s-accented mt-4 text-foreground">
-                    Images
-                  </p>
-                  <MediaTagsList
-                    type="image"
-                    items={extractedImages}
-                    editable={false}
-                    preview={true}
-                  />
-                </>
-              )}
-              {extractedVideos.length > 0 && (
-                <>
-                  <p className="comet-body-s-accented mt-4 text-foreground">
-                    Videos
-                  </p>
-                  <MediaTagsList
-                    type="video"
-                    items={extractedVideos}
-                    editable={false}
-                    preview={true}
-                  />
-                </>
-              )}
-              {extractedAudios.length > 0 && (
-                <>
-                  <p className="comet-body-s-accented mt-4 text-foreground">
-                    Audios
-                  </p>
-                  <MediaTagsList
-                    type="audio"
-                    items={extractedAudios}
-                    editable={false}
-                    preview={true}
-                  />
-                </>
-              )}
-            </>
+            <TextPromptView
+              template={displayText}
+              extractedImages={extractedImages}
+              extractedVideos={extractedVideos}
+              extractedAudios={extractedAudios}
+            />
           )}
           {activeVersion?.metadata && (
             <>

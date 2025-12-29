@@ -41,6 +41,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
+import TextPromptEditor from "@/components/pages-shared/TextPromptEditor/TextPromptEditor";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -224,22 +225,11 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
             </div>
           )}
           {!isEdit && !isChatPrompt && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label htmlFor="template">Prompt</Label>
-              <Textarea
-                id="template"
-                className="comet-code"
-                placeholder="Prompt"
-                value={localText}
-                onChange={(event) => handleContentChange(event.target.value)}
-              />
-              <Description>
-                {
-                  EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_prompt_be]
-                    .description
-                }
-              </Description>
-            </div>
+            <TextPromptEditor
+              value={localText}
+              onChange={handleContentChange}
+              placeholder="Prompt"
+            />
           )}
           {!isEdit && isChatPrompt && (
             <div className="flex flex-col gap-2 pb-4">
