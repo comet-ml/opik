@@ -123,6 +123,7 @@ export const mapColumnDataFields = <TColumnData, TData>(
       ...(columnData.customMeta && { custom: columnData.customMeta }),
     },
     ...(columnData.size && { size: columnData.size }),
+    ...(columnData.minSize && { minSize: columnData.minSize }),
     cell: (columnData.cell ?? TextCell) as never,
     ...(columnData.aggregatedCell && {
       aggregatedCell: columnData.aggregatedCell as never,
