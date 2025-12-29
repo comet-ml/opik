@@ -486,7 +486,7 @@ def test_log_spans_feedback_scores__project_name_fallback_logic(opik_client: opi
 
 
 @pytest.mark.xfail(
-    reason="Backend bug: If incorrect project_name is specified, the project gets created and the score is not attached to the correct thread."
+    reason="Backend bug (OPIK-3630): If incorrect project_name is specified, the project gets created and the score is not attached to the correct thread."
 )
 def test_log_threads_feedback_scores__project_name_fallback_logic(
     opik_client: opik.Opik,
@@ -607,7 +607,7 @@ def test_log_threads_feedback_scores__project_name_fallback_logic(
         ],
     )
 
-    verifiers.verify_thread(  # TODO: This fails
+    verifiers.verify_thread(  # TODO: This fails (OPIK-3630)
         opik_client=opik_client,
         thread_id=thread_id_default,
         project_name=project_default,
