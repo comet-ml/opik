@@ -77,6 +77,8 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         if messages is not None:
             all_messages.extend(messages)
 
+        all_messages = self._prepare_messages(all_messages, dataset_item)
+
         # Push trace metadata for better visibility (tools/LLM logs in Opik)
         try:
             opik_context.update_current_trace(metadata=self.trace_metadata)
@@ -156,3 +158,9 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             else:
                 result = ""
         return result
+
+    def _prepare_messages(
+        self, messages: list[dict[str, Any]], dataset_item: dict[str, Any] | None
+    ) -> list[dict[str, Any]]:
+        """Hook for subclasses to adjust messages before the LLM call."""
+        return messages
