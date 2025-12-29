@@ -204,6 +204,8 @@ export const useDeletedIds = () =>
 
 export const useAddedDatasetItemById = (id?: string) =>
   useDatasetDraftStore((state) => state.addedItems.get(id || ""));
+export const useEditedDatasetItemById = (id?: string) =>
+  useDatasetDraftStore((state) => state.editedItems.get(id || ""));
 export const useIsDraftMode = () => useDatasetDraftStore(selectIsDraftMode);
 
 export default useDatasetDraftStore;

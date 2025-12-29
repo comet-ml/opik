@@ -1,8 +1,12 @@
 import { useMemo } from "react";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
+import {
+  useIsDraftMode,
+  useAddedDatasetItemById,
+  useEditedDatasetItemById,
+} from "@/store/DatasetDraftStore";
 import { getFieldType } from "./useDatasetItemFormHelpers";
-import { useAddedDatasetItemById } from "@/store/DatasetDraftStore";
 
 export enum FIELD_TYPE {
   SIMPLE = "simple",
@@ -11,9 +15,9 @@ export enum FIELD_TYPE {
 
 export type DatasetField = {
   key: string;
-  value: unknown; // Parsed value (not the original string if it was JSON-encoded)
+  value: unknown;
   type: FIELD_TYPE;
-  isJsonString?: boolean; // True if value came from a JSON-encoded string
+  isJsonString?: boolean;
 };
 
 interface UseDatasetItemDataParams {
@@ -31,16 +35,34 @@ export const useDatasetItemData = ({
   datasetItemId,
   columns,
 }: UseDatasetItemDataParams): UseDatasetItemDataReturn => {
+  const isDraftMode = useIsDraftMode();
   const draftItem = useAddedDatasetItemById(datasetItemId);
+  const editedFields = useEditedDatasetItemById(datasetItemId);
 
-  const { data: apiDatasetItem, isPending } = useDatasetItemById(
+  const { data: apiDatasetItem, isPending: apiIsPending } = useDatasetItemById(
     { datasetItemId: datasetItemId || "" },
     {
       enabled: !!datasetItemId && !draftItem,
     },
   );
 
-  const datasetItem = draftItem || apiDatasetItem;
+  const datasetItem = useMemo(() => {
+    if (draftItem) return draftItem;
+
+    const apiItem = apiDatasetItem;
+    if (!apiItem) return undefined;
+
+    if (!isDraftMode) return apiItem;
+
+    if (!editedFields) return apiItem;
+
+    return {
+      ...apiItem,
+      ...editedFields,
+    };
+  }, [draftItem, apiDatasetItem, isDraftMode, editedFields]);
+
+  const isPending = draftItem ? false : apiIsPending;
 
   const fields = useMemo(() => {
     if (!datasetItemId) {
@@ -83,7 +105,7 @@ export const useDatasetItemData = ({
 
   return {
     fields,
-    isPending: draftItem ? false : !!datasetItemId && isPending,
+    isPending,
     datasetItem,
   };
 };
