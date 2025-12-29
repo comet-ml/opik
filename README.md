@@ -52,12 +52,13 @@ Opik provides tracing, evals, and automatic improvements to help you build and m
 Opik (built by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik)) is an open-source platform designed to streamline the entire lifecycle of GenAI applications. It empowers developers to evaluate, test, monitor, and optimize their LLM applications and agents. Opik covers three core components: **Observability**, **Evaluation**, and **Optimization**.
 
 ### 🔍 Observability
-See exactly what's happening inside your AI application. Track every step of complex agents, tool calls, and multi-turn conversations to quickly root-cause issues.
+See exactly what's happening inside your AI application. Trace every step of complex agents, tool calls, and multi-turn conversations to quickly root-cause issues. Observability is easy to set up for any application with Opik's [Python and TypeScript SDKs](https://www.comet.com/docs/opik/reference/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdks_link&utm_campaign=opik), [OpenTelemetry support](https://www.comet.com/docs/opik/integrations/opentelemetry/?from=llm&utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik), and growing list of [integrations](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik).
 
 - **Debug traces with comprehensive visibility** into every prompt, tool call, agent hand-off, and response ([Quickstart](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik)).
-- **Drill down from project-level error surfacing**:to specific failing traces and spans for detailed analysis 
-- [**Track costs and latency**](https://www.comet.com/docs/opik/tracing/cost_tracking) at the trace and span level to identify performance bottlenecks and optimize spending"
-- **Manage prompts** with composable templates and versioning as you iterate and compare results
+- [**Track costs and latency**](https://www.comet.com/docs/opik/tracing/cost_tracking/?from=llm&utm_source=opik&utm_medium=github&utm_content=cost_tracking_link&utm_campaign=opik) at the project, trace, and span level to identify performance bottlenecks and optimize spending
+- **Error surfacing:** Drill down from project-level metrics to specific failing traces and spans for detailed analysis
+- **Integrated Playground:** Prototype and iterate on prompts with help from Opik's automatic [prompt generator and improver](https://www.comet.com/docs/opik/prompt_engineering/improve/?from=llm&utm_source=opik&utm_medium=github&utm_content=prompt_improver_link&utm_campaign=opik) - all with full observability so you never lose track of your best prompt
+- **Manage prompts** in the [Prompt Library](https://www.comet.com/docs/opik/prompt_engineering/prompt_management/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik) with composable templates and versioning as you iterate and compare results
 - **Production monitoring and guardrails:** Use guardrails, alerts, and dashboards to catch issues before users complain
 
 ### ✅ Evaluation 
@@ -68,6 +69,7 @@ Test your AI app systematically or run quick spot checks as needed. Evaluate ind
 - **Configurable online evaluation** to automatically score live interactions or existing traces on demand
 - **No-code evaluation** available through the **playground** for rapid no-code iteration
 - **Human annotation workflows** to incorporate expert judgment and build ground-truth datasets [➡️](https://www.comet.com/docs/opik/evaluation/annotation_queues)
+- 
 ### 🏆 Agent Optimization
 Automatically improve your prompts, tools, and LLM parameters using state-of-the-art optimization algorithms, all in one SDK.
 - **Prompt optimization** to automate prompt engineering based on the metrics of your choice
@@ -81,7 +83,7 @@ Automatically improve your prompts, tools, and LLM parameters using state-of-the
 
 - **Advanced optimization capabilities**: Opik provides cutting-edge prompt and tool optimization to systematically improve your application
 - **Strong multimodal support**: Platform-wide support for multimodal use cases, with full UI support for text, images, and video
-- **Flexible and framework-agnostic**: Works with OpenAI, Anthropic, Bedrock, LangChain, LangGraph, Vercel AI SDK, and more ([see all Integrations](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
+- **Flexible and framework-agnostic**: Works with OpenAI, Anthropic, Bedrock, LangChain, LangGraph, Vercel AI SDK, and more ([see all integrations](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
 - **Fully open source**: Complete end-to-end functionality in the open-source version
 
 Key capabilities include:
