@@ -580,10 +580,16 @@ class OpikTracer(BaseTracer):
             span_data = self._span_data_map[run.id]
             run_dict: Dict[str, Any] = run.dict()
 
-            usage_info = provider_usage_extractors.try_extract_provider_usage_data(
-                run_dict
-            )
-            if usage_info is None:
+            # Only extract usage data for LLM spans, not for tool/chain/other spans
+            # Tool calls don't consume tokens and should not have usage data
+            run_type = run_dict.get("run_type")
+            if run_type == "llm":
+                usage_info = provider_usage_extractors.try_extract_provider_usage_data(
+                    run_dict
+                )
+                if usage_info is None:
+                    usage_info = llm_usage.LLMUsageInfo()
+            else:
                 usage_info = llm_usage.LLMUsageInfo()
 
             # workaround for `.astream()` method usage
