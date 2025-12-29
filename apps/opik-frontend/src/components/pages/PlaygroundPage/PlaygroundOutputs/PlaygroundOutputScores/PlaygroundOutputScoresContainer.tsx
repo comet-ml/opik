@@ -74,7 +74,6 @@ const PlaygroundOutputScoresContainer: React.FC<
   const rulesWereDeleted =
     Array.isArray(selectedRuleIds) &&
     selectedRuleIds.length > 0 &&
-    rules.length > 0 &&
     selectedRules.length === 0;
 
   const { data: trace } = useTraceById(
@@ -123,6 +122,14 @@ const PlaygroundOutputScoresContainer: React.FC<
     return scores;
   }, [trace?.feedback_scores]);
 
+  // Combine expected metric names (from rule analysis) with actual score names (from trace)
+  // This ensures Python evaluator scores are shown even if they couldn't be predicted
+  const allMetricNames = useMemo(() => {
+    const actualScoreNames = Object.keys(metricScores);
+    const combined = new Set([...expectedMetricNames, ...actualScoreNames]);
+    return [...combined].sort((a, b) => a.localeCompare(b));
+  }, [expectedMetricNames, metricScores]);
+
   // Don't show metrics if there's no output yet or no rules selected
   if (!shouldShowMetrics) {
     return null;
@@ -130,7 +137,7 @@ const PlaygroundOutputScoresContainer: React.FC<
 
   return (
     <PlaygroundOutputScores
-      metricNames={expectedMetricNames}
+      metricNames={allMetricNames}
       metricScores={metricScores}
       stale={stale}
       className={className}

@@ -2,6 +2,7 @@ import {
   EvaluatorsRule,
   EVALUATORS_RULE_TYPE,
   LLMJudgeDetails,
+  PythonCodeDetails,
 } from "@/types/automations";
 import { LLMJudgeSchema } from "@/types/llm";
 
@@ -11,6 +12,28 @@ export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
     rule.type === EVALUATORS_RULE_TYPE.thread_python_code ||
     rule.type === EVALUATORS_RULE_TYPE.span_python_code
   );
+};
+
+/**
+ * Attempts to extract metric name from Python code by parsing the __init__ default parameter.
+ * Looks for patterns like: def __init__(self, name: str = "my_custom_metric")
+ * Returns empty array if no name can be extracted.
+ */
+const extractMetricNameFromPythonCode = (code: string): string[] => {
+  // Match: def __init__(self, name: str = "metric_name") or name: str = 'metric_name'
+  const patterns = [
+    /def\s+__init__\s*\([^)]*name\s*:\s*str\s*=\s*["']([^"']+)["']/,
+    /def\s+__init__\s*\([^)]*name\s*=\s*["']([^"']+)["']/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = code.match(pattern);
+    if (match && match[1]) {
+      return [match[1]];
+    }
+  }
+
+  return [];
 };
 
 export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {
@@ -27,11 +50,11 @@ export const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
     return llmRule.code.schema?.map((s: LLMJudgeSchema) => s.name) || [];
   }
   if (isPythonCodeRule(rule)) {
-    // Python code metric contains the full code snippet, not the score name.
-    // The actual score name is determined at runtime from ScoreResult.name,
-    // so we cannot extract it statically. Return empty array to avoid
-    // incorrect polling for a score with the code string as its name.
-    return [];
+    const pythonRule = rule as EvaluatorsRule & PythonCodeDetails;
+    // Attempt to extract metric name from Python code by parsing __init__ default parameter
+    // This works for the common pattern: def __init__(self, name: str = "metric_name")
+    // Falls back to empty array if name cannot be extracted (dynamic names, etc.)
+    return extractMetricNameFromPythonCode(pythonRule.code.metric || "");
   }
   return [];
 };
