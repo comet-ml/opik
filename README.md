@@ -72,13 +72,14 @@ Test your AI app systematically, monitor production quality, or run quick spot c
 
 
 ### 🏆 Agent Optimization
-Automatically improve your prompts, tools, and LLM parameters using state-of-the-art optimization algorithms, all in one SDK.
-- **Prompt optimization** to automate prompt engineering based on the metrics of your choice
-- **Optimize MCP tools, tool schemas, and multi-step workflows:** Use Opik’s specialized optimizer to improve tool-enabled prompts with better tool selection logic, parameter formatting, error handling, and more.
-- **Optimize LLM parameters** like temperature, top_p, and frequency_penalty
-- **Multiple optimization algorithms in one SDK:** external research projects (GEPA) plus novel techniques developed by the Opik team
-- **Built for agents and multimodal use cases**: optimize complex systems with tool calls, image outputs, and multi-agent workflows
-- **Use any metrics you care about**: cost, latency, built-in eval metrics, custom scorers, or multiple metrics at once
+Automatically improve your prompts, tools, and LLM parameters using state-of-the-art optimization algorithms, all in one SDK. The [Opik Agent Optimizer](https://www.comet.com/docs/opik/agent_optimization/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=agent_optimizer_link&utm_campaign=opik) uses a dataset of test cases and your chosen metrics to itarate on your application for you. It tests your app, makes changes based on the results, and repeats, delivering the best performing version once it completes.
+
+- **Prompt Optimization:** Automate prompt engineering to improve general prompts, few-shot examples, and complex instruction prompts ([Quickstart](https://www.comet.com/docs/opik/agent_optimization/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=agent_optimizer_quicktart_link&utm_campaign=opik)).
+- **Tool Optimization:** [Improve MCP tools, tool schemas, and tool-enabled prompts](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization/?from=llm&utm_source=opik&utm_medium=github&utm_content=tool_optimization_link&utm_campaign=opik) with better tool selection logic, parameter formatting, error handling, and more.
+- **LLM Parameter Optimization:** [Optimizer parameters](https://www.comet.com/docs/opik/agent_optimization/algorithms/parameter_optimizer/?from=llm&utm_source=opik&utm_medium=github&utm_content=parameter_optimization_link&utm_campaign=opik) like temperature, top_p, and frequency_penalty in your LLM call
+- **Optimization Algorithms:** Opik brings together novel optimization approaches developed in-house ([HRPO](https://www.comet.com/docs/opik/agent_optimization/algorithms/hierarchical_adaptive_optimizer/?from=llm&utm_source=opik&utm_medium=github&utm_content=optimization_hrpo_link&utm_campaign=opik)) and external research projects ([GEPA](https://www.comet.com/docs/opik/agent_optimization/algorithms/gepa_optimizer/?from=llm&utm_source=opik&utm_medium=github&utm_content=optimization_gepa_link&utm_campaign=opik)) under one clean SDK.
+- **Multimodal Support:** Native support for [multimodal(text+image) optimization](https://www.comet.com/docs/opik/agent_optimization/optimization/optimize_multimodal/?from=llm&utm_source=opik&utm_medium=github&utm_content=multimodal_optimization_link&utm_campaign=opik).
+- **Optimization Metrics:** Optimize based on cost, latency, built-in eval metrics, custom scorers, or multiple metrics at once with [multi-metric objectives](https://www.comet.com/docs/opik/agent_optimization/optimization/define_metrics/?from=llm&utm_source=opik&utm_medium=github&utm_content=multi-objective_optimization_link&utm_campaign=opik).
 
 ## How Opik Stands Out
 
