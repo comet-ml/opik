@@ -36,8 +36,8 @@ import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/Datase
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SelectAllBanner from "@/components/shared/SelectAllBanner/SelectAllBanner";
-import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
-import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
+import AddEditDatasetItemDialog from "../AddEditDatasetItemDialog";
+import AddDatasetItemSidebar from "./AddDatasetItemSidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Check, Loader2 } from "lucide-react";
