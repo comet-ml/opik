@@ -59,7 +59,7 @@ const useModelSelection = ({
     useLLMProviderModelsData();
 
   const { model, provider, configs } = useMemo(() => {
-    if (lastPickedModel && providerKeys.length > 0) {
+    if (lastPickedModel) {
       const lastPickedProvider = calculateModelProvider(lastPickedModel);
       if (lastPickedProvider && providerKeys.includes(lastPickedProvider)) {
         return {
