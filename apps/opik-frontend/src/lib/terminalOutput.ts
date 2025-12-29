@@ -150,4 +150,3 @@ export const convertTerminalOutputToHtml = (text: string): string => {
   // 4. Restore hyperlinks from placeholders
   return restoreOsc8Links(withColors, links);
 };
-

@@ -173,8 +173,7 @@ describe("cleanTerminalControls", () => {
 
   describe("complex terminal output", () => {
     it("should handle multiple control sequences", () => {
-      const input =
-        "\x1b[?25l\x1b[2J\x1b[HHello\x1b[5AWorld\x1b[K\x1b[?25h";
+      const input = "\x1b[?25l\x1b[2J\x1b[HHello\x1b[5AWorld\x1b[K\x1b[?25h";
       expect(cleanTerminalControls(input)).toBe("HelloWorld");
     });
 
@@ -202,8 +201,7 @@ describe("extractOsc8Links", () => {
     });
 
     it("should extract OSC 8 link with ST terminator", () => {
-      const input =
-        "\x1b]8;;https://example.com\x1b\\Click here\x1b]8;;\x1b\\";
+      const input = "\x1b]8;;https://example.com\x1b\\Click here\x1b]8;;\x1b\\";
       const result = extractOsc8Links(input);
 
       expect(result.links.size).toBe(1);
@@ -281,8 +279,7 @@ describe("extractOsc8Links", () => {
     });
 
     it("should handle links with multiline text", () => {
-      const input =
-        "\x1b]8;;https://example.com\x07Line 1\nLine 2\x1b]8;;\x07";
+      const input = "\x1b]8;;https://example.com\x07Line 1\nLine 2\x1b]8;;\x07";
       const result = extractOsc8Links(input);
 
       const linkInfo = result.links.get("__OPIK_LINK_0__");
@@ -362,9 +359,7 @@ describe("restoreOsc8Links", () => {
 
       const result = restoreOsc8Links(html, links);
 
-      expect(result).toContain(
-        "&lt;script&gt;alert('xss')&lt;/script&gt;</a>",
-      );
+      expect(result).toContain("&lt;script&gt;alert('xss')&lt;/script&gt;</a>");
       expect(result).not.toContain("<script>");
     });
 
@@ -405,7 +400,9 @@ describe("restoreOsc8Links", () => {
 
       expect(result).toContain('target="_blank"');
       expect(result).toContain('rel="noopener noreferrer"');
-      expect(result).toContain('class="text-blue-400 underline hover:text-blue-300"');
+      expect(result).toContain(
+        'class="text-blue-400 underline hover:text-blue-300"',
+      );
     });
   });
 });
@@ -465,7 +462,9 @@ describe("convertTerminalOutputToHtml", () => {
 
     it("should return empty string for null-like input", () => {
       expect(convertTerminalOutputToHtml(null as unknown as string)).toBe("");
-      expect(convertTerminalOutputToHtml(undefined as unknown as string)).toBe("");
+      expect(convertTerminalOutputToHtml(undefined as unknown as string)).toBe(
+        "",
+      );
     });
   });
 
@@ -558,4 +557,3 @@ describe("convertTerminalOutputToHtml", () => {
     });
   });
 });
-
