@@ -615,6 +615,37 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Success: Version name is auto-incremented and formatted as 'v1', 'v2', etc.")
+        void putItems__whenMultipleVersions__thenVersionNameAutoIncremented() {
+            // Given - Create dataset
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // When - Create multiple versions
+            createDatasetItems(datasetId, 2);
+            var version1 = getLatestVersion(datasetId);
+
+            createDatasetItems(datasetId, 1);
+            var version2 = getLatestVersion(datasetId);
+
+            createDatasetItems(datasetId, 1);
+            var version3 = getLatestVersion(datasetId);
+
+            // Then - Verify version names are correctly formatted
+            assertThat(version1.versionName()).isEqualTo("v1");
+            assertThat(version2.versionName()).isEqualTo("v2");
+            assertThat(version3.versionName()).isEqualTo("v3");
+
+            // Verify all versions in list have correct names
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(3);
+
+            // Versions are ordered by creation time DESC (v3, v2, v1)
+            assertThat(versions.content().get(0).versionName()).isEqualTo("v3");
+            assertThat(versions.content().get(1).versionName()).isEqualTo("v2");
+            assertThat(versions.content().get(2).versionName()).isEqualTo("v1");
+        }
+
+        @Test
         @DisplayName("Success: UUID-based hash allows same content in different versions")
         void putItems__whenSameContent__thenGenerateUniqueHash() {
             // Given - Create two datasets with identical items
