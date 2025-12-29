@@ -303,7 +303,7 @@ def test_log_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik
             "id": trace_p1.id,
             "name": "metric-p1",
             "value": 1.0,
-            "project_name": project_1,
+            "project_name": project_2,  # incorrect
             "reason": "reason-p1",
         },
         # 2. Function parameter fallback - should go to project_2
@@ -314,7 +314,7 @@ def test_log_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik
             "reason": "reason-p2",
         },
         # 3. Default project name fallback - will go to Default Project
-        # since the backend will use the default project when id does 
+        # since the backend will use the default project when id does
         # not match the provided project_name
         {
             "id": trace_default.id,
@@ -413,7 +413,7 @@ def test_log_spans_feedback_scores__project_name_fallback_logic(opik_client: opi
             "reason": "reason-p2",
         },
         # 3. Default project name fallback - will go to Default Project
-        # since the backend will use the default project when id does 
+        # since the backend will use the default project when id does
         # not match the provided project_name
         {
             "id": span_default.id,
@@ -484,7 +484,9 @@ def test_log_spans_feedback_scores__project_name_fallback_logic(opik_client: opi
     )
 
 
-def test_log_threads_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik):
+def test_log_threads_feedback_scores__project_name_fallback_logic(
+    opik_client: opik.Opik,
+):
     # Setup projects
     project_1 = "project-1"
     project_2 = "project-2"
@@ -556,7 +558,7 @@ def test_log_threads_feedback_scores__project_name_fallback_logic(opik_client: o
             "reason": "reason-p2",
         },
         # 3. Default project name fallback - will go to Default Project
-        # since the backend will use the default project when id does 
+        # since the backend will use the default project when id does
         # not match the provided project_name
         {
             "id": thread_id_default,

@@ -140,7 +140,7 @@ def parse_search_expressions(
 
 def parse_feedback_score_messages(
     scores: List[BatchFeedbackScoreDict],
-    project_name: Optional[str],
+    project_name: str,
     parsed_item_class: Type[ScoreMessageT],
     logger: logging.Logger,
 ) -> OptionalScoreMessageList:
@@ -150,15 +150,15 @@ def parse_feedback_score_messages(
         if validation_helpers.validate_feedback_score(score, logger) is not None
     ]
 
+    for score in valid_scores:
+        if score.get("project_name") is None:
+            score["project_name"] = project_name
+
     if len(valid_scores) == 0:
         return None
 
     score_messages = [
-        parsed_item_class(
-            source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-            project_name=score_dict.get("project_name") or project_name,
-            **{k: v for k, v in score_dict.items() if k != "project_name"},
-        )
+        parsed_item_class(source=constants.FEEDBACK_SCORE_SOURCE_SDK, **score_dict)
         for score_dict in valid_scores
     ]
 

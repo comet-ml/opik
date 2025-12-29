@@ -2,7 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
+from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
 
 import httpx
 
@@ -291,7 +291,9 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_traces_feedback_scores(feedback_scores, project_name)
+            self.log_traces_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
         if attachments is not None:
             for attachment_data in attachments:
@@ -466,7 +468,9 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_spans_feedback_scores(feedback_scores, project_name)
+            self.log_spans_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
         return span.span_client.create_span(
             trace_id=trace_id,
@@ -652,7 +656,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self._project_name,
+            project_name=project_name or self.project_name,
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -691,7 +695,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self._project_name,
+            project_name=project_name or self.project_name,
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )

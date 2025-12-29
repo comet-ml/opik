@@ -1,7 +1,7 @@
 from typing import List
 
 import pytest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import patch, MagicMock
 
 from opik.api_objects import opik_client
 from opik.message_processing import messages
@@ -140,11 +140,12 @@ def test_opik_client__log_spans_feedback_scores__happy_path():
         ),
     ]
 
-    with patch(
-        "opik.api_objects.helpers.parse_feedback_score_messages"
-    ) as mock_parse, patch(
-        "opik.message_processing.batching.sequence_splitter.split_into_batches"
-    ) as mock_batch:
+    with (
+        patch("opik.api_objects.helpers.parse_feedback_score_messages") as mock_parse,
+        patch(
+            "opik.message_processing.batching.sequence_splitter.split_into_batches"
+        ) as mock_batch,
+    ):
         mock_parse.return_value = mock_score_messages
         mock_batch.return_value = [mock_score_messages]  # Single batch
 
@@ -189,11 +190,12 @@ def test_opik_client__log_spans_feedback_scores__with_explicit_project_name():
         )
     ]
 
-    with patch(
-        "opik.api_objects.helpers.parse_feedback_score_messages"
-    ) as mock_parse, patch(
-        "opik.message_processing.batching.sequence_splitter.split_into_batches"
-    ) as mock_batch:
+    with (
+        patch("opik.api_objects.helpers.parse_feedback_score_messages") as mock_parse,
+        patch(
+            "opik.message_processing.batching.sequence_splitter.split_into_batches"
+        ) as mock_batch,
+    ):
         mock_parse.return_value = mock_score_messages
         mock_batch.return_value = [mock_score_messages]
 
@@ -216,11 +218,10 @@ def test_opik_client__log_spans_feedback_scores__no_valid_scores():
         {"id": "span-1", "name": "quality"}  # Missing required 'value' field
     ]
 
-    with patch(
-        "opik.api_objects.helpers.parse_feedback_score_messages"
-    ) as mock_parse, patch(
-        "opik.api_objects.opik_client.LOGGER"
-    ) as mock_logger:
+    with (
+        patch("opik.api_objects.helpers.parse_feedback_score_messages") as mock_parse,
+        patch("opik.api_objects.opik_client.LOGGER") as mock_logger,
+    ):
         mock_parse.return_value = None  # No valid scores
 
         opik_client_.log_spans_feedback_scores(scores=scores)
@@ -261,11 +262,12 @@ def test_opik_client__log_traces_feedback_scores__happy_path():
         )
     ]
 
-    with patch(
-        "opik.api_objects.helpers.parse_feedback_score_messages"
-    ) as mock_parse, patch(
-        "opik.message_processing.batching.sequence_splitter.split_into_batches"
-    ) as mock_batch:
+    with (
+        patch("opik.api_objects.helpers.parse_feedback_score_messages") as mock_parse,
+        patch(
+            "opik.message_processing.batching.sequence_splitter.split_into_batches"
+        ) as mock_batch,
+    ):
         mock_parse.return_value = mock_score_messages
         mock_batch.return_value = [mock_score_messages]
 
@@ -305,11 +307,12 @@ def test_opik_client__log_traces_feedback_scores__with_explicit_project_name():
         )
     ]
 
-    with patch(
-        "opik.api_objects.helpers.parse_feedback_score_messages"
-    ) as mock_parse, patch(
-        "opik.message_processing.batching.sequence_splitter.split_into_batches"
-    ) as mock_batch:
+    with (
+        patch("opik.api_objects.helpers.parse_feedback_score_messages") as mock_parse,
+        patch(
+            "opik.message_processing.batching.sequence_splitter.split_into_batches"
+        ) as mock_batch,
+    ):
         mock_parse.return_value = mock_score_messages
         mock_batch.return_value = [mock_score_messages]
 
@@ -332,11 +335,10 @@ def test_opik_client__log_traces_feedback_scores__no_valid_scores():
         {"id": "trace-1", "name": "accuracy"}  # Missing required 'value' field
     ]
 
-    with patch(
-        "opik.api_objects.helpers.parse_feedback_score_messages"
-    ) as mock_parse, patch(
-        "opik.api_objects.opik_client.LOGGER"
-    ) as mock_logger:
+    with (
+        patch("opik.api_objects.helpers.parse_feedback_score_messages") as mock_parse,
+        patch("opik.api_objects.opik_client.LOGGER") as mock_logger,
+    ):
         mock_parse.return_value = None  # No valid scores
 
         opik_client_.log_traces_feedback_scores(scores=scores)
@@ -349,4 +351,3 @@ def test_opik_client__log_traces_feedback_scores__no_valid_scores():
 
         # Verify streamer.put was NOT called
         mock_streamer.put.assert_not_called()
-

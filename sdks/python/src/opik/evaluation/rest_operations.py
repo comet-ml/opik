@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional
 
 from opik.api_objects import dataset, experiment, opik_client
-from opik.types import FeedbackScoreDict
+from opik.types import BatchFeedbackScoreDict
 from . import test_case
 from .metrics import score_result
 from .types import ScoringKeyMappingType
@@ -80,13 +80,13 @@ def log_test_result_feedback_scores(
     trace_id: str,
     project_name: Optional[str],
 ) -> None:
-    all_trace_scores: List[FeedbackScoreDict] = []
+    all_trace_scores: List[BatchFeedbackScoreDict] = []
 
     for score_result_ in score_results:
         if score_result_.scoring_failed:
             continue
 
-        trace_score = FeedbackScoreDict(
+        trace_score = BatchFeedbackScoreDict(
             id=trace_id,
             name=score_result_.name,
             value=score_result_.value,
