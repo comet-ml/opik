@@ -12,7 +12,7 @@ import {
 } from "@/store/PlaygroundStore";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
-import PlaygroundOutputScores from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScores";
+import PlaygroundOutputScoresContainer from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
 import { cn } from "@/lib/utils";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useAppStore from "@/store/AppStore";
@@ -121,11 +121,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
           </TooltipWrapper>
         )}
         <div className="mb-2 min-h-[var(--cell-top-height)]">
-          <PlaygroundOutputScores
+          <PlaygroundOutputScoresContainer
             traceId={traceId}
             selectedRuleIds={selectedRuleIds}
             stale={stale}
-            outputReady={!isLoading || !!value}
           />
         </div>
         <div className="flex-1 overflow-y-auto">{renderContent()}</div>
