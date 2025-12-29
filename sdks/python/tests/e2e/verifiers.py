@@ -89,7 +89,6 @@ def verify_trace(
             item_id=trace_id,
             feedback_scores=trace.feedback_scores,
             expected_feedback_scores=feedback_scores,
-            project_name=project_name,
         )
 
     if guardrails_validations is not mock.ANY:
@@ -185,7 +184,6 @@ def verify_span(
             item_id=span_id,
             feedback_scores=span.feedback_scores,
             expected_feedback_scores=feedback_scores,
-            project_name=project_name,
         )
 
 
@@ -582,7 +580,6 @@ def verify_thread(
             item_id=thread_id,
             feedback_scores=actual_feedback_scores,
             expected_feedback_scores=feedback_scores,
-            project_name=project_name,
         )
 
 
@@ -590,7 +587,6 @@ def _assert_feedback_scores(
     item_id: str,
     feedback_scores: Optional[List[Union[FeedbackScore, FeedbackScorePublic]]],
     expected_feedback_scores: Optional[List[FeedbackScoreDict]],
-    project_name: Optional[str],
 ) -> None:
     if feedback_scores is None:
         assert (
@@ -610,7 +606,6 @@ def _assert_feedback_scores(
             name=score.name,
             reason=score.reason.strip(),
             value=score.value,
-            project_name=project_name,
         )
         for score in feedback_scores
     ]

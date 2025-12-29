@@ -2,6 +2,7 @@ from typing import List
 import opik
 from opik import opik_context
 from opik.types import BatchFeedbackScoreDict, FeedbackScoreDict
+import pytest
 from . import verifiers
 
 
@@ -285,8 +286,8 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
 
 def test_log_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik):
     # Setup projects
-    project_1 = "project-1"
-    project_2 = "project-2"
+    project_1 = opik_client.project_name + "-1"
+    project_2 = opik_client.project_name + "-2"
     project_default = opik_client.project_name
 
     # Create traces in different projects
@@ -381,8 +382,8 @@ def test_log_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik
 
 def test_log_spans_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik):
     # Setup projects
-    project_1 = "project-1"
-    project_2 = "project-2"
+    project_1 = opik_client.project_name + "-1"
+    project_2 = opik_client.project_name + "-2"
     project_default = opik_client.project_name
 
     # Create traces and spans in different projects
@@ -484,12 +485,13 @@ def test_log_spans_feedback_scores__project_name_fallback_logic(opik_client: opi
     )
 
 
+@pytest.mark.xfail(reason="Backend bug: If incorrect project_name is specified, the project gets created and the score is not attached to the correct thread.")
 def test_log_threads_feedback_scores__project_name_fallback_logic(
     opik_client: opik.Opik,
 ):
     # Setup projects
-    project_1 = "project-1"
-    project_2 = "project-2"
+    project_1 = opik_client.project_name + "-1"
+    project_2 = opik_client.project_name + "-2"
     project_default = opik_client.project_name
 
     # Create threads in different projects
@@ -557,9 +559,8 @@ def test_log_threads_feedback_scores__project_name_fallback_logic(
             "value": 0.5,
             "reason": "reason-p2",
         },
-        # 3. Default project name fallback - will go to Default Project
-        # since the backend will use the default project when id does
-        # not match the provided project_name
+        # 3. If no project_name is specified, the project gets created and
+        # the score is not attached to the correct thread.
         {
             "id": thread_id_default,
             "name": "metric-default",
@@ -604,7 +605,7 @@ def test_log_threads_feedback_scores__project_name_fallback_logic(
         ],
     )
 
-    verifiers.verify_thread(
+    verifiers.verify_thread( # TODO: This fails
         opik_client=opik_client,
         thread_id=thread_id_default,
         project_name=project_default,

@@ -150,15 +150,17 @@ def parse_feedback_score_messages(
         if validation_helpers.validate_feedback_score(score, logger) is not None
     ]
 
-    for score in valid_scores:
-        if score.get("project_name") is None:
-            score["project_name"] = project_name
-
     if len(valid_scores) == 0:
         return None
 
     score_messages = [
-        parsed_item_class(source=constants.FEEDBACK_SCORE_SOURCE_SDK, **score_dict)
+        parsed_item_class(
+            source=constants.FEEDBACK_SCORE_SOURCE_SDK,
+            **{
+                **score_dict,
+                "project_name": score_dict.get("project_name") or project_name,
+            },
+        )
         for score_dict in valid_scores
     ]
 
