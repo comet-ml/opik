@@ -28,11 +28,14 @@ public interface DatasetVersionDAO {
 
     @SqlUpdate("""
             INSERT INTO dataset_versions (
-                id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
+                id, dataset_id, version_hash, version_sequence, items_total, items_added, items_modified, items_deleted,
                 change_description, metadata, created_by, last_updated_by, workspace_id
             ) VALUES (
-                :version.id, :version.datasetId, :version.versionHash, :version.itemsTotal,
-                :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
+                :version.id, :version.datasetId, :version.versionHash,
+                (SELECT COALESCE(MAX(dv.version_sequence), 0) + 1
+                 FROM (SELECT version_sequence FROM dataset_versions
+                       WHERE dataset_id = :version.datasetId AND workspace_id = :workspace_id) AS dv),
+                :version.itemsTotal, :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
                 :version.changeDescription, :version.metadata, :version.createdBy, :version.lastUpdatedBy, :workspace_id
             )
             """)
@@ -40,7 +43,20 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("""
             SELECT
-                dv.*,
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', dv.version_sequence) AS version_sequence,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
@@ -55,7 +71,20 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("""
             SELECT
-                dv.*,
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', dv.version_sequence) AS version_sequence,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
@@ -73,7 +102,20 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("""
             SELECT
-                dv.*,
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', dv.version_sequence) AS version_sequence,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
@@ -84,7 +126,7 @@ public interface DatasetVersionDAO {
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id = :dataset_id
                 AND dv.workspace_id = :workspace_id
-            ORDER BY dv.id DESC
+            ORDER BY dv.version_sequence DESC
             LIMIT :limit OFFSET :offset
             """)
     List<DatasetVersion> findByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId,
@@ -114,7 +156,20 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("""
             SELECT
-                dv.*,
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', dv.version_sequence) AS version_sequence,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
@@ -142,7 +197,20 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("""
             SELECT
-                dv.*,
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', dv.version_sequence) AS version_sequence,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 true AS is_latest
             FROM dataset_versions AS dv
