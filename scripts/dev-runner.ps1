@@ -611,12 +611,16 @@ function Start-Frontend {
             }
         }
         
-        # Configure frontend to talk to local backend
-        Write-LogInfo "Frontend API base URL (VITE_BASE_API_URL) set to: http://localhost:8080"
+        # Configure frontend API base URL (defaults to /api in frontend code if not set)
+        # The Vite dev server proxy will forward /api/* requests to the backend
+        if (-not $env:VITE_BASE_API_URL) {
+            Write-LogDebug "Frontend API base URL (VITE_BASE_API_URL) not set, will use default from frontend code: /api"
+        } else {
+            Write-LogInfo "Frontend API base URL (VITE_BASE_API_URL) set to: $env:VITE_BASE_API_URL"
+        }
         
         # Set environment variables for frontend
         $env:CI = "true"
-        $env:VITE_BASE_API_URL = "http://localhost:8080"
         if ($script:DEBUG_MODE) {
             $env:NODE_ENV = "development"
             Write-LogDebug "Frontend debug mode enabled - NODE_ENV=development"
