@@ -2,6 +2,7 @@ import enum
 import sys
 from typing import Literal, Optional
 
+from pydantic import StrictStr
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -100,7 +101,7 @@ class BatchFeedbackScoreDict(TypedDict):
     value: Required[float]
     """The numerical value of the feedback score."""
 
-    project_name: NotRequired[str]
+    project_name: NotRequired[Optional[StrictStr]]
     """
     The name of the project for this specific score.
     If not provided, falls back to the project_name parameter in the method call,
