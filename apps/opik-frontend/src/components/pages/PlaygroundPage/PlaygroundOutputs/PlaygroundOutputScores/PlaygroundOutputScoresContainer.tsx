@@ -28,8 +28,6 @@ const PlaygroundOutputScoresContainer: React.FC<
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
-  // Show metrics when: all rules selected (null) OR specific rules selected (non-empty array)
-  // Don't show when: undefined OR empty array (no rules selected)
   const shouldShowMetrics =
     selectedRuleIds === null ||
     (Array.isArray(selectedRuleIds) && selectedRuleIds.length > 0);

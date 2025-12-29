@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 
 import {
   HoverCard,
@@ -36,20 +36,29 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   stale = false,
   className,
 }) => {
+  const { metricColors, visibleMetrics, hiddenMetrics, remainingCount } =
+    useMemo(() => {
+      const colors = Object.fromEntries(
+        metricNames.map((name) => {
+          const variant = generateTagVariant(name);
+          return [name, TAG_VARIANTS_COLOR_MAP[variant ?? "gray"]];
+        }),
+      );
+
+      const visible = metricNames.slice(0, MAX_VISIBLE_METRICS);
+      const hidden = metricNames.slice(MAX_VISIBLE_METRICS);
+
+      return {
+        metricColors: colors,
+        visibleMetrics: visible,
+        hiddenMetrics: hidden,
+        remainingCount: hidden.length,
+      };
+    }, [metricNames]);
+
   if (metricNames.length === 0) {
     return null;
   }
-
-  const metricColors = Object.fromEntries(
-    metricNames.map((name) => {
-      const variant = generateTagVariant(name);
-      return [name, TAG_VARIANTS_COLOR_MAP[variant ?? "gray"]];
-    }),
-  );
-
-  const visibleMetrics = metricNames.slice(0, MAX_VISIBLE_METRICS);
-  const hiddenMetrics = metricNames.slice(MAX_VISIBLE_METRICS);
-  const remainingCount = hiddenMetrics.length;
 
   return (
     <div
