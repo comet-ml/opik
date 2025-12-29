@@ -57,18 +57,19 @@ See exactly what's happening inside your AI application. Log every step of compl
 - **Debug with complete visibility** into every prompt, tool call, agent hand-off, and response ([Quickstart](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
 - **Track project-level metrics** like [cost](https://www.comet.com/docs/opik/tracing/cost_tracking/?from=llm&utm_source=opik&utm_medium=github&utm_content=cost_tracking_link&utm_campaign=opik), latency, [user feedback](https://www.comet.com/docs/opik/tracing/annotate_traces/?from=llm&utm_source=opik&utm_medium=github&utm_content=user_feedback_tracking_link&utm_campaign=opik), and more in custom dashboards
 - **Integrated Playground:** Prototype and iterate on prompts with help from Opik's automatic [prompt generator and improver](https://www.comet.com/docs/opik/prompt_engineering/improve/?from=llm&utm_source=opik&utm_medium=github&utm_content=prompt_improver_link&utm_campaign=opik) - all with full observability so you never lose track of your best prompt
-- **Manage prompts** in the [Prompt Library](https://www.comet.com/docs/opik/prompt_engineering/prompt_management/?from=llm&utm_source=opik&utm_medium=github&utm_content=prompt_library_link&utm_campaign=opik) with composable templates and versioning as you iterate and compare results
+- **Manage prompts** in the [prompt library](https://www.comet.com/docs/opik/prompt_engineering/prompt_management/?from=llm&utm_source=opik&utm_medium=github&utm_content=prompt_library_link&utm_campaign=opik) with composable templates and versioning as you iterate and compare results
 - **Production monitoring and guardrails:** Use [guardrails](https://www.comet.com/docs/opik/production/guardrails/?from=llm&utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik), [alerts](https://www.comet.com/docs/opik/production/alerts/?from=llm&utm_source=opik&utm_medium=github&utm_content=alerts_link&utm_campaign=opik), and [dashboards](https://www.comet.com/docs/opik/production/dashboards/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboards_link&utm_campaign=opik) to catch and prevent issues early
 
 ### ✅ Evaluation 
-Test your AI app systematically or run quick spot checks as needed. Evaluate individual steps, complete agent workflows, or entire conversation threads to validate quality and catch regressions.
-- **Comprehensive agent evaluation** from individual steps(spans), to full agent workflows (traces), to entire conversation threads. ([see the docs](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm))
-- **Structured evaluation** **with experiments** over datasets of curated test cases. Compare prompts, models, and configurations ****side-by-side in the dashboard and catch regressions when you update prompts or models.
-- **Built-in and custom metrics:** 40+ built in scorers to test agent trajectory, tool use, hallucinations, and more, with custom scorers for application-specific evaluation
+Test your AI app systematically, monitor production quality, or run quick spot checks as needed. Evaluate individual steps, complete agent workflows, or entire conversation threads to validate quality and catch regressions.
+
+- **Comprehensive agent evaluation** from individual steps(spans), to full agent workflows (traces), to entire conversation threads. ([see the docs](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=agent_evaluation_link&utm_campaign=opik))
+- **Systematic experiments** over [datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) of curated test cases. Compare prompts, models, and configurations side-by-side in custom dashboards and catch regressions when you update prompts or models
+- **Built-in and custom metrics:** 40+ [built-in LLM-as-a-judge and heuritic scorers](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_link&utm_campaign=opik) to test agent trajectory, tool use, hallucinations, language adherence, and more, along with custom scorers for application-specific evaluation
 - **Configurable online evaluation** to automatically score live interactions or existing traces on demand
-- **No-code evaluation** available through the **playground** for rapid no-code iteration
-- **Human annotation workflows** to incorporate expert judgment and build ground-truth datasets [➡️](https://www.comet.com/docs/opik/evaluation/annotation_queues)
-- 
+- **No-code evaluation** available through the [playground](https://www.comet.com/docs/opik/prompt_engineering/playground/?from=llm&utm_source=opik&utm_medium=github&utm_content=playground_link&utm_campaign=opik) for rapid no-code iteration on text and multimodal applications
+- **Human annotation workflows** with [annotation queues](https://www.comet.com/docs/opik/evaluation/annotation_queues/?from=llm&utm_source=opik&utm_medium=github&utm_content=annotation_queues_link&utm_campaign=opik), annotator assignments, and a dedicated UI to incorporate expert judgment and build evaluation datasets
+
 ### 🏆 Agent Optimization
 Automatically improve your prompts, tools, and LLM parameters using state-of-the-art optimization algorithms, all in one SDK.
 - **Prompt optimization** to automate prompt engineering based on the metrics of your choice
