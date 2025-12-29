@@ -28,12 +28,17 @@ const PlaygroundOutputScoresContainer: React.FC<
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
+  // Check if we should show metrics AFTER early return check
+  const shouldShowMetrics =
+    selectedRuleIds !== undefined &&
+    !(Array.isArray(selectedRuleIds) && selectedRuleIds.length === 0);
+
   const hasRulesSelected =
     selectedRuleIds == null || selectedRuleIds.length > 0;
 
   const { data: playgroundProject } = useProjectByName(
     { projectName: PLAYGROUND_PROJECT_NAME },
-    { enabled: !!workspaceName && hasRulesSelected },
+    { enabled: !!workspaceName && shouldShowMetrics && hasRulesSelected },
   );
 
   const { data: rulesData } = useRulesList(
@@ -43,16 +48,18 @@ const PlaygroundOutputScoresContainer: React.FC<
       page: 1,
       size: 100,
     },
-    { enabled: !!playgroundProject?.id && hasRulesSelected },
+    {
+      enabled: !!playgroundProject?.id && shouldShowMetrics && hasRulesSelected,
+    },
   );
 
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
   const selectedRules = useMemo(() => {
-    if (!hasRulesSelected || !rules.length) return [];
+    if (!shouldShowMetrics || !hasRulesSelected || !rules.length) return [];
     if (selectedRuleIds == null) return rules;
     return rules.filter((r) => selectedRuleIds.includes(r.id));
-  }, [hasRulesSelected, rules, selectedRuleIds]);
+  }, [shouldShowMetrics, hasRulesSelected, rules, selectedRuleIds]);
 
   const expectedMetricNames = useMemo(() => {
     const allNames = selectedRules.flatMap((rule) =>
@@ -116,7 +123,8 @@ const PlaygroundOutputScoresContainer: React.FC<
     return scores;
   }, [trace?.feedback_scores]);
 
-  if (!hasRulesSelected) {
+  // Don't show metrics if there's no output yet or no rules selected
+  if (!shouldShowMetrics) {
     return null;
   }
 
