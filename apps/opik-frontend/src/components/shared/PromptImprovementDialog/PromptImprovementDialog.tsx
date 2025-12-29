@@ -22,8 +22,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Description } from "@/components/ui/description";
 import { Separator } from "@/components/ui/separator";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import usePromptImprovement from "@/hooks/usePromptImprovement";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
+import useModelSelection from "@/hooks/useModelSelection";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
@@ -49,6 +51,8 @@ const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
   "Polishing the output...",
 ];
 
+const PROMPT_IMPROVEMENT_LAST_PICKED_MODEL = "opik-prompt-improvement-model";
+
 interface PromptImprovementDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -66,9 +70,9 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   setOpen,
   id,
   originalPrompt = "",
-  model,
-  provider,
-  configs,
+  model: defaultModel,
+  provider: defaultProvider,
+  configs: defaultConfigs,
   workspaceName,
   onAccept,
 }) => {
@@ -78,6 +82,14 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
+
+  // Model selection with persistence using the reusable hook
+  const { model, provider, configs, modelSelectProps } = useModelSelection({
+    persistenceKey: PROMPT_IMPROVEMENT_LAST_PICKED_MODEL,
+    defaultModel,
+    defaultProvider,
+    defaultConfigs,
+  });
 
   const { improvePrompt, generatePrompt } = usePromptImprovement({
     workspaceName,
@@ -443,6 +455,16 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           />
         </DialogHeader>
         <DialogAutoScrollBody>
+          <div className="mb-4 flex items-center gap-3">
+            <div className="comet-body-accented shrink-0">Model</div>
+            <div className="w-64">
+              <PromptModelSelect
+                workspaceName={workspaceName}
+                {...modelSelectProps}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertTitle>{error}</AlertTitle>
