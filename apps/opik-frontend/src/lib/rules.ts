@@ -2,7 +2,6 @@ import {
   EvaluatorsRule,
   EVALUATORS_RULE_TYPE,
   LLMJudgeDetails,
-  PythonCodeDetails,
 } from "@/types/automations";
 import { LLMJudgeSchema } from "@/types/llm";
 
@@ -28,8 +27,11 @@ export const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
     return llmRule.code.schema?.map((s: LLMJudgeSchema) => s.name) || [];
   }
   if (isPythonCodeRule(rule)) {
-    const pythonRule = rule as EvaluatorsRule & PythonCodeDetails;
-    return pythonRule.code.metric ? [pythonRule.code.metric] : [];
+    // Python code metric contains the full code snippet, not the score name.
+    // The actual score name is determined at runtime from ScoreResult.name,
+    // so we cannot extract it statically. Return empty array to avoid
+    // incorrect polling for a score with the code string as its name.
+    return [];
   }
   return [];
 };

@@ -87,9 +87,11 @@ const PlaygroundOutputScoresContainer: React.FC<
           if ([...expectedNames].every((name) => receivedNames.has(name))) {
             return false;
           }
-        } else if (receivedScores.length > 0) {
-          return false;
         }
+        // Note: We don't stop polling just because scores exist when expectedNames
+        // is empty. This prevents a race condition where pre-existing scores or
+        // scores from Python rules (whose names can't be extracted statically)
+        // would stop polling before all rules finish loading or executing.
 
         return REFETCH_INTERVAL;
       },
