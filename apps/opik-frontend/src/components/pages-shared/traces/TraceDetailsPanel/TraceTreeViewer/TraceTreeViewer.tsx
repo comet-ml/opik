@@ -91,6 +91,13 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     [trace.id],
   );
 
+  // Combine trace_id filter with trace panel filters for navigation
+  // spansFilterForTrace comes first to ensure trace_id filter takes precedence
+  const combinedSpansFilters = useMemo(
+    () => [...spansFilterForTrace, ...filters],
+    [spansFilterForTrace, filters],
+  );
+
   const predicate = useCallback(
     (data: Span | Trace) =>
       !hasSearch && !hasFilter ? true : filterFunction(data, filters, search),
@@ -126,6 +133,13 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 
     return retVal;
   }, [traceSpans, hasSearchOrFilter, trace, predicate]);
+
+  // Calculate filtered span count excluding the trace itself
+  const filteredSpanCount = useMemo(() => {
+    if (!hasSearchOrFilter) return traceSpans.length;
+    // Exclude the trace from the count - only count actual spans
+    return searchIds.size - (searchIds.has(trace.id) ? 1 : 0);
+  }, [hasSearchOrFilter, traceSpans.length, searchIds, trace.id]);
 
   const { tree, toggleExpandAll, setTree, expandedTreeRows, fullExpandedSet } =
     useTreeDetailsStore();
@@ -217,14 +231,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
                 params={{ workspaceName, projectId }}
                 search={{
                   type: "spans",
-                  spans_filters: spansFilterForTrace,
+                  spans_filters: combinedSpansFilters,
                 }}
               >
                 <Button variant="link" className="comet-body-s px-0" asChild>
-                  <span>
-                    {!hasSearchOrFilter ? traceSpans.length : searchIds.size}{" "}
-                    spans
-                  </span>
+                  <span>{filteredSpanCount} spans</span>
                 </Button>
               </Link>
             </TooltipWrapper>
