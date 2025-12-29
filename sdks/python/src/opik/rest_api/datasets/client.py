@@ -51,6 +51,7 @@ class DatasetsClient:
         update: DatasetItemUpdate,
         ids: typing.Optional[typing.Sequence[str]] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -65,6 +66,9 @@ class DatasetsClient:
             List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
 
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
+        dataset_id : typing.Optional[str]
+            Dataset ID. Required when using 'filters', optional when using 'ids'.
 
         merge_tags : typing.Optional[bool]
             If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
@@ -84,7 +88,12 @@ class DatasetsClient:
         client.datasets.batch_update_dataset_items(update=DatasetItemUpdate(), )
         """
         _response = self._raw_client.batch_update_dataset_items(
-            update=update, ids=ids, filters=filters, merge_tags=merge_tags, request_options=request_options
+            update=update,
+            ids=ids,
+            filters=filters,
+            dataset_id=dataset_id,
+            merge_tags=merge_tags,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1093,38 +1102,6 @@ class DatasetsClient:
         _response = self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
         return _response.data
 
-    def restore_dataset_version(
-        self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> DatasetVersionPublic:
-        """
-        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
-
-        Parameters
-        ----------
-        id : str
-
-        version_ref : str
-            Version hash or tag to restore from
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        DatasetVersionPublic
-            Version restored successfully
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.restore_dataset_version(id='id', version_ref='version_ref', )
-        """
-        _response = self._raw_client.restore_dataset_version(
-            id, version_ref=version_ref, request_options=request_options
-        )
-        return _response.data
-
     def update_dataset_version(
         self,
         version_hash: str,
@@ -1194,6 +1171,7 @@ class AsyncDatasetsClient:
         update: DatasetItemUpdate,
         ids: typing.Optional[typing.Sequence[str]] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -1208,6 +1186,9 @@ class AsyncDatasetsClient:
             List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
 
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
+        dataset_id : typing.Optional[str]
+            Dataset ID. Required when using 'filters', optional when using 'ids'.
 
         merge_tags : typing.Optional[bool]
             If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
@@ -1230,7 +1211,12 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.batch_update_dataset_items(
-            update=update, ids=ids, filters=filters, merge_tags=merge_tags, request_options=request_options
+            update=update,
+            ids=ids,
+            filters=filters,
+            dataset_id=dataset_id,
+            merge_tags=merge_tags,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2321,41 +2307,6 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
-        return _response.data
-
-    async def restore_dataset_version(
-        self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> DatasetVersionPublic:
-        """
-        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
-
-        Parameters
-        ----------
-        id : str
-
-        version_ref : str
-            Version hash or tag to restore from
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        DatasetVersionPublic
-            Version restored successfully
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.datasets.restore_dataset_version(id='id', version_ref='version_ref', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.restore_dataset_version(
-            id, version_ref=version_ref, request_options=request_options
-        )
         return _response.data
 
     async def update_dataset_version(

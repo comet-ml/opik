@@ -19,7 +19,6 @@ class DatasetItemPagePublic(UniversalBaseModel):
     sortable_by: typing_extensions.Annotated[typing.Optional[typing.List[str]], FieldMetadata(alias="sortableBy")] = (
         None
     )
-    has_draft: typing_extensions.Annotated[typing.Optional[bool], FieldMetadata(alias="hasDraft")] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
