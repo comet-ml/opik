@@ -461,6 +461,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
               <PromptModelSelect
                 workspaceName={workspaceName}
                 {...modelSelectProps}
+                disabled={isLoading}
               />
             </div>
           </div>

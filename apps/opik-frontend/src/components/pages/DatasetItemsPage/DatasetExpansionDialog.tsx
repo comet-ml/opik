@@ -487,6 +487,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
             <PromptModelSelect
               workspaceName={workspaceName}
               {...modelSelectProps}
+              disabled={isPending}
             />
           </div>
 
