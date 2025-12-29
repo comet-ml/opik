@@ -9,6 +9,7 @@ import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
@@ -1903,6 +1904,84 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(exp2FromList.datasetVersionId()).isEqualTo(version2.id());
+        }
+    }
+
+    @Nested
+    @DisplayName("Stream Dataset Items With Versioning:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class StreamDatasetItemsWithVersioning {
+
+        @Test
+        @DisplayName("Success: Stream items uses latest version when toggle is ON")
+        void streamItems_whenVersioningEnabled_thenUsesLatestVersion() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+
+            // Create initial version with 2 items
+            createDatasetItems(datasetId, 2);
+            var version1 = getLatestVersion(datasetId);
+
+            // Create second version with 1 more item (total 3)
+            createDatasetItems(datasetId, 1);
+            var version2 = getLatestVersion(datasetId);
+
+            assertThat(version1.id()).isNotEqualTo(version2.id());
+            assertThat(version2.itemsTotal()).isEqualTo(3);
+
+            // when - stream items without specifying version
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(datasetName)
+                    .steamLimit(100)
+                    .build();
+            var streamedItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY, TEST_WORKSPACE);
+
+            // then - should get items from latest version (3 items)
+            assertThat(streamedItems).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Success: Stream items with explicit version parameter")
+        void streamItems_whenVersionSpecified_thenUsesSpecifiedVersion() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+
+            // Create version 1 with 2 items
+            createDatasetItems(datasetId, 2);
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Create version 2 with 1 more item (total 3)
+            createDatasetItems(datasetId, 1);
+            var version2 = getLatestVersion(datasetId);
+
+            assertThat(version1.id()).isNotEqualTo(version2.id());
+            assertThat(version2.itemsTotal()).isEqualTo(3);
+
+            // when - stream items from version 1 using tag
+            var streamRequestV1 = DatasetItemStreamRequest.builder()
+                    .datasetName(datasetName)
+                    .steamLimit(100)
+                    .version("v1")
+                    .build();
+            var streamedItemsV1 = datasetResourceClient.streamDatasetItems(streamRequestV1, API_KEY, TEST_WORKSPACE);
+
+            // then - should get 2 items from version 1
+            assertThat(streamedItemsV1).hasSize(2);
+
+            // when - stream items from version 2 using 'latest' tag
+            var streamRequestV2 = DatasetItemStreamRequest.builder()
+                    .datasetName(datasetName)
+                    .steamLimit(100)
+                    .version(DatasetVersionService.LATEST_TAG)
+                    .build();
+            var streamedItemsV2 = datasetResourceClient.streamDatasetItems(streamRequestV2, API_KEY, TEST_WORKSPACE);
+
+            // then - should get 3 items from version 2
+            assertThat(streamedItemsV2).hasSize(3);
         }
     }
 }

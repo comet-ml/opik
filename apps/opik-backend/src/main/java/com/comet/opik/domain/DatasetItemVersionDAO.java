@@ -43,6 +43,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 public interface DatasetItemVersionDAO {
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria searchCriteria, int page, int size, UUID versionId);
 
+    Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
+
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
     /**
@@ -223,6 +225,30 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT :limit OFFSET :offset
+            """;
+
+    private static final String SELECT_DATASET_ITEM_VERSIONS_STREAM = """
+            SELECT
+                id,
+                dataset_item_id,
+                dataset_id,
+                data,
+                trace_id,
+                span_id,
+                source,
+                tags,
+                item_created_at as created_at,
+                item_last_updated_at as last_updated_at,
+                item_created_by as created_by,
+                item_last_updated_by as last_updated_by,
+                null AS experiment_items_array
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND workspace_id = :workspace_id
+            %s
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT :limit
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
@@ -531,6 +557,33 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnSuccess(items -> log.info("Retrieved '{}' item IDs and hashes for version '{}'", items.size(),
                             versionId))
                     .flatMapMany(Flux::fromIterable);
+        });
+    }
+
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
+            UUID lastRetrievedId) {
+        log.info("Streaming dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}'",
+                datasetId, versionId, limit, lastRetrievedId);
+
+        String lastRetrievedFilter = lastRetrievedId != null ? "AND id < :lastRetrievedId" : "";
+        String query = SELECT_DATASET_ITEM_VERSIONS_STREAM.formatted(lastRetrievedFilter);
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(query)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString())
+                    .bind("limit", limit);
+
+            if (lastRetrievedId != null) {
+                statement.bind("lastRetrievedId", lastRetrievedId.toString());
+            }
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_version_items");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(DatasetItemResultMapper::mapItem);
         });
     }
 

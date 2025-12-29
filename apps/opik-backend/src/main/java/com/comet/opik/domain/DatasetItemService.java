@@ -725,7 +725,49 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
+                .flatMapMany(dataset -> {
+                    // 3-tier version resolution logic:
+                    // 1. If version parameter is specified, use it
+                    // 2. If feature toggle is ON and no version specified, use latest version
+                    // 3. Otherwise, use legacy table (existing behavior)
+
+                    String versionHashOrTag = request.version();
+
+                    // Case 1: Version explicitly specified
+                    if (versionHashOrTag != null && !versionHashOrTag.isBlank()) {
+                        log.info("Using explicitly provided version '{}' for streaming dataset '{}' items",
+                                versionHashOrTag, dataset.id());
+                        return Mono.fromCallable(() -> versionService.resolveVersionId(workspaceId, dataset.id(),
+                                versionHashOrTag))
+                                .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
+                                        request.steamLimit(), request.lastRetrievedId()));
+                    }
+
+                    // Case 2: Feature toggle ON and no version specified - use latest version
+                    if (featureFlags.isDatasetVersioningEnabled()) {
+                        log.info("Feature toggle ON, using latest version for streaming dataset '{}' items",
+                                dataset.id());
+                        return Mono.fromCallable(() -> versionService.getLatestVersion(dataset.id(), workspaceId))
+                                .flatMapMany(latestVersionOpt -> {
+                                    if (latestVersionOpt.isPresent()) {
+                                        UUID versionId = latestVersionOpt.get().id();
+                                        log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
+                                                dataset.id());
+                                        return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
+                                                request.lastRetrievedId());
+                                    } else {
+                                        // No version exists yet - return empty
+                                        log.info("No versions exist for dataset '{}', returning empty stream",
+                                                dataset.id());
+                                        return Flux.empty();
+                                    }
+                                });
+                    }
+
+                    // Case 3: Feature toggle OFF - use legacy table
+                    log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items", dataset.id());
+                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId());
+                });
     }
 
     @Override
