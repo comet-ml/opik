@@ -16,6 +16,7 @@ import java.util.UUID;
 public record DatasetVersionSummary(
         @Schema(description = "Unique identifier of the version") UUID id,
         @Schema(description = "Hash of the version content") String versionHash,
+        @Schema(description = "Sequential version name formatted as 'v1', 'v2', etc.") String versionName,
         @Schema(description = "Description of changes in this version") String changeDescription,
         @Schema(description = "Tags associated with this version") SequencedSet<String> tags) {
 
@@ -26,6 +27,7 @@ public record DatasetVersionSummary(
         return DatasetVersionSummary.builder()
                 .id(version.id())
                 .versionHash(version.versionHash())
+                .versionName(version.versionName())
                 .changeDescription(version.changeDescription())
                 .tags(version.tags())
                 .build();
