@@ -112,20 +112,16 @@ const MetricContainerChart = ({
     const lines: string[] = [];
 
     // collect all unique time values from all traces
-    const allTimeValues = new Set<string>();
-    traces.forEach((trace) => {
-      trace.data?.forEach((entry) => {
-        allTimeValues.add(entry.time);
-      });
-    });
-    const sortedTimeValues = Array.from(allTimeValues).sort();
+    const sortedTimeValues = Array.from(
+      new Set(traces.flatMap((t) => t.data?.map((d) => d.time) ?? [])),
+    ).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-    const timeToIndexMap = new Map<string, number>();
-    const transformedData: TransformedData[] = sortedTimeValues.map(
-      (time, index) => {
-        timeToIndexMap.set(time, index);
-        return { time };
-      },
+    const transformedData: TransformedData[] = sortedTimeValues.map((time) => ({
+      time,
+    }));
+
+    const timeToIndexMap = new Map<string, number>(
+      sortedTimeValues.map((time, index) => [time, index]),
     );
 
     traces.forEach((trace) => {
@@ -136,7 +132,7 @@ const MetricContainerChart = ({
       if (shouldInclude) {
         lines.push(trace.name);
 
-        trace.data.forEach((d) => {
+        trace.data?.forEach((d) => {
           const index = timeToIndexMap.get(d.time);
           if (index !== undefined && transformedData[index]) {
             transformedData[index][trace.name] = d.value;
