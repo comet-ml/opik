@@ -3,12 +3,11 @@ import { v4 as uuidv4 } from "uuid";
 import { DatasetItem } from "@/types/datasets";
 
 interface DatasetDraftState {
-  // State
   addedItems: Map<string, DatasetItem>;
   editedItems: Map<string, Partial<DatasetItem>>;
   deletedIds: Set<string>;
+  isAllItemsSelected: boolean;
 
-  // Actions
   addItem: (item: Omit<DatasetItem, "id">) => void;
   bulkAddItems: (items: Omit<DatasetItem, "id">[]) => void;
   editItem: (id: string, changes: Partial<DatasetItem>) => void;
@@ -16,6 +15,7 @@ interface DatasetDraftState {
   bulkDeleteItems: (ids: string[]) => void;
   bulkEditItems: (ids: string[], changes: Partial<DatasetItem>) => void;
   clearDraft: () => void;
+  setIsAllItemsSelected: (value: boolean) => void;
   getChangesSummary: () => { added: number; edited: number; deleted: number };
   getChangesPayload: () => {
     addedItems: DatasetItem[];
@@ -25,12 +25,10 @@ interface DatasetDraftState {
 }
 
 const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
-  // Initial state
   addedItems: new Map(),
   editedItems: new Map(),
   deletedIds: new Set(),
-
-  // Actions
+  isAllItemsSelected: false,
 
   addItem: (item: Omit<DatasetItem, "id">) => {
     const tempId = uuidv4();
@@ -42,7 +40,7 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
     set((state) => {
       const newAddedItems = new Map(state.addedItems);
       newAddedItems.set(tempId, newItem);
-      return { addedItems: newAddedItems };
+      return { addedItems: newAddedItems, isAllItemsSelected: false };
     });
   },
 
@@ -59,25 +57,23 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
         newAddedItems.set(tempId, newItem);
       });
 
-      return { addedItems: newAddedItems };
+      return { addedItems: newAddedItems, isAllItemsSelected: false };
     });
   },
 
   editItem: (id: string, changes: Partial<DatasetItem>) => {
     set((state) => {
-      // Check if this is a temp item (from addedItems)
       if (state.addedItems.has(id)) {
         const newAddedItems = new Map(state.addedItems);
         const existingItem = state.addedItems.get(id)!;
         newAddedItems.set(id, { ...existingItem, ...changes });
-        return { addedItems: newAddedItems };
+        return { addedItems: newAddedItems, isAllItemsSelected: false };
       }
 
-      // Otherwise, it's an edit to an existing item
       const newEditedItems = new Map(state.editedItems);
       const existingChanges = state.editedItems.get(id) || {};
       newEditedItems.set(id, { ...existingChanges, ...changes });
-      return { editedItems: newEditedItems };
+      return { editedItems: newEditedItems, isAllItemsSelected: false };
     });
   },
 
@@ -92,13 +88,10 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
       const newDeletedIds = new Set(state.deletedIds);
 
       ids.forEach((id) => {
-        // If it's a temp item, just remove it from addedItems
         if (state.addedItems.has(id)) {
           newAddedItems.delete(id);
         } else {
-          // If it's an edited item being deleted, remove from editedItems
           newEditedItems.delete(id);
-          // Add to deletedIds
           newDeletedIds.add(id);
         }
       });
@@ -107,6 +100,7 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
         addedItems: newAddedItems,
         editedItems: newEditedItems,
         deletedIds: newDeletedIds,
+        isAllItemsSelected: false,
       };
     });
   },
@@ -117,12 +111,10 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
       const newEditedItems = new Map(state.editedItems);
 
       ids.forEach((id) => {
-        // Check if this is a temp item (from addedItems)
         if (state.addedItems.has(id)) {
           const existingItem = state.addedItems.get(id)!;
           newAddedItems.set(id, { ...existingItem, ...changes });
         } else {
-          // Otherwise, it's an edit to an existing item
           const existingChanges = state.editedItems.get(id) || {};
           newEditedItems.set(id, { ...existingChanges, ...changes });
         }
@@ -131,6 +123,7 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
       return {
         addedItems: newAddedItems,
         editedItems: newEditedItems,
+        isAllItemsSelected: false,
       };
     });
   },
@@ -140,7 +133,12 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
       addedItems: new Map(),
       editedItems: new Map(),
       deletedIds: new Set(),
+      isAllItemsSelected: false,
     });
+  },
+
+  setIsAllItemsSelected: (value: boolean) => {
+    set({ isAllItemsSelected: value });
   },
 
   getChangesSummary: () => {
@@ -167,7 +165,6 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
   },
 }));
 
-// Selectors
 export const selectIsDraftMode = (state: DatasetDraftState) =>
   state.addedItems.size > 0 ||
   state.editedItems.size > 0 ||
@@ -176,7 +173,6 @@ export const selectIsDraftMode = (state: DatasetDraftState) =>
 export const selectAddedItemById = (id: string) => (state: DatasetDraftState) =>
   state.addedItems.get(id);
 
-// Custom hooks (following AppStore.ts pattern)
 export const useAddItem = () => useDatasetDraftStore((state) => state.addItem);
 export const useBulkAddItems = () =>
   useDatasetDraftStore((state) => state.bulkAddItems);
@@ -207,5 +203,10 @@ export const useAddedDatasetItemById = (id?: string) =>
 export const useEditedDatasetItemById = (id?: string) =>
   useDatasetDraftStore((state) => state.editedItems.get(id || ""));
 export const useIsDraftMode = () => useDatasetDraftStore(selectIsDraftMode);
+
+export const useIsAllItemsSelected = () =>
+  useDatasetDraftStore((state) => state.isAllItemsSelected);
+export const useSetIsAllItemsSelected = () =>
+  useDatasetDraftStore((state) => state.setIsAllItemsSelected);
 
 export default useDatasetDraftStore;

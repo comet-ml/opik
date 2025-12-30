@@ -16,7 +16,11 @@ import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
-import { useBulkDeleteItems, useBulkAddItems } from "@/store/DatasetDraftStore";
+import {
+  useBulkDeleteItems,
+  useBulkAddItems,
+  useIsAllItemsSelected,
+} from "@/store/DatasetDraftStore";
 import { useToast } from "@/components/ui/use-toast";
 import { DATASET_ITEM_SOURCE } from "@/types/datasets";
 
@@ -27,7 +31,6 @@ type DatasetItemsActionsPanelProps = {
   datasetName: string;
   columnsToExport: string[];
   dynamicColumns: string[];
-  isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
   totalCount?: number;
@@ -43,7 +46,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   datasetName,
   columnsToExport,
   dynamicColumns,
-  isAllItemsSelected = false,
   filters = [],
   search = "",
   totalCount = 0,
@@ -62,6 +64,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const bulkDeleteItems = useBulkDeleteItems();
   const bulkAddItems = useBulkAddItems();
+  const isAllItemsSelected = useIsAllItemsSelected();
   const { toast } = useToast();
 
   const deleteDatasetItemsHandler = useCallback(() => {
@@ -172,7 +175,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={addTagDialogOpen}
         setOpen={setAddTagDialogOpen}
         onSuccess={() => {}}
-        isAllItemsSelected={isAllItemsSelected}
         filters={filters}
         search={search}
         totalCount={totalCount}

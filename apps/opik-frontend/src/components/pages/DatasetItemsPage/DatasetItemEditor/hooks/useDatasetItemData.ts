@@ -61,7 +61,7 @@ export const useDatasetItemData = ({
     };
   }, [draftItem, apiDatasetItem, isDraftMode, editedFields]);
 
-  const isPending = draftItem ? false : apiIsPending;
+  const isPending = !datasetItemId || draftItem ? false : apiIsPending;
 
   const fields = useMemo(() => {
     if (!datasetItemId) {

@@ -61,8 +61,11 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
-import useDatasetDraftStore, {
+import {
   useIsDraftMode,
+  useIsAllItemsSelected,
+  useSetIsAllItemsSelected,
+  useDeletedIds,
 } from "@/store/DatasetDraftStore";
 
 /**
@@ -149,7 +152,8 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [isAllItemsSelected, setIsAllItemsSelected] = useState(false);
+  const isAllItemsSelected = useIsAllItemsSelected();
+  const setIsAllItemsSelected = useSetIsAllItemsSelected();
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
@@ -172,7 +176,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   );
 
   const isDraftMode = useIsDraftMode();
-  const deletedIds = useDatasetDraftStore((state) => state.deletedIds);
+  const deletedIds = useDeletedIds();
 
   // Compute effective size for draft mode: use 100 if in draft mode and size is default (10)
   const effectiveSize = useMemo(
@@ -293,7 +297,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         return next;
       });
     },
-    [isAllItemsSelected],
+    [isAllItemsSelected, setIsAllItemsSelected],
   );
 
   const effectiveIsAllItemsSelected = useMemo(() => {
@@ -507,9 +511,10 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const handleClearSelection = useCallback(() => {
     setRowSelection({});
     setIsAllItemsSelected(false);
-  }, []);
+  }, [setIsAllItemsSelected]);
 
   const showSelectAllBanner =
+    !isDraftMode &&
     selectedRows.length > 0 &&
     selectedRows.length === rows.length &&
     selectedRows.length < totalCount;
@@ -557,7 +562,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             datasetName={datasetName ?? ""}
             columnsToExport={columnsToExport}
             dynamicColumns={dynamicColumnsIds}
-            isAllItemsSelected={effectiveIsAllItemsSelected}
             filters={filters}
             search={search ?? ""}
             totalCount={totalCount}

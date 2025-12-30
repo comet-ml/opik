@@ -4,7 +4,10 @@ import {
   DatasetItemWithDraft,
   DATASET_ITEM_DRAFT_STATUS,
 } from "@/types/datasets";
-import useDatasetDraftStore, {
+import {
+  useAddedItems,
+  useDeletedIds,
+  useEditedItems,
   useIsDraftMode,
 } from "@/store/DatasetDraftStore";
 import useDatasetItemsList, {
@@ -44,10 +47,12 @@ const mergeItemsWithDraftChanges = (
     });
 
   // Prepend new draft items at the top
-  const newItems = Array.from(draftState.addedItems.values()).map((item) => ({
-    ...item,
-    draftStatus: DATASET_ITEM_DRAFT_STATUS.added,
-  }));
+  const newItems = Array.from(draftState.addedItems.values())
+    .reverse()
+    .map((item) => ({
+      ...item,
+      draftStatus: DATASET_ITEM_DRAFT_STATUS.added,
+    }));
 
   return [...newItems, ...processedApiItems];
 };
@@ -65,9 +70,9 @@ export const useDatasetItemsWithDraft = (
   options?: QueryConfig<UseDatasetItemsListResponse>,
 ) => {
   const isDraftMode = useIsDraftMode();
-  const draftAddedItems = useDatasetDraftStore((state) => state.addedItems);
-  const draftEditedItems = useDatasetDraftStore((state) => state.editedItems);
-  const draftDeletedIds = useDatasetDraftStore((state) => state.deletedIds);
+  const draftAddedItems = useAddedItems();
+  const draftEditedItems = useEditedItems();
+  const draftDeletedIds = useDeletedIds();
 
   const query = useDatasetItemsList(params, options);
 

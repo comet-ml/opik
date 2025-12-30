@@ -12,7 +12,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import useDatasetItemBatchUpdateMutation from "@/api/datasets/useDatasetItemBatchUpdateMutation";
 import { Filters } from "@/types/filters";
-import { useBulkEditItems } from "@/store/DatasetDraftStore";
+import {
+  useBulkEditItems,
+  useIsAllItemsSelected,
+} from "@/store/DatasetDraftStore";
 
 type AddTagDialogProps = {
   datasetId: string;
@@ -20,7 +23,6 @@ type AddTagDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onSuccess?: () => void;
-  isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
   totalCount?: number;
@@ -32,7 +34,6 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   open,
   setOpen,
   onSuccess,
-  isAllItemsSelected = false,
   filters = [],
   search = "",
   totalCount = 0,
@@ -41,6 +42,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const [newTag, setNewTag] = useState<string>("");
   const batchUpdateMutation = useDatasetItemBatchUpdateMutation();
   const bulkEditItems = useBulkEditItems();
+  const isAllItemsSelected = useIsAllItemsSelected();
   const MAX_ENTITIES = 1000;
 
   const handleClose = () => {
