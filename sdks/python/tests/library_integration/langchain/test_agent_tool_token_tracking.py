@@ -8,8 +8,12 @@ See: https://github.com/comet-ml/opik/issues/4574
 """
 
 import pytest
+from typing import Any, Dict, List, Optional
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 from opik.integrations.langchain import OpikTracer
 from ...testlib import (
@@ -22,6 +26,48 @@ from ...testlib import (
 )
 
 
+class FakeChatModelWithUsage(BaseChatModel):
+    """
+    A fake chat model that returns predictable responses with token usage data.
+    This allows testing token tracking without requiring real API keys.
+    """
+    
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Generate a response with fake token usage."""
+        # Create a simple response
+        response_text = f"Hello! I received {len(messages)} message(s)."
+        
+        # Create fake token usage
+        prompt_tokens = 10 + len(str(messages))  # Simulate prompt tokens
+        completion_tokens = 15  # Fixed completion tokens
+        total_tokens = prompt_tokens + completion_tokens
+        
+        usage_metadata = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+        
+        message = AIMessage(content=response_text, usage_metadata=usage_metadata)
+        generation = ChatGeneration(message=message)
+        
+        return ChatResult(
+            generations=[generation],
+            llm_output={"token_usage": usage_metadata, "model_name": "fake-model"},
+        )
+    
+    @property
+    def _llm_type(self) -> str:
+        """Return identifier of llm."""
+        return "fake-chat-model-with-usage"
+
+
 def simulated_tool_call(input_text: str) -> str:
     """Simulates a tool call that doesn't use LLM."""
     return f"Tool result for: {input_text}"
@@ -30,7 +76,6 @@ def simulated_tool_call(input_text: str) -> str:
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_langchain_tool_calls_do_not_have_token_usage(
     fake_backend,
-    ensure_openai_configured,
     use_streaming,
 ):
     """
@@ -43,18 +88,8 @@ def test_langchain_tool_calls_do_not_have_token_usage(
     3. Verifies that only LLM spans have usage data
     4. Verifies that tool spans do NOT have usage data
     """
-    from langchain_openai import ChatOpenAI
-
-    # Configure LLM
-    llm_args = {
-        "model": "gpt-4o-mini",
-        "temperature": 0,
-        "max_tokens": 50,
-    }
-    if use_streaming:
-        llm_args["stream_usage"] = True
-
-    llm = ChatOpenAI(**llm_args)
+    # Use fake LLM that doesn't require API keys
+    llm = FakeChatModelWithUsage()
 
     # Create a simple chain: LLM -> Tool
     # The tool is represented as a RunnableLambda which will be tracked as type="tool"
@@ -124,7 +159,6 @@ def test_langchain_tool_calls_do_not_have_token_usage(
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_token_aggregation_excludes_non_llm_spans(
     fake_backend,
-    ensure_openai_configured,
     use_streaming,
 ):
     """
@@ -133,18 +167,8 @@ def test_token_aggregation_excludes_non_llm_spans(
     This simulates what the backend does when it sums up usage across spans.
     We verify that non-LLM spans don't contribute to the total.
     """
-    from langchain_openai import ChatOpenAI
-
-    # Configure LLM
-    llm_args = {
-        "model": "gpt-4o-mini",
-        "temperature": 0,
-        "max_tokens": 50,
-    }
-    if use_streaming:
-        llm_args["stream_usage"] = True
-
-    llm = ChatOpenAI(**llm_args)
+    # Use fake LLM that doesn't require API keys
+    llm = FakeChatModelWithUsage()
 
     # Create a simple chain with LLM and tool
     prompt = PromptTemplate.from_template("Say hello to {name}")
