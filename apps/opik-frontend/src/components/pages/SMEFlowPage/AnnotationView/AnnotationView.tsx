@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { HotkeyDisplay } from "@/components/ui/hotkey-display";
 import CommentAndScoreViewer from "@/components/pages/SMEFlowPage/AnnotationView/CommentAndScoreViewer";
 import ValidationAlert from "./ValidationAlert";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useSMEFlow } from "../SMEFlowContext";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 import ThreadDataViewer from "./ThreadDataViewer";
@@ -30,23 +31,67 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     queueItems,
     validationState,
     isLastUnprocessedItem,
+    isReviewMode,
+    hasChanges,
     handleNext,
     handlePrevious,
     handleSubmit,
+    handleExitReviewMode,
+    discardChanges,
   } = useSMEFlow();
 
   const isLastItem = currentIndex === queueItems.length - 1;
   const isFirstItem = currentIndex === 0;
+
+  // State for unsaved changes confirmation dialog
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<
+    "next" | "previous" | null
+  >(null);
+
+  const handleNavigateNext = useCallback(() => {
+    if (hasChanges) {
+      setPendingNavigation("next");
+      setShowUnsavedDialog(true);
+    } else {
+      handleNext();
+    }
+  }, [hasChanges, handleNext]);
+
+  const handleNavigatePrevious = useCallback(() => {
+    if (hasChanges) {
+      setPendingNavigation("previous");
+      setShowUnsavedDialog(true);
+    } else {
+      handlePrevious();
+    }
+  }, [hasChanges, handlePrevious]);
+
+  const handleConfirmDiscard = useCallback(() => {
+    discardChanges();
+    if (pendingNavigation === "next") {
+      handleNext();
+    } else if (pendingNavigation === "previous") {
+      handlePrevious();
+    }
+    setPendingNavigation(null);
+    setShowUnsavedDialog(false);
+  }, [pendingNavigation, discardChanges, handleNext, handlePrevious]);
+
+  const handleCancelNavigation = useCallback(() => {
+    setPendingNavigation(null);
+    setShowUnsavedDialog(false);
+  }, []);
 
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.PREVIOUS].key,
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
       if (!isFirstItem) {
-        handlePrevious();
+        handleNavigatePrevious();
       }
     },
-    [isFirstItem, handlePrevious],
+    [isFirstItem, handleNavigatePrevious],
   );
 
   useHotkeys(
@@ -54,10 +99,10 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
       if (!isLastItem) {
-        handleNext();
+        handleNavigateNext();
       }
     },
-    [isLastItem, handleNext],
+    [isLastItem, handleNavigateNext],
   );
 
   useHotkeys(
@@ -75,6 +120,16 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
 
   return (
     <AnnotationTreeStateProvider>
+      <ConfirmDialog
+        open={showUnsavedDialog}
+        setOpen={setShowUnsavedDialog}
+        onConfirm={handleConfirmDiscard}
+        onCancel={handleCancelNavigation}
+        title="Unsaved changes"
+        description="You have unsaved changes. Are you sure you want to continue without saving? Your changes will be lost."
+        confirmText="Discard changes"
+        cancelText="Go back"
+      />
       <SMEFlowLayout
         header={header}
         footer={
@@ -90,8 +145,9 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
               >
                 <Button
                   variant="outline"
-                  onClick={handlePrevious}
+                  onClick={handleNavigatePrevious}
                   disabled={isFirstItem}
+                  aria-label="Go to previous item"
                 >
                   <ChevronLeft className="mr-2 size-4" />
                   Previous
@@ -109,8 +165,9 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
               >
                 <Button
                   variant="outline"
-                  onClick={handleNext}
+                  onClick={handleNavigateNext}
                   disabled={isLastItem}
+                  aria-label="Go to next item"
                 >
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.NEXT].display}
@@ -129,6 +186,11 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 <Button
                   onClick={handleSubmit}
                   disabled={!validationState.canSubmit}
+                  aria-label={
+                    isLastUnprocessedItem
+                      ? "Submit and complete all annotations"
+                      : "Submit and go to next item"
+                  }
                 >
                   {isLastUnprocessedItem
                     ? "Submit & Complete"
@@ -140,6 +202,15 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                   />
                 </Button>
               </TooltipWrapper>
+              {isReviewMode && (
+                <Button
+                  variant="outline"
+                  onClick={handleExitReviewMode}
+                  aria-label="Done reviewing, return to completion screen"
+                >
+                  Done reviewing
+                </Button>
+              )}
             </div>
           </>
         }
