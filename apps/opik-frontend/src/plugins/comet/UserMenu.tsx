@@ -42,7 +42,11 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
-import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
+import {
+  Organization,
+  ORGANIZATION_PLAN_ENTERPRISE,
+  ORGANIZATION_ROLE_TYPE,
+} from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
@@ -138,6 +142,9 @@ const UserMenu = () => {
 
   const isAcademic = organization?.academic;
 
+  const isEnterpriseCustomer =
+    organization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
+
   const isLLMOnlyOrganization =
     organization?.role === ORGANIZATION_ROLE_TYPE.opik;
 
@@ -173,6 +180,7 @@ const UserMenu = () => {
       !isOnPremise() &&
       isOrganizationAdmin &&
       !isAcademic &&
+      !isEnterpriseCustomer &&
       !hideUpgradeButton
     ) {
       return (
