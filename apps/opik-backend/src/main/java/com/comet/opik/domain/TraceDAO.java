@@ -1175,9 +1175,11 @@ class TraceDAOImpl implements TraceDAO {
                  AND id IN (
                     SELECT
                         trace_id
-                    FROM experiment_items FINAL
+                    FROM experiment_items
                     WHERE workspace_id = :workspace_id
                     AND <experiment_filters>
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                  )
                  <endif>
                  <if(feedback_scores_empty_filters)>
@@ -1600,9 +1602,11 @@ class TraceDAOImpl implements TraceDAO {
                     AND id IN (
                         SELECT
                             trace_id
-                        FROM experiment_items FINAL
+                        FROM experiment_items
                         WHERE workspace_id = :workspace_id
                         AND <experiment_filters>
+                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
                     )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -2240,9 +2244,11 @@ class TraceDAOImpl implements TraceDAO {
                 AND id IN (
                     SELECT
                         trace_id
-                    FROM experiment_items FINAL
+                    FROM experiment_items
                     WHERE workspace_id = :workspace_id
                     AND <experiment_filters>
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
