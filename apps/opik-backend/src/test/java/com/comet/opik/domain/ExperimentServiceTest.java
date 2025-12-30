@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -62,6 +63,9 @@ class ExperimentServiceTest {
     @Mock
     private ExperimentResponseBuilder responseBuilder;
 
+    @Mock
+    private FeatureFlags featureFlags;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -77,7 +81,8 @@ class ExperimentServiceTest {
                 eventBus,
                 promptService,
                 sortingFactory,
-                responseBuilder);
+                responseBuilder,
+                featureFlags);
     }
 
     @Nested

@@ -22,6 +22,7 @@ import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
@@ -73,6 +74,7 @@ public class ExperimentService {
     private final @NonNull PromptService promptService;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull ExperimentResponseBuilder responseBuilder;
+    private final @NonNull FeatureFlags featureFlags;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -388,37 +390,18 @@ public class ExperimentService {
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
         return datasetService.getOrCreateDataset(experiment.datasetName())
                 .flatMap(datasetId -> {
+                    // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
+                    if (!featureFlags.isDatasetVersioningEnabled()) {
+                        return processExperimentCreation(experiment, id, name, datasetId);
+                    }
+
+                    // Case 2: Feature toggle ON - resolve version and link experiment
                     return resolveDatasetVersion(experiment, datasetId)
                             .flatMap(resolvedVersionId -> {
                                 var experimentWithVersion = experiment.toBuilder()
                                         .datasetVersionId(resolvedVersionId)
                                         .build();
-
-                                if (hasPromptVersionLinks(experimentWithVersion)) {
-                                    return validatePromptVersion(experimentWithVersion).flatMap(promptVersionMap -> {
-                                        var builder = experimentWithVersion.toBuilder();
-                                        // add prompt versions to new prompt version map field
-                                        builder.promptVersions(promptVersionMap.values().stream()
-                                                .map(promptVersion -> PromptVersionLink.builder()
-                                                        .id(promptVersion.id())
-                                                        .commit(promptVersion.commit())
-                                                        .promptId(promptVersion.promptId())
-                                                        .build())
-                                                .toList());
-                                        // add prompt version to old prompt version field (to be deprecated soon)
-                                        if (experimentWithVersion.promptVersion() != null) {
-                                            var promptVersion = promptVersionMap
-                                                    .get(experimentWithVersion.promptVersion().id());
-                                            builder.promptVersion(PromptVersionLink.builder()
-                                                    .id(promptVersion.id())
-                                                    .commit(promptVersion.commit())
-                                                    .promptId(promptVersion.promptId())
-                                                    .build());
-                                        }
-                                        return create(builder.build(), id, name, datasetId);
-                                    });
-                                }
-                                return create(experimentWithVersion, id, name, datasetId);
+                                return processExperimentCreation(experimentWithVersion, id, name, datasetId);
                             });
                 })
                 // If a conflict occurs, we just return the id of the existing experiment.
@@ -427,9 +410,47 @@ public class ExperimentService {
     }
 
     /**
-     * Resolves the dataset version ID for an experiment using 3-tier logic.
+     * Processes experiment creation by validating prompt versions (if present) and persisting the experiment.
+     * This logic is shared between versioned and unversioned experiment creation flows.
+     *
+     * @param experiment the experiment to create (with datasetVersionId already resolved)
+     * @param id the experiment ID
+     * @param name the experiment name
+     * @param datasetId the dataset ID
+     * @return Mono emitting the created experiment ID
+     */
+    private Mono<UUID> processExperimentCreation(Experiment experiment, UUID id, String name, UUID datasetId) {
+        if (hasPromptVersionLinks(experiment)) {
+            return validatePromptVersion(experiment).flatMap(promptVersionMap -> {
+                var builder = experiment.toBuilder();
+                // add prompt versions to new prompt version map field
+                builder.promptVersions(promptVersionMap.values().stream()
+                        .map(promptVersion -> PromptVersionLink.builder()
+                                .id(promptVersion.id())
+                                .commit(promptVersion.commit())
+                                .promptId(promptVersion.promptId())
+                                .build())
+                        .toList());
+                // add prompt version to old prompt version field (to be deprecated soon)
+                if (experiment.promptVersion() != null) {
+                    var promptVersion = promptVersionMap
+                            .get(experiment.promptVersion().id());
+                    builder.promptVersion(PromptVersionLink.builder()
+                            .id(promptVersion.id())
+                            .commit(promptVersion.commit())
+                            .promptId(promptVersion.promptId())
+                            .build());
+                }
+                return create(builder.build(), id, name, datasetId);
+            });
+        }
+        return create(experiment, id, name, datasetId);
+    }
+
+    /**
+     * Resolves the dataset version ID for an experiment using 2-tier logic.
      * <p>
-     * In the new versioning system, all dataset items are stored in dataset_item_versions.
+     * This method should only be called when the feature toggle is ON.
      * The resolution logic is:
      * 1. If experiment.datasetVersionId is explicitly provided, validate and use it
      * 2. Otherwise, use the latest version ID (always available after migration)
