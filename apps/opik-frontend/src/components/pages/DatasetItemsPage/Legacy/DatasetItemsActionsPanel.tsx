@@ -6,12 +6,15 @@ import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { DatasetItem } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
+import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
+import useAppStore from "@/store/AppStore";
+import { useToast } from "@/components/ui/use-toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "@/components/pages/DatasetItemsPage/DatasetExpansionDialog";
 import GeneratedSamplesDialog from "@/components/pages/DatasetItemsPage/GeneratedSamplesDialog";
-import AddTagDialog from "@/components/pages/DatasetItemsPage/AddTagDialog";
+import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -56,6 +59,9 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const disabled = !selectedDatasetItems?.length;
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
+  const { mutate: addItemsMutate } = useDatasetItemBatchMutation();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { toast } = useToast();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteDatasetItemsHandler = useCallback(() => {
@@ -79,6 +85,29 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     setGeneratedSamples(samples);
     setGeneratedSamplesDialogOpen(true);
   }, []);
+
+  const handleAddGeneratedItems = useCallback(
+    (items: DatasetItem[]) => {
+      addItemsMutate(
+        {
+          workspaceName,
+          datasetId,
+          datasetItems: items,
+        },
+        {
+          onSuccess: () => {
+            toast({
+              title: "Samples added successfully",
+              description: `${items.length} sample${
+                items.length !== 1 ? "s" : ""
+              } added to ${datasetName}`,
+            });
+          },
+        },
+      );
+    },
+    [addItemsMutate, workspaceName, datasetId, datasetName, toast],
+  );
 
   const mapRowData = useCallback(async () => {
     const datasetItems = await getDataForExport();
@@ -133,11 +162,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
       <GeneratedSamplesDialog
         key={`generate-samples-${resetKeyRef.current}`}
-        datasetId={datasetId}
-        datasetName={datasetName}
         samples={generatedSamples}
         open={generatedSamplesDialogOpen}
         setOpen={setGeneratedSamplesDialogOpen}
+        onAddItems={handleAddGeneratedItems}
       />
 
       <AddTagDialog

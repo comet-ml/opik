@@ -40,6 +40,7 @@ import {
   checkIsRowType,
   extractIdFromRowId,
 } from "@/lib/groups";
+import { cn } from "@/lib/utils";
 
 export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
@@ -177,6 +178,7 @@ export const shiftCheckboxClickHandler = <TData,>(
 
 export const generateSelectColumDef = <TData,>(meta?: {
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+  cellClassName?: string | ((context: CellContext<TData, unknown>) => string);
 }) => {
   let previousSelectedRowID = "";
 
@@ -201,26 +203,33 @@ export const generateSelectColumDef = <TData,>(meta?: {
         />
       </HeaderWrapper>
     ),
-    cell: (context) => (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-        className="py-3.5"
-        stopClickPropagation
-      >
-        <Checkbox
-          checked={context.row.getIsSelected()}
-          disabled={!context.row.getCanSelect()}
-          onCheckedChange={(value) => context.row.toggleSelected(!!value)}
-          onClick={(event) => {
-            event.stopPropagation();
-            shiftCheckboxClickHandler(event, context, previousSelectedRowID);
-            previousSelectedRowID = context.row.id;
-          }}
-          aria-label="Select row"
-        />
-      </CellWrapper>
-    ),
+    cell: (context) => {
+      const additionalClassName =
+        typeof meta?.cellClassName === "function"
+          ? meta.cellClassName(context)
+          : meta?.cellClassName || "";
+
+      return (
+        <CellWrapper
+          metadata={context.column.columnDef.meta}
+          tableMetadata={context.table.options.meta}
+          className={cn("py-3.5", additionalClassName)}
+          stopClickPropagation
+        >
+          <Checkbox
+            checked={context.row.getIsSelected()}
+            disabled={!context.row.getCanSelect()}
+            onCheckedChange={(value) => context.row.toggleSelected(!!value)}
+            onClick={(event) => {
+              event.stopPropagation();
+              shiftCheckboxClickHandler(event, context, previousSelectedRowID);
+              previousSelectedRowID = context.row.id;
+            }}
+            aria-label="Select row"
+          />
+        </CellWrapper>
+      );
+    },
     meta,
     size: 50,
     enableResizing: false,
