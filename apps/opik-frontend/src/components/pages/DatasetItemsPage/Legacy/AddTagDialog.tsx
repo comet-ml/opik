@@ -12,10 +12,6 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import useDatasetItemBatchUpdateMutation from "@/api/datasets/useDatasetItemBatchUpdateMutation";
 import { Filters } from "@/types/filters";
-import {
-  useBulkEditItems,
-  useIsAllItemsSelected,
-} from "@/store/DatasetDraftStore";
 
 type AddTagDialogProps = {
   datasetId: string;
@@ -23,6 +19,7 @@ type AddTagDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onSuccess?: () => void;
+  isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
   totalCount?: number;
@@ -34,6 +31,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   open,
   setOpen,
   onSuccess,
+  isAllItemsSelected = false,
   filters = [],
   search = "",
   totalCount = 0,
@@ -41,8 +39,6 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const { toast } = useToast();
   const [newTag, setNewTag] = useState<string>("");
   const batchUpdateMutation = useDatasetItemBatchUpdateMutation();
-  const bulkEditItems = useBulkEditItems();
-  const isAllItemsSelected = useIsAllItemsSelected();
   const MAX_ENTITIES = 1000;
 
   const handleClose = () => {
@@ -55,45 +51,31 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const handleAddTag = () => {
     if (!newTag) return;
 
-    if (!isAllItemsSelected) {
-      rows.forEach((item) => {
-        const existingTags = item?.tags || [];
-        bulkEditItems([item.id], { tags: [...existingTags, newTag] });
-      });
+    batchUpdateMutation.mutate(
+      {
+        datasetId,
+        itemIds: rows.map((row) => row.id),
+        item: { tags: [newTag] },
+        mergeTags: true,
+        isAllItemsSelected,
+        filters,
+        search,
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: "Success",
+            description: `Tag "${newTag}" added to ${effectiveCount} dataset items`,
+          });
 
-      if (onSuccess) {
-        onSuccess();
-      }
+          if (onSuccess) {
+            onSuccess();
+          }
 
-      handleClose();
-    } else {
-      // Use API for filter-based tagging
-      batchUpdateMutation.mutate(
-        {
-          datasetId,
-          itemIds: rows.map((row) => row.id),
-          item: { tags: [newTag] },
-          mergeTags: true,
-          isAllItemsSelected,
-          filters,
-          search,
+          handleClose();
         },
-        {
-          onSuccess: () => {
-            toast({
-              title: "Success",
-              description: `Tag "${newTag}" added to ${effectiveCount} dataset items`,
-            });
-
-            if (onSuccess) {
-              onSuccess();
-            }
-
-            handleClose();
-          },
-        },
-      );
-    }
+      },
+    );
   };
 
   const isOverLimit = !isAllItemsSelected && rows.length > MAX_ENTITIES;

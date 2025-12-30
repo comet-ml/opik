@@ -1,6 +1,11 @@
 import { useMemo } from "react";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
+import {
+  useIsDraftMode,
+  useAddedDatasetItemById,
+  useEditedDatasetItemById,
+} from "@/store/DatasetDraftStore";
 import { getFieldType } from "./useDatasetItemFormHelpers";
 
 export enum FIELD_TYPE {
@@ -10,9 +15,9 @@ export enum FIELD_TYPE {
 
 export type DatasetField = {
   key: string;
-  value: unknown; // Parsed value (not the original string if it was JSON-encoded)
+  value: unknown;
   type: FIELD_TYPE;
-  isJsonString?: boolean; // True if value came from a JSON-encoded string
+  isJsonString?: boolean;
 };
 
 interface UseDatasetItemDataParams {
@@ -30,12 +35,33 @@ export const useDatasetItemData = ({
   datasetItemId,
   columns,
 }: UseDatasetItemDataParams): UseDatasetItemDataReturn => {
-  const { data: datasetItem, isPending } = useDatasetItemById(
+  const isDraftMode = useIsDraftMode();
+  const draftItem = useAddedDatasetItemById(datasetItemId);
+  const editedFields = useEditedDatasetItemById(datasetItemId);
+
+  const { data: apiDatasetItem, isPending: apiIsPending } = useDatasetItemById(
     { datasetItemId: datasetItemId || "" },
     {
-      enabled: !!datasetItemId,
+      enabled: !!datasetItemId && !draftItem,
     },
   );
+
+  const datasetItem = useMemo(() => {
+    if (draftItem) return draftItem;
+
+    if (!apiDatasetItem) return undefined;
+
+    if (!isDraftMode) return apiDatasetItem;
+
+    if (!editedFields) return apiDatasetItem;
+
+    return {
+      ...apiDatasetItem,
+      ...editedFields,
+    };
+  }, [draftItem, apiDatasetItem, isDraftMode, editedFields]);
+
+  const isPending = !datasetItemId || draftItem ? false : apiIsPending;
 
   const fields = useMemo(() => {
     if (!datasetItemId) {
@@ -78,7 +104,7 @@ export const useDatasetItemData = ({
 
   return {
     fields,
-    isPending: !!datasetItemId && isPending,
+    isPending,
     datasetItem,
   };
 };

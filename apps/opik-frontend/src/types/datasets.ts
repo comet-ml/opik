@@ -60,6 +60,13 @@ export enum DATASET_ITEM_SOURCE {
   sdk = "sdk",
 }
 
+export enum DATASET_ITEM_DRAFT_STATUS {
+  unchanged = "unchanged",
+  added = "added",
+  edited = "edited",
+  // deleted items are filtered out, not shown
+}
+
 export interface DatasetItem {
   id: string;
   data: object;
@@ -69,6 +76,11 @@ export interface DatasetItem {
   tags?: string[];
   created_at: string;
   last_updated_at: string;
+}
+
+export interface DatasetItemWithDraft extends DatasetItem {
+  draftStatus?: DATASET_ITEM_DRAFT_STATUS;
+  tempId?: string;
 }
 
 export interface DatasetItemColumn {
