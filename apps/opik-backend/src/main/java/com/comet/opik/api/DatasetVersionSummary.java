@@ -19,17 +19,4 @@ public record DatasetVersionSummary(
         @Schema(description = "Sequential version name formatted as 'v1', 'v2', etc.") String versionName,
         @Schema(description = "Description of changes in this version") String changeDescription,
         @Schema(description = "Tags associated with this version") SequencedSet<String> tags) {
-
-    public static DatasetVersionSummary from(DatasetVersion version) {
-        if (version == null) {
-            return null;
-        }
-        return DatasetVersionSummary.builder()
-                .id(version.id())
-                .versionHash(version.versionHash())
-                .versionName(version.versionName())
-                .changeDescription(version.changeDescription())
-                .tags(version.tags())
-                .build();
-    }
 }
