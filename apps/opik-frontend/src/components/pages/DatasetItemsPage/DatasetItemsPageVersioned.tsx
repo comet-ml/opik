@@ -42,7 +42,6 @@ const DatasetItemsPageVersioned = () => {
     changeDescription?: string;
   } | null>(null);
 
-  // Use draft store instead of API has_draft
   const hasDraft = useIsDraftMode();
   const clearDraft = useClearDraft();
   const getChangesPayload = useGetChangesPayload();
@@ -63,14 +62,12 @@ const DatasetItemsPageVersioned = () => {
 
   const latestVersion = dataset?.latest_version;
 
-  // Reset draft store when leaving the page or changing datasets
   useEffect(() => {
     return () => {
       clearDraft();
     };
   }, [datasetId, clearDraft]);
 
-  // Navigation blocker for unsaved changes
   const { DialogComponent } = useNavigationBlocker({
     condition: hasDraft,
     title: "Unsaved changes",
@@ -80,7 +77,6 @@ const DatasetItemsPageVersioned = () => {
     cancelText: "Stay",
   });
 
-  // Mutation with 409 conflict handling
   const changesMutation = useDatasetItemChangesMutation({
     onConflict: () => {
       setOverrideDialogOpen(true);

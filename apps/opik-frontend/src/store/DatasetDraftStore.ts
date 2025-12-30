@@ -10,6 +10,7 @@ interface DatasetDraftState {
 
   // Actions
   addItem: (item: Omit<DatasetItem, "id">) => void;
+  bulkAddItems: (items: Omit<DatasetItem, "id">[]) => void;
   editItem: (id: string, changes: Partial<DatasetItem>) => void;
   deleteItem: (id: string) => void;
   bulkDeleteItems: (ids: string[]) => void;
@@ -45,6 +46,23 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
     });
   },
 
+  bulkAddItems: (items: Omit<DatasetItem, "id">[]) => {
+    set((state) => {
+      const newAddedItems = new Map(state.addedItems);
+
+      items.forEach((item) => {
+        const tempId = uuidv4();
+        const newItem: DatasetItem = {
+          ...item,
+          id: tempId,
+        };
+        newAddedItems.set(tempId, newItem);
+      });
+
+      return { addedItems: newAddedItems };
+    });
+  },
+
   editItem: (id: string, changes: Partial<DatasetItem>) => {
     set((state) => {
       // Check if this is a temp item (from addedItems)
@@ -64,27 +82,7 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
   },
 
   deleteItem: (id: string) => {
-    set((state) => {
-      // If it's a temp item, just remove it from addedItems
-      if (state.addedItems.has(id)) {
-        const newAddedItems = new Map(state.addedItems);
-        newAddedItems.delete(id);
-        return { addedItems: newAddedItems };
-      }
-
-      // If it's an edited item being deleted, remove from editedItems
-      const newEditedItems = new Map(state.editedItems);
-      newEditedItems.delete(id);
-
-      // Add to deletedIds
-      const newDeletedIds = new Set(state.deletedIds);
-      newDeletedIds.add(id);
-
-      return {
-        editedItems: newEditedItems,
-        deletedIds: newDeletedIds,
-      };
-    });
+    get().bulkDeleteItems([id]);
   },
 
   bulkDeleteItems: (ids: string[]) => {
@@ -180,6 +178,8 @@ export const selectAddedItemById = (id: string) => (state: DatasetDraftState) =>
 
 // Custom hooks (following AppStore.ts pattern)
 export const useAddItem = () => useDatasetDraftStore((state) => state.addItem);
+export const useBulkAddItems = () =>
+  useDatasetDraftStore((state) => state.bulkAddItems);
 export const useEditItem = () =>
   useDatasetDraftStore((state) => state.editItem);
 export const useDeleteItem = () =>

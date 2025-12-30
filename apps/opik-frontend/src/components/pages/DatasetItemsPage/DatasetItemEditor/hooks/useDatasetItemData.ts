@@ -49,15 +49,14 @@ export const useDatasetItemData = ({
   const datasetItem = useMemo(() => {
     if (draftItem) return draftItem;
 
-    const apiItem = apiDatasetItem;
-    if (!apiItem) return undefined;
+    if (!apiDatasetItem) return undefined;
 
-    if (!isDraftMode) return apiItem;
+    if (!isDraftMode) return apiDatasetItem;
 
-    if (!editedFields) return apiItem;
+    if (!editedFields) return apiDatasetItem;
 
     return {
-      ...apiItem,
+      ...apiDatasetItem,
       ...editedFields,
     };
   }, [draftItem, apiDatasetItem, isDraftMode, editedFields]);

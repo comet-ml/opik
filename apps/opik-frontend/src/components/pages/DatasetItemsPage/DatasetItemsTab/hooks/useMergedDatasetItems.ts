@@ -5,7 +5,7 @@ import {
   DATASET_ITEM_DRAFT_STATUS,
 } from "@/types/datasets";
 import useDatasetDraftStore, {
-  selectIsDraftMode,
+  useIsDraftMode,
 } from "@/store/DatasetDraftStore";
 import useDatasetItemsList, {
   UseDatasetItemsListParams,
@@ -64,7 +64,7 @@ export const useDatasetItemsWithDraft = (
   params: UseDatasetItemsListParams,
   options?: QueryConfig<UseDatasetItemsListResponse>,
 ) => {
-  const isDraftMode = useDatasetDraftStore(selectIsDraftMode);
+  const isDraftMode = useIsDraftMode();
   const draftAddedItems = useDatasetDraftStore((state) => state.addedItems);
   const draftEditedItems = useDatasetDraftStore((state) => state.editedItems);
   const draftDeletedIds = useDatasetDraftStore((state) => state.deletedIds);

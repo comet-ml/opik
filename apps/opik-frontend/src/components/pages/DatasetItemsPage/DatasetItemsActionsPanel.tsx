@@ -16,7 +16,9 @@ import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
-import { useBulkDeleteItems } from "@/store/DatasetDraftStore";
+import { useBulkDeleteItems, useBulkAddItems } from "@/store/DatasetDraftStore";
+import { useToast } from "@/components/ui/use-toast";
+import { DATASET_ITEM_SOURCE } from "@/types/datasets";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -59,6 +61,8 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const bulkDeleteItems = useBulkDeleteItems();
+  const bulkAddItems = useBulkAddItems();
+  const { toast } = useToast();
 
   const deleteDatasetItemsHandler = useCallback(() => {
     if (!isAllItemsSelected) {
@@ -89,6 +93,29 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     setGeneratedSamples(samples);
     setGeneratedSamplesDialogOpen(true);
   }, []);
+
+  const handleAddGeneratedItems = useCallback(
+    (items: DatasetItem[]) => {
+      const now = new Date().toISOString();
+      const itemsToAdd = items.map((item) => ({
+        data: item.data,
+        source: DATASET_ITEM_SOURCE.manual,
+        tags: item.tags || [],
+        created_at: now,
+        last_updated_at: now,
+      }));
+
+      bulkAddItems(itemsToAdd);
+
+      toast({
+        title: "Samples added to draft",
+        description: `${items.length} sample${
+          items.length !== 1 ? "s" : ""
+        } added to your draft changes`,
+      });
+    },
+    [bulkAddItems, toast],
+  );
 
   const mapRowData = useCallback(async () => {
     const datasetItems = await getDataForExport();
@@ -132,11 +159,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
       <GeneratedSamplesDialog
         key={`generate-samples-${resetKeyRef.current}`}
-        datasetId={datasetId}
-        datasetName={datasetName}
         samples={generatedSamples}
         open={generatedSamplesDialogOpen}
         setOpen={setGeneratedSamplesDialogOpen}
+        onAddItems={handleAddGeneratedItems}
       />
 
       <AddTagDialog

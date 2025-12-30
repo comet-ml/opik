@@ -62,7 +62,7 @@ import {
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
 import useDatasetDraftStore, {
-  selectIsDraftMode,
+  useIsDraftMode,
 } from "@/store/DatasetDraftStore";
 
 /**
@@ -171,7 +171,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [filters],
   );
 
-  const isDraftMode = useDatasetDraftStore(selectIsDraftMode);
+  const isDraftMode = useIsDraftMode();
   const deletedIds = useDatasetDraftStore((state) => state.deletedIds);
 
   // Compute effective size for draft mode: use 100 if in draft mode and size is default (10)
