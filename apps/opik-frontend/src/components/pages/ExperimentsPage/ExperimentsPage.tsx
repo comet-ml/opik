@@ -27,7 +27,6 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { useExperimentsTraceCountNavigation } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
@@ -345,27 +344,6 @@ const ExperimentsPage: React.FC = () => {
     ? "There are no experiments yet"
     : "No search results";
 
-  const navigateToExperimentTraces = useExperimentsTraceCountNavigation();
-
-  const columnsWithCallback = useMemo(
-    () =>
-      DEFAULT_COLUMNS.map((column) =>
-        column.id === "trace_count"
-          ? {
-              ...column,
-              customMeta: {
-                ...column.customMeta,
-                callback: navigateToExperimentTraces,
-                getIsDisabled: (row: GroupedExperiment) => !row.project_id,
-                disabledTooltip:
-                  "No project associated with this experiment. Traces cannot be viewed.",
-              },
-            }
-          : column,
-      ),
-    [navigateToExperimentTraces],
-  );
-
   const {
     columns,
     selectedRows,
@@ -381,7 +359,7 @@ const ExperimentsPage: React.FC = () => {
     groupFieldNames,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
-    defaultColumns: columnsWithCallback,
+    defaultColumns: DEFAULT_COLUMNS,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
     groups,
     sortableBy,
