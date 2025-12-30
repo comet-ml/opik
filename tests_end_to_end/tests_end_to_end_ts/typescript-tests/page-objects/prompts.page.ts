@@ -127,8 +127,8 @@ export class PromptDetailsPage {
     await promptTab.click();
     await this.page.waitForTimeout(500);
 
-    const promptCode = this.page.locator('code').first();
-    const text = await promptCode.textContent();
+    const promptContainer = this.page.getByTestId('prompt-text-content');
+    const text = await promptContainer.textContent();
     return text?.trim() || '';
   }
 }
