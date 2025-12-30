@@ -27,12 +27,12 @@ const CompletionView: React.FunctionComponent<CompletionViewProps> = ({
           <p>You can close this tab.</p>
         </div>
         <Button
-          variant="link"
+          variant="outline"
           onClick={handleStartReviewing}
           className="mt-4"
           aria-label="Review my annotations"
         >
-          review my annotations
+          Review my annotations
         </Button>
       </Card>
     </SMEFlowLayout>
