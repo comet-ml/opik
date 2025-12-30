@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FlaskConical, Pause, Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -160,18 +160,13 @@ const PlaygroundOutputActions = ({
   const datasets = datasetsData?.content || EMPTY_DATASETS;
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
-  const {
-    stopAll,
-    runAll,
-    isRunning,
-    createdExperiments,
-    navigateToExperiments,
-  } = useActionButtonActions({
-    workspaceName,
-    datasetItems,
-    datasetName,
-    datasetId: datasetId ? datasetId : undefined,
-  });
+  const { stopAll, runAll, isRunning, createdExperiments } =
+    useActionButtonActions({
+      workspaceName,
+      datasetItems,
+      datasetName,
+      datasetId: datasetId ? datasetId : undefined,
+    });
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -406,27 +401,26 @@ const PlaygroundOutputActions = ({
         </div>
       )}
       <div className="sticky flex items-center justify-between gap-2">
-        {createdExperiments.length > 0 && (
+        {createdExperiments.length > 0 && datasetId && (
           <div className="flex gap-2">
-            <TooltipWrapper
-              content={
-                createdExperiments.length === 1
-                  ? "Your run was stored in this experiment. Explore your results to find insights."
-                  : "Your run was stored in experiments. Explore comparison results to get insights."
-              }
-            >
-              <Button
-                size="sm"
-                className="mt-2.5"
-                onClick={navigateToExperiments}
-                variant="outline"
-              >
-                <FlaskConical className="mr-2 size-4" />
-                {createdExperiments.length === 1
-                  ? "Explore experiment"
-                  : "Compare experiments"}
-              </Button>
-            </TooltipWrapper>
+            <div className="mt-2.5">
+              <NavigationTag
+                resource={RESOURCE_TYPE.experiment}
+                id={datasetId}
+                name={
+                  createdExperiments.length === 1 ? "Experiment" : "Experiments"
+                }
+                className="h-8"
+                search={{
+                  experiments: createdExperiments.map((e) => e.id),
+                }}
+                tooltipContent={
+                  createdExperiments.length === 1
+                    ? "Your run was stored in this experiment. Explore your results to find insights."
+                    : "Your run was stored in experiments. Explore comparison results to get insights."
+                }
+              />
+            </div>
             {createdExperiments.length === 1 &&
               playgroundProject?.id &&
               createdExperiments[0]?.id && (
@@ -435,7 +429,6 @@ const PlaygroundOutputActions = ({
                     resource={RESOURCE_TYPE.traces}
                     id={playgroundProject.id}
                     name="Traces"
-                    size="lg"
                     className="h-8"
                     search={{
                       traces_filters: generateExperimentIdFilter(
