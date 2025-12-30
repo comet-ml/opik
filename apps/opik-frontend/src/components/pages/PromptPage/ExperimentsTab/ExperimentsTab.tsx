@@ -27,10 +27,10 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
-import { useExperimentsColumnsWithTraceCount } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
+import { useExperimentsTraceCountNavigation } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -152,7 +152,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
-    cell: LinkCell as never,
+    cell: TraceCountCell as never,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
@@ -319,8 +319,26 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setExpanded: expandingConfig.setExpanded,
   });
 
-  const columnsWithCallback =
-    useExperimentsColumnsWithTraceCount(DEFAULT_COLUMNS);
+  const navigateToExperimentTraces = useExperimentsTraceCountNavigation();
+
+  const columnsWithCallback = useMemo(
+    () =>
+      DEFAULT_COLUMNS.map((column) =>
+        column.id === "trace_count"
+          ? {
+              ...column,
+              customMeta: {
+                ...column.customMeta,
+                callback: navigateToExperimentTraces,
+                getIsDisabled: (row: GroupedExperiment) => !row.project_id,
+                disabledTooltip:
+                  "No project associated with this experiment. Traces cannot be viewed.",
+              },
+            }
+          : column,
+      ),
+    [navigateToExperimentTraces],
+  );
 
   const {
     columns,

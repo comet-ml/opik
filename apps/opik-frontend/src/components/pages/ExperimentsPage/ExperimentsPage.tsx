@@ -22,12 +22,12 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { useExperimentsColumnsWithTraceCount } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
+import { useExperimentsTraceCountNavigation } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
@@ -166,7 +166,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
-    cell: LinkCell as never,
+    cell: TraceCountCell as never,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
@@ -345,8 +345,26 @@ const ExperimentsPage: React.FC = () => {
     ? "There are no experiments yet"
     : "No search results";
 
-  const columnsWithCallback =
-    useExperimentsColumnsWithTraceCount(DEFAULT_COLUMNS);
+  const navigateToExperimentTraces = useExperimentsTraceCountNavigation();
+
+  const columnsWithCallback = useMemo(
+    () =>
+      DEFAULT_COLUMNS.map((column) =>
+        column.id === "trace_count"
+          ? {
+              ...column,
+              customMeta: {
+                ...column.customMeta,
+                callback: navigateToExperimentTraces,
+                getIsDisabled: (row: GroupedExperiment) => !row.project_id,
+                disabledTooltip:
+                  "No project associated with this experiment. Traces cannot be viewed.",
+              },
+            }
+          : column,
+      ),
+    [navigateToExperimentTraces],
+  );
 
   const {
     columns,
