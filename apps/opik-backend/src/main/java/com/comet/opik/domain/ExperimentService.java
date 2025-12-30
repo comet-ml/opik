@@ -333,15 +333,29 @@ public class ExperimentService {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     Set<UUID> promptVersionIds = getPromptVersionIds(experiment);
 
+                    // Get dataset version if experiment has a version ID
+                    Mono<Optional<DatasetVersion>> versionMono = experiment.datasetVersionId() != null
+                            ? Mono.fromCallable(() -> Optional.ofNullable(
+                                    datasetVersionService.findByIds(List.of(experiment.datasetVersionId()), workspaceId)
+                                            .stream()
+                                            .findFirst()
+                                            .orElse(null)))
+                                    .subscribeOn(Schedulers.boundedElastic())
+                            : Mono.just(Optional.empty());
+
                     return Mono.zip(
                             promptService.getVersionsInfoByVersionsIds(promptVersionIds),
                             Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
-                                    .subscribeOn(Schedulers.boundedElastic()))
+                                    .subscribeOn(Schedulers.boundedElastic()),
+                            versionMono)
                             .map(tuple -> experiment.toBuilder()
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
                                     .datasetName(tuple.getT2()
                                             .map(Dataset::name)
+                                            .orElse(null))
+                                    .datasetVersionName(tuple.getT3()
+                                            .map(DatasetVersion::versionName)
                                             .orElse(null))
                                     .build());
                 }));

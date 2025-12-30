@@ -1797,9 +1797,10 @@ class DatasetVersionResourceTest {
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
-            // then - experiment should have the specified version ID
+            // then - experiment should have the specified version ID and version name
             var createdExperiment = getExperiment(experimentId);
             assertThat(createdExperiment.datasetVersionId()).isEqualTo(version1.id());
+            assertThat(createdExperiment.datasetVersionName()).isEqualTo(version1.versionName());
         }
 
         @Test
@@ -1816,15 +1817,23 @@ class DatasetVersionResourceTest {
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
-            // then - experiment should have a version ID from the dataset
+            // then - experiment should have a version ID and version name from the dataset
             var createdExperiment = getExperiment(experimentId);
             assertThat(createdExperiment.datasetVersionId()).isNotNull();
+            assertThat(createdExperiment.datasetVersionName()).isNotNull();
             assertThat(createdExperiment.datasetId()).isEqualTo(datasetId);
 
             // Verify the version belongs to this dataset
             var allVersions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
             var versionIds = allVersions.content().stream().map(DatasetVersion::id).toList();
             assertThat(versionIds).contains(createdExperiment.datasetVersionId());
+
+            // Verify version name matches the version
+            var matchingVersion = allVersions.content().stream()
+                    .filter(v -> v.id().equals(createdExperiment.datasetVersionId()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(createdExperiment.datasetVersionName()).isEqualTo(matchingVersion.versionName());
         }
 
         @Test
@@ -1849,12 +1858,14 @@ class DatasetVersionResourceTest {
                     1, 10, datasetId, null, null, null, false, null, null, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
 
-            // then - version ID should be present in the list
+            // then - version ID and version name should be present in the list
             assertThat(experimentsList.content())
                     .hasSize(1)
                     .first()
-                    .extracting(Experiment::datasetVersionId)
-                    .isEqualTo(version1.id());
+                    .satisfies(exp -> {
+                        assertThat(exp.datasetVersionId()).isEqualTo(version1.id());
+                        assertThat(exp.datasetVersionName()).isEqualTo(version1.versionName());
+                    });
         }
 
         @Test
@@ -1890,7 +1901,7 @@ class DatasetVersionResourceTest {
                     1, 10, datasetId, null, null, null, false, null, null, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
 
-            // then - each experiment should have its correct version ID
+            // then - each experiment should have its correct version ID and version name
             assertThat(experimentsList.content()).hasSize(2);
 
             var exp1FromList = experimentsList.content().stream()
@@ -1898,12 +1909,14 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(exp1FromList.datasetVersionId()).isEqualTo(version1.id());
+            assertThat(exp1FromList.datasetVersionName()).isEqualTo(version1.versionName());
 
             var exp2FromList = experimentsList.content().stream()
                     .filter(e -> e.id().equals(experimentId2))
                     .findFirst()
                     .orElseThrow();
             assertThat(exp2FromList.datasetVersionId()).isEqualTo(version2.id());
+            assertThat(exp2FromList.datasetVersionName()).isEqualTo(version2.versionName());
         }
     }
 
