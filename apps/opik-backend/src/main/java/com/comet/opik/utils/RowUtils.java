@@ -3,6 +3,8 @@ package com.comet.opik.utils;
 import io.r2dbc.spi.Row;
 import lombok.experimental.UtilityClass;
 
+import java.util.NoSuchElementException;
+
 /**
  * Utility class for safely accessing database row values.
  * Contains shared methods for handling optional columns that may not exist in query results.
@@ -27,8 +29,8 @@ public final class RowUtils {
     public static <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
         try {
             return row.getMetadata().contains(columnName) ? row.get(columnName, type) : null;
-        } catch (IllegalArgumentException e) {
-            // Column doesn't exist in this query result or type mismatch - return null
+        } catch (IllegalArgumentException | NoSuchElementException e) {
+            // Column doesn't exist in this query result, type mismatch, or invalid column name - return null
             return null;
         }
     }
