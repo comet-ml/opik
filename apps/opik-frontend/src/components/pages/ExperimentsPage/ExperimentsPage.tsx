@@ -229,6 +229,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DATASET_ID,
   "created_at",
   "duration.p50",
+  "trace_count",
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];

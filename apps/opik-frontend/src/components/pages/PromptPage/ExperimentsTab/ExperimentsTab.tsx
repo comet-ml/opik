@@ -217,6 +217,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "prompt",
   COLUMN_DATASET_ID,
   "created_at",
+  "trace_count",
 ];
 
 interface ExperimentsTabProps {
