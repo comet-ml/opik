@@ -27,8 +27,8 @@ public final class RowUtils {
     public static <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
         try {
             return row.getMetadata().contains(columnName) ? row.get(columnName, type) : null;
-        } catch (Exception e) {
-            // Column doesn't exist in this query result - return null
+        } catch (IllegalArgumentException e) {
+            // Column doesn't exist in this query result or type mismatch - return null
             return null;
         }
     }
