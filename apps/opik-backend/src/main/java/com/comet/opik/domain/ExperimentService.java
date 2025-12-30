@@ -431,7 +431,7 @@ public class ExperimentService {
      * <p>
      * In the new versioning system, all dataset items are stored in dataset_item_versions.
      * The resolution logic is:
-     * 1. If experiment.datasetVersionId is explicitly provided, use it
+     * 1. If experiment.datasetVersionId is explicitly provided, validate and use it
      * 2. Otherwise, use the latest version ID (always available after migration)
      *
      * @param experiment the experiment being created
@@ -442,11 +442,26 @@ public class ExperimentService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // Case 1: Version ID explicitly provided - use it
+            // Case 1: Version ID explicitly provided - validate and use it
             if (experiment.datasetVersionId() != null) {
-                log.info("Using explicitly provided dataset version ID '{}' for experiment on dataset '{}'",
+                log.info("Validating explicitly provided dataset version ID '{}' for experiment on dataset '{}'",
                         experiment.datasetVersionId(), datasetId);
-                return Mono.just(experiment.datasetVersionId());
+                return Mono.fromCallable(() -> {
+                    // Validate the version exists and belongs to this dataset
+                    var version = datasetVersionService.getVersionById(workspaceId, datasetId,
+                            experiment.datasetVersionId());
+
+                    // Verify the version actually belongs to the specified dataset
+                    if (!version.datasetId().equals(datasetId)) {
+                        throw new NotFoundException(
+                                "Version '%s' does not belong to dataset '%s'"
+                                        .formatted(experiment.datasetVersionId(), datasetId));
+                    }
+
+                    log.info("Using validated dataset version ID '{}' for experiment on dataset '{}'",
+                            version.id(), datasetId);
+                    return version.id();
+                }).subscribeOn(Schedulers.boundedElastic());
             }
 
             // Case 2: No version specified - use latest version

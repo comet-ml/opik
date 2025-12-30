@@ -57,7 +57,7 @@ public record Experiment(
                 Experiment.View.Write.class}) @Schema(deprecated = true) PromptVersionLink promptVersion,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions,
         @JsonView({Experiment.View.Public.class,
-                Experiment.View.Write.class}) @Schema(description = "ID of the dataset version this experiment is linked to. If null, experiment uses the latest available version or draft items.") UUID datasetVersionId,
+                Experiment.View.Write.class}) @Schema(description = "ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.") UUID datasetVersionId,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Sequential version name (e.g., 'v1', 'v2') of the dataset version this experiment is linked to.") String datasetVersionName){
 

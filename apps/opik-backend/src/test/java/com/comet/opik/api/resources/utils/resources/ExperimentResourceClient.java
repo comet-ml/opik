@@ -87,14 +87,18 @@ public class ExperimentResourceClient {
     }
 
     public UUID create(Experiment experiment, String apiKey, String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(experiment))) {
+        try (var response = callCreate(experiment, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return TestUtils.getIdFromLocation(response.getLocation());
         }
+    }
+
+    public Response callCreate(Experiment experiment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(experiment));
     }
 
     public UUID create(String apiKey, String workspaceName) {

@@ -757,7 +757,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                 request.lastRetrievedId());
                                     } else {
                                         // No version exists yet - return empty
-                                        log.info("No versions exist for dataset '{}', returning empty stream",
+                                        log.warn("No versions exist for dataset '{}', returning empty stream",
                                                 dataset.id());
                                         return Flux.empty();
                                     }

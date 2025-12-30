@@ -1918,6 +1918,52 @@ class DatasetVersionResourceTest {
             assertThat(exp2FromList.datasetVersionId()).isEqualTo(version2.id());
             assertThat(exp2FromList.datasetVersionName()).isEqualTo(version2.versionName());
         }
+
+        @Test
+        @DisplayName("Error: Create experiment with non-existent version ID")
+        void createExperiment_whenInvalidVersionId_thenNotFound() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 1);
+
+            var nonExistentVersionId = UUID.randomUUID();
+
+            // when - create experiment with non-existent version ID
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(nonExistentVersionId)
+                    .build();
+
+            // then - should fail with 404
+            try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Create experiment with version ID from different dataset")
+        void createExperiment_whenVersionFromDifferentDataset_thenNotFound() {
+            // given - create two datasets with versions
+            var dataset1Name = UUID.randomUUID().toString();
+            var dataset1Id = createDataset(dataset1Name);
+            createDatasetItems(dataset1Id, 1);
+            var version1 = getLatestVersion(dataset1Id);
+
+            var dataset2Name = UUID.randomUUID().toString();
+            createDataset(dataset2Name);
+
+            // when - try to create experiment on dataset2 with version from dataset1
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset2Name)
+                    .datasetVersionId(version1.id())
+                    .build();
+
+            // then - should fail with 404 (version doesn't belong to dataset2)
+            try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
     }
 
     @Nested
