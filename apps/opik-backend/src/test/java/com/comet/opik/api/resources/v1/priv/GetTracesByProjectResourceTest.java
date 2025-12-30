@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.Guardrail;
@@ -31,6 +32,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TestWorkspace;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -177,6 +179,7 @@ class GetTracesByProjectResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
     private IdGenerator idGenerator;
 
     @BeforeAll
@@ -194,6 +197,7 @@ class GetTracesByProjectResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         this.guardrailsGenerator = new GuardrailsGenerator();
         this.idGenerator = idGenerator;
     }
@@ -1054,6 +1058,94 @@ class GetTracesByProjectResourceTest {
                     .projectId(projectId)
                     .scope(AnnotationQueue.AnnotationScope.TRACE)
                     .build();
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        @DisplayName("When filtering by experiment_id, should return only traces associated with the experiment")
+        void whenFilterExperimentIdEquals__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create traces
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(project.name())
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans for stats endpoint
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, 1)
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .projectName(project.name())
+                                    .traceId(trace.id())
+                                    .type(SpanType.general)
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Update trace objects with span count for stats calculation
+            var updatedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder().spanCount(1).build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            var expectedTraces = List.of(updatedTraces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .build());
+
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            // Create experiments
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(UUID.randomUUID())
+                    .build();
+            var experiment1Id = experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(UUID.randomUUID())
+                    .build();
+            var experiment2Id = experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            // Create experiment items linking traces to experiments
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment1Id)
+                    .traceId(updatedTraces.getFirst().id())
+                    .build();
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment2Id)
+                    .traceId(updatedTraces.get(1).id())
+                    .build();
+
+            experimentResourceClient.createExperimentItem(
+                    Set.of(experimentItem1, experimentItem2), apiKey, workspaceName);
+
+            // Create filter for experiment_id
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.EXPERIMENT_ID)
+                    .operator(Operator.EQUAL)
+                    .value(experiment1Id.toString())
+                    .build());
+
+            var values = testAssertion.transformTestParams(updatedTraces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
         }
 
         @ParameterizedTest

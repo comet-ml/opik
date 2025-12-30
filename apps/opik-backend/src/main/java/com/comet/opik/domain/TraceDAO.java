@@ -1171,6 +1171,15 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE <trace_aggregation_filters>
                  )
                  <endif>
+                 <if(experiment_filters)>
+                 AND id IN (
+                    SELECT
+                        trace_id
+                    FROM experiment_items FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND <experiment_filters>
+                 )
+                 <endif>
                  <if(feedback_scores_empty_filters)>
                  AND (
                     id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
@@ -1585,6 +1594,15 @@ class TraceDAOImpl implements TraceDAO {
                         id IN (SELECT trace_id FROM sfsc WHERE sfsc.span_feedback_scores_count = 0)
                             OR
                         id NOT IN (SELECT trace_id FROM sfsc)
+                    )
+                    <endif>
+                    <if(experiment_filters)>
+                    AND id IN (
+                        SELECT
+                            trace_id
+                        FROM experiment_items FINAL
+                        WHERE workspace_id = :workspace_id
+                        AND <experiment_filters>
                     )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -2216,6 +2234,15 @@ class TraceDAOImpl implements TraceDAO {
                         trace_id
                     FROM spans_agg
                     WHERE <trace_aggregation_filters>
+                )
+                <endif>
+                <if(experiment_filters)>
+                AND id IN (
+                    SELECT
+                        trace_id
+                    FROM experiment_items FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND <experiment_filters>
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
