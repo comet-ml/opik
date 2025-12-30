@@ -149,7 +149,7 @@ const DatasetItemsPageVersioned = () => {
                 className="flex shrink-0 items-center gap-1"
               >
                 <GitCommitVertical className="size-3 text-green-500" />
-                {latestVersion.version_hash}
+                {latestVersion.version_name}
               </Tag>
               {latestVersion.tags?.map((tag) => (
                 <ColoredTag

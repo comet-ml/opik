@@ -65,7 +65,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
         setOpen={setOpen}
         onConfirm={handleRestore}
         title="Restore version"
-        description={`Restoring this version will create a new version based on version ${version.version_hash}. All previous versions will stay in your history.`}
+        description={`Restoring this version will create a new version based on version ${version.version_name}. All previous versions will stay in your history.`}
         confirmText="Restore version"
         confirmButtonVariant="default"
       />
