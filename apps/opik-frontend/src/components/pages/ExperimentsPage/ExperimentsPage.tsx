@@ -22,6 +22,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
@@ -164,9 +165,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
+    cell: TraceCountCell as never,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
+      tooltip: "View experiment traces",
     },
   },
   {
@@ -225,6 +228,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DATASET_ID,
   "created_at",
   "duration.p50",
+  "trace_count",
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];
