@@ -46,7 +46,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   // State for unsaved changes confirmation dialog
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<
-    "next" | "previous" | null
+    "next" | "previous" | "exit" | null
   >(null);
 
   const handleNavigateNext = useCallback(() => {
@@ -67,16 +67,33 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     }
   }, [hasChanges, handlePrevious]);
 
+  const handleDoneReviewing = useCallback(() => {
+    if (hasChanges) {
+      setPendingNavigation("exit");
+      setShowUnsavedDialog(true);
+    } else {
+      handleExitReviewMode();
+    }
+  }, [hasChanges, handleExitReviewMode]);
+
   const handleConfirmDiscard = useCallback(() => {
     discardChanges();
     if (pendingNavigation === "next") {
       handleNext();
     } else if (pendingNavigation === "previous") {
       handlePrevious();
+    } else if (pendingNavigation === "exit") {
+      handleExitReviewMode();
     }
     setPendingNavigation(null);
     setShowUnsavedDialog(false);
-  }, [pendingNavigation, discardChanges, handleNext, handlePrevious]);
+  }, [
+    pendingNavigation,
+    discardChanges,
+    handleNext,
+    handlePrevious,
+    handleExitReviewMode,
+  ]);
 
   const handleCancelNavigation = useCallback(() => {
     setPendingNavigation(null);
@@ -205,7 +222,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
               {isReviewMode && (
                 <Button
                   variant="outline"
-                  onClick={handleExitReviewMode}
+                  onClick={handleDoneReviewing}
                   aria-label="Done reviewing, return to completion screen"
                 >
                   Done reviewing
