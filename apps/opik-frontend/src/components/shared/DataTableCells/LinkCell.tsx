@@ -10,15 +10,27 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 type CustomMeta<TData> = {
-  callback: (row: TData) => void;
-  asId: boolean;
+  callback?: (row: TData) => void;
+  asId?: boolean;
+  tooltip?: string;
+  getIsDisabled?: (row: TData) => boolean;
+  disabledTooltip?: string;
 };
 
 const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { callback, asId } = (custom ?? {}) as CustomMeta<TData>;
-  const value = context.getValue() as string;
+  const { callback, asId, tooltip, getIsDisabled, disabledTooltip } = (custom ??
+    {}) as CustomMeta<TData>;
+  const value = context.getValue() as string | number;
   const { toast } = useToast();
+  const row = context.row.original;
+
+  // Check if disabled: value is 0/falsy OR getIsDisabled returns true
+  // Note: When value is 0, we render "-" but isDisabled is still true for consistency
+  const isDisabled = !value || (getIsDisabled ? getIsDisabled(row) : false);
+  const effectiveTooltip = isDisabled
+    ? disabledTooltip ?? tooltip ?? String(value)
+    : tooltip ?? String(value);
 
   const copyClickHandler = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -26,9 +38,19 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
       toast({
         description: "ID copied to clipboard",
       });
-      copy(value);
+      copy(String(value));
     },
     [toast, value],
+  );
+
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      if (!isDisabled && callback) {
+        callback(row);
+      }
+    },
+    [isDisabled, callback, row],
   );
 
   return (
@@ -38,16 +60,17 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
       className="group py-1"
     >
       {value ? (
-        <TooltipWrapper content={value} stopClickPropagation>
+        <TooltipWrapper content={effectiveTooltip} stopClickPropagation>
           <div className="flex max-w-full items-center">
             <Button
               variant="tableLink"
               size="sm"
-              className="block truncate px-0 leading-8"
-              onClick={(event) => {
-                event.stopPropagation();
-                callback(context.row.original);
-              }}
+              className={cn(
+                "block truncate px-0 leading-8",
+                isDisabled && "cursor-not-allowed opacity-50",
+              )}
+              onClick={handleClick}
+              disabled={isDisabled}
             >
               {value}
             </Button>

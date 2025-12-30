@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import { BooleanParam, useQueryParam } from "use-query-params";
 import { Maximize2, Minimize2, PenLine } from "lucide-react";
@@ -16,6 +16,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { AggregatedFeedbackScore } from "@/types/shared";
+import { generateExperimentIdFilter } from "@/lib/filters";
 import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
@@ -109,6 +110,13 @@ const CompareExperimentsDetails: React.FunctionComponent<
     isCompare,
     experiments,
   });
+
+  const experimentTracesSearch = useMemo(
+    () => ({
+      traces_filters: generateExperimentIdFilter(experimentsIds[0]),
+    }),
+    [experimentsIds],
+  );
 
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
@@ -239,6 +247,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
               resource={RESOURCE_TYPE.prompt}
             />
           )}
+        {!isCompare && experiment?.project_id && (
+          <NavigationTag
+            resource={RESOURCE_TYPE.traces}
+            id={experiment.project_id}
+            name="Traces"
+            search={experimentTracesSearch}
+            tooltipContent="View all traces for this experiment"
+          />
+        )}
       </div>
       {renderSubSection()}
       {renderCharts()}
