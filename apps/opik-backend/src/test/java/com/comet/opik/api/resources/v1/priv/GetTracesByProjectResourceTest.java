@@ -1101,7 +1101,6 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> trace.toBuilder().spanCount(1).build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
-            var expectedTraces = List.of(updatedTraces.getFirst());
             var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .projectName(project.name())
@@ -1140,7 +1139,8 @@ class GetTracesByProjectResourceTest {
                     .value(experiment1Id.toString())
                     .build());
 
-            var values = testAssertion.transformTestParams(updatedTraces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(updatedTraces, List.of(updatedTraces.getFirst()),
+                    unexpectedTraces);
 
             testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
