@@ -13,7 +13,7 @@ export const useExperimentsTraceCountNavigation = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const handleTraceCountZoomIn = useCallback(
+  const navigateToExperimentTraces = useCallback(
     (row: GroupedExperiment) => {
       if (!row.project_id) return;
 
@@ -31,7 +31,7 @@ export const useExperimentsTraceCountNavigation = () => {
     [navigate, workspaceName],
   );
 
-  return handleTraceCountZoomIn;
+  return navigateToExperimentTraces;
 };
 
 /**
@@ -66,10 +66,11 @@ export const useExperimentsColumnsWithTraceCount = <
 >(
   columns: ColumnData<T>[],
 ): ColumnData<T>[] => {
-  const handleTraceCountZoomIn = useExperimentsTraceCountNavigation();
+  const navigateToExperimentTraces = useExperimentsTraceCountNavigation();
 
   return useMemo(
-    () => enhanceColumnsWithTraceCountCallback(columns, handleTraceCountZoomIn),
-    [columns, handleTraceCountZoomIn],
+    () =>
+      enhanceColumnsWithTraceCountCallback(columns, navigateToExperimentTraces),
+    [columns, navigateToExperimentTraces],
   );
 };
