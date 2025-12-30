@@ -249,6 +249,7 @@ interface SMEFlowContextValue {
   setCurrentView: (currentView: WORKFLOW_STATUS) => void;
   handleStartAnnotating: () => void;
   handleStartReviewing: () => void;
+  handleExitReviewMode: () => void;
   handleNext: () => void;
   handlePrevious: () => void;
   handleSubmit: () => void;
@@ -440,6 +441,11 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     setIsReviewMode(true);
     setCurrentView(WORKFLOW_STATUS.ANNOTATING);
     setCurrentIndex(0);
+  }, [setCurrentView]);
+
+  const handleExitReviewMode = useCallback(() => {
+    setIsReviewMode(false);
+    setCurrentView(WORKFLOW_STATUS.COMPLETED);
   }, [setCurrentView]);
 
   const handleNext = useCallback(() => {
@@ -811,7 +817,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
 
     // Review mode state
     isReviewMode,
-    reviewedCount: currentIndex + 1, // Current position in the queue (1-indexed)
+    reviewedCount: queueItems.length === 0 ? 0 : currentIndex + 1, // Current position in the queue (1-indexed)
 
     // Annotation state
     currentAnnotationState,
@@ -824,6 +830,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     setCurrentView,
     handleStartAnnotating,
     handleStartReviewing,
+    handleExitReviewMode,
     handleNext,
     handlePrevious,
     handleSubmit,

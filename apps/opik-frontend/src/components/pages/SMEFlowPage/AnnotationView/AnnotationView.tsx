@@ -31,10 +31,12 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     queueItems,
     validationState,
     isLastUnprocessedItem,
+    isReviewMode,
     hasChanges,
     handleNext,
     handlePrevious,
     handleSubmit,
+    handleExitReviewMode,
     discardChanges,
   } = useSMEFlow();
 
@@ -200,6 +202,15 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                   />
                 </Button>
               </TooltipWrapper>
+              {isReviewMode && (
+                <Button
+                  variant="outline"
+                  onClick={handleExitReviewMode}
+                  aria-label="Done reviewing, return to completion screen"
+                >
+                  Done reviewing
+                </Button>
+              )}
             </div>
           </>
         }

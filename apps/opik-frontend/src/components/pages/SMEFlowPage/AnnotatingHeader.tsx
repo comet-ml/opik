@@ -33,7 +33,9 @@ const AnnotatingHeader: React.FunctionComponent<AnnotatingHeaderProps> = ({
         <div className="comet-body-s-accented text-foreground">Progress</div>
         <span className="comet-body-s text-light-slate">
           {processedCount}/{totalCount} completed
-          {isReviewMode && ` · ${reviewedCount}/${totalCount} reviewed`}
+          {isReviewMode &&
+            totalCount > 0 &&
+            ` · ${reviewedCount}/${totalCount} reviewed`}
         </span>
       </div>
       <div className="flex flex-1 items-center space-x-4">
