@@ -14,7 +14,7 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "@/components/pages/DatasetItemsPage/DatasetExpansionDialog";
 import GeneratedSamplesDialog from "@/components/pages/DatasetItemsPage/GeneratedSamplesDialog";
-import AddTagDialog from "@/components/pages/DatasetItemsPage/AddTagDialog";
+import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
