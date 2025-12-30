@@ -22,12 +22,12 @@ interface VersionHistoryTabProps {
 const getRowId = (v: DatasetVersion) => v.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: ["version_hash"],
+  left: ["version_name"],
 };
 
 const COLUMNS: ColumnData<DatasetVersion>[] = [
   {
-    id: "version_hash",
+    id: "version_name",
     label: "Version",
     type: COLUMN_TYPE.string,
   },

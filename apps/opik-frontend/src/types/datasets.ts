@@ -24,7 +24,7 @@ export interface Dataset {
   status?: DATASET_STATUS;
   latest_version?: Pick<
     DatasetVersion,
-    "id" | "version_hash" | "tags" | "change_description"
+    "id" | "version_hash" | "version_name" | "tags" | "change_description"
   >;
 }
 
@@ -32,6 +32,7 @@ export interface DatasetVersion {
   id: string;
   dataset_id: string;
   version_hash: string;
+  version_name?: string;
   items_total: number;
   items_added: number;
   items_modified: number;
