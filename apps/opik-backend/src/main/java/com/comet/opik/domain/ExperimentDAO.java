@@ -677,8 +677,7 @@ class ExperimentDAO {
                 null AS total_estimated_cost,
                 null AS total_estimated_cost_avg,
                 null AS usage,
-                null AS comments_array_agg,
-                dataset_version_id
+                null AS comments_array_agg
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
