@@ -30,7 +30,6 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
-import { useExperimentsTraceCountNavigation } from "@/components/pages-shared/experiments/useExperimentsTraceCountNavigation";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -319,27 +318,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setExpanded: expandingConfig.setExpanded,
   });
 
-  const navigateToExperimentTraces = useExperimentsTraceCountNavigation();
-
-  const columnsWithCallback = useMemo(
-    () =>
-      DEFAULT_COLUMNS.map((column) =>
-        column.id === "trace_count"
-          ? {
-              ...column,
-              customMeta: {
-                ...column.customMeta,
-                callback: navigateToExperimentTraces,
-                getIsDisabled: (row: GroupedExperiment) => !row.project_id,
-                disabledTooltip:
-                  "No project associated with this experiment. Traces cannot be viewed.",
-              },
-            }
-          : column,
-      ),
-    [navigateToExperimentTraces],
-  );
-
   const {
     columns,
     selectedRows,
@@ -354,7 +332,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setColumnsOrder,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
-    defaultColumns: columnsWithCallback,
+    defaultColumns: DEFAULT_COLUMNS,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
     groups,
     sortableBy,
