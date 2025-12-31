@@ -58,18 +58,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
               onValueChange={handleFrameworkSelect}
             >
               <SelectTrigger className="w-full">
-                <div className="flex items-center gap-2">
-                  <img
-                    alt={integration.label}
-                    src={
-                      themeMode === THEME_MODE.DARK && integration.logoWhite
-                        ? integration.logoWhite
-                        : integration.logo
-                    }
-                    className="size-4 shrink-0"
-                  />
-                  <SelectValue />
-                </div>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {integrationList.map((item) => (
