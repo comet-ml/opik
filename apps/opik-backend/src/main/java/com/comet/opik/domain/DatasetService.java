@@ -8,7 +8,6 @@ import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -611,7 +610,7 @@ class DatasetServiceImpl implements DatasetService {
                             .optimizationCount(optimizationSummary.optimizationCount())
                             .mostRecentExperimentAt(resume.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
-                            .latestVersion(DatasetVersionSummary.from(latestVersion))
+                            .latestVersion(DatasetVersionMapper.INSTANCE.toDatasetVersionSummary(latestVersion))
                             .build();
                 })
                 .toList();

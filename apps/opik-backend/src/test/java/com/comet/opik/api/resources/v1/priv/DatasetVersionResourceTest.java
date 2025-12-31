@@ -1299,6 +1299,8 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Dataset not found in list"));
             assertThat(dataset.datasetItemsCount()).isEqualTo(3L);
+            assertThat(dataset.latestVersion()).isNotNull();
+            assertThat(dataset.latestVersion().versionName()).isEqualTo("v1");
 
             // Now delete an item via applyDeltaChanges (creates version 2 with 2 items)
             var v1Items = datasetResourceClient.getDatasetItems(
@@ -1321,6 +1323,8 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Dataset not found in list after update"));
             assertThat(datasetAfter.datasetItemsCount()).isEqualTo(2L);
+            assertThat(datasetAfter.latestVersion()).isNotNull();
+            assertThat(datasetAfter.latestVersion().versionName()).isEqualTo("v2");
 
             // Verify latest version has 2 items
             var version2 = getLatestVersion(datasetId);
