@@ -146,12 +146,20 @@ def process_optimizer_job(*args, **kwargs):
             span.set_attribute("workspace_id", context.workspace_id)
             span.set_attribute("workspace_name", context.workspace_name)
             
+            # Log to standard logger first (for Grafana) - before collector creation
+            # This ensures we have context even if collector creation fails
+            logger.info(
+                f"Processing Optimization Studio job: {context.optimization_id} "
+                f"for workspace: {context.workspace_name}"
+            )
+            
             # Create log collector early so we can capture pre-subprocess logs
             log_collector = create_optimization_log_collector(
                 workspace_id=context.workspace_id,
                 optimization_id=context.optimization_id,
             )
             
+            # Also log to Redis for UI visibility
             _log_to_redis(
                 log_collector, "info",
                 f"Processing Optimization Studio job: {context.optimization_id} "

@@ -587,11 +587,22 @@ class RedisBatchLogCollector(BatchLogCollector):
         This is a convenience method for adding pre-formatted log lines
         (e.g., from the main process before/after subprocess execution).
         
+        These lines bypass the spinner dedup logic since they are explicit
+        manual logs that should always be recorded.
+        
         Args:
             line: The log line to add (will be stripped of whitespace)
         """
         if line and line.strip():
-            self.emit({'message': line.strip()})
+            # Bypass emit() to avoid spinner dedup logic - manual logs should always be recorded
+            message = line.strip()
+            with self.buffer_lock:
+                self.log_buffer.append(message)
+                self.buffer_size_bytes += len(message.encode('utf-8'))
+                
+                # Check if we should flush based on buffer size
+                if self.buffer_size_bytes >= self.max_size_bytes:
+                    self._flush_logs()
     
     def _flush_logs(self) -> None:
         """
