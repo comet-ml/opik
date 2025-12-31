@@ -46,3 +46,21 @@ else
   echo "No frontend files changed. Skipping lint and typecheck."
 fi
 
+# Check for staged workflow files
+if git diff --cached --name-only | grep -E '^\.github/workflows/'; then
+  echo "Workflow files have been changed. Running actionlint..."
+  
+  if command -v actionlint >/dev/null 2>&1; then
+    if ! actionlint; then
+      echo "actionlint found issues. Please fix them before committing."
+      echo "Install actionlint: https://github.com/rhysd/actionlint#installation"
+      exit 1
+    fi
+  else
+    echo "Warning: actionlint not installed. Skipping workflow validation."
+    echo "Install it with: brew install actionlint (macOS) or see https://github.com/rhysd/actionlint#installation"
+  fi
+else
+  echo "No workflow files changed. Skipping actionlint."
+fi
+
