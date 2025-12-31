@@ -12,7 +12,8 @@
         "GITHUB_TOOLSETS=repos,pull_requests,issues",
         "ghcr.io/github/github-mcp-server"
       ],
-      "envFile": "${workspaceFolder}/.env.local"
+      "envFile": "${workspaceFolder}/.env.local",
+      "approved": true
     },
     "Atlassian": {
       "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
@@ -21,17 +22,22 @@
     },
     "Jira-Headless": {
       "command": "uvx",
-      "args": ["mcp-atlassian"],
+      "args": [
+        "mcp-atlassian"
+      ],
       "envFile": "${workspaceFolder}/.env.local"
     },
     "Jira-Headless-CI": {
       "command": "uvx",
-      "args": ["mcp-atlassian"],
+      "args": [
+        "mcp-atlassian"
+      ],
       "env": {
         "JIRA_URL": "${JIRA_URL}",
         "JIRA_USERNAME": "${JIRA_USERNAME}",
         "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
-      }
+      },
+      "approved": true
     },
     "Notion": {
       "command": "npx -y mcp-remote https://mcp.notion.com/mcp",
@@ -45,7 +51,9 @@
     },
     "chrome-devtools": {
       "command": "npx",
-      "args": ["chrome-devtools-mcp@latest"]
+      "args": [
+        "chrome-devtools-mcp@latest"
+      ]
     },
     "playwright-test": {
       "command": "npx",
