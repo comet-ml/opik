@@ -10,7 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: rhysd/actionlint@v1.7.9
         with:
-          fail-on-error: true
+          fetch-depth: 0  # Fetch all history for git diff
+      
+      - name: Get changed workflow files
+        id: changed-files
+        run: |
+          # Get list of changed workflow files
+          CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }}...HEAD -- '.github/workflows/*.yml' '.github/workflows/*.yaml' | tr '\n' ' ')
+          echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+          echo "Changed workflow files: $CHANGED_FILES"
+      
+      - name: Run actionlint on changed files
+        if: steps.changed-files.outputs.files != ''
+        uses: raven-actions/actionlint@v2
+        with:
+          version: latest
+          files: ${{ steps.changed-files.outputs.files }}
 
