@@ -59,7 +59,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     copyText?: string;
   }) => (
     <div className="overflow-hidden rounded-md border border-border bg-primary-foreground">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1">
         <div className="comet-body-xs text-muted-slate">{title}</div>
         {copyText && (
           <CopyButton
