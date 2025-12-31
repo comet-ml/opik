@@ -188,7 +188,7 @@ def test_threads_client__search_threads__filter_by_feedback_score(
     # Log feedback score to one thread
     threads_client.log_threads_feedback_scores(
         scores=[
-            FeedbackScoreDict(
+            BatchFeedbackScoreDict(
                 id=thread_with_score,
                 name=unique_metric,
                 value=0.85,
