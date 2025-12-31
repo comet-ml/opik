@@ -24,12 +24,21 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
   onRunCodeCallback,
 }) => {
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
+  const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(true);
   const integration = integrationList[integrationIndex];
   const apiKey = useUserApiKey();
   const { themeMode } = useTheme();
 
+  const handleFrameworkSelect = (index: number) => {
+    setIntegrationIndex(index);
+    setIsMenuExpanded(false);
+  };
+
   return (
     <IntegrationListLayout
+      isMenuExpanded={isMenuExpanded}
+      onMenuToggle={() => setIsMenuExpanded(!isMenuExpanded)}
+      selectedIntegration={integration}
       leftSidebar={
         <>
           <IntegrationTabs.Title>Select framework</IntegrationTabs.Title>
@@ -37,7 +46,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
             {integrationList.map((item, index) => (
               <IntegrationTabs.Item
                 key={item.label}
-                onClick={() => setIntegrationIndex(index)}
+                onClick={() => handleFrameworkSelect(index)}
                 isActive={index === integrationIndex}
               >
                 <img
