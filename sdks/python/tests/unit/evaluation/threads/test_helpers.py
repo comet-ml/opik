@@ -99,4 +99,48 @@ def test_load_conversation_thread():
         project_name=project_name,
         filter_string=f'thread_id = "{thread.id}"',
         max_results=10,
+        truncate=False,
     )
+
+
+def test_load_conversation_thread_disables_truncation():
+    """Test that load_conversation_thread disables truncation to prevent malformed JSON.
+    
+    This test verifies the fix for issue #4595 where traces were truncated at ~9935 characters,
+    causing malformed JSON to be passed to trace_output_transform functions.
+    """
+    # Setup mock with a long output that would be truncated
+    long_output = {"content": "x" * 15000}  # Longer than truncation threshold
+    mock_traces = [
+        TracePublic(
+            id="trace_1",
+            input={"content": "input"},
+            output=long_output,
+            start_time=datetime.datetime.now(),
+        ),
+    ]
+    mock_opik_client = mock.MagicMock()
+    mock_opik_client.search_traces.return_value = mock_traces
+
+    # Mock transform functions
+    def input_transform(json_input):
+        return json_input.get("content", "")
+
+    def output_transform(json_output):
+        return json_output.get("content", "")
+
+    # Call the method
+    thread = TraceThread(id="thread_1")
+    helpers.load_conversation_thread(
+        thread=thread,
+        trace_input_transform=input_transform,
+        trace_output_transform=output_transform,
+        max_results=10,
+        project_name="test_project",
+        client=mock_opik_client,
+    )
+
+    # Verify that truncate=False is explicitly passed to prevent truncation
+    call_kwargs = mock_opik_client.search_traces.call_args[1]
+    assert "truncate" in call_kwargs, "truncate parameter must be explicitly set"
+    assert call_kwargs["truncate"] is False, "truncate must be False to prevent malformed JSON"
