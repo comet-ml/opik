@@ -1158,7 +1158,7 @@ class Opik:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -1168,6 +1168,8 @@ class Opik:
                 - `input contains "question"` - Filter by input content
                 - `usage.total_tokens > 1000` - Filter by token usage
                 - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter traces with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter traces with non-empty feedback score
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
@@ -1250,7 +1252,7 @@ class Opik:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -1260,6 +1262,8 @@ class Opik:
                 - `input contains "question"` - Filter by input content
                 - `usage.total_tokens > 1000` - Filter by token usage
                 - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter spans with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter spans with non-empty feedback score
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID

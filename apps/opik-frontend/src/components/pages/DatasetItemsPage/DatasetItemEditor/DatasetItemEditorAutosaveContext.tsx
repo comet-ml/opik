@@ -1,12 +1,11 @@
 import React, { createContext, useContext, useCallback, useMemo } from "react";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMutation";
-import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
 import { DatasetField } from "./hooks/useDatasetItemData";
 import { useDatasetItemNavigation } from "./hooks/useDatasetItemNavigation";
 import { useDatasetItemData } from "./hooks/useDatasetItemData";
 import { useDatasetItemFormState } from "./hooks/useDatasetItemFormState";
 import { useAutosave } from "./hooks/useAutosave";
+import { useEditItem, useDeleteItem } from "@/store/DatasetDraftStore";
 
 interface DatasetItemEditorAutosaveContextValue {
   // Data
@@ -74,17 +73,15 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
   // Form state
   const { formId } = useDatasetItemFormState({ datasetItemId });
 
-  // Mutations
-  const { mutate: updateDatasetItem } = useDatasetItemUpdateMutation();
-  const { mutate: deleteDatasetItem } = useDatasetItemBatchDeleteMutation();
+  // Draft store actions
+  const editItem = useEditItem();
+  const deleteItem = useDeleteItem();
 
-  // Autosave
+  // Autosave (not used in draft mode, but keeping for compatibility)
   const {
-    handleAutosave,
     isAutoSaving,
     lastSavedAt,
     hasError,
-    cancelPendingSave,
     flushPendingSave,
     resetSaveState,
   } = useAutosave({
@@ -93,51 +90,38 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
     debounceMs: 1000,
   });
 
-  // Tag handlers
+  // Tag handlers - use draft store
   const handleAddTag = useCallback(
     (newTag: string) => {
       if (!datasetItemId) return;
-      updateDatasetItem({
-        datasetId,
-        itemId: datasetItemId,
-        item: { tags: [...tags, newTag] },
-      });
+      editItem(datasetItemId, { tags: [...tags, newTag] });
     },
-    [updateDatasetItem, datasetId, datasetItemId, tags],
+    [editItem, datasetItemId, tags],
   );
 
   const handleDeleteTag = useCallback(
     (tag: string) => {
       if (!datasetItemId) return;
-      updateDatasetItem({
-        datasetId,
-        itemId: datasetItemId,
-        item: { tags: tags.filter((t) => t !== tag) },
-      });
+      editItem(datasetItemId, { tags: tags.filter((t) => t !== tag) });
     },
-    [updateDatasetItem, datasetId, datasetItemId, tags],
+    [editItem, datasetItemId, tags],
   );
 
   const handleFieldChange = useCallback(
     (data: Record<string, unknown>) => {
-      handleAutosave(data);
+      if (!datasetItemId) return;
+      editItem(datasetItemId, { data });
     },
-    [handleAutosave],
+    [editItem, datasetItemId],
   );
 
   const handleDelete = useCallback(
     (onSuccess: () => void) => {
       if (!datasetItemId) return;
-      // Cancel any pending autosave before deleting
-      cancelPendingSave();
-      deleteDatasetItem(
-        { datasetId, ids: [datasetItemId] },
-        {
-          onSuccess,
-        },
-      );
+      deleteItem(datasetItemId);
+      onSuccess();
     },
-    [deleteDatasetItem, datasetId, datasetItemId, cancelPendingSave],
+    [deleteItem, datasetItemId],
   );
 
   // Navigation - no unsaved changes confirmation needed for autosave

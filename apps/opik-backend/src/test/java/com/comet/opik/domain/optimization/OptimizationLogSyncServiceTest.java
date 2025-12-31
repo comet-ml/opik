@@ -82,7 +82,7 @@ class OptimizationLogSyncServiceTest {
 
         // Default Redis mocks - use doReturn to avoid generic type issues
         lenient().doReturn(logList).when(redisClient).getList(anyString(), any(StringCodec.class));
-        lenient().doReturn(metaMap).when(redisClient).getMap(anyString());
+        lenient().doReturn(metaMap).when(redisClient).getMap(anyString(), any(StringCodec.class));
         lenient().when(redisClient.getKeys()).thenReturn(keysReactive);
     }
 

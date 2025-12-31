@@ -15,7 +15,8 @@ import os
 import sys
 
 # Terminal width for Rich output formatting (configurable via env var)
-TERMINAL_WIDTH = int(os.environ.get("OPTSTUDIO_LOG_TERM_WIDTH", "80"))
+# Default to 120 to accommodate Rich panels (up to 90 chars) with nesting prefixes
+TERMINAL_WIDTH = int(os.environ.get("OPTSTUDIO_LOG_TERM_WIDTH", "120"))
 
 # Set terminal size for Rich output formatting BEFORE importing Rich
 os.environ["COLUMNS"] = str(TERMINAL_WIDTH)

@@ -120,7 +120,7 @@ The `filter_string` (Python) / `filterString` (TypeScript) parameter should be a
 | `input`                   | String     | `=`, `contains`, `not_contains`                                             |
 | `output`                  | String     | `=`, `contains`, `not_contains`                                             |
 | `metadata`                | Dictionary | `=`, `contains`, `>`, `<`                                                   |
-| `feedback_scores`         | Numeric    | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `feedback_scores`         | Numeric    | `=`, `>`, `<`, `>=`, `<=`, `is_empty`, `is_not_empty`                      |
 | `tags`                    | List       | `contains`                                                                  |
 | `usage.total_tokens`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
 | `usage.prompt_tokens`     | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
@@ -163,6 +163,12 @@ Here are some full examples of using `filter_string` / `filterString` values in 
 
     # Search for traces based on the model used
     traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
+
+    # Search for traces that have a feedback score (not empty)
+    traces = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
+
+    # Search for traces that don't have a feedback score (empty)
+    traces = client.search_traces(filter_string='feedback_scores.user_rating is_empty')
     ```
 
   </Tab>
@@ -197,6 +203,16 @@ Here are some full examples of using `filter_string` / `filterString` values in 
     // Search for traces based on the model used
     const traces5 = await client.searchTraces({
       filterString: 'metadata.model = "gpt-4o"'
+    });
+
+    // Search for traces that have a feedback score (not empty)
+    const traces6 = await client.searchTraces({
+      filterString: 'feedback_scores.user_rating is_not_empty'
+    });
+
+    // Search for traces that don't have a feedback score (empty)
+    const traces7 = await client.searchTraces({
+      filterString: 'feedback_scores.user_rating is_empty'
     });
     ```
 

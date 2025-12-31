@@ -50,7 +50,10 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({
         </div>
       ) : (
         <>
-          <div className="rounded-md bg-primary-foreground p-3">
+          <div
+            className="rounded-md bg-primary-foreground p-3"
+            data-testid="prompt-text-content"
+          >
             <MarkdownPreview>{template}</MarkdownPreview>
           </div>
           {extractedImages.length > 0 && (

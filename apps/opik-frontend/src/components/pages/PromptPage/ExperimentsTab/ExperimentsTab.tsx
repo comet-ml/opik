@@ -27,6 +27,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
@@ -150,9 +151,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
+    cell: TraceCountCell as never,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
       aggregationKey: "trace_count",
+      tooltip: "View experiment traces",
     },
   },
   {
@@ -213,6 +216,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "prompt",
   COLUMN_DATASET_ID,
   "created_at",
+  "trace_count",
 ];
 
 interface ExperimentsTabProps {
