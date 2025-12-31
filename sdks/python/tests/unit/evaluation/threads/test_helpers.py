@@ -99,4 +99,5 @@ def test_load_conversation_thread():
         project_name=project_name,
         filter_string=f'thread_id = "{thread.id}"',
         max_results=10,
+        truncate=False,
     )
