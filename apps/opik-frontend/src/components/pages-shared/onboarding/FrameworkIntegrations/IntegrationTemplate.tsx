@@ -59,7 +59,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     copyText?: string;
   }) => (
     <div className="overflow-hidden rounded-md border border-border bg-primary-foreground">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <div className="comet-body-xs text-muted-slate">{title}</div>
         {copyText && (
           <CopyButton
@@ -79,16 +79,16 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <div className="comet-body-s mb-3">
-            Install Opik using pip from the command line
+          <div className="comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap">
+            1. Install Opik using pip from the command line
           </div>
           <CodeBlockWithHeader title="Terminal" copyText={CODE_BLOCK_1}>
             <CodeHighlighter data={CODE_BLOCK_1} />
           </CodeBlockWithHeader>
         </div>
         <div>
-          <div className="comet-body-s mb-3">
-            Run the following code to get started
+          <div className="comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap">
+            2. Run the following code to get started
           </div>
           {canExecuteCode ? (
             <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
