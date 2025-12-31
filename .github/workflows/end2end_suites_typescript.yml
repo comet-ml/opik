@@ -111,6 +111,11 @@ jobs:
             - name: Create Allure test plan directory
               working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
               run: |
+                # Create empty Allure test plan for allurectl watch
+                # allurectl watch requires .allure/testplan.json to exist for TestOps integration
+                # Empty "tests" array means "run all tests" (no selective execution)
+                # This enables real-time test result streaming to Allure TestOps
+                # See: https://docs.qameta.io/allure-testops/ecosystem/allurectl/
                 mkdir -p .allure
                 echo '{"version": "1.0", "tests": []}' > .allure/testplan.json
 

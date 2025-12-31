@@ -92,6 +92,28 @@ The GitHub Actions workflow automatically:
 - Uploads results to Allure TestOps (if configured)
 - Stores results as artifacts for later analysis
 
+#### Allure TestOps Real-Time Streaming
+
+The workflow uses `allurectl watch` for real-time test result streaming to Allure TestOps:
+
+**How it works:**
+1. The workflow creates an empty `.allure/testplan.json` file before running tests
+2. Empty test plan `{"version": "1.0", "tests": []}` means "run all tests" (no selective execution)
+3. `allurectl watch` streams results in real-time to https://comet.testops.cloud/
+4. This enables live monitoring of test execution and immediate visibility into failures
+
+**Why we generate testplan.json in CI:**
+- `allurectl watch` requires the file to exist for TestOps integration
+- Generating it in CI (vs committing to repo) follows best practices:
+  - Test artifacts shouldn't be committed to source control
+  - Keeps repository clean and focused on source code
+  - Consistent with how other test artifacts (allure-results, playwright-report) are handled
+- Empty test plan is a documented Allure pattern for "run all tests" mode
+
+**References:**
+- [Allure TestOps Documentation](https://docs.qameta.io/allure-testops/ecosystem/allurectl/)
+- [Allure Playwright Integration](https://allurereport.org/docs/playwright/)
+
 ## CI/CD Usage
 
 ### Triggering Tests via GitHub Actions
