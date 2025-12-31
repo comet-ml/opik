@@ -5,6 +5,7 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
@@ -156,10 +157,10 @@ public class ExperimentService {
                                             .ofNullable(tuple.getT2().get(experiment.datasetId()))
                                             .map(Dataset::name)
                                             .orElse(null))
-                                    .datasetVersionName(Optional
+                                    .datasetVersionSummary(Optional
                                             .ofNullable(experiment.datasetVersionId())
                                             .map(tuple.getT3()::get)
-                                            .map(DatasetVersion::versionName)
+                                            .map(DatasetVersionSummary::from)
                                             .orElse(null))
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
@@ -356,8 +357,8 @@ public class ExperimentService {
                                     .datasetName(tuple.getT2()
                                             .map(Dataset::name)
                                             .orElse(null))
-                                    .datasetVersionName(tuple.getT3()
-                                            .map(DatasetVersion::versionName)
+                                    .datasetVersionSummary(tuple.getT3()
+                                            .map(DatasetVersionSummary::from)
                                             .orElse(null))
                                     .build());
                 }));

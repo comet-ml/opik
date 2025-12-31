@@ -1800,10 +1800,12 @@ class DatasetVersionResourceTest {
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
-            // then - experiment should have the specified version ID and version name
+            // then - experiment should have the specified version ID and version summary
             var createdExperiment = getExperiment(experimentId);
             assertThat(createdExperiment.datasetVersionId()).isEqualTo(version1.id());
-            assertThat(createdExperiment.datasetVersionName()).isEqualTo(version1.versionName());
+            assertThat(createdExperiment.datasetVersionSummary()).isNotNull();
+            assertThat(createdExperiment.datasetVersionSummary().id()).isEqualTo(version1.id());
+            assertThat(createdExperiment.datasetVersionSummary().versionHash()).isEqualTo(version1.versionHash());
         }
 
         @Test
@@ -1837,10 +1839,10 @@ class DatasetVersionResourceTest {
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
-            // then - experiment should have a version ID and version name from the dataset
+            // then - experiment should have a version ID and version summary from the dataset
             var createdExperiment = getExperiment(experimentId);
             assertThat(createdExperiment.datasetVersionId()).isNotNull();
-            assertThat(createdExperiment.datasetVersionName()).isNotNull();
+            assertThat(createdExperiment.datasetVersionSummary()).isNotNull();
             assertThat(createdExperiment.datasetId()).isEqualTo(datasetId);
 
             // Verify the version belongs to this dataset
@@ -1848,12 +1850,14 @@ class DatasetVersionResourceTest {
             var versionIds = allVersions.content().stream().map(DatasetVersion::id).toList();
             assertThat(versionIds).contains(createdExperiment.datasetVersionId());
 
-            // Verify version name matches the version
+            // Verify version summary matches the version
             var matchingVersion = allVersions.content().stream()
                     .filter(v -> v.id().equals(createdExperiment.datasetVersionId()))
                     .findFirst()
                     .orElseThrow();
-            assertThat(createdExperiment.datasetVersionName()).isEqualTo(matchingVersion.versionName());
+            assertThat(createdExperiment.datasetVersionSummary().id()).isEqualTo(matchingVersion.id());
+            assertThat(createdExperiment.datasetVersionSummary().versionHash())
+                    .isEqualTo(matchingVersion.versionHash());
 
             // Now test creating experiment items (this validates the dataset item IDs)
             var datasetItems = datasetResourceClient.getDatasetItems(
@@ -1940,13 +1944,15 @@ class DatasetVersionResourceTest {
                     1, 10, datasetId, null, null, null, false, null, null, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
 
-            // then - version ID and version name should be present in the list
+            // then - version ID and version summary should be present in the list
             assertThat(experimentsList.content())
                     .hasSize(1)
                     .first()
                     .satisfies(exp -> {
                         assertThat(exp.datasetVersionId()).isEqualTo(version1.id());
-                        assertThat(exp.datasetVersionName()).isEqualTo(version1.versionName());
+                        assertThat(exp.datasetVersionSummary()).isNotNull();
+                        assertThat(exp.datasetVersionSummary().id()).isEqualTo(version1.id());
+                        assertThat(exp.datasetVersionSummary().versionHash()).isEqualTo(version1.versionHash());
                     });
         }
 
@@ -1983,7 +1989,7 @@ class DatasetVersionResourceTest {
                     1, 10, datasetId, null, null, null, false, null, null, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
 
-            // then - each experiment should have its correct version ID and version name
+            // then - each experiment should have its correct version ID and version summary
             assertThat(experimentsList.content()).hasSize(2);
 
             var exp1FromList = experimentsList.content().stream()
@@ -1991,14 +1997,18 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(exp1FromList.datasetVersionId()).isEqualTo(version1.id());
-            assertThat(exp1FromList.datasetVersionName()).isEqualTo(version1.versionName());
+            assertThat(exp1FromList.datasetVersionSummary()).isNotNull();
+            assertThat(exp1FromList.datasetVersionSummary().id()).isEqualTo(version1.id());
+            assertThat(exp1FromList.datasetVersionSummary().versionHash()).isEqualTo(version1.versionHash());
 
             var exp2FromList = experimentsList.content().stream()
                     .filter(e -> e.id().equals(experimentId2))
                     .findFirst()
                     .orElseThrow();
             assertThat(exp2FromList.datasetVersionId()).isEqualTo(version2.id());
-            assertThat(exp2FromList.datasetVersionName()).isEqualTo(version2.versionName());
+            assertThat(exp2FromList.datasetVersionSummary()).isNotNull();
+            assertThat(exp2FromList.datasetVersionSummary().id()).isEqualTo(version2.id());
+            assertThat(exp2FromList.datasetVersionSummary().versionHash()).isEqualTo(version2.versionHash());
         }
 
         @Test
