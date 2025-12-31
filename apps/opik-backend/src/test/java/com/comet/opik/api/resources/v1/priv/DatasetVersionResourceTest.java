@@ -16,6 +16,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
@@ -1834,6 +1835,56 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(createdExperiment.datasetVersionName()).isEqualTo(matchingVersion.versionName());
+
+            // Now test creating experiment items (this validates the dataset item IDs)
+            var datasetItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(datasetItems).hasSize(1);
+
+            var datasetItem = datasetItems.getFirst();
+
+            // Create a trace first (experiment items require a trace ID)
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(UUID.randomUUID().toString())
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            // Create experiment item using the stable dataset item ID
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .input(null)
+                    .output(null)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, TEST_WORKSPACE);
+
+            // Verify experiment item was created successfully
+            var experimentItems = experimentResourceClient.getExperimentItems(experiment.name(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(experimentItems).hasSize(1);
+            assertThat(experimentItems.get(0).datasetItemId()).isEqualTo(datasetItem.draftItemId());
+
+            // Verify the frontend endpoint returns experiment_items array populated
+            var datasetItemsWithExperiments = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), API_KEY, TEST_WORKSPACE);
+
+            assertThat(datasetItemsWithExperiments.content()).hasSize(1);
+            var itemWithExperiments = datasetItemsWithExperiments.content().get(0);
+
+            assertThat(itemWithExperiments.experimentItems())
+                    .as("experiment_items array must be populated for frontend to work")
+                    .isNotNull()
+                    .isNotEmpty()
+                    .hasSize(1);
+
+            // Verify the experiment item details are correct
+            var returnedExperimentItem = itemWithExperiments.experimentItems().get(0);
+            assertThat(returnedExperimentItem.experimentId()).isEqualTo(experimentId);
+            assertThat(returnedExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
         }
 
         @Test

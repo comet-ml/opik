@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
@@ -29,6 +30,8 @@ public class ExperimentItemService {
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
+    private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
+    private final @NonNull FeatureFlags featureFlags;
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
@@ -89,7 +92,8 @@ public class ExperimentItemService {
 
         boolean allDatasetItemsBelongToWorkspace = Boolean.TRUE
                 .equals(validateDatasetItemWorkspace(workspaceId, datasetItemIds)
-                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                                .put(RequestContext.USER_NAME, "system")) // Add userName to context
                         .block());
 
         if (!allDatasetItemsBelongToWorkspace) {
@@ -102,6 +106,17 @@ public class ExperimentItemService {
             return Mono.just(true);
         }
 
+        // When versioning is enabled, dataset item IDs are row IDs from dataset_item_versions
+        // When versioning is disabled, dataset item IDs are from dataset_items (legacy table)
+        // We need to check both tables to support backward compatibility
+        if (featureFlags.isDatasetVersioningEnabled()) {
+            // Check versioned table
+            return datasetItemVersionDAO.getDatasetItemWorkspace(datasetItemIds)
+                    .map(items -> items.stream()
+                            .allMatch(item -> workspaceId.equals(item.workspaceId())));
+        }
+
+        // Legacy mode: only check dataset_items table
         return datasetItemDAO.getDatasetItemWorkspace(datasetItemIds)
                 .map(datasetItemWorkspace -> datasetItemWorkspace.stream()
                         .allMatch(datasetItem -> workspaceId.equals(datasetItem.workspaceId())));

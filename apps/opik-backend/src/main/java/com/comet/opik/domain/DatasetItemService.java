@@ -30,6 +30,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -131,6 +132,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService versionService;
+    private final @NonNull ExperimentDAO experimentDao;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -1130,12 +1132,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
             });
         } else if (featureFlags.isDatasetVersioningEnabled()) {
-            // Versioning toggle is ON: fetch items from the latest version
-            log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, page, size);
-
+            // Versioning toggle is ON
             return Mono.deferContextual(ctx -> {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                // If experimentIds are present, use the experiment's linked version
+                if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds())) {
+                    log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
+                            datasetItemSearchCriteria, page, size);
+                    return getItemsFromExperimentVersion(datasetItemSearchCriteria, page, size, workspaceId);
+                }
+
+                // Otherwise, fetch items from the latest version
+                log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
+                        datasetItemSearchCriteria, page, size);
                 return getItemsFromLatestVersion(datasetItemSearchCriteria, page, size, workspaceId);
             });
         } else {
@@ -1165,6 +1175,33 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return versionDao.getItems(criteria, page, size, versionId)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+    }
+
+    private Mono<DatasetItemPage> getItemsFromExperimentVersion(DatasetItemSearchCriteria criteria, int page, int size,
+            String workspaceId) {
+        // Get the first experiment ID to determine which version to use
+        // All experiments in the comparison should be linked to the same dataset version
+        UUID experimentId = criteria.experimentIds().iterator().next();
+
+        // Query the experiment to get its dataset_version_id
+        return Mono.deferContextual(ctx -> experimentDao.getById(experimentId))
+                .flatMap(experiment -> {
+                    UUID versionId = experiment.datasetVersionId();
+
+                    if (versionId == null) {
+                        // Experiment is not linked to a version (shouldn't happen with versioning enabled, but handle gracefully)
+                        log.warn("Experiment '{}' is not linked to a dataset version, falling back to latest version",
+                                experimentId);
+                        return getItemsFromLatestVersion(criteria, page, size, workspaceId);
+                    }
+
+                    log.info("Fetching items from experiment's linked version '{}' for dataset '{}'", versionId,
+                            criteria.datasetId());
+
+                    // Use the specialized method that joins with experiment items
+                    return versionDao.getItemsWithExperimentItems(criteria, page, size, versionId)
+                            .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                });
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
