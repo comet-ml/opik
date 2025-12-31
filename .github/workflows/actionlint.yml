@@ -13,18 +13,25 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git diff
       
-      - name: Get changed workflow files
-        id: changed-files
+      - name: Install actionlint
         run: |
-          # Get list of changed workflow files
-          CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }}...HEAD -- '.github/workflows/*.yml' '.github/workflows/*.yaml' | tr '\n' ' ')
-          echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
-          echo "Changed workflow files: $CHANGED_FILES"
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo mv actionlint /usr/local/bin/
       
       - name: Run actionlint on changed files
-        if: steps.changed-files.outputs.files != ''
-        uses: raven-actions/actionlint@v2
-        with:
-          version: latest
-          files: ${{ steps.changed-files.outputs.files }}
+        run: |
+          # Get list of changed workflow files
+          CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }}...HEAD -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No workflow files changed."
+            exit 0
+          fi
+          
+          echo "Changed workflow files:"
+          echo "$CHANGED_FILES"
+          echo ""
+          
+          # Run actionlint on each changed file
+          echo "$CHANGED_FILES" | xargs actionlint
 
