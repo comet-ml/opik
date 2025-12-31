@@ -14,6 +14,14 @@ import {
 import IntegrationListLayout from "../IntegrationListLayout/IntegrationListLayout";
 import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
 import { useUserApiKey } from "@/store/AppStore";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type FrameworkIntegrationsProps = {
   integrationList?: FrameworkIntegration[];
@@ -24,55 +32,101 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
   onRunCodeCallback,
 }) => {
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
-  const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(true);
   const integration = integrationList[integrationIndex];
   const apiKey = useUserApiKey();
   const { themeMode } = useTheme();
+  const { isPhonePortrait } = useIsPhone();
 
-  const handleFrameworkSelect = (index: number) => {
-    setIntegrationIndex(index);
-    setIsMenuExpanded(false);
+  const handleFrameworkSelect = (value: string) => {
+    const index = integrationList.findIndex((item) => item.label === value);
+    if (index !== -1) {
+      setIntegrationIndex(index);
+    }
   };
 
   return (
     <IntegrationListLayout
-      isMenuExpanded={isMenuExpanded}
-      onMenuToggle={() => setIsMenuExpanded(!isMenuExpanded)}
-      selectedIntegration={integration}
       leftSidebar={
-        <>
-          <IntegrationTabs.Title>Select framework</IntegrationTabs.Title>
-          <IntegrationTabs>
-            {integrationList.map((item, index) => (
-              <IntegrationTabs.Item
-                key={item.label}
-                onClick={() => handleFrameworkSelect(index)}
-                isActive={index === integrationIndex}
-              >
-                <img
-                  alt={item.label}
-                  src={
-                    themeMode === THEME_MODE.DARK && item.logoWhite
-                      ? item.logoWhite
-                      : item.logo
-                  }
-                  className="size-[32px] shrink-0"
-                />
-                <div className="ml-1 truncate">{item.label}</div>
-              </IntegrationTabs.Item>
-            ))}
-          </IntegrationTabs>
-          <Button className="w-fit pl-2" variant="ghost" asChild>
-            <a
-              href={buildDocsUrl("/tracing/integrations/overview")}
-              target="_blank"
-              rel="noreferrer"
+        isPhonePortrait ? (
+          // Mobile: Use Select dropdown
+          <div className="flex flex-col gap-1">
+            <label className="comet-body-s-accented px-0.5 pb-0.5">
+              Select framework
+            </label>
+            <Select
+              value={integration.label}
+              onValueChange={handleFrameworkSelect}
             >
-              Explore all integrations
-              <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
-            </a>
-          </Button>
-        </>
+              <SelectTrigger className="w-full">
+                <div className="flex items-center gap-2">
+                  <img
+                    alt={integration.label}
+                    src={
+                      themeMode === THEME_MODE.DARK && integration.logoWhite
+                        ? integration.logoWhite
+                        : integration.logo
+                    }
+                    className="size-4 shrink-0"
+                  />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {integrationList.map((item) => (
+                  <SelectItem key={item.label} value={item.label}>
+                    <div className="flex items-center gap-2">
+                      <img
+                        alt={item.label}
+                        src={
+                          themeMode === THEME_MODE.DARK && item.logoWhite
+                            ? item.logoWhite
+                            : item.logo
+                        }
+                        className="size-4 shrink-0"
+                      />
+                      <span>{item.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          // Desktop: Use tabs
+          <>
+            <IntegrationTabs.Title>Select framework</IntegrationTabs.Title>
+            <IntegrationTabs>
+              {integrationList.map((item, index) => (
+                <IntegrationTabs.Item
+                  key={item.label}
+                  onClick={() => setIntegrationIndex(index)}
+                  isActive={index === integrationIndex}
+                >
+                  <img
+                    alt={item.label}
+                    src={
+                      themeMode === THEME_MODE.DARK && item.logoWhite
+                        ? item.logoWhite
+                        : item.logo
+                    }
+                    className="size-[32px] shrink-0"
+                  />
+                  <div className="ml-1 truncate">{item.label}</div>
+                </IntegrationTabs.Item>
+              ))}
+            </IntegrationTabs>
+            <Button className="w-fit pl-2" variant="ghost" asChild>
+              <a
+                href={buildDocsUrl("/tracing/integrations/overview")}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Explore all integrations
+                <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
+              </a>
+            </Button>
+          </>
+        )
       }
       rightSidebar={
         <>
