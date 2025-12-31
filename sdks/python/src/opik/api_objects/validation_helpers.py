@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Optional, cast, Union, Dict
 
-from ..types import FeedbackScoreDict
+from ..types import BatchFeedbackScoreDict
 from ..validation import feedback_score as feedback_score_validator
 from .. import logging_messages, llm_usage
 from opik.types import LLMProvider
@@ -38,7 +38,7 @@ def validate_and_parse_usage(
 
 def validate_feedback_score(
     feedback_score: Any, logger: logging.Logger
-) -> Optional[FeedbackScoreDict]:
+) -> Optional[BatchFeedbackScoreDict]:
     feedback_score_validator_ = feedback_score_validator.FeedbackScoreValidator(
         feedback_score
     )
@@ -51,4 +51,4 @@ def validate_feedback_score(
         )
         return None
 
-    return cast(FeedbackScoreDict, feedback_score)
+    return cast(BatchFeedbackScoreDict, feedback_score)

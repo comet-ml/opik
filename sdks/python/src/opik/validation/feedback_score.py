@@ -1,16 +1,16 @@
 import pydantic
 
 from typing import Any
-from ..types import FeedbackScoreDict
+from ..types import BatchFeedbackScoreDict
 from . import validator, result
 
 
 class PydanticWrapper(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
-    feedback_score: FeedbackScoreDict
+    feedback_score: BatchFeedbackScoreDict
 
 
-EXPECTED_TYPES = "{'id': str, 'name': str, 'value': float, 'reason': NotRequired[str], 'category_name': NotRequired[str]}"
+EXPECTED_TYPES = "{'id': str, 'name': str, 'value': float, 'reason': NotRequired[str], 'category_name': NotRequired[str], 'project_name': NotRequired[str]}"
 
 
 class FeedbackScoreValidator(validator.Validator):

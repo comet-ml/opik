@@ -4,7 +4,7 @@ from . import evaluation_result
 from ...api_objects import opik_client
 from ...api_objects.conversation import conversation_thread, conversation_factory
 from ...rest_api import TraceThread, JsonListStringPublic
-from ...types import FeedbackScoreDict
+from ...types import BatchFeedbackScoreDict
 from ...api_objects.threads import threads_client
 
 
@@ -15,7 +15,7 @@ def log_feedback_scores(
 ) -> None:
     for result in results:
         feedback_scores = [
-            FeedbackScoreDict(
+            BatchFeedbackScoreDict(
                 id=result.thread_id,
                 name=score.name,
                 value=score.value,
