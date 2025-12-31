@@ -62,11 +62,13 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
       <div className="flex items-center justify-between border-b border-border px-3">
         <div className="comet-body-xs text-muted-slate">{title}</div>
         {copyText && (
-          <CopyButton
-            message="Successfully copied code"
-            text={copyText}
-            tooltipText="Copy code"
-          />
+          <div className="-mr-2">
+            <CopyButton
+              message="Successfully copied code"
+              text={copyText}
+              tooltipText="Copy code"
+            />
+          </div>
         )}
       </div>
       <div className="[&>div>.absolute]:!hidden [&_.cm-editor]:!bg-primary-foreground [&_.cm-gutters]:!bg-primary-foreground">
