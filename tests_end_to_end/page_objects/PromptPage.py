@@ -25,7 +25,7 @@ class PromptPage:
         self.page.wait_for_timeout(500)
 
     def get_prompt_of_selected_commit(self):
-        return self.page.get_by_role("code").first.inner_text()
+        return self.page.get_by_test_id("prompt-text-content").first.inner_text()
 
     def get_all_prompt_versions_with_commit_ids_on_page(self):
         rows: list[Locator] = self.page.get_by_role("row").all()[1:]
