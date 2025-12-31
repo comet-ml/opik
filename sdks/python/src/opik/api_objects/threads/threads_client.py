@@ -74,7 +74,7 @@ class ThreadsClient:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -84,6 +84,8 @@ class ThreadsClient:
                 - `duration > 300` - Filter by thread duration (seconds)
                 - `number_of_messages >= 5` - Filter by message count
                 - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter threads with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter threads with non-empty feedback score
                 - `tags contains "important"` - Filter by tag
 
                 If not provided, all threads in the project will be returned up to the limit.

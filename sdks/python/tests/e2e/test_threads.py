@@ -144,3 +144,98 @@ def test_threads_client__close_thread__happy_path(
         filter_string='status = "active"',
     )
     assert len(threads) == 0
+
+
+def test_threads_client__search_threads__filter_by_feedback_score(
+    opik_client: opik.Opik, temporary_project_name
+):
+    # Create a unique metric name to avoid conflicts with other tests
+    unique_metric = f"test_metric_{str(uuid.uuid4()).replace('-', '_')[-8:]}"
+    threads_client = opik_client.get_threads_client()
+
+    # Create thread with feedback score
+    thread_with_score = str(uuid.uuid4())[-6:]
+    opik_client.trace(
+        name="trace-with-score",
+        thread_id=thread_with_score,
+        project_name=temporary_project_name,
+    )
+
+    # Create thread without feedback score
+    thread_without_score = str(uuid.uuid4())[-6:]
+    opik_client.trace(
+        name="trace-without-score",
+        thread_id=thread_without_score,
+        project_name=temporary_project_name,
+    )
+
+    opik_client.flush()
+
+    # Close threads before logging scores
+    for thread_id in [thread_with_score, thread_without_score]:
+        opik_client.rest_client.traces.close_trace_thread(
+            project_name=temporary_project_name, thread_id=thread_id
+        )
+
+    def check_threads_closed() -> bool:
+        threads = threads_client.search_threads(
+            project_name=temporary_project_name, filter_string='status = "active"'
+        )
+        return len(threads) == 0
+
+    synchronization.wait_for_done(lambda: check_threads_closed(), timeout=30)
+
+    # Log feedback score to one thread
+    threads_client.log_threads_feedback_scores(
+        scores=[
+            FeedbackScoreDict(
+                id=thread_with_score,
+                name=unique_metric,
+                value=0.85,
+                category_name="test-category",
+                reason="test-reason",
+            )
+        ],
+        project_name=temporary_project_name,
+    )
+
+    # Wait for feedback scores to propagate
+    def check_feedback_score_logged() -> bool:
+        threads = threads_client.search_threads(
+            project_name=temporary_project_name,
+            filter_string=f"feedback_scores.{unique_metric} is_not_empty",
+        )
+        return len(threads) == 1
+
+    synchronization.wait_for_done(lambda: check_feedback_score_logged(), timeout=30)
+
+    # Test filtering with is_not_empty
+    threads_not_empty = threads_client.search_threads(
+        project_name=temporary_project_name,
+        filter_string=f"feedback_scores.{unique_metric} is_not_empty",
+    )
+    thread_ids_not_empty = {thread.id for thread in threads_not_empty}
+    assert (
+        thread_with_score in thread_ids_not_empty
+    ), "Thread with score should be found with is_not_empty filter"
+    assert (
+        thread_without_score not in thread_ids_not_empty
+    ), "Thread without score should not be found with is_not_empty filter"
+
+    # Test filtering with = operator
+    threads_with_value = threads_client.search_threads(
+        project_name=temporary_project_name,
+        filter_string=f"feedback_scores.{unique_metric} = 0.85",
+    )
+    thread_ids_with_value = {thread.id for thread in threads_with_value}
+    assert (
+        thread_with_score in thread_ids_with_value
+    ), "Thread with score value 0.85 should be found"
+    assert (
+        thread_without_score not in thread_ids_with_value
+    ), "Thread without score should not be found"
+
+    # Verify is_not_empty and = return the same thread
+    assert (
+        thread_ids_not_empty == thread_ids_with_value
+    ), "is_not_empty and = filters should return the same threads for this test case"
