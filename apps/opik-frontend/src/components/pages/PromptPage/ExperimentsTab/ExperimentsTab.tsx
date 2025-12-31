@@ -104,6 +104,13 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
+    id: "dataset_version",
+    label: "Dataset version",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.dataset_version?.version_name || "",
+    cell: TextCell as never,
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,

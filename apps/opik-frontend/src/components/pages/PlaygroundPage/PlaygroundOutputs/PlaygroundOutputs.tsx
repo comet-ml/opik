@@ -26,6 +26,7 @@ import {
 } from "@/types/datasets";
 import { Filter, Filters } from "@/types/filters";
 import { COLUMN_DATA_ID } from "@/types/shared";
+import { DatasetVersionData } from "@/components/shared/DatasetVersionSelectBox";
 
 interface PlaygroundOutputsProps {
   workspaceName: string;
@@ -63,6 +64,9 @@ const PlaygroundOutputs = ({
   datasetId,
   onChangeDatasetId,
 }: PlaygroundOutputsProps) => {
+  const [datasetVersion, setDatasetVersion] =
+    React.useState<DatasetVersionData | null>(null);
+
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
   const filters = useDatasetFilters();
@@ -125,10 +129,18 @@ const PlaygroundOutputs = ({
       resetDatasetFilters();
       if (!id) {
         setDatasetVariables([]);
+        setDatasetVersion(null);
       }
       onChangeDatasetId(id);
     },
     [onChangeDatasetId, resetDatasetFilters, setDatasetVariables],
+  );
+
+  const handleChangeDatasetVersion = useCallback(
+    (version: DatasetVersionData | null) => {
+      setDatasetVersion(version);
+    },
+    [],
   );
 
   const renderResult = () => {
@@ -184,6 +196,8 @@ const PlaygroundOutputs = ({
     <div className="flex min-w-full flex-col">
       <PlaygroundOutputActions
         datasetId={datasetId}
+        datasetVersion={datasetVersion}
+        onChangeDatasetVersion={handleChangeDatasetVersion}
         datasetItems={datasetItems}
         datasetColumns={datasetColumns}
         workspaceName={workspaceName}

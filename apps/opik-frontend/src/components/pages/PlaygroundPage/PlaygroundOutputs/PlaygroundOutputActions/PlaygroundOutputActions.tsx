@@ -11,6 +11,12 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import MetricSelector from "./MetricSelector";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
+import {
+  DatasetVersionSelectBox,
+  DatasetVersionData,
+} from "@/components/shared/DatasetVersionSelectBox";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -46,6 +52,8 @@ const DEFAULT_LOADED_DATASETS = 1000;
 interface PlaygroundOutputActionsProps {
   datasetId: string | null;
   onChangeDatasetId: (id: string | null) => void;
+  datasetVersion?: DatasetVersionData | null;
+  onChangeDatasetVersion?: (version: DatasetVersionData | null) => void;
   workspaceName: string;
   datasetItems: DatasetItem[];
   datasetColumns: DatasetItemColumn[];
@@ -65,6 +73,8 @@ const RUN_HOT_KEYS = ["⌘", "⏎"];
 const PlaygroundOutputActions = ({
   datasetId,
   onChangeDatasetId,
+  datasetVersion,
+  onChangeDatasetVersion,
   workspaceName,
   datasetItems,
   datasetColumns,
@@ -78,6 +88,9 @@ const PlaygroundOutputActions = ({
   total,
   isLoadingTotal,
 }: PlaygroundOutputActionsProps) => {
+  const isVersioningEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
+  );
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
     string | undefined
@@ -160,12 +173,21 @@ const PlaygroundOutputActions = ({
   const datasets = datasetsData?.content || EMPTY_DATASETS;
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
+  const handleDatasetVersionChange = useCallback(
+    (datasetId: string, version: DatasetVersionData | null) => {
+      onChangeDatasetId(datasetId || null);
+      onChangeDatasetVersion?.(version);
+    },
+    [onChangeDatasetId, onChangeDatasetVersion],
+  );
+
   const { stopAll, runAll, isRunning, createdExperiments } =
     useActionButtonActions({
       workspaceName,
       datasetItems,
       datasetName,
       datasetId: datasetId ? datasetId : undefined,
+      datasetVersionHash: datasetVersion?.hash || undefined,
     });
 
   const hasMediaCompatibilityIssues = useMemo(() => {
@@ -443,12 +465,21 @@ const PlaygroundOutputActions = ({
         )}
         <div className="ml-auto flex gap-2">
           <div className="mt-2.5">
-            <DatasetSelectBox
-              value={datasetId}
-              onChange={onChangeDatasetId}
-              workspaceName={workspaceName}
-              onDatasetChangeExtra={handleDatasetChangeExtra}
-            />
+            {isVersioningEnabled ? (
+              <DatasetVersionSelectBox
+                datasetId={datasetId}
+                versionData={datasetVersion || null}
+                onChange={handleDatasetVersionChange}
+                workspaceName={workspaceName}
+              />
+            ) : (
+              <DatasetSelectBox
+                value={datasetId}
+                onChange={onChangeDatasetId}
+                workspaceName={workspaceName}
+                onDatasetChangeExtra={handleDatasetChangeExtra}
+              />
+            )}
           </div>
           {datasetId && (
             <div className="mt-2.5 flex">
