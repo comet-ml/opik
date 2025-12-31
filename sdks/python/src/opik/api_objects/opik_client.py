@@ -653,6 +653,16 @@ class Opik:
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": span1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": span2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_spans_feedback_scores(scores=scores)
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
@@ -692,6 +702,16 @@ class Opik:
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": trace1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": trace2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_traces_feedback_scores(scores=scores)
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
@@ -736,13 +756,10 @@ class Opik:
         Example:
             >>> from opik import Opik
             >>> client = Opik()
+            >>> # Batch logging across multiple projects
             >>> scores = [
-            >>>     {
-            >>>         "id": "thread_123",
-            >>>         "name": "user_satisfaction",
-            >>>         "value": 0.85,
-            >>>         "reason": "User seemed satisfied with the conversation"
-            >>>     }
+            >>>     {"id": "thread_123", "name": "user_satisfaction", "value": 0.85, "project_name": "project-A"},
+            >>>     {"id": "thread_456", "name": "user_satisfaction", "value": 0.92, "project_name": "project-B"},
             >>> ]
             >>> client.log_threads_feedback_scores(scores=scores)
         """
