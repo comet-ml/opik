@@ -15,7 +15,7 @@ const IntegrationListLayout: React.FC<IntegrationListLayoutProps> = ({
 
   if (isPhonePortrait) {
     return (
-      <div className="m-auto flex w-full flex-col gap-6 px-4">
+      <div className="m-auto flex w-full flex-col gap-6">
         {/* Framework selector */}
         <div className="flex flex-col gap-4">{leftSidebar}</div>
 
