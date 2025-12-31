@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Column;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -38,6 +39,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -774,6 +776,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     public Mono<PageColumns> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
+        if (featureFlags.isDatasetVersioningEnabled()) {
+            log.info("Getting output columns with versioning for dataset '{}', experimentIds '{}'", datasetId,
+                    experimentIds);
+
+            return versionDao.getExperimentItemsOutputColumns(datasetId, experimentIds)
+                    .map(columns -> PageColumns.builder().columns(columns).build())
+                    .switchIfEmpty(Mono.just(PageColumns.empty()));
+        }
+
+        // Versioning toggle is OFF: use legacy table
         return dao.getOutputColumns(datasetId, experimentIds)
                 .map(columns -> PageColumns.builder().columns(columns).build())
                 .switchIfEmpty(Mono.just(PageColumns.empty()));
@@ -1198,8 +1210,27 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Fetching items from experiment's linked version '{}' for dataset '{}'", versionId,
                             criteria.datasetId());
 
-                    // Use the specialized method that joins with experiment items
-                    return versionDao.getItemsWithExperimentItems(criteria, page, size, versionId)
+                    // Fetch experiment items output columns and merge with dataset item columns
+                    return Mono.zip(
+                            versionDao.getItemsWithExperimentItems(criteria, page, size, versionId),
+                            versionDao.getExperimentItemsOutputColumns(criteria.datasetId(), criteria.experimentIds())
+                                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)))
+                            .map(tuple -> {
+                                DatasetItemPage itemPage = tuple.getT1();
+                                List<Column> experimentColumns = tuple.getT2();
+
+                                // Merge dataset columns with experiment columns
+                                Set<Column> allColumns = new HashSet<>(itemPage.columns());
+                                allColumns.addAll(experimentColumns);
+
+                                return new DatasetItemPage(
+                                        itemPage.content(),
+                                        itemPage.page(),
+                                        itemPage.size(),
+                                        itemPage.total(),
+                                        allColumns,
+                                        itemPage.sortableBy());
+                            })
                             .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
                 });
     }

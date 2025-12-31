@@ -21,6 +21,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -59,6 +60,8 @@ public interface DatasetItemVersionDAO {
      */
     Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria searchCriteria, int page, int size,
             UUID versionId);
+
+    Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
 
@@ -285,7 +288,66 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             """;
 
-    // Query to fetch versioned dataset items with their associated experiment items
+    // Query to extract columns from trace output for experiment items view
+    private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
+            WITH dataset_items_scope AS (
+                SELECT DISTINCT
+                    div.id AS row_id,
+                    div.dataset_item_id AS stable_id,
+                    div.dataset_version_id
+                FROM experiments e
+                INNER JOIN dataset_item_versions div
+                    ON div.dataset_id = :datasetId
+                    AND div.workspace_id = :workspace_id
+                    AND div.dataset_version_id = e.dataset_version_id
+                WHERE e.workspace_id = :workspace_id
+                <if(experiment_ids)>AND e.id IN :experiment_ids<endif>
+                ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
+                LIMIT 1 BY div.id
+            ),
+            experiment_items_scope AS (
+                SELECT
+                    trace_id,
+                    dataset_item_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND dataset_item_id IN (SELECT row_id FROM dataset_items_scope)
+                <if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            SELECT
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(
+                            key -> arrayDistinct(arrayConcat(acc[key], x[key])),
+                            arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))
+                        )
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(
+                                    key_type -> map(tupleElement(key_type, 1), [tupleElement(key_type, 2)]),
+                                    output_keys
+                                )
+                            )
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
+                ) AS columns
+            FROM experiment_items_scope AS ei
+            INNER JOIN (
+                SELECT
+                    id,
+                    output_keys
+                FROM traces FINAL
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT trace_id FROM experiment_items_scope)
+            ) AS t ON t.id = ei.trace_id
+            """;
+
     // Query to fetch versioned dataset items with their associated experiment items
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH experiment_items_scope AS (
@@ -1056,12 +1118,51 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .doFinally(signalType -> endSegment(segment))
                         .flatMap(DatasetItemResultMapper::mapItem)
                         .collectList()
-                        .flatMap(items -> {
-                            // Get columns for the response
-                            return getColumns(criteria.datasetId(), versionId)
-                                    .map(columns -> new DatasetItemPage(items, page, items.size(),
-                                            (long) items.size(), columns, null));
+                        .zipWith(getCount(criteria.datasetId(), versionId))
+                        .zipWith(getColumns(criteria.datasetId(), versionId))
+                        .map(tuple -> {
+                            var itemsAndCount = tuple.getT1();
+                            List<DatasetItem> items = itemsAndCount.getT1();
+                            Long count = itemsAndCount.getT2();
+                            Set<Column> columns = tuple.getT2();
+
+                            return new DatasetItemPage(items, page, items.size(), count, columns, null);
                         });
+            });
+        });
+    }
+
+    @Override
+    public Mono<List<Column>> getExperimentItemsOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
+        log.debug("Getting experiment items output columns for dataset '{}'", datasetId);
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return asyncTemplate.nonTransaction(connection -> {
+                ST template = TemplateUtils.newST(SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS);
+
+                if (CollectionUtils.isNotEmpty(experimentIds)) {
+                    template.add("experiment_ids", true);
+                }
+
+                var statement = connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("datasetId", datasetId);
+
+                if (CollectionUtils.isNotEmpty(experimentIds)) {
+                    statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+                }
+
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                        "get_experiment_items_output_columns");
+
+                return Flux.from(statement.execute())
+                        .doFinally(signalType -> endSegment(segment))
+                        .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "output"))
+                        .next()
+                        .map(List::copyOf)
+                        .defaultIfEmpty(List.of());
             });
         });
     }

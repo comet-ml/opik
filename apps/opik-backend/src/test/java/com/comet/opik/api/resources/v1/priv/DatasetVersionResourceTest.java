@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Column;
 import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
@@ -68,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -1807,10 +1809,27 @@ class DatasetVersionResourceTest {
         @Test
         @DisplayName("Success: Create experiment without version ID uses latest version")
         void createExperiment_whenNoVersionId_thenLatestVersionUsed() {
-            // given
+            // given - create dataset with custom fields (not "input"/"output")
             var datasetName = UUID.randomUUID().toString();
             var datasetId = createDataset(datasetName);
-            createDatasetItems(datasetId, 1);
+
+            // Create dataset items with custom fields different from trace input/output
+            List<DatasetItem> itemsList = List.of(
+                    factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .id(null)
+                            .source(DatasetItemSource.MANUAL)
+                            .traceId(null)
+                            .spanId(null)
+                            .data(Map.of(
+                                    "job_title", JsonUtils.getJsonNodeFromString("\"Software Engineer\""),
+                                    "salary", JsonUtils.getJsonNodeFromString("\"100000\"")))
+                            .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(itemsList)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             // when - create experiment WITHOUT specifying version ID
             var experiment = experimentResourceClient.createPartialExperiment()
@@ -1844,18 +1863,22 @@ class DatasetVersionResourceTest {
             var datasetItem = datasetItems.getFirst();
 
             // Create a trace first (experiment items require a trace ID)
+            // The trace's output field should have "input" and "output" keys so they appear in output_keys
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(UUID.randomUUID().toString())
+                    .output(JsonUtils.getJsonNodeFromString(
+                            "{\"input\": {\"prompt\": \"test prompt\"}, \"output\": {\"response\": \"test response\"}}"))
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
             // Create experiment item using the stable dataset item ID
+            // Copy input/output from the trace
             var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)
                     .datasetItemId(datasetItem.id())
                     .traceId(trace.id())
                     .input(null)
-                    .output(null)
+                    .output(trace.output()) // Copy output from trace
                     .usage(null)
                     .feedbackScores(null)
                     .build();
@@ -1885,6 +1908,14 @@ class DatasetVersionResourceTest {
             var returnedExperimentItem = itemWithExperiments.experimentItems().get(0);
             assertThat(returnedExperimentItem.experimentId()).isEqualTo(experimentId);
             assertThat(returnedExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
+
+            // Verify columns include input and output from trace data (for experiment items view)
+            var columnNames = datasetItemsWithExperiments.columns().stream()
+                    .map(Column::name)
+                    .collect(Collectors.toSet());
+            assertThat(columnNames)
+                    .as("Columns should include 'input' and 'output' from trace data for experiment items")
+                    .contains("input", "output");
         }
 
         @Test
