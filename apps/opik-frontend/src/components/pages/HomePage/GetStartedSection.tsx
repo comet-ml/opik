@@ -14,6 +14,7 @@ import { SheetTitle } from "@/components/ui/sheet";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsPhone } from "@/hooks/useIsPhone";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -25,6 +26,7 @@ const GetStartedSection = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+  const { isPhonePortrait } = useIsPhone();
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
@@ -84,7 +86,11 @@ const GetStartedSection = () => {
         <div className="flex w-full min-w-fit flex-col pb-12">
           <div className="pb-8">
             <SheetTitle>Log a trace</SheetTitle>
-            <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
+            <div
+              className={`comet-body-s mt-4 self-center text-center text-muted-slate ${
+                isPhonePortrait ? "w-full px-4" : "m-auto w-[468px]"
+              }`}
+            >
               Select a framework and follow the instructions to integrate Comet
               with your code, or explore our ready-to-run examples on the right
             </div>
