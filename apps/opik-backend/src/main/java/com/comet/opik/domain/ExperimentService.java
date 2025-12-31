@@ -5,7 +5,6 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
@@ -160,7 +159,7 @@ public class ExperimentService {
                                     .datasetVersionSummary(Optional
                                             .ofNullable(experiment.datasetVersionId())
                                             .map(tuple.getT3()::get)
-                                            .map(DatasetVersionSummary::from)
+                                            .map(DatasetVersionMapper.INSTANCE::toDatasetVersionSummary)
                                             .orElse(null))
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
@@ -358,7 +357,7 @@ public class ExperimentService {
                                             .map(Dataset::name)
                                             .orElse(null))
                                     .datasetVersionSummary(tuple.getT3()
-                                            .map(DatasetVersionSummary::from)
+                                            .map(DatasetVersionMapper.INSTANCE::toDatasetVersionSummary)
                                             .orElse(null))
                                     .build());
                 }));

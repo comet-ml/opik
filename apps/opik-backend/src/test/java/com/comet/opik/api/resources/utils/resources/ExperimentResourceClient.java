@@ -79,7 +79,6 @@ public class ExperimentResourceClient {
                 .datasetVersionId(null)
                 .datasetVersionSummary(null);
     }
-    }
 
     public List<Experiment> generateExperimentList() {
         return PodamFactoryUtils.manufacturePojoList(podamFactory, Integer.class).stream()
