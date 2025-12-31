@@ -12,11 +12,16 @@ Logs from the subprocess are captured and streamed to Redis for S3 sync.
 
 import logging
 import os
+from datetime import datetime
+from typing import Optional
 
 from opentelemetry import trace
 
 from opik_backend.executor_isolated import IsolatedSubprocessExecutor
-from opik_backend.subprocess_logger import create_optimization_log_collector
+from opik_backend.subprocess_logger import (
+    create_optimization_log_collector,
+    RedisBatchLogCollector,
+)
 from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
@@ -25,6 +30,33 @@ from opik_backend.studio import (
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
+
+
+def _log_to_redis(
+    log_collector: Optional[RedisBatchLogCollector],
+    level: str,
+    message: str,
+) -> None:
+    """
+    Log a message to both the standard logger and Redis (if collector is available).
+    
+    This ensures pre-subprocess and post-subprocess messages are visible in the
+    optimization logs UI, not just in the container stdout.
+    """
+    # Format similar to Rich console output for consistency
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted_line = f"{timestamp} [{level.upper()}] {message}"
+    
+    # Log to standard logger
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    logger.log(log_level, message)
+    
+    # Also push to Redis if collector is available
+    if log_collector:
+        try:
+            log_collector.add_log_line(formatted_line)
+        except Exception as e:
+            logger.warning(f"Failed to push log to Redis: {e}")
 
 # Path to the optimizer runner script
 OPTIMIZER_RUNNER_PATH = os.path.join(
@@ -101,51 +133,57 @@ def process_optimizer_job(*args, **kwargs):
         ValueError: If job message is invalid
         Exception: Any error during optimization
     """
+    log_collector = None
+    
     with tracer.start_as_current_span("process_optimizer_job") as span:
-        # Parse job message first (don't log raw args/kwargs - they contain API keys)
-        job_message = _parse_job_message(args, kwargs)
-        context = OptimizationJobContext.from_job_message(job_message)
-        
-        # Set span attributes for tracing
-        span.set_attribute("optimization_id", str(context.optimization_id))
-        span.set_attribute("workspace_id", context.workspace_id)
-        span.set_attribute("workspace_name", context.workspace_name)
-        
-        logger.info(
-            f"Processing Optimization Studio job: {context.optimization_id} "
-            f"for workspace: {context.workspace_name}"
-        )
-        
-        # Prepare environment variables for subprocess
-        # Pass LLM API keys and Opik configuration
-        env_vars = {
-            **LLM_API_KEYS,  # OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
-        }
-        
-        # Pass Opik API key if provided (for cloud deployment)
-        if context.opik_api_key:
-            env_vars["OPIK_API_KEY"] = context.opik_api_key
-        
-        # Pass workspace name for SDK initialization
-        env_vars["OPIK_WORKSPACE"] = context.workspace_name
-        
-        # Create isolated subprocess executor with Redis-backed log collection
-        executor = IsolatedSubprocessExecutor(
-            timeout_secs=OPTIMIZATION_TIMEOUT_SECS
-        )
-        
-        # Create log collector for this optimization
-        log_collector = create_optimization_log_collector(
-            workspace_id=context.workspace_id,
-            optimization_id=context.optimization_id,
-        )
-        
-        # Store log collector in executor for subprocess log capture
-        # The executor will use this to stream subprocess stdout/stderr to Redis
-        executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
-        
         try:
-            logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
+            # Parse job message first (don't log raw args/kwargs - they contain API keys)
+            job_message = _parse_job_message(args, kwargs)
+            context = OptimizationJobContext.from_job_message(job_message)
+            
+            # Set span attributes for tracing
+            span.set_attribute("optimization_id", str(context.optimization_id))
+            span.set_attribute("workspace_id", context.workspace_id)
+            span.set_attribute("workspace_name", context.workspace_name)
+            
+            # Create log collector early so we can capture pre-subprocess logs
+            log_collector = create_optimization_log_collector(
+                workspace_id=context.workspace_id,
+                optimization_id=context.optimization_id,
+            )
+            
+            _log_to_redis(
+                log_collector, "info",
+                f"Processing Optimization Studio job: {context.optimization_id} "
+                f"for workspace: {context.workspace_name}"
+            )
+            
+            # Prepare environment variables for subprocess
+            # Pass LLM API keys and Opik configuration
+            env_vars = {
+                **LLM_API_KEYS,  # OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+            }
+            
+            # Pass Opik API key if provided (for cloud deployment)
+            if context.opik_api_key:
+                env_vars["OPIK_API_KEY"] = context.opik_api_key
+            
+            # Pass workspace name for SDK initialization
+            env_vars["OPIK_WORKSPACE"] = context.workspace_name
+            
+            # Create isolated subprocess executor with Redis-backed log collection
+            executor = IsolatedSubprocessExecutor(
+                timeout_secs=OPTIMIZATION_TIMEOUT_SECS
+            )
+            
+            # Store log collector in executor for subprocess log capture
+            # The executor will use this to stream subprocess stdout/stderr to Redis
+            executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
+            
+            _log_to_redis(
+                log_collector, "info",
+                f"Starting optimization subprocess for optimization {context.optimization_id}"
+            )
             
             # Execute optimization in isolated subprocess
             result = executor.execute(
@@ -159,15 +197,30 @@ def process_optimizer_job(*args, **kwargs):
             
             # Check for errors
             if "error" in result:
-                logger.error(f"Optimization failed: {result.get('error')}")
+                _log_to_redis(
+                    log_collector, "error",
+                    f"Optimization failed: {result.get('error')}"
+                )
                 raise Exception(result.get("error", "Unknown error"))
             
-            logger.info(f"Optimization completed successfully: {context.optimization_id}")
+            _log_to_redis(
+                log_collector, "info",
+                f"Optimization completed successfully: {context.optimization_id}"
+            )
             return result
+        
+        except Exception as e:
+            # Log any exception to Redis before re-raising
+            _log_to_redis(
+                log_collector, "error",
+                f"Optimization error: {str(e)}"
+            )
+            raise
         
         finally:
             # Ensure log collector is closed (flushes remaining logs)
-            try:
-                log_collector.close()
-            except Exception as e:
-                logger.warning(f"Error closing log collector: {e}")
+            if log_collector:
+                try:
+                    log_collector.close()
+                except Exception as e:
+                    logger.warning(f"Error closing log collector: {e}")

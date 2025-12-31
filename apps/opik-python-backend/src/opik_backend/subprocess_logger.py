@@ -580,6 +580,19 @@ class RedisBatchLogCollector(BatchLogCollector):
             except Exception as e:
                 logger.warning(f"Error closing {stream_name}: {e}")
     
+    def add_log_line(self, line: str) -> None:
+        """
+        Add a log line directly to the buffer.
+        
+        This is a convenience method for adding pre-formatted log lines
+        (e.g., from the main process before/after subprocess execution).
+        
+        Args:
+            line: The log line to add (will be stripped of whitespace)
+        """
+        if line and line.strip():
+            self.emit({'message': line.strip()})
+    
     def _flush_logs(self) -> None:
         """
         Flush buffered logs to Redis as raw strings.
