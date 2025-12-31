@@ -54,7 +54,7 @@ SUPPORTED_OPERATORS = {
     ],
     "output": ["=", "contains", "not_contains"],
     "metadata": ["=", "contains", ">", "<"],
-    "feedback_scores": ["=", ">", "<", ">=", "<="],
+    "feedback_scores": ["=", ">", "<", ">=", "<=", "is_empty", "is_not_empty"],
     "tags": ["contains"],
     "usage.total_tokens": ["=", "!=", ">", "<", ">=", "<="],
     "usage.prompt_tokens": ["=", "!=", ">", "<", ">=", "<="],
@@ -131,6 +131,8 @@ SUPPORTED_OPERATORS = {
         "!=",
     ],
 }
+
+OPERATORS_WITHOUT_VALUES = {"is_empty", "is_not_empty"}
 
 
 class OpikQueryLanguage:
@@ -384,8 +386,12 @@ class OpikQueryLanguage:
             # Parse operators
             parsed_operator = self._parse_operator(parsed_field["field"])
 
-            # Parse values
-            parsed_value = self._parse_value()
+            operator_name = parsed_operator.get("operator", "")
+            if operator_name in OPERATORS_WITHOUT_VALUES:
+                # For operators without values, use empty string as value
+                parsed_value = {"value": ""}
+            else:
+                parsed_value = self._parse_value()
 
             expressions.append({**parsed_field, **parsed_operator, **parsed_value})
 

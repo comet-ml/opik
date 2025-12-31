@@ -88,6 +88,162 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
                 {"field": "id", "operator": "ends_with", "value": "789012"},
             ],
         ),
+        # Test cases for is_empty and is_not_empty operators
+        (
+            "feedback_scores.my_metric is_empty",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_empty",
+                    "value": "",
+                }
+            ],
+        ),
+        (
+            "feedback_scores.my_metric is_not_empty",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_not_empty",
+                    "value": "",
+                }
+            ],
+        ),
+        (
+            'feedback_scores."Answer Relevance" is_empty',
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "Answer Relevance",
+                    "operator": "is_empty",
+                    "value": "",
+                }
+            ],
+        ),
+        (
+            "feedback_scores.my_metric is_empty AND feedback_scores.other_metric is_not_empty",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_empty",
+                    "value": "",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "other_metric",
+                    "operator": "is_not_empty",
+                    "value": "",
+                },
+            ],
+        ),
+        # Test cases mixing is_empty/is_not_empty with regular operators
+        (
+            "feedback_scores.my_metric is_empty AND feedback_scores.other_metric > 0.5",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_empty",
+                    "value": "",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "other_metric",
+                    "operator": ">",
+                    "value": "0.5",
+                },
+            ],
+        ),
+        (
+            "feedback_scores.accuracy > 0.8 AND feedback_scores.user_frustration is_empty",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "accuracy",
+                    "operator": ">",
+                    "value": "0.8",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "user_frustration",
+                    "operator": "is_empty",
+                    "value": "",
+                },
+            ],
+        ),
+        (
+            "feedback_scores.my_metric is_not_empty AND feedback_scores.my_metric >= 0.5",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_not_empty",
+                    "value": "",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": ">=",
+                    "value": "0.5",
+                },
+            ],
+        ),
+        (
+            'feedback_scores."Answer Relevance" is_empty AND feedback_scores."Answer Relevance" < 0.5',
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "Answer Relevance",
+                    "operator": "is_empty",
+                    "value": "",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "Answer Relevance",
+                    "operator": "<",
+                    "value": "0.5",
+                },
+            ],
+        ),
+        (
+            "feedback_scores.accuracy >= 0.7 AND feedback_scores.relevance is_not_empty AND feedback_scores.quality > 0.5",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "accuracy",
+                    "operator": ">=",
+                    "value": "0.7",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "relevance",
+                    "operator": "is_not_empty",
+                    "value": "",
+                },
+                {
+                    "field": "feedback_scores",
+                    "key": "quality",
+                    "operator": ">",
+                    "value": "0.5",
+                },
+            ],
+        ),
+        (
+            'name = "test" AND feedback_scores.my_metric is_empty AND duration > 100',
+            [
+                {"field": "name", "operator": "=", "value": "test"},
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_empty",
+                    "value": "",
+                },
+                {"field": "duration", "operator": ">", "value": "100"},
+            ],
+        ),
     ],
 )
 def test_valid_oql_expressions(filter_string, expected):
