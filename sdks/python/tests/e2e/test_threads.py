@@ -7,7 +7,7 @@ import pytest
 
 import opik
 from opik import synchronization
-from opik.types import FeedbackScoreDict
+from opik.types import BatchFeedbackScoreDict
 from . import verifiers
 
 
@@ -79,14 +79,14 @@ def test_threads_client__log_threads_feedback_scores__happy_path(
 
     # log feedback scores
     scores = [
-        FeedbackScoreDict(
+        BatchFeedbackScoreDict(
             id=active_threads[0],
             name="thread-metric-1",
             value=0.75,
             category_name="category-3",
             reason="some-reason-3",
         ),
-        FeedbackScoreDict(
+        BatchFeedbackScoreDict(
             id=active_threads[1],
             name="thread-metric-2",
             value=0.25,
@@ -188,7 +188,7 @@ def test_threads_client__search_threads__filter_by_feedback_score(
     # Log feedback score to one thread
     threads_client.log_threads_feedback_scores(
         scores=[
-            FeedbackScoreDict(
+            BatchFeedbackScoreDict(
                 id=thread_with_score,
                 name=unique_metric,
                 value=0.85,
