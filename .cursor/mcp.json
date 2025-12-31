@@ -19,6 +19,11 @@
       "env": {},
       "args": []
     },
+    "Jira-Headless": {
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
+      "envFile": "${workspaceFolder}/.env.local"
+    },    
     "Notion": {
       "command": "npx -y mcp-remote https://mcp.notion.com/mcp",
       "env": {},
