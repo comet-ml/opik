@@ -1,9 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import useAppStore from "@/store/AppStore";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { useIsPhone } from "@/hooks/useIsPhone";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -25,6 +32,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   onRunCodeCallback,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { isPhonePortrait } = useIsPhone();
+  const [expandedItem, setExpandedItem] = useState<string>("install");
+
   const { code: codeWithConfig, lines } = putConfigInCode({
     code,
     workspaceName,
@@ -45,39 +55,73 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     apiKey &&
     Boolean(CODE_EXECUTOR_SERVICE_URL);
 
+  const installSection = (
+    <div>
+      <div className="comet-body-s mb-3">
+        Install Opik using pip from the command line
+      </div>
+      <div className="min-h-7">
+        <CodeHighlighter data={CODE_BLOCK_1} />
+      </div>
+    </div>
+  );
+
+  const runCodeSection = (
+    <div>
+      <div className="comet-body-s mb-3">
+        Run the following code to get started
+      </div>
+      {canExecuteCode ? (
+        <CodeExecutor
+          executionUrl={executionUrl}
+          executionLogs={executionLogs}
+          data={codeWithConfig}
+          copyData={codeWithConfigToCopy}
+          apiKey={apiKey}
+          workspaceName={workspaceName}
+          highlightedLines={lines}
+          onRunCodeCallback={onRunCodeCallback}
+        />
+      ) : (
+        <CodeHighlighter
+          data={codeWithConfig}
+          copyData={codeWithConfigToCopy}
+          highlightedLines={lines}
+        />
+      )}
+    </div>
+  );
+
+  if (isPhonePortrait) {
+    return (
+      <div className="flex flex-col gap-6 rounded-md border bg-background p-6">
+        <Accordion
+          type="single"
+          collapsible
+          value={expandedItem}
+          onValueChange={setExpandedItem}
+        >
+          <AccordionItem value="install">
+            <AccordionTrigger className="comet-body-s-accented hover:no-underline">
+              Install Opik
+            </AccordionTrigger>
+            <AccordionContent>{installSection}</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="run-code">
+            <AccordionTrigger className="comet-body-s-accented hover:no-underline">
+              Run the code
+            </AccordionTrigger>
+            <AccordionContent>{runCodeSection}</AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-background p-6">
-      <div>
-        <div className="comet-body-s mb-3">
-          1. Install Opik using pip from the command line.
-        </div>
-        <div className="min-h-7">
-          <CodeHighlighter data={CODE_BLOCK_1} />
-        </div>
-      </div>
-      <div>
-        <div className="comet-body-s mb-3">
-          2. Run the following code to get started
-        </div>
-        {canExecuteCode ? (
-          <CodeExecutor
-            executionUrl={executionUrl}
-            executionLogs={executionLogs}
-            data={codeWithConfig}
-            copyData={codeWithConfigToCopy}
-            apiKey={apiKey}
-            workspaceName={workspaceName}
-            highlightedLines={lines}
-            onRunCodeCallback={onRunCodeCallback}
-          />
-        ) : (
-          <CodeHighlighter
-            data={codeWithConfig}
-            copyData={codeWithConfigToCopy}
-            highlightedLines={lines}
-          />
-        )}
-      </div>
+      {installSection}
+      {runCodeSection}
     </div>
   );
 };
