@@ -649,7 +649,7 @@ class Opik:
                 Specifying a span id via `id` key for each score is mandatory.
             project_name: The name of the project in which the spans are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
-                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
@@ -688,7 +688,7 @@ class Opik:
                 Specifying a trace id via `id` key for each score is mandatory.
             project_name: The name of the project in which the traces are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
-                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
@@ -728,7 +728,7 @@ class Opik:
                 Specifying a thread id via `id` key for each score is mandatory.
             project_name: The name of the project in which the threads are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
-                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
