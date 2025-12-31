@@ -105,7 +105,7 @@ def test_load_conversation_thread():
 
 def test_load_conversation_thread_disables_truncation():
     """Test that load_conversation_thread disables truncation to prevent malformed JSON.
-    
+
     This test verifies the fix for issue #4595 where traces were truncated at ~9935 characters,
     causing malformed JSON to be passed to trace_output_transform functions.
     """
@@ -143,4 +143,6 @@ def test_load_conversation_thread_disables_truncation():
     # Verify that truncate=False is explicitly passed to prevent truncation
     call_kwargs = mock_opik_client.search_traces.call_args[1]
     assert "truncate" in call_kwargs, "truncate parameter must be explicitly set"
-    assert call_kwargs["truncate"] is False, "truncate must be False to prevent malformed JSON"
+    assert (
+        call_kwargs["truncate"] is False
+    ), "truncate must be False to prevent malformed JSON"
