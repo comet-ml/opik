@@ -108,6 +108,12 @@ jobs:
                 playwright install
                 pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
 
+            - name: Create Allure test plan directory
+              working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
+              run: |
+                mkdir -p .allure
+                echo '{"version": "1.0", "tests": []}' > .allure/testplan.json
+
             - name: Run TypeScript E2E suite
               working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
               env:
