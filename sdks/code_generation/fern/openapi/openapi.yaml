@@ -1289,6 +1289,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/{id}/items/changes:
+    post:
+      tags:
+      - Datasets
+      summary: Apply changes to dataset items
+      description: |
+        Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+        This endpoint:
+        - Creates a new version with the applied changes
+        - Validates that baseVersion matches the latest version (unless override=true)
+        - Returns 409 Conflict if baseVersion is stale and override is not set
+
+        Use `override=true` query parameter to force version creation even with stale baseVersion.
+      operationId: applyDatasetItemChanges
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: override
+        in: query
+        schema:
+          type: boolean
+          default: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemChanges_Public"
+      responses:
+        "201":
+          description: Version created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Dataset or version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Version conflict - baseVersion is not the latest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/items/batch:
     patch:
       tags:
@@ -1942,6 +1999,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}:
+    delete:
+      tags:
+      - Datasets
+      summary: Delete version tag
+      description: "Remove a tag from a dataset version. The version itself is not\
+        \ deleted, only the tag reference."
+      operationId: deleteVersionTag
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Tag deleted successfully
   /v1/private/datasets/{id}/versions:
     get:
       tags:
@@ -1984,84 +2069,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
-    post:
-      tags:
-      - Datasets
-      summary: Create dataset version
-      description: Create a new immutable version of the dataset by snapshotting the
-        current state
-      operationId: createDatasetVersion
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DatasetVersionCreate_Public"
-      responses:
-        "201":
-          description: Created
-          headers:
-            Location:
-              required: true
-              style: simple
-              schema:
-                type: string
-              example: "${basePath}/v1/private/datasets/{datasetId}/versions"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-        "409":
-          description: Conflict - Tag already exists
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-  /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}:
-    delete:
-      tags:
-      - Datasets
-      summary: Delete version tag
-      description: "Remove a tag from a dataset version. The version itself is not\
-        \ deleted, only the tag reference."
-      operationId: deleteVersionTag
-      parameters:
-      - name: versionHash
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: tag
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "204":
-          description: Tag deleted successfully
   /v1/private/datasets/{id}/versions/restore:
     post:
       tags:
       - Datasets
       summary: Restore dataset to a previous version
-      description: "Restores the dataset to a previous version state. All draft items\
-        \ are replaced with items from the specified version. If the version is not\
-        \ the latest, a new version snapshot is created. If the version is the latest,\
-        \ only draft items are replaced (revert functionality)."
+      description: "Restores the dataset to a previous version state by creating a\
+        \ new version with items copied from the specified version. If the version\
+        \ is already the latest, returns it as-is (no-op)."
       operationId: restoreDatasetVersion
       parameters:
       - name: id
@@ -3092,58 +3107,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio:
-    get:
-      tags:
-      - Optimizations
-      summary: Find Studio optimizations
-      description: Find Studio optimizations
-      operationId: findStudioOptimizations
-      parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: dataset_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: dataset_deleted
-        in: query
-        schema:
-          type: boolean
-      - name: filters
-        in: query
-        schema:
-          type: string
-      responses:
-        "200":
-          description: Studio optimizations resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OptimizationPage_Public"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/{id}:
     get:
       tags:
@@ -3192,33 +3155,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio/{id}:
-    get:
-      tags:
-      - Optimizations
-      summary: Get Studio optimization by id
-      description: Get Studio optimization with config included
-      operationId: getStudioOptimizationById
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Studio optimization resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Optimization_Public"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/studio/{id}/logs:
     get:
       tags:
@@ -8643,6 +8579,80 @@ components:
           type: string
         config:
           $ref: "#/components/schemas/JsonNode_Public"
+    DatasetVersion_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_hash:
+          type: string
+          readOnly: true
+        tags:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        is_latest:
+          type: boolean
+          description: Indicates whether this is the latest version of the dataset
+          readOnly: true
+        version_name:
+          type: string
+          description: "Sequential version name formatted as 'v1', 'v2', etc."
+          readOnly: true
+        items_total:
+          type: integer
+          description: Total number of items in this version
+          format: int32
+          readOnly: true
+        items_added:
+          type: integer
+          description: Number of items added since last version
+          format: int32
+          readOnly: true
+        items_modified:
+          type: integer
+          description: Number of items modified since last version
+          format: int32
+          readOnly: true
+        items_deleted:
+          type: integer
+          description: Number of items deleted since last version
+          format: int32
+          readOnly: true
+        change_description:
+          type: string
+          readOnly: true
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+            readOnly: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    DatasetItemChanges_Public:
+      type: object
     DatasetItemBatchUpdate:
       required:
       - update
@@ -8664,6 +8674,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItemFilter"
+        dataset_id:
+          type: string
+          description: "Dataset ID. Required when using 'filters', optional when using\
+            \ 'ids'."
+          format: uuid
         update:
           $ref: "#/components/schemas/DatasetItemUpdate"
         merge_tags:
@@ -9409,8 +9424,6 @@ components:
           type: array
           items:
             type: string
-        hasDraft:
-          type: boolean
     DatasetItem_Compare:
       required:
       - data
@@ -9943,8 +9956,6 @@ components:
           type: array
           items:
             type: string
-        hasDraft:
-          type: boolean
     Column:
       type: object
       properties:
@@ -10057,31 +10068,6 @@ components:
           maxLength: 100
           minLength: 0
           type: string
-    DatasetVersionCreate_Public:
-      type: object
-      properties:
-        tags:
-          type: array
-          description: Optional list of tags for this version
-          example:
-          - baseline
-          - v1.0
-          items:
-            maxLength: 100
-            minLength: 0
-            type: string
-            description: Optional list of tags for this version
-            example: "[\"baseline\",\"v1.0\"]"
-        change_description:
-          type: string
-          description: Optional description of changes in this version
-          example: Initial baseline version with production data
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-            description: Optional user-defined metadata
-          description: Optional user-defined metadata
     DatasetVersionPage_Public:
       type: object
       properties:
@@ -10098,74 +10084,6 @@ components:
         total:
           type: integer
           format: int64
-    DatasetVersion_Public:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        dataset_id:
-          type: string
-          format: uuid
-          readOnly: true
-        version_hash:
-          type: string
-          readOnly: true
-        tags:
-          uniqueItems: true
-          type: array
-          readOnly: true
-          items:
-            type: string
-            readOnly: true
-        is_latest:
-          type: boolean
-          description: Indicates whether this is the latest version of the dataset
-          readOnly: true
-        items_total:
-          type: integer
-          description: Total number of items in this version
-          format: int32
-          readOnly: true
-        items_added:
-          type: integer
-          description: Number of items added since last version
-          format: int32
-          readOnly: true
-        items_modified:
-          type: integer
-          description: Number of items modified since last version
-          format: int32
-          readOnly: true
-        items_deleted:
-          type: integer
-          description: Number of items deleted since last version
-          format: int32
-          readOnly: true
-        change_description:
-          type: string
-          readOnly: true
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-            readOnly: true
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
     DatasetVersionRestore_Public:
       required:
       - version_ref
@@ -10208,6 +10126,10 @@ components:
           minLength: 1
           type: string
         dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
           type: string
           format: uuid
           readOnly: true
@@ -11032,6 +10954,10 @@ components:
           minLength: 1
           type: string
         dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
           type: string
           format: uuid
           readOnly: true
