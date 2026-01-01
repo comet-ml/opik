@@ -19,6 +19,7 @@ import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELin
 import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
+import ViewAllItemsButton from "@/components/pages/AnnotationQueuePage/ViewAllItemsButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ScopeTag from "@/components/pages/AnnotationQueuePage/ScopeTag";
@@ -69,6 +70,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         <h1 className="comet-title-l truncate break-words">{queueName}</h1>
         {annotationQueue && (
           <div className="flex items-center gap-2">
+            <ViewAllItemsButton annotationQueue={annotationQueue} />
             <CopySMELinkButton annotationQueue={annotationQueue} />
             <EditAnnotationQueueButton annotationQueue={annotationQueue} />
             <ExportAnnotatedDataButton annotationQueue={annotationQueue} />
