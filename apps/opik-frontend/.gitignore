@@ -10,3 +10,4 @@ env/
 
 # Test scripts
 test_nested_json_traces.py
+gh_2.63.2_linux_amd64/
