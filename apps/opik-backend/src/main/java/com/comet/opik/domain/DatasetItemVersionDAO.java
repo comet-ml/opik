@@ -1237,7 +1237,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
                 // Add experiment IDs to template
-                if (criteria.experimentIds() != null && !criteria.experimentIds().isEmpty()) {
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
                     template.add("experiment_ids", criteria.experimentIds());
                 }
 
