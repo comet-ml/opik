@@ -207,7 +207,7 @@ class DatasetVersionResourceTest {
     private DatasetVersion getLatestVersion(UUID datasetId) {
         var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
         assertThat(versions.content()).isNotEmpty();
-        return versions.content().get(0);
+        return versions.content().getFirst();
     }
 
     private void deleteDatasetItem(UUID datasetId, UUID itemId) {
@@ -788,7 +788,7 @@ class DatasetVersionResourceTest {
             // Get v1 items to identify item to delete via applyDeltaChanges
             var v1Items = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE)
                     .content();
-            var itemToDelete = v1Items.get(0);
+            var itemToDelete = v1Items.getFirst();
 
             // Create version 2 by applying delta (deleting one item)
             var changes = DatasetItemChanges.builder()
@@ -900,7 +900,7 @@ class DatasetVersionResourceTest {
             var itemToKeep = v1Items.get(2);
 
             // Prepare changes: add 1 new item, edit 1 item, delete 1 item
-            var newItem = generateDatasetItems(1).get(0);
+            var newItem = generateDatasetItems(1).getFirst();
             var editedItem = DatasetItemEdit.builder()
                     .id(itemToEdit.id()) // Row ID from API response
                     .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
@@ -981,7 +981,7 @@ class DatasetVersionResourceTest {
             // When - Try to apply changes with stale baseVersion (v1 instead of v2)
             var changes = DatasetItemChanges.builder()
                     .baseVersion(version1.id()) // Stale version
-                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .addedItems(List.of(generateDatasetItems(1).getFirst()))
                     .tags(List.of("v3"))
                     .changeDescription("Should fail - stale base version")
                     .build();
@@ -1015,7 +1015,7 @@ class DatasetVersionResourceTest {
             // When - Apply changes with stale baseVersion but override=true
             var changes = DatasetItemChanges.builder()
                     .baseVersion(version1.id()) // Stale version, but override=true
-                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .addedItems(List.of(generateDatasetItems(1).getFirst()))
                     .tags(List.of("v3-override"))
                     .changeDescription("Override stale base version")
                     .build();
@@ -1041,7 +1041,7 @@ class DatasetVersionResourceTest {
 
             var changes = DatasetItemChanges.builder()
                     .baseVersion(someVersionId)
-                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .addedItems(List.of(generateDatasetItems(1).getFirst()))
                     .build();
 
             // When
@@ -1064,7 +1064,7 @@ class DatasetVersionResourceTest {
 
             var changes = DatasetItemChanges.builder()
                     .baseVersion(nonExistentVersionId) // Non-existent version
-                    .addedItems(List.of(generateDatasetItems(1).get(0)))
+                    .addedItems(List.of(generateDatasetItems(1).getFirst()))
                     .build();
 
             // When
@@ -1099,7 +1099,7 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1Items).hasSize(5);
 
-            var itemToDelete = v1Items.get(0);
+            var itemToDelete = v1Items.getFirst();
 
             // When - Delete one item
             deleteDatasetItem(datasetId, itemToDelete.id());
@@ -1279,7 +1279,7 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(items).hasSize(3);
 
-            var itemFromList = items.get(0);
+            var itemFromList = items.getFirst();
             var rowId = itemFromList.id();
 
             // When - Get single item by row ID (what the frontend does)
@@ -1317,7 +1317,7 @@ class DatasetVersionResourceTest {
             // Now delete an item via applyDeltaChanges (creates version 2 with 2 items)
             var v1Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
-            var itemToDelete = v1Items.get(0);
+            var itemToDelete = v1Items.getFirst();
 
             var changes = DatasetItemChanges.builder()
                     .baseVersion(version1.id())
@@ -1366,7 +1366,7 @@ class DatasetVersionResourceTest {
             // Get first item to patch
             var v1Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
-            var itemToPatch = v1Items.get(0);
+            var itemToPatch = v1Items.getFirst();
 
             // When - Patch the item with new data
             var newData = Map.of("patched", factory.manufacturePojo(JsonNode.class));
@@ -1897,14 +1897,14 @@ class DatasetVersionResourceTest {
             var experimentItems = experimentResourceClient.getExperimentItems(experiment.name(), API_KEY,
                     TEST_WORKSPACE);
             assertThat(experimentItems).hasSize(1);
-            assertThat(experimentItems.get(0).datasetItemId()).isEqualTo(datasetItem.draftItemId());
+            assertThat(experimentItems.getFirst().datasetItemId()).isEqualTo(datasetItem.id());
 
             // Verify the frontend endpoint returns experiment_items array populated
             var datasetItemsWithExperiments = datasetResourceClient.getDatasetItemsWithExperimentItems(
                     datasetId, List.of(experimentId), API_KEY, TEST_WORKSPACE);
 
             assertThat(datasetItemsWithExperiments.content()).hasSize(1);
-            var itemWithExperiments = datasetItemsWithExperiments.content().get(0);
+            var itemWithExperiments = datasetItemsWithExperiments.content().getFirst();
 
             assertThat(itemWithExperiments.experimentItems())
                     .as("experiment_items array must be populated for frontend to work")
@@ -1913,7 +1913,7 @@ class DatasetVersionResourceTest {
                     .hasSize(1);
 
             // Verify the experiment item details are correct
-            var returnedExperimentItem = itemWithExperiments.experimentItems().get(0);
+            var returnedExperimentItem = itemWithExperiments.experimentItems().getFirst();
             assertThat(returnedExperimentItem.experimentId()).isEqualTo(experimentId);
             assertThat(returnedExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
 
