@@ -272,39 +272,157 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     /**
      * Counts dataset items with experiment items, applying all filters from search criteria.
      * This ensures pagination totals match the filtered results.
+     *
+     * Note: Uses simplified feedback scores processing (only aggregated values, not full details)
+     * since we only need values for filtering in HAVING clauses, not for display.
+     * This keeps the count query closer to the legacy pattern while supporting all required filters.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
-            WITH experiment_dataset_versions AS (
-                SELECT
-                    e.id AS experiment_id,
-                    e.dataset_version_id
-                FROM experiments e
-                WHERE e.workspace_id = :workspace_id
-                AND e.dataset_id = :datasetId
-                <if(experiment_ids)> AND e.id IN :experiment_ids <endif>
+            WITH experiment_items_scope AS (
+            	SELECT *
+            	FROM experiment_items
+            	WHERE workspace_id = :workspace_id
+            	<if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
+            	ORDER BY id DESC, last_updated_at DESC
+            	LIMIT 1 BY id
             ),
-            dataset_items_scope AS (
-                SELECT
-                    div.id AS row_id
-                FROM dataset_item_versions div
-                INNER JOIN experiment_dataset_versions edv ON div.dataset_version_id = edv.dataset_version_id
-                WHERE div.workspace_id = :workspace_id
-                AND div.dataset_id = :datasetId
-                ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                LIMIT 1 BY div.id
+            feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
             ),
-            experiment_items_scope AS (
-                SELECT DISTINCT
-                    ei.dataset_item_id
-                FROM experiment_items ei
-                WHERE ei.workspace_id = :workspace_id
-                AND ei.dataset_item_id IN (SELECT row_id FROM dataset_items_scope)
-                <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
-                ORDER BY ei.id DESC, ei.last_updated_at DESC
-                LIMIT 1 BY ei.id
+            feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ),
+            feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ),
+            feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
             )
-            SELECT COUNT(DISTINCT dataset_item_id) AS count
-            FROM experiment_items_scope
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                FROM feedback_scores_final
+                GROUP BY entity_id
+                HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            , experiment_items_final AS (
+            	SELECT *
+            	FROM experiment_items_scope ei
+            	WHERE workspace_id = :workspace_id
+            	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
+                AND trace_id IN (
+                    SELECT
+                        id
+                    FROM traces
+                    <if(feedback_scores_empty_filters)>
+                        LEFT JOIN fsc ON fsc.entity_id = traces.id
+                    <endif>
+                    WHERE workspace_id = :workspace_id
+                    <if(experiment_item_filters)>
+                    AND <experiment_item_filters>
+                    <endif>
+                    <if(feedback_scores_filters)>
+                    AND id IN (
+                        SELECT
+                            entity_id
+                        FROM feedback_scores_final
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                    <if(feedback_scores_empty_filters)>
+                    AND fsc.feedback_scores_count = 0
+                    <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+            	ORDER BY id DESC, last_updated_at DESC
+            )
+            SELECT COUNT(DISTINCT ei.dataset_item_id) AS count
+            FROM experiment_items_final AS ei
+            LEFT JOIN (
+                SELECT
+                    id,
+                    dataset_item_id,
+                    data
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND id IN (SELECT dataset_item_id FROM experiment_items_scope)
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS di ON di.id = ei.dataset_item_id
+            LEFT JOIN (
+                SELECT
+                    t.id,
+                    <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
+                    <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>
+                FROM (
+                    SELECT
+                        id,
+                        input,
+                        output
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
+            ) AS tfs ON ei.trace_id = tfs.id
+            <if(search)>
+            WHERE multiSearchAnyCaseInsensitive(toString(COALESCE(di.data, map())), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(tfs.input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(tfs.output), :searchTerms)
+            <endif>
             """;
 
     // Query to extract columns from trace output for experiment items view
@@ -1207,16 +1325,44 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.nonTransaction(connection -> {
             ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
+            template.add("truncate", criteria.truncate());
+            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
+
             // Add experiment IDs if present
             if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
                 template.add("experiment_ids", true);
             }
 
+            // Add filters if present
+            if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+                Optional<String> filterQuery = FilterQueryBuilder.toAnalyticsDbFilters(
+                        criteria.filters(),
+                        FilterStrategy.DATASET_ITEM);
+                filterQuery.ifPresent(query -> template.add("filters", query));
+            }
+
+            // Add search if present
+            if (StringUtils.isNotBlank(criteria.search())) {
+                template.add("search", true);
+            }
+
             var statement = connection.createStatement(template.render())
-                    .bind("datasetId", criteria.datasetId());
+                    .bind("datasetId", criteria.datasetId())
+                    .bind("versionId", versionId.toString());
 
             if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
                 statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+            }
+
+            // Bind search terms if present
+            if (StringUtils.isNotBlank(criteria.search())) {
+                String[] searchTerms = criteria.search().trim().split("\\s+");
+                statement.bind("searchTerms", searchTerms);
+            }
+
+            // Bind filter parameters if present
+            if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+                FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
             }
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,

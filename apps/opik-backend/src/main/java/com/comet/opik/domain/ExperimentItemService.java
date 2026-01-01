@@ -41,7 +41,8 @@ public class ExperimentItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            var experimentItemsWithValidIds = addIdIfAbsentAndValidateIt(experimentItems, workspaceId, userName);
+            var experimentItemsWithValidIds = validateExperimentItemIdsAndWorkspace(experimentItems, workspaceId,
+                    userName);
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
             return experimentItemDAO.insert(experimentItemsWithValidIds)
@@ -49,7 +50,7 @@ public class ExperimentItemService {
         });
     }
 
-    private Set<ExperimentItem> addIdIfAbsentAndValidateIt(
+    private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(
             Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         validateExperimentsWorkspace(experimentItems, workspaceId);
 
