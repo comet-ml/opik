@@ -1625,16 +1625,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting '{}' items by dataset_item_ids from dataset '{}' version '{}'", datasetItemIds.size(),
                 datasetId, versionId);
 
-        // Convert UUIDs to strings for the IN clause
-        List<String> itemIdStrings = datasetItemIds.stream()
-                .map(UUID::toString)
-                .toList();
-
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(SELECT_ITEMS_BY_DATASET_ITEM_IDS)
                     .bind("datasetId", datasetId.toString())
                     .bind("versionId", versionId.toString())
-                    .bind("datasetItemIds", itemIdStrings);
+                    .bind("datasetItemIds", datasetItemIds.toArray(UUID[]::new));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_items_by_dataset_item_ids");
 
@@ -1714,14 +1709,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         log.debug("Mapping '{}' row IDs to dataset_item_ids", rowIds.size());
 
-        // Convert UUIDs to strings for the IN clause
-        List<String> rowIdStrings = rowIds.stream()
-                .map(UUID::toString)
-                .toList();
-
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(SELECT_ITEM_ID_MAPPING_BY_ROW_IDS)
-                    .bind("rowIds", rowIdStrings);
+                    .bind("rowIds", rowIds.toArray(UUID[]::new));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "map_row_ids_to_dataset_item_ids");
 
@@ -1772,14 +1762,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         log.debug("Getting workspace IDs for '{}' dataset item row IDs", datasetItemRowIds.size());
 
-        // Convert UUIDs to strings for the IN clause
-        List<String> rowIdStrings = datasetItemRowIds.stream()
-                .map(UUID::toString)
-                .toList();
-
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(SELECT_DATASET_WORKSPACE_ITEMS_BY_ROW_IDS)
-                    .bind("datasetItemRowIds", rowIdStrings);
+                    .bind("datasetItemRowIds", datasetItemRowIds.toArray(UUID[]::new));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_dataset_item_workspace");
 
