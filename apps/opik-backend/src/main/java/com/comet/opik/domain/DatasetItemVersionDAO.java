@@ -667,7 +667,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.item_created_by,
                 di.item_last_updated_by
             <if(search)>
-            HAVING multiSearchAnyCaseInsensitive(toString(data_final), [<search>]) OR multiSearchAnyCaseInsensitive(toString(input), [<search>]) OR multiSearchAnyCaseInsensitive(toString(output), [<search>])
+            HAVING multiSearchAnyCaseInsensitive(toString(data_final), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(output), :searchTerms)
             <endif>
             <if(filters)>
             HAVING <filters>
@@ -1084,7 +1084,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 // Add search if present
                 if (StringUtils.isNotBlank(criteria.search())) {
-                    template.add("search", criteria.search());
+                    template.add("search", true);
                 }
 
                 // Add sorting if present
@@ -1109,6 +1109,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 // Bind experiment IDs as array
                 if (criteria.experimentIds() != null && !criteria.experimentIds().isEmpty()) {
                     statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+                }
+
+                // Bind search terms as array
+                if (StringUtils.isNotBlank(criteria.search())) {
+                    filterQueryBuilder.bindSearchTerms(statement, criteria.search());
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
