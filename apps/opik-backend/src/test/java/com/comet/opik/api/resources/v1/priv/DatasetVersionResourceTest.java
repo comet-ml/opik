@@ -2056,6 +2056,111 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
+
+        @Test
+        @DisplayName("Success: Pagination count matches filtered results for experiment items")
+        void getDatasetItemsWithExperiments_whenFilteredByExperiment_thenCountMatchesFilteredResults() {
+            // given - create dataset with 100 items
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 100);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(100);
+
+            // Create two experiments
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version1.id())
+                    .build();
+            var experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version1.id())
+                    .build();
+            var experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+
+            // Fetch dataset items
+            var datasetItems = datasetResourceClient.getDatasetItems(datasetId, 1, 100, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+
+            // Link only 10 items to experiment1 (items 0-9) and 5 items to experiment2 (items 10-14)
+            linkExperimentItems(experimentId1, datasetItems, 0, 10);
+            linkExperimentItems(experimentId2, datasetItems, 10, 15);
+
+            // when - get dataset items filtered by experiment1 (should return 10 items)
+            var datasetItemsWithExperiment1 = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId1), API_KEY, TEST_WORKSPACE);
+
+            // then - pagination count should match filtered results (10), not total dataset items (100)
+            assertThat(datasetItemsWithExperiment1.total())
+                    .as("Total should be 10 (items linked to experiment1), not 100 (all items in dataset)")
+                    .isEqualTo(10L);
+            assertThat(datasetItemsWithExperiment1.content())
+                    .as("Should return all 10 items in one page")
+                    .hasSize(10);
+
+            // when - get dataset items filtered by experiment2 (should return 5 items)
+            var datasetItemsWithExperiment2 = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId2), API_KEY, TEST_WORKSPACE);
+
+            // then - pagination count should match filtered results (5), not total dataset items (100)
+            assertThat(datasetItemsWithExperiment2.total())
+                    .as("Total should be 5 (items linked to experiment2), not 100 (all items in dataset)")
+                    .isEqualTo(5L);
+            assertThat(datasetItemsWithExperiment2.content())
+                    .as("Should return all 5 items in one page")
+                    .hasSize(5);
+
+            // when - get dataset items filtered by both experiments (should return 15 items total)
+            var datasetItemsWithBothExperiments = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId1, experimentId2), API_KEY, TEST_WORKSPACE);
+
+            // then - pagination count should be 15 (combined unique items from both experiments)
+            assertThat(datasetItemsWithBothExperiments.total())
+                    .as("Total should be 15 (items linked to either experiment), not 100 (all items in dataset)")
+                    .isEqualTo(15L);
+            // Note: content size will be limited by page size (default 10), but total count should be correct
+            assertThat(datasetItemsWithBothExperiments.content().size())
+                    .as("Should return items up to page size limit")
+                    .isLessThanOrEqualTo(15);
+        }
+
+        /**
+         * Helper method to link experiment items to dataset items.
+         * Creates traces and experiment items for a range of dataset items.
+         *
+         * @param experimentId The experiment to link items to
+         * @param datasetItems The list of dataset items
+         * @param startIndex The starting index (inclusive)
+         * @param endIndex The ending index (exclusive)
+         */
+        private void linkExperimentItems(UUID experimentId, List<DatasetItem> datasetItems, int startIndex,
+                int endIndex) {
+            for (int i = startIndex; i < endIndex; i++) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(UUID.randomUUID().toString())
+                        .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
+                        .output(JsonUtils.getJsonNodeFromString(
+                                "{\"input\": {\"prompt\": \"test prompt\"}, \"output\": {\"response\": \"response " + i
+                                        + "\"}}"))
+                        .build();
+                traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+                var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experimentId)
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(trace.id())
+                        .input(trace.input())
+                        .output(trace.output())
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build();
+
+                experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, TEST_WORKSPACE);
+            }
+        }
     }
 
     @Nested

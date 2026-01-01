@@ -288,6 +288,44 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             """;
 
+    /**
+     * Counts dataset items with experiment items, applying all filters from search criteria.
+     * This ensures pagination totals match the filtered results.
+     */
+    private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
+            WITH experiment_dataset_versions AS (
+                SELECT
+                    e.id AS experiment_id,
+                    e.dataset_version_id
+                FROM experiments e
+                WHERE e.workspace_id = :workspace_id
+                AND e.dataset_id = :datasetId
+                <if(experiment_ids)> AND e.id IN :experiment_ids <endif>
+            ),
+            dataset_items_scope AS (
+                SELECT
+                    div.id AS row_id
+                FROM dataset_item_versions div
+                INNER JOIN experiment_dataset_versions edv ON div.dataset_version_id = edv.dataset_version_id
+                WHERE div.workspace_id = :workspace_id
+                AND div.dataset_id = :datasetId
+                ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
+                LIMIT 1 BY div.id
+            ),
+            experiment_items_scope AS (
+                SELECT DISTINCT
+                    ei.dataset_item_id
+                FROM experiment_items ei
+                WHERE ei.workspace_id = :workspace_id
+                AND ei.dataset_item_id IN (SELECT row_id FROM dataset_items_scope)
+                <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
+                ORDER BY ei.id DESC, ei.last_updated_at DESC
+                LIMIT 1 BY ei.id
+            )
+            SELECT COUNT(DISTINCT dataset_item_id) AS count
+            FROM experiment_items_scope
+            """;
+
     // Query to extract columns from trace output for experiment items view
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
             WITH dataset_items_scope AS (
@@ -1123,7 +1161,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .doFinally(signalType -> endSegment(segment))
                         .flatMap(DatasetItemResultMapper::mapItem)
                         .collectList()
-                        .zipWith(getCount(criteria.datasetId(), versionId))
+                        .zipWith(getCountWithExperimentFilters(criteria, versionId))
                         .zipWith(getColumns(criteria.datasetId(), versionId))
                         .map(tuple -> {
                             var itemsAndCount = tuple.getT1();
@@ -1169,6 +1207,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .map(List::copyOf)
                         .defaultIfEmpty(List.of());
             });
+        });
+    }
+
+    private Mono<Long> getCountWithExperimentFilters(@NonNull DatasetItemSearchCriteria criteria,
+            @NonNull UUID versionId) {
+        log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
+                versionId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+
+            // Add experiment IDs if present
+            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                template.add("experiment_ids", true);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", criteria.datasetId());
+
+            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+            }
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "count_dataset_item_versions_with_experiment_filters");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
+                    .reduce(0L, Long::sum);
         });
     }
 
