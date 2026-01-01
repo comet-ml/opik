@@ -1165,6 +1165,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
+    /**
+     * Helper method to add common filter conditions to a StringTemplate.
+     * This encapsulates the repeated pattern of adding filters and search criteria to templates.
+     *
+     * @param template The StringTemplate to add filters to
+     * @param criteria The search criteria containing filters and search terms
+     */
+    private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
+        // Add filters if present
+        if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+            Optional<String> filterQuery = FilterQueryBuilder.toAnalyticsDbFilters(
+                    criteria.filters(),
+                    FilterStrategy.DATASET_ITEM);
+            filterQuery.ifPresent(query -> template.add("filters", query));
+        }
+
+        // Add search if present
+        if (StringUtils.isNotBlank(criteria.search())) {
+            template.add("search", true);
+        }
+    }
+
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull DatasetItemSearchCriteria criteria, int page, int size,
@@ -1219,18 +1241,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     template.add("experiment_ids", criteria.experimentIds());
                 }
 
-                // Add filters if present
-                if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                    Optional<String> filterQuery = FilterQueryBuilder.toAnalyticsDbFilters(
-                            criteria.filters(),
-                            FilterStrategy.DATASET_ITEM);
-                    filterQuery.ifPresent(query -> template.add("filters", query));
-                }
-
-                // Add search if present
-                if (StringUtils.isNotBlank(criteria.search())) {
-                    template.add("search", true);
-                }
+                // Add filters and search criteria using helper method
+                addFiltersToTemplate(template, criteria);
 
                 // Add sorting if present
                 if (criteria.sortingFields() != null && !criteria.sortingFields().isEmpty()) {
@@ -1333,18 +1345,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 template.add("experiment_ids", true);
             }
 
-            // Add filters if present
-            if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                Optional<String> filterQuery = FilterQueryBuilder.toAnalyticsDbFilters(
-                        criteria.filters(),
-                        FilterStrategy.DATASET_ITEM);
-                filterQuery.ifPresent(query -> template.add("filters", query));
-            }
-
-            // Add search if present
-            if (StringUtils.isNotBlank(criteria.search())) {
-                template.add("search", true);
-            }
+            // Add filters and search criteria using helper method
+            addFiltersToTemplate(template, criteria);
 
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", criteria.datasetId())
