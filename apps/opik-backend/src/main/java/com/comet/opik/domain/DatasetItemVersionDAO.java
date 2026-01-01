@@ -1358,8 +1358,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             // Bind search terms if present
             if (StringUtils.isNotBlank(criteria.search())) {
-                String[] searchTerms = criteria.search().trim().split("\\s+");
-                statement.bind("searchTerms", searchTerms);
+                filterQueryBuilder.bindSearchTerms(statement, criteria.search());
             }
 
             // Bind filter parameters if present
