@@ -39,8 +39,9 @@ public class ExperimentItemService {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-            var experimentItemsWithValidIds = addIdIfAbsentAndValidateIt(experimentItems, workspaceId);
+            var experimentItemsWithValidIds = addIdIfAbsentAndValidateIt(experimentItems, workspaceId, userName);
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
             return experimentItemDAO.insert(experimentItemsWithValidIds)
@@ -48,10 +49,11 @@ public class ExperimentItemService {
         });
     }
 
-    private Set<ExperimentItem> addIdIfAbsentAndValidateIt(Set<ExperimentItem> experimentItems, String workspaceId) {
+    private Set<ExperimentItem> addIdIfAbsentAndValidateIt(
+            Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         validateExperimentsWorkspace(experimentItems, workspaceId);
 
-        validateDatasetItemsWorkspace(experimentItems, workspaceId);
+        validateDatasetItemsWorkspace(experimentItems, workspaceId, userName);
 
         return experimentItems.stream()
                 .map(item -> {
@@ -84,7 +86,8 @@ public class ExperimentItemService {
         return new ClientErrorException(message, Response.Status.CONFLICT);
     }
 
-    private void validateDatasetItemsWorkspace(Set<ExperimentItem> experimentItems, String workspaceId) {
+    private void validateDatasetItemsWorkspace(
+            Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         Set<UUID> datasetItemIds = experimentItems
                 .stream()
                 .map(ExperimentItem::datasetItemId)
@@ -93,7 +96,7 @@ public class ExperimentItemService {
         boolean allDatasetItemsBelongToWorkspace = Boolean.TRUE
                 .equals(validateDatasetItemWorkspace(workspaceId, datasetItemIds)
                         .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                                .put(RequestContext.USER_NAME, "system")) // Add userName to context
+                                .put(RequestContext.USER_NAME, userName))
                         .block());
 
         if (!allDatasetItemsBelongToWorkspace) {
