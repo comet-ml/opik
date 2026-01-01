@@ -74,6 +74,7 @@ import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -957,6 +958,9 @@ class DatasetVersionResourceTest {
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
+            assertThat(v1ItemsAfter)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .isEqualTo(v1Items);
         }
 
         @Test

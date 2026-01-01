@@ -1335,10 +1335,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return changes.addedItems().stream()
                 .map(item -> {
                     // Generate new stable ID for new items
-                    UUID stableId = idGenerator.generateId();
+                    UUID id = idGenerator.generateId();
                     // Use draftItemId as the stable ID field
                     return item.toBuilder()
-                            .draftItemId(stableId)
+                            .id(id)
+                            .draftItemId(id)
                             .datasetId(datasetId)
                             .build();
                 })
