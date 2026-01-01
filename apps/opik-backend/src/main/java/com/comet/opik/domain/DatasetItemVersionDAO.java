@@ -252,32 +252,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
+            <if(lastRetrievedId)>AND id \\< :lastRetrievedId<endif>
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT :limit OFFSET :offset
-            """;
-
-    private static final String SELECT_DATASET_ITEM_VERSIONS_STREAM = """
-            SELECT
-                id,
-                dataset_item_id,
-                dataset_id,
-                data,
-                trace_id,
-                span_id,
-                source,
-                tags,
-                item_created_at as created_at,
-                item_last_updated_at as last_updated_at,
-                item_created_by as created_by,
-                item_last_updated_by as last_updated_by,
-                null AS experiment_items_array
-            FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND workspace_id = :workspace_id
-            %s
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            <if(lastRetrievedId)>
             LIMIT :limit
+            <else>
+            LIMIT :limit OFFSET :offset
+            <endif>
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
@@ -1040,8 +1021,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.info("Streaming dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}'",
                 datasetId, versionId, limit, lastRetrievedId);
 
-        String lastRetrievedFilter = lastRetrievedId != null ? "AND id < :lastRetrievedId" : "";
-        String query = SELECT_DATASET_ITEM_VERSIONS_STREAM.formatted(lastRetrievedFilter);
+        ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
+        if (lastRetrievedId != null) {
+            template.add("lastRetrievedId", true);
+        }
+        String query = template.render();
 
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(query)
@@ -1051,6 +1035,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             if (lastRetrievedId != null) {
                 statement.bind("lastRetrievedId", lastRetrievedId.toString());
+            } else {
+                statement.bind("offset", 0);
             }
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_version_items");
@@ -1072,7 +1058,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     Set<Column> columns = tuple.getT2();
 
                     return asyncTemplate.nonTransaction(connection -> {
-                        var statement = connection.createStatement(SELECT_DATASET_ITEM_VERSIONS)
+                        ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
+                        String query = template.render();
+
+                        var statement = connection.createStatement(query)
                                 .bind("datasetId", criteria.datasetId().toString())
                                 .bind("versionId", versionId.toString())
                                 .bind("limit", size)
