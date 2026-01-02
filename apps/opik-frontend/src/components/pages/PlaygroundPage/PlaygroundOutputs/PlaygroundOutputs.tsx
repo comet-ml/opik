@@ -26,11 +26,12 @@ import {
 } from "@/types/datasets";
 import { Filter, Filters } from "@/types/filters";
 import { COLUMN_DATA_ID } from "@/types/shared";
-import { DatasetVersionData } from "@/components/shared/DatasetVersionSelectBox";
+import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface PlaygroundOutputsProps {
   workspaceName: string;
   datasetId: string | null;
+  versionName?: string;
   onChangeDatasetId: (id: string | null) => void;
 }
 
@@ -62,11 +63,9 @@ const transformDataColumnFilters = (filters: Filters): Filters => {
 const PlaygroundOutputs = ({
   workspaceName,
   datasetId,
+  versionName,
   onChangeDatasetId,
 }: PlaygroundOutputsProps) => {
-  const [datasetVersion, setDatasetVersion] =
-    React.useState<DatasetVersionData | null>(null);
-
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
   const filters = useDatasetFilters();
@@ -77,10 +76,17 @@ const PlaygroundOutputs = ({
   const setSize = useSetDatasetSize();
   const resetDatasetFilters = useResetDatasetFilters();
 
+  // Parse datasetId to extract plain ID for API calls (handles both "id" and "id::hash" formats)
+  const parsedDatasetId = useMemo(() => {
+    if (!datasetId) return null;
+    const parsed = parseDatasetVersionKey(datasetId);
+    return parsed?.datasetId || datasetId;
+  }, [datasetId]);
+
   const { data: dataset } = useDatasetById(
-    { datasetId: datasetId! },
+    { datasetId: parsedDatasetId! },
     {
-      enabled: !!datasetId,
+      enabled: !!parsedDatasetId,
       refetchInterval: (query) => {
         const status = query.state.data?.status;
         return status === DATASET_STATUS.processing
@@ -107,16 +113,16 @@ const PlaygroundOutputs = ({
     isFetching: isFetchingDatasetItems,
   } = useDatasetItemsList(
     {
-      datasetId: datasetId!,
+      datasetId: parsedDatasetId!,
       page,
       size,
       truncate: true,
       filters: transformedFilters,
     },
     {
-      enabled: !!datasetId,
+      enabled: !!parsedDatasetId,
       refetchInterval: isProcessing ? POLLING_INTERVAL_MS : false,
-      placeholderData: datasetId ? keepPreviousData : undefined,
+      placeholderData: parsedDatasetId ? keepPreviousData : undefined,
     },
   );
 
@@ -129,22 +135,14 @@ const PlaygroundOutputs = ({
       resetDatasetFilters();
       if (!id) {
         setDatasetVariables([]);
-        setDatasetVersion(null);
       }
       onChangeDatasetId(id);
     },
     [onChangeDatasetId, resetDatasetFilters, setDatasetVariables],
   );
 
-  const handleChangeDatasetVersion = useCallback(
-    (version: DatasetVersionData | null) => {
-      setDatasetVersion(version);
-    },
-    [],
-  );
-
   const renderResult = () => {
-    if (datasetId) {
+    if (parsedDatasetId) {
       return (
         <div className="flex w-full flex-col pb-4 pt-2">
           {isProcessing && (
@@ -196,12 +194,11 @@ const PlaygroundOutputs = ({
     <div className="flex min-w-full flex-col">
       <PlaygroundOutputActions
         datasetId={datasetId}
-        datasetVersion={datasetVersion}
-        onChangeDatasetVersion={handleChangeDatasetVersion}
+        versionName={versionName}
+        onChangeDatasetId={handleChangeDatasetId}
         datasetItems={datasetItems}
         datasetColumns={datasetColumns}
         workspaceName={workspaceName}
-        onChangeDatasetId={handleChangeDatasetId}
         loadingDatasetItems={isLoadingDatasetItems}
         filters={filters}
         onFiltersChange={setFilters}

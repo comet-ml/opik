@@ -14,6 +14,8 @@ import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
+export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
+  "playground-selected-dataset-version";
 
 export const LLM_MESSAGE_ROLE_NAME_MAP = {
   [LLM_MESSAGE_ROLE.system]: "System",

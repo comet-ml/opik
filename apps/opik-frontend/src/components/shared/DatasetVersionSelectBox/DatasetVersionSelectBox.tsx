@@ -19,23 +19,26 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
-import useDatasetVersionSelect from "./useDatasetVersionSelect";
+import useDatasetVersionSelect, {
+  DEFAULT_LOADED_DATASETS,
+} from "./useDatasetVersionSelect";
 import DatasetOption from "./DatasetOption";
 import VersionOption from "./VersionOption";
 import { Dataset } from "@/types/datasets";
-
-const DEFAULT_LOADED_DATASETS = 1000;
+import {
+  parseDatasetVersionKey,
+  formatDatasetVersionKey,
+} from "@/utils/datasetVersionStorage";
 
 export interface DatasetVersionData {
-  id: string;
   hash: string;
   name: string;
 }
 
 interface DatasetVersionSelectBoxProps {
-  datasetId: string | null;
-  versionData: DatasetVersionData | null;
-  onChange: (datasetId: string, version: DatasetVersionData | null) => void;
+  value: string | null; // "datasetId::versionHash" format
+  versionName?: string;
+  onChange: (value: string | null) => void;
   workspaceName: string;
   disabled?: boolean;
   showClearButton?: boolean;
@@ -56,8 +59,8 @@ const DatasetEmptyState = () => {
 };
 
 const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
-  datasetId,
-  versionData,
+  value,
+  versionName,
   onChange,
   workspaceName,
   disabled = false,
@@ -72,6 +75,10 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Parse value to extract datasetId for internal use
+  const parsed = parseDatasetVersionKey(value);
+  const datasetId = parsed?.datasetId || null;
 
   const {
     datasets,
@@ -96,29 +103,18 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
   const displayValue = useMemo(() => {
     if (!selectedDataset) return null;
 
-    return `${selectedDataset.name} / ${versionData?.name || ""}`;
-  }, [selectedDataset, versionData?.name]);
-
-  const handleVersionSelect = (
-    selectedDatasetId: string,
-    selectedVersionData: DatasetVersionData,
-  ) => {
-    onChange(selectedDatasetId, selectedVersionData);
-    setIsSelectOpen(false);
-    setOpenDatasetId(null);
-  };
+    return `${selectedDataset.name} / ${versionName || ""}`;
+  }, [selectedDataset, versionName]);
 
   const handleDatasetCreated = async (newDataset: Dataset) => {
-    const latestVersion = newDataset.latest_version;
-    if (latestVersion) {
-      onChange(newDataset.id, {
-        id: latestVersion.id,
-        hash: latestVersion.version_hash,
-        name: latestVersion.version_name!,
-      });
-    } else {
-      onChange(newDataset.id, null);
-    }
+    // TODO remove ! after BE migration
+    const latestVersion = newDataset.latest_version!;
+
+    const formattedValue = formatDatasetVersionKey(
+      newDataset.id,
+      latestVersion.version_hash,
+    );
+    onChange(formattedValue);
     setIsDialogOpen(false);
   };
 
@@ -161,7 +157,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
                   key={version.id}
                   version={version}
                   datasetId={dataset.id}
-                  isSelected={version.id === versionData?.id}
+                  isSelected={parsed?.versionHash === version.version_hash}
                 />
               ))
             )}
@@ -229,24 +225,11 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     <>
       <div className="flex">
         <Select
-          value={datasetId ? `${datasetId}::${versionData?.id || ""}` : ""}
-          onValueChange={(value) => {
-            if (!value) return;
-
-            // Parse format: "datasetId::versionId"
-            const [selectedDatasetId, versionId] = value.split("::");
-
-            if (!versionId) return; // Only dataset clicked, not a version
-
-            // Find the version data from the loaded versions
-            const version = versions.find((v) => v.id === versionId);
-            if (!version) return;
-
-            handleVersionSelect(selectedDatasetId, {
-              id: version.id,
-              hash: version.version_hash,
-              name: version.version_name!,
-            });
+          value={value || ""}
+          onValueChange={(selectedValue) => {
+            onChange(selectedValue);
+            setIsSelectOpen(false);
+            setOpenDatasetId(null);
           }}
           onOpenChange={(open) => {
             if (!open) {
@@ -263,7 +246,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
               className={cn(
                 "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0",
                 {
-                  "rounded-r-none": !!datasetId && showClearButton,
+                  "rounded-r-none": !!value && showClearButton,
                 },
                 buttonClassName,
               )}
@@ -284,7 +267,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
                   <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
                     <span className="truncate">{selectedDataset?.name}</span>
                     <GitCommitVertical className="size-3.5 shrink-0 text-muted-slate" />
-                    <span className="truncate">{versionData?.name || ""}</span>
+                    <span className="truncate">{versionName || ""}</span>
                   </div>
                 </div>
               </SelectValue>
@@ -327,12 +310,12 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
           </SelectContent>
         </Select>
 
-        {datasetId && showClearButton && (
+        {value && showClearButton && (
           <Button
             variant="outline"
             size="icon-sm"
             className="rounded-l-none border-l-0"
-            onClick={() => onChange("", null)}
+            onClick={() => onChange(null)}
             disabled={disabled}
           >
             <X className="text-light-slate" />

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader } from "lucide-react";
 
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
-import { useValidatedDatasetId } from "@/hooks/useValidatedDatasetId";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ResizablePromptContainer from "@/components/pages/PlaygroundPage/ResizablePromptContainer";
@@ -22,7 +22,7 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
 
-  const [datasetId, setDatasetId] = useValidatedDatasetId();
+  const { datasetId, versionName, setDatasetId } = usePlaygroundDataset();
   const hasDataset = !!datasetId;
 
   const { DialogComponent } = useNavigationBlocker({
@@ -89,6 +89,7 @@ const PlaygroundPage = () => {
         <div className="flex">
           <PlaygroundOutputs
             datasetId={datasetId}
+            versionName={versionName}
             onChangeDatasetId={setDatasetId}
             workspaceName={workspaceName}
           />

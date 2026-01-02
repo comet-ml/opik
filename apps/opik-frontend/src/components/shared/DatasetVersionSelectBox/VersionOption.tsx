@@ -16,13 +16,10 @@ const VersionOption: React.FC<VersionOptionProps> = ({
   datasetId,
   isSelected,
 }) => {
-  const versionName =
-    version.version_name || `v${version.version_hash.slice(0, 7)}`;
-
   return (
     <SelectItem
       key={version.id}
-      value={`${datasetId}::${version.id}`}
+      value={`${datasetId}::${version.version_hash}`}
       withoutCheck
       className={cn(
         "flex h-auto min-h-10 flex-col cursor-pointer justify-center py-2 pl-12 min-w-40 focus:bg-primary-foreground focus:text-foreground",
@@ -37,7 +34,9 @@ const VersionOption: React.FC<VersionOptionProps> = ({
       )}
       <div className="comet-body-s max-w-[220px] text-light-slate">
         <GitCommitVertical className="inline-block size-4 text-muted-slate" />
-        <span className="comet-body-s pr-2 text-foreground">{versionName}</span>
+        <span className="comet-body-s pr-2 text-foreground">
+          {version.version_name}
+        </span>
         {version.change_description}
       </div>
       {version.tags && version.tags.length > 0 && (

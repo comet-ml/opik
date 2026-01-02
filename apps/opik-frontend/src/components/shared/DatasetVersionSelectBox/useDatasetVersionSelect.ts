@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import { Dataset, DatasetVersion } from "@/types/datasets";
 import toLower from "lodash/toLower";
 
-const DEFAULT_LOADED_DATASETS = 1000;
+export const DEFAULT_LOADED_DATASETS = 1000;
 const MAX_LOADED_DATASETS = 10000;
 
 interface UseDatasetVersionSelectParams {
