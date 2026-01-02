@@ -147,8 +147,11 @@ def process_optimizer_job(*args, **kwargs):
         
         # Create cancellation checker and start background thread
         cancellation_checker = CancellationChecker(str(context.optimization_id))
+        was_cancelled = False
         
         def on_cancelled():
+            nonlocal was_cancelled
+            was_cancelled = True
             logger.info(
                 f"Cancellation detected, killing subprocess for {context.optimization_id}"
             )
@@ -169,7 +172,14 @@ def process_optimizer_job(*args, **kwargs):
                 job_id=str(context.optimization_id),
             )
             
-            # Check for errors
+            # Check if cancelled - don't treat as error
+            if was_cancelled:
+                logger.info(f"Optimization was cancelled: {context.optimization_id}")
+                # Write cancellation message to optimization logs (visible in UI)
+                log_collector.emit({"message": "Execution cancelled by the user."})
+                return {"status": "cancelled", "optimization_id": str(context.optimization_id)}
+            
+            # Check for errors (only if not cancelled)
             if "error" in result:
                 logger.error(f"Optimization failed: {result.get('error')}")
                 raise Exception(result.get("error", "Unknown error"))
