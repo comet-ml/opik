@@ -34,7 +34,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        # 3.14+ is not supported by crewai v0.x
+        python_version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code
