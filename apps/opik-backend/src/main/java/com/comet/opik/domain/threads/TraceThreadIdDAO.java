@@ -39,4 +39,10 @@ interface TraceThreadIdDAO {
                 WHERE id IN (<threadModelIds>)
             """)
     List<TraceThreadIdModel> findByThreadModelIds(@BindList("threadModelIds") List<UUID> threadModelIds);
+
+    @SqlQuery("""
+                SELECT * FROM project_trace_threads
+                WHERE thread_id = :threadId
+            """)
+    TraceThreadIdModel findByThreadId(@Bind("threadId") String threadId);
 }
