@@ -675,7 +675,7 @@ public class DatasetsResource {
                 .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
-                .versionHashOrTag(null) // Get draft items
+                .versionHashOrTag(null) // Service layer will resolve to experiment's version when experimentIds present
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
