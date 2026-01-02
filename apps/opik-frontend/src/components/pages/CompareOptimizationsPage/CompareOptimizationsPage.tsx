@@ -97,6 +97,7 @@ const CompareOptimizationsPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <CompareOptimizationsToolbar
             isStudioOptimization={isStudioOptimization}
+            optimization={optimization}
             view={view}
             onViewChange={setView}
             search={search!}
