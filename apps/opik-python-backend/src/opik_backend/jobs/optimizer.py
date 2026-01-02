@@ -21,6 +21,7 @@ from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
     OPTIMIZATION_TIMEOUT_SECS,
+    CancellationChecker,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,20 @@ def process_optimizer_job(*args, **kwargs):
         # The executor will use this to stream subprocess stdout/stderr to Redis
         executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
         
+        # Create cancellation checker and start background thread
+        cancellation_checker = CancellationChecker(str(context.optimization_id))
+        was_cancelled = False
+        
+        def on_cancelled():
+            nonlocal was_cancelled
+            was_cancelled = True
+            logger.info(
+                f"Cancellation detected, killing subprocess for {context.optimization_id}"
+            )
+            executor.kill_all_processes(timeout=5)
+        
+        cancellation_checker.start_background_check(on_cancelled=on_cancelled)
+        
         try:
             logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
             
@@ -157,7 +172,14 @@ def process_optimizer_job(*args, **kwargs):
                 job_id=str(context.optimization_id),
             )
             
-            # Check for errors
+            # Check if cancelled - don't treat as error
+            if was_cancelled:
+                logger.info(f"Optimization was cancelled: {context.optimization_id}")
+                # Write cancellation message to optimization logs (visible in UI)
+                log_collector.emit({"message": "Execution cancelled by the user."})
+                return {"status": "cancelled", "optimization_id": str(context.optimization_id)}
+            
+            # Check for errors (only if not cancelled)
             if "error" in result:
                 logger.error(f"Optimization failed: {result.get('error')}")
                 raise Exception(result.get("error", "Unknown error"))
@@ -166,6 +188,9 @@ def process_optimizer_job(*args, **kwargs):
             return result
         
         finally:
+            # Stop cancellation checker
+            cancellation_checker.stop_background_check()
+            
             # Ensure log collector is closed (flushes remaining logs)
             try:
                 log_collector.close()

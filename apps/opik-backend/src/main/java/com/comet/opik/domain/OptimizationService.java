@@ -27,16 +27,19 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -79,6 +82,16 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull OptimizationLogSyncService logSyncService;
+    private final @NonNull RedissonReactiveClient redisClient;
+
+    // Redis key pattern for cancellation signals (Python worker checks this)
+    private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
+    // TTL for cancellation keys (1 hour - longer than max optimization timeout)
+    private static final long CANCEL_KEY_TTL_SECONDS = 3600;
+    // Statuses that can be cancelled
+    private static final Set<OptimizationStatus> CANCELLABLE_STATUSES = EnumSet.of(
+            OptimizationStatus.INITIALIZED,
+            OptimizationStatus.RUNNING);
 
     @Override
     @WithSpan
@@ -237,7 +250,25 @@ class OptimizationServiceImpl implements OptimizationService {
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-                    return optimizationDAO.update(id, update)
+                    // If this is a cancellation request for a Studio optimization, signal Redis
+                    Mono<Void> signalCancellation = Mono.empty();
+                    if (update.status() == OptimizationStatus.CANCELLED
+                            && optimization.studioConfig() != null
+                            && CANCELLABLE_STATUSES.contains(optimization.status())) {
+
+                        log.info("Signalling cancellation for Studio optimization '{}' (current status: '{}')",
+                                id, optimization.status());
+
+                        String cancelKey = String.format(CANCEL_KEY_PATTERN, id);
+                        signalCancellation = redisClient.getBucket(cancelKey)
+                                .set("1", CANCEL_KEY_TTL_SECONDS, TimeUnit.SECONDS)
+                                .doOnSuccess(
+                                        __ -> log.debug("Set cancellation signal in Redis for optimization '{}'", id))
+                                .then();
+                    }
+
+                    return signalCancellation
+                            .then(optimizationDAO.update(id, update))
                             .doOnSuccess(result -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL
