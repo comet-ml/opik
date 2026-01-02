@@ -269,3 +269,58 @@ async def test_litellm_chat_model_agenerate_string_supports_dict_choices(monkeyp
 
     assert result == "async-ok"
     assert captured_kwargs["messages"][0]["content"] == "hello async"
+
+
+def test_models_factory_track_parameter_creates_separate_instances(monkeypatch):
+    """Test that track parameter creates separate cached instances."""
+    _install_litellm_stub(monkeypatch)
+
+    # Get model with track=True
+    model_tracked = models_factory.get("gpt-4o", track=True)
+    # Get model with track=False
+    model_untracked = models_factory.get("gpt-4o", track=False)
+    # Get another model with track=True (should reuse first)
+    model_tracked_2 = models_factory.get("gpt-4o", track=True)
+
+    # track=True and track=False should create separate instances
+    assert model_tracked is not model_untracked
+    # Same track value should reuse cached instance
+    assert model_tracked is model_tracked_2
+
+
+@pytest.mark.parametrize(
+    "track,expected_calls",
+    [
+        (False, 0),
+        (True, 2),  # Once for completion, once for acompletion
+    ],
+)
+def test_litellm_chat_model_track_parameter_controls_monitoring(
+    monkeypatch, track, expected_calls
+):
+    """Test that track parameter controls LiteLLM monitoring when globally enabled."""
+    _install_litellm_stub(monkeypatch)
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
+    # Track which decorator was used
+    decorator_calls = 0
+
+    def mock_track_completion(project_name=None):
+        def decorator(func):
+            nonlocal decorator_calls
+            decorator_calls += 1
+            return func
+
+        return decorator
+
+    monkeypatch.setattr(
+        litellm_chat_model.litellm_integration,
+        "track_completion",
+        mock_track_completion,
+    )
+
+    # Create model with specified track value
+    litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o", track=track)
+
+    # Verify that track_completion decorator was applied the expected number of times
+    assert decorator_calls == expected_calls

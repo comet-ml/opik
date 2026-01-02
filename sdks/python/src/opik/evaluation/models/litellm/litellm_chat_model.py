@@ -59,6 +59,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         self,
         model_name: str = "gpt-5-nano",
         must_support_arguments: Optional[List[str]] = None,
+        track: bool = True,
         **completion_kwargs: Any,
     ) -> None:
         import litellm
@@ -75,7 +76,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 `litellm.get_supported_openai_params(model_name)` call is used to get
                 supported arguments. If any is missing, ValueError is raised.
                 You can pass the arguments from the table: https://docs.litellm.ai/docs/completion/input#translated-openai-params
-
+            track: Whether to track the model calls. When False, disables tracing for this model instance.
+                Defaults to True.
             completion_kwargs: key-value arguments to always pass additionally into `litellm.completion` function.
         """
         super().__init__(model_name=model_name)
@@ -100,7 +102,10 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         config = opik_config.OpikConfig()
 
-        if config.enable_litellm_models_monitoring:
+        # Enable tracking only if both track parameter is True and config allows it
+        enable_tracking = track and config.enable_litellm_models_monitoring
+
+        if enable_tracking:
             self._litellm_completion = litellm_integration.track_completion()(
                 litellm.completion
             )
