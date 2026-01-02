@@ -395,7 +395,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .collect(Collectors.toSet());
 
         var criteria = TraceThreadCriteria.builder()
-                .projectId(dto.project().id())
+                // .projectId(dto.project().id())
                 .ids(List.copyOf(ids))
                 .status(TraceThreadStatus.INACTIVE)
                 .build();
@@ -427,8 +427,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto<FeedbackScoreBatchItemThread> projectDto,
             String threadId) {
-        return traceThreadService.getOrCreateThreadId(projectDto.project().id(), threadId)
-                .map(threadModelId -> Map.entry(threadId, threadModelId));
+        // First, try to find the thread by its threadId string (it may exist in a different project)
+        return traceThreadService.findByThreadId(threadId)
+                .map(existingThread -> Map.entry(threadId, existingThread.id()))
+                .switchIfEmpty(Mono.defer(() ->
+                // Thread doesn't exist anywhere, create it in the provided project
+                traceThreadService.getOrCreateThreadId(projectDto.project().id(), threadId)
+                        .map(threadModelId -> Map.entry(threadId, threadModelId))));
     }
 
     private ProjectDto<FeedbackScoreBatchItemThread> bindThreadModelId(
