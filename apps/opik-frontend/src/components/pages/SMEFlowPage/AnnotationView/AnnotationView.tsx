@@ -30,6 +30,8 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     queueItems,
     validationState,
     isLastUnprocessedItem,
+    isCurrentItemProcessed,
+    unprocessedItems,
     handleNext,
     handlePrevious,
     handleSubmit,
@@ -37,6 +39,24 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
 
   const isLastItem = currentIndex === queueItems.length - 1;
   const isFirstItem = currentIndex === 0;
+
+  // Determine button label based on item completion status
+  const getButtonLabel = () => {
+    if (isCurrentItemProcessed) {
+      // Viewing a completed item
+      if (!validationState.canSubmit) {
+        return "Item completed";
+      }
+      // Check if there are other unprocessed items (not counting current)
+      const hasOtherUnprocessedItems = unprocessedItems.length > 0;
+      return hasOtherUnprocessedItems ? "Update & next" : "Update & complete";
+    } else {
+      // Viewing a non-completed item
+      return isLastUnprocessedItem ? "Submit & complete" : "Submit & next";
+    }
+  };
+
+  const buttonLabel = getButtonLabel();
 
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.PREVIOUS].key,
@@ -130,9 +150,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                   onClick={handleSubmit}
                   disabled={!validationState.canSubmit}
                 >
-                  {isLastUnprocessedItem
-                    ? "Submit & Complete"
-                    : "Submit + Next"}
+                  {buttonLabel}
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.DONE].display}
                     size="sm"

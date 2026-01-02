@@ -227,6 +227,7 @@ interface SMEFlowContextValue {
   nextItem: Trace | Thread | undefined;
   currentView: WORKFLOW_STATUS;
   isLastUnprocessedItem: boolean;
+  isCurrentItemProcessed: boolean;
 
   // Computed state
   processedCount: number;
@@ -472,6 +473,12 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     const currentUnprocessedIdx = unprocessedIds.indexOf(currentId);
     return currentUnprocessedIdx === unprocessedIds.length - 1;
   }, [unprocessedIds, currentItem?.id]);
+
+  const isCurrentItemProcessed = useMemo(() => {
+    if (!currentItem || !annotationQueue) return false;
+    const feedbackScoreNames = annotationQueue.feedback_definition_names ?? [];
+    return isItemProcessed(currentItem, feedbackScoreNames, currentUserName);
+  }, [currentItem, annotationQueue, currentUserName]);
 
   const handleNextUnprocessed = useCallback(() => {
     const nextIndex = getNextUnprocessedIndex(currentIndex);
@@ -778,6 +785,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     nextItem,
     currentView: currentView || WORKFLOW_STATUS.INITIAL,
     isLastUnprocessedItem,
+    isCurrentItemProcessed,
 
     // Computed state
     processedCount,
