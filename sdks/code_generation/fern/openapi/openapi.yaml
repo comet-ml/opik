@@ -3092,58 +3092,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio:
-    get:
-      tags:
-      - Optimizations
-      summary: Find Studio optimizations
-      description: Find Studio optimizations
-      operationId: findStudioOptimizations
-      parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: dataset_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: dataset_deleted
-        in: query
-        schema:
-          type: boolean
-      - name: filters
-        in: query
-        schema:
-          type: string
-      responses:
-        "200":
-          description: Studio optimizations resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OptimizationPage_Public"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/{id}:
     get:
       tags:
@@ -3192,33 +3140,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio/{id}:
-    get:
-      tags:
-      - Optimizations
-      summary: Get Studio optimization by id
-      description: Get Studio optimization with config included
-      operationId: getStudioOptimizationById
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Studio optimization resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Optimization_Public"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/studio/{id}/logs:
     get:
       tags:
