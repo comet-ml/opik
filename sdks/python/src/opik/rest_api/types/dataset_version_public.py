@@ -17,6 +17,11 @@ class DatasetVersionPublic(UniversalBaseModel):
     Indicates whether this is the latest version of the dataset
     """
 
+    version_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Sequential version name formatted as 'v1', 'v2', etc.
+    """
+
     items_total: typing.Optional[int] = pydantic.Field(default=None)
     """
     Total number of items in this version
