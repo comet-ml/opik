@@ -2053,41 +2053,6 @@ paths:
       responses:
         "204":
           description: Tag deleted successfully
-  /v1/private/datasets/{id}/versions/restore:
-    post:
-      tags:
-      - Datasets
-      summary: Restore dataset to a previous version
-      description: "Restores the dataset to a previous version state. All draft items\
-        \ are replaced with items from the specified version. If the version is not\
-        \ the latest, a new version snapshot is created. If the version is the latest,\
-        \ only draft items are replaced (revert functionality)."
-      operationId: restoreDatasetVersion
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DatasetVersionRestore_Public"
-      responses:
-        "200":
-          description: Version restored successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DatasetVersion_Public"
-        "404":
-          description: Version not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/hash/{versionHash}:
     patch:
       tags:
@@ -3092,58 +3057,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio:
-    get:
-      tags:
-      - Optimizations
-      summary: Find Studio optimizations
-      description: Find Studio optimizations
-      operationId: findStudioOptimizations
-      parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: dataset_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: dataset_deleted
-        in: query
-        schema:
-          type: boolean
-      - name: filters
-        in: query
-        schema:
-          type: string
-      responses:
-        "200":
-          description: Studio optimizations resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OptimizationPage_Public"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/{id}:
     get:
       tags:
@@ -3192,33 +3105,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio/{id}:
-    get:
-      tags:
-      - Optimizations
-      summary: Get Studio optimization by id
-      description: Get Studio optimization with config included
-      operationId: getStudioOptimizationById
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Studio optimization resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Optimization_Public"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/studio/{id}/logs:
     get:
       tags:
@@ -8664,6 +8550,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItemFilter"
+        dataset_id:
+          type: string
+          description: "Dataset ID. Required when using 'filters', optional when using\
+            \ 'ids'."
+          format: uuid
         update:
           $ref: "#/components/schemas/DatasetItemUpdate"
         merge_tags:
@@ -9409,8 +9300,6 @@ components:
           type: array
           items:
             type: string
-        hasDraft:
-          type: boolean
     DatasetItem_Compare:
       required:
       - data
@@ -9943,8 +9832,6 @@ components:
           type: array
           items:
             type: string
-        hasDraft:
-          type: boolean
     Column:
       type: object
       properties:
@@ -10166,15 +10053,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    DatasetVersionRestore_Public:
-      required:
-      - version_ref
-      type: object
-      properties:
-        version_ref:
-          minLength: 1
-          type: string
-          description: Version hash or tag to restore from
     DatasetVersionUpdate_Public:
       type: object
       properties:

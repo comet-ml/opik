@@ -14,6 +14,8 @@ export interface DatasetItemBatchUpdate {
     /** List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'. */
     ids?: string[];
     filters?: OpikApi.DatasetItemFilter[];
+    /** Dataset ID. Required when using 'filters', optional when using 'ids'. */
+    datasetId?: string;
     update: OpikApi.DatasetItemUpdate;
     /** If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true. */
     mergeTags?: boolean;
