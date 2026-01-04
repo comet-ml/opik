@@ -1,0 +1,37 @@
+name: ':octocat: Lint Workflows'
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git diff
+      
+      - name: Install actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo mv actionlint /usr/local/bin/
+      
+      - name: Run actionlint on changed files
+        run: |
+          # Get list of changed workflow files
+          CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }}...HEAD -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No workflow files changed."
+            exit 0
+          fi
+          
+          echo "Changed workflow files:"
+          echo "$CHANGED_FILES"
+          echo ""
+          
+          # Run actionlint on each changed file
+          echo "$CHANGED_FILES" | xargs actionlint
+

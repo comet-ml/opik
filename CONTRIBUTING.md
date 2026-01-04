@@ -464,6 +464,73 @@ mvn test
 
 Tests leverage the `testcontainers` library to run integration tests against a real instances of the external services. Ports are randomly assigned by the library to avoid conflicts.
 
+### Contributing to GitHub Actions Workflows
+
+When modifying GitHub Actions workflows in `.github/workflows/`, we use [actionlint](https://github.com/rhysd/actionlint) to validate workflow syntax and catch common errors before merge.
+
+#### Automated Validation
+
+All workflow changes are automatically validated:
+- **GitHub Actions**: actionlint runs on every PR that modifies workflow files
+- **Pre-commit Hook**: actionlint runs locally when you commit workflow changes (if installed)
+
+#### Installing actionlint Locally
+
+For faster feedback during development, install actionlint:
+
+**macOS:**
+```bash
+brew install actionlint
+```
+
+**Linux:**
+```bash
+# Download the latest release
+bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+sudo mv actionlint /usr/local/bin/
+```
+
+**Windows:**
+```powershell
+# Using Chocolatey
+choco install actionlint
+
+# Or download from GitHub releases
+# https://github.com/rhysd/actionlint/releases
+```
+
+#### Running actionlint Manually
+
+```bash
+# Validate all workflows
+actionlint
+
+# Validate specific workflow
+actionlint .github/workflows/backend_tests.yml
+
+# Get detailed error information
+actionlint -verbose
+```
+
+#### Common Issues actionlint Catches
+
+- **Syntax errors**: Invalid YAML structure
+- **Undefined actions**: References to non-existent actions
+- **Expression errors**: Invalid GitHub Actions expressions (`${{ }}`)
+- **Shell script issues**: Common bash/shell mistakes in `run:` steps
+- **Deprecated features**: Usage of deprecated GitHub Actions features
+
+#### Workflow Best Practices
+
+When creating or modifying workflows:
+1. **Test locally**: Run actionlint before pushing
+2. **Use specific versions**: Pin action versions (e.g., `actions/checkout@v4`)
+3. **Add comments**: Document complex workflow logic
+4. **Keep it simple**: Break complex workflows into smaller, reusable ones
+5. **Follow naming conventions**: Use descriptive workflow and job names
+
+For more information, see the [actionlint documentation](https://github.com/rhysd/actionlint).
+
 #### Health checks
 To see your applications health enter url `http://localhost:8080/healthcheck`
 
