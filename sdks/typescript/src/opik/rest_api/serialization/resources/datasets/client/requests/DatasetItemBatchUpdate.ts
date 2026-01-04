@@ -14,6 +14,7 @@ export const DatasetItemBatchUpdate: core.serialization.Schema<
 > = core.serialization.object({
     ids: core.serialization.list(core.serialization.string()).optional(),
     filters: core.serialization.list(DatasetItemFilter).optional(),
+    datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     update: DatasetItemUpdate,
     mergeTags: core.serialization.property("merge_tags", core.serialization.boolean().optional()),
 });
@@ -22,6 +23,7 @@ export declare namespace DatasetItemBatchUpdate {
     export interface Raw {
         ids?: string[] | null;
         filters?: DatasetItemFilter.Raw[] | null;
+        dataset_id?: string | null;
         update: DatasetItemUpdate.Raw;
         merge_tags?: boolean | null;
     }
