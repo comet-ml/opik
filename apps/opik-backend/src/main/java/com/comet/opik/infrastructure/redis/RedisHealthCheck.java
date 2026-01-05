@@ -16,14 +16,12 @@ public class RedisHealthCheck extends NamedHealthCheck {
     @Override
     protected Result check() {
         try {
-            if (redisClient.getNodesGroup().pingAll()) {
-                return Result.healthy();
-            }
+            // Try to execute a simple ping command to verify Redis connectivity
+            redisClient.getKeys().count().block();
+            return Result.healthy();
         } catch (Exception ex) {
             return Result.unhealthy(ex);
         }
-
-        return Result.unhealthy("Redis health check failed");
     }
 
     @Override
