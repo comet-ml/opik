@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Column;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -30,6 +31,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -37,6 +39,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -131,6 +134,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService versionService;
+    private final @NonNull ExperimentDAO experimentDao;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -725,11 +729,63 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
+                .flatMapMany(dataset -> {
+                    // 3-tier version resolution logic:
+                    // 1. If version parameter is specified, use it
+                    // 2. If feature toggle is ON and no version specified, use latest version
+                    // 3. Otherwise, use legacy table (existing behavior)
+
+                    String versionHashOrTag = request.version();
+
+                    // Case 1: Version explicitly specified
+                    if (versionHashOrTag != null && !versionHashOrTag.isBlank()) {
+                        log.info("Using explicitly provided version '{}' for streaming dataset '{}' items",
+                                versionHashOrTag, dataset.id());
+                        return Mono.fromCallable(() -> versionService.resolveVersionId(workspaceId, dataset.id(),
+                                versionHashOrTag))
+                                .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
+                                        request.steamLimit(), request.lastRetrievedId()));
+                    }
+
+                    // Case 2: Feature toggle ON and no version specified - use latest version
+                    if (featureFlags.isDatasetVersioningEnabled()) {
+                        log.info("Feature toggle ON, using latest version for streaming dataset '{}' items",
+                                dataset.id());
+                        return Mono.fromCallable(() -> versionService.getLatestVersion(dataset.id(), workspaceId))
+                                .flatMapMany(latestVersionOpt -> {
+                                    if (latestVersionOpt.isPresent()) {
+                                        UUID versionId = latestVersionOpt.get().id();
+                                        log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
+                                                dataset.id());
+                                        return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
+                                                request.lastRetrievedId());
+                                    } else {
+                                        // No version exists yet - return empty
+                                        log.warn("No versions exist for dataset '{}', returning empty stream",
+                                                dataset.id());
+                                        return Flux.empty();
+                                    }
+                                });
+                    }
+
+                    // Case 3: Feature toggle OFF - use legacy table
+                    log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items", dataset.id());
+                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId());
+                });
     }
 
     @Override
     public Mono<PageColumns> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
+        if (featureFlags.isDatasetVersioningEnabled()) {
+            log.info("Getting output columns with versioning for dataset '{}', experimentIds '{}'", datasetId,
+                    experimentIds);
+
+            return versionDao.getExperimentItemsOutputColumns(datasetId, experimentIds)
+                    .map(columns -> PageColumns.builder().columns(columns).build())
+                    .switchIfEmpty(Mono.just(PageColumns.empty()));
+        }
+
+        // Versioning toggle is OFF: use legacy table
         return dao.getOutputColumns(datasetId, experimentIds)
                 .map(columns -> PageColumns.builder().columns(columns).build())
                 .switchIfEmpty(Mono.just(PageColumns.empty()));
@@ -1088,12 +1144,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
             });
         } else if (featureFlags.isDatasetVersioningEnabled()) {
-            // Versioning toggle is ON: fetch items from the latest version
-            log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, page, size);
-
+            // Versioning toggle is ON
             return Mono.deferContextual(ctx -> {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                // If experimentIds are present, use the experiment's linked version
+                if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds())) {
+                    log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
+                            datasetItemSearchCriteria, page, size);
+                    return getItemsFromExperimentVersion(datasetItemSearchCriteria, page, size, workspaceId);
+                }
+
+                // Otherwise, fetch items from the latest version
+                log.info("Finding latest version dataset items by '{}', page '{}', size '{}'",
+                        datasetItemSearchCriteria, page, size);
                 return getItemsFromLatestVersion(datasetItemSearchCriteria, page, size, workspaceId);
             });
         } else {
@@ -1123,6 +1187,52 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return versionDao.getItems(criteria, page, size, versionId)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+    }
+
+    private Mono<DatasetItemPage> getItemsFromExperimentVersion(DatasetItemSearchCriteria criteria, int page, int size,
+            String workspaceId) {
+        // Get the first experiment ID to determine which version to use
+        // All experiments in the comparison should be linked to the same dataset version
+        UUID experimentId = criteria.experimentIds().iterator().next();
+
+        // Query the experiment to get its dataset_version_id
+        return Mono.deferContextual(ctx -> experimentDao.getById(experimentId))
+                .flatMap(experiment -> {
+                    UUID versionId = experiment.datasetVersionId();
+
+                    if (versionId == null) {
+                        // Experiment is not linked to a version (shouldn't happen with versioning enabled, but handle gracefully)
+                        log.warn("Experiment '{}' is not linked to a dataset version, falling back to latest version",
+                                experimentId);
+                        return getItemsFromLatestVersion(criteria, page, size, workspaceId);
+                    }
+
+                    log.info("Fetching items from experiment's linked version '{}' for dataset '{}'", versionId,
+                            criteria.datasetId());
+
+                    // Fetch experiment items output columns and merge with dataset item columns
+                    return Mono.zip(
+                            versionDao.getItemsWithExperimentItems(criteria, page, size, versionId),
+                            versionDao.getExperimentItemsOutputColumns(criteria.datasetId(), criteria.experimentIds())
+                                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)))
+                            .map(tuple -> {
+                                DatasetItemPage itemPage = tuple.getT1();
+                                List<Column> experimentColumns = tuple.getT2();
+
+                                // Merge dataset columns with experiment columns
+                                Set<Column> allColumns = new HashSet<>(itemPage.columns());
+                                allColumns.addAll(experimentColumns);
+
+                                return new DatasetItemPage(
+                                        itemPage.content(),
+                                        itemPage.page(),
+                                        itemPage.size(),
+                                        itemPage.total(),
+                                        allColumns,
+                                        itemPage.sortableBy());
+                            })
+                            .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                });
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
@@ -1225,10 +1335,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return changes.addedItems().stream()
                 .map(item -> {
                     // Generate new stable ID for new items
-                    UUID stableId = idGenerator.generateId();
+                    UUID id = idGenerator.generateId();
                     // Use draftItemId as the stable ID field
                     return item.toBuilder()
-                            .draftItemId(stableId)
+                            .id(id)
+                            .draftItemId(id)
                             .datasetId(datasetId)
                             .build();
                 })
