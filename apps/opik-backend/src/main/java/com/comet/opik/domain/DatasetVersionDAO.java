@@ -261,4 +261,42 @@ public interface DatasetVersionDAO {
             """)
     List<DatasetVersion> findLatestVersionsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            WITH version_sequences AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                FROM dataset_versions
+                WHERE workspace_id = :workspace_id
+            )
+            SELECT
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', vs.seq_num) AS version_name,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
+            FROM dataset_versions AS dv
+            INNER JOIN version_sequences vs ON dv.id = vs.id
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
+            WHERE dv.id IN (<version_ids>)
+                AND dv.workspace_id = :workspace_id
+            """)
+    List<DatasetVersion> findByIds(@BindList("version_ids") Collection<UUID> versionIds,
+            @Bind("workspace_id") String workspaceId);
 }

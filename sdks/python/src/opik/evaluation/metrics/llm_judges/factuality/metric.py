@@ -63,7 +63,7 @@ class Factuality(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            self._model = models_factory.get(model_name=model, track=self.track)
 
     def score(
         self, input: str, output: str, context: List[str], **ignored_kwargs: Any
