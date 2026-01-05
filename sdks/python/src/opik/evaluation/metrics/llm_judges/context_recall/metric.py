@@ -74,7 +74,9 @@ class ContextRecall(base_metric.BaseMetric):
             if self._seed is not None:
                 model_kwargs["seed"] = self._seed
 
-            self._model = models_factory.get(model_name=model, **model_kwargs)
+            self._model = models_factory.get(
+                model_name=model, track=self.track, **model_kwargs
+            )
 
     def score(
         self,

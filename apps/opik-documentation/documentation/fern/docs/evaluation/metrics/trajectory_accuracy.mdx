@@ -52,7 +52,7 @@ print(score.reason)  # Explanation of the verdict
 | --- | --- | --- |
 | `model` | `gpt-5-nano` | Judge used to score the trajectory. |
 | `temperature` | `None` | Forwarded to the underlying model when provided. |
-| `track` | `True` | Disable to skip logging to Opik. |
+| `track` | `True` | Disable to skip logging to Opik. When `False`, disables tracing for both the metric and underlying LLM judge calls. |
 | `project_name` | `None` | Override the tracking project name. |
 
 The metric returns a value in the 0.0–1.0 range together with a detailed explanation highlighting missing steps, misaligned actions, or other issues.

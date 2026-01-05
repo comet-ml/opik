@@ -93,7 +93,7 @@ class SycEval(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            self._model = models_factory.get(model_name=model, track=self.track)
 
     def _init_rebuttal_model(
         self, rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]]
@@ -101,7 +101,9 @@ class SycEval(base_metric.BaseMetric):
         if isinstance(rebuttal_model, base_model.OpikBaseModel):
             self._rebuttal_model = rebuttal_model
         else:
-            self._rebuttal_model = models_factory.get(model_name=rebuttal_model)
+            self._rebuttal_model = models_factory.get(
+                model_name=rebuttal_model, track=self.track
+            )
 
     def score(
         self,
