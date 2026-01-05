@@ -184,13 +184,18 @@ const AddEditDatasetDialog: React.FunctionComponent<
               })),
             },
             {
+              onSuccess: (versionSummary) => {
+                // Enrich dataset with latest_version from backend response
+                const enrichedDataset: Dataset = {
+                  ...newDataset,
+                  latest_version: versionSummary || undefined,
+                };
+                if (onDatasetCreated) {
+                  onDatasetCreated(enrichedDataset);
+                }
+              },
               onError: () => {
                 setOpen(false);
-              },
-              onSettled: () => {
-                if (onDatasetCreated) {
-                  onDatasetCreated(newDataset);
-                }
               },
             },
           );

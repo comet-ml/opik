@@ -39,42 +39,50 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   const { navigate: navigateToExperiment } = useNavigateToExperiment();
   const { loadPlayground } = useLoadPlayground();
 
-  const showSuccessToast = useCallback(() => {
-    toast({
-      title: "New version created",
-      description:
-        "Your dataset changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
-      actions: [
-        <ToastAction
-          variant="link"
-          size="sm"
-          className="comet-body-s-accented gap-1.5 px-0"
-          altText="Run experiment in the SDK"
-          key="sdk"
-          onClick={() =>
-            navigateToExperiment({
-              newExperiment: true,
-              datasetName,
-            })
-          }
-        >
-          <Code2 className="size-4" />
-          Run experiment in the SDK
-        </ToastAction>,
-        <ToastAction
-          variant="link"
-          size="sm"
-          className="comet-body-s-accented gap-1.5 px-0"
-          altText="Run experiment in the Playground"
-          key="playground"
-          onClick={() => loadPlayground({ datasetId })}
-        >
-          <Blocks className="size-4" />
-          Run experiment in the Playground
-        </ToastAction>,
-      ],
-    });
-  }, [toast, navigateToExperiment, datasetName, loadPlayground, datasetId]);
+  const showSuccessToast = useCallback(
+    (versionId?: string) => {
+      toast({
+        title: "New version created",
+        description:
+          "Your dataset changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="comet-body-s-accented gap-1.5 px-0"
+            altText="Run experiment in the SDK"
+            key="sdk"
+            onClick={() =>
+              navigateToExperiment({
+                newExperiment: true,
+                datasetName,
+              })
+            }
+          >
+            <Code2 className="size-4" />
+            Run experiment in the SDK
+          </ToastAction>,
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="comet-body-s-accented gap-1.5 px-0"
+            altText="Run experiment in the Playground"
+            key="playground"
+            onClick={() =>
+              loadPlayground({
+                datasetId,
+                datasetVersionId: versionId,
+              })
+            }
+          >
+            <Blocks className="size-4" />
+            Run experiment in the Playground
+          </ToastAction>,
+        ],
+      });
+    },
+    [toast, navigateToExperiment, datasetName, loadPlayground, datasetId],
+  );
 
   const handleSubmit = (data: VersionFormData) => {
     // If onConfirm is provided, use it (draft mode)
@@ -91,8 +99,8 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
         tags: data.tags,
       },
       {
-        onSuccess: () => {
-          showSuccessToast();
+        onSuccess: (version) => {
+          showSuccessToast(version.id);
           setOpen(false);
         },
       },
