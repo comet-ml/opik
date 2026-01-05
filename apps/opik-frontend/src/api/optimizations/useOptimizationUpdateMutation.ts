@@ -15,7 +15,14 @@ type UseOptimizationUpdateMutationParams = {
   update: OptimizationUpdate;
 };
 
-const useOptimizationUpdateMutation = () => {
+type UseOptimizationUpdateMutationOptions = {
+  successMessage?: string;
+};
+
+const useOptimizationUpdateMutation = (
+  options: UseOptimizationUpdateMutationOptions = {},
+) => {
+  const { successMessage } = options;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const opikApiKey = useAppStore((state) => state.user.apiKey);
@@ -34,11 +41,9 @@ const useOptimizationUpdateMutation = () => {
       return { optimizationId };
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "message"], error.message) ||
+        "An unknown error occurred while updating the optimization. Please try again.";
 
       toast({
         title: "Error",
@@ -47,10 +52,12 @@ const useOptimizationUpdateMutation = () => {
       });
     },
     onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Optimization cancelled successfully",
-      });
+      if (successMessage) {
+        toast({
+          title: "Success",
+          description: successMessage,
+        });
+      }
     },
     onSettled: (_, __, variables) => {
       // Invalidate the specific optimization query

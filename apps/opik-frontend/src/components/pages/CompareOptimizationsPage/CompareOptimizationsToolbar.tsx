@@ -31,7 +31,9 @@ const CompareOptimizationsToolbar: React.FC<
   const showSearch =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
 
-  const updateMutation = useOptimizationUpdateMutation();
+  const updateMutation = useOptimizationUpdateMutation({
+    successMessage: "Optimization cancelled successfully",
+  });
 
   const canCancel =
     isStudioOptimization &&
