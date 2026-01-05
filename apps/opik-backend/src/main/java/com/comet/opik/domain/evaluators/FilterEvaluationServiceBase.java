@@ -5,21 +5,22 @@ import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
-import com.jayway.jsonpath.PathNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Base class for filter evaluation services using JSONPath for nested field extraction.
@@ -33,9 +34,13 @@ import java.util.Set;
 public abstract class FilterEvaluationServiceBase<E> {
 
     // JSONPath configuration with options to suppress exceptions for missing paths
+    // This static Configuration instance is reused across all calls for better performance
     private static final Configuration JSON_PATH_CONFIG = Configuration.builder()
             .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
             .build();
+
+    // Pattern for converting numeric dot notation to bracket notation (e.g., "messages.0.content" -> "messages[0].content")
+    private static final Pattern NUMERIC_DOT_PATTERN = Pattern.compile("\\.(\\d+)(?=\\.|$)");
 
     private final Class<E> entityClass;
 
@@ -98,8 +103,8 @@ public abstract class FilterEvaluationServiceBase<E> {
 
             return evaluateOperator(filter.operator(), fieldValue, filter.value());
         } catch (Exception e) {
-            log.warn("Error evaluating filter '{}' against {} '{}': '{}'", filter, getEntityClassName(),
-                    getEntityId(entity), e.getMessage());
+            log.warn("Error evaluating filter '{}' against {} '{}'", filter, getEntityClassName(),
+                    getEntityId(entity), e);
             return false; // If we can't evaluate the filter, consider it a non-match
         }
     }
@@ -117,10 +122,9 @@ public abstract class FilterEvaluationServiceBase<E> {
             return str;
         }
         try {
-            // Use JsonUtils.getMapper() which provides a thread-safe shared ObjectMapper instance
-            return JsonUtils.getMapper().writeValueAsString(jsonValue);
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to convert value to string: {}", e.getMessage());
+            return JsonUtils.writeValueAsString(jsonValue);
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to convert value to string", e);
             return jsonValue.toString();
         }
     }
@@ -150,16 +154,14 @@ public abstract class FilterEvaluationServiceBase<E> {
                 jsonString = str;
             } else {
                 // Convert object to JSON string for JSONPath parsing
-                jsonString = JsonUtils.getMapper().writeValueAsString(jsonValue);
+                jsonString = JsonUtils.writeValueAsString(jsonValue);
             }
 
             // Use JSONPath to extract the value
+            // JSON_PATH_CONFIG is static and reused, providing better performance than creating a new Configuration each time
             return JsonPath.using(JSON_PATH_CONFIG).parse(jsonString).read(jsonPath);
-        } catch (PathNotFoundException e) {
-            log.debug("Path '{}' not found in JSON value", jsonPath);
-            return null;
         } catch (Exception e) {
-            log.warn("Failed to extract nested value with JSONPath '{}': {}", jsonPath, e.getMessage());
+            log.warn("Failed to extract nested value with JSONPath '{}'", jsonPath, e);
             return null;
         }
     }
@@ -170,7 +172,7 @@ public abstract class FilterEvaluationServiceBase<E> {
      * This ensures compatibility with JSONPath library which prefers bracket notation for array indices.
      */
     private String normalizeJsonPath(String path) {
-        if (path == null || path.isEmpty()) {
+        if (StringUtils.isBlank(path)) {
             return path;
         }
 
@@ -181,7 +183,7 @@ public abstract class FilterEvaluationServiceBase<E> {
         // Pattern: match a dot followed by one or more digits (array index in dot notation)
         // Replace ".0" with "[0]", ".123" with "[123]", etc.
         // Use word boundary to avoid matching digits that are part of property names
-        String normalized = pathWithoutDollar.replaceAll("\\.(\\d+)(?=\\.|$)", "[$1]");
+        String normalized = NUMERIC_DOT_PATTERN.matcher(pathWithoutDollar).replaceAll("[$1]");
 
         return hasLeadingDollar ? "$" + normalized : normalized;
     }
