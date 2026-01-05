@@ -1324,11 +1324,11 @@ class OptimizationsResourceTest {
             var completedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
             assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
 
-            // Try to cancel - should fail with 500 (IllegalStateException mapped to 500)
+            // Try to cancel - should fail with 409 Conflict
             var cancelUpdate = OptimizationUpdate.builder()
                     .status(OptimizationStatus.CANCELLED)
                     .build();
-            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 500);
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 409);
 
             // Verify status is still COMPLETED
             var stillCompletedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);

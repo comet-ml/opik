@@ -21,7 +21,9 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -254,9 +256,10 @@ class OptimizationServiceImpl implements OptimizationService {
                     if (update.status() == OptimizationStatus.CANCELLED
                             && optimization.studioConfig() != null
                             && !CANCELLABLE_STATUSES.contains(optimization.status())) {
-                        return Mono.error(new IllegalStateException(
+                        return Mono.error(new ClientErrorException(
                                 "Cannot cancel optimization with status '%s'. Only optimizations with status %s can be cancelled."
-                                        .formatted(optimization.status(), CANCELLABLE_STATUSES)));
+                                        .formatted(optimization.status(), CANCELLABLE_STATUSES),
+                                Response.Status.CONFLICT));
                     }
 
                     return signalCancellationIfNeeded(id, optimization, update)
