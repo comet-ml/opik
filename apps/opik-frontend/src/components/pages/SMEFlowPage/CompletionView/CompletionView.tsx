@@ -1,7 +1,9 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import SMEFlowLayout from "../SMEFlowLayout";
 import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
+import { useSMEFlow } from "../SMEFlowContext";
 
 interface CompletionViewProps {
   header: React.ReactNode;
@@ -10,6 +12,8 @@ interface CompletionViewProps {
 const CompletionView: React.FunctionComponent<CompletionViewProps> = ({
   header,
 }) => {
+  const { handleStartReviewing } = useSMEFlow();
+
   return (
     <SMEFlowLayout header={header} footer={<ReturnToAnnotationQueueButton />}>
       <Card className="h-full p-6 pt-14 text-center">
@@ -22,6 +26,14 @@ const CompletionView: React.FunctionComponent<CompletionViewProps> = ({
           </p>
           <p>You can close this tab.</p>
         </div>
+        <Button
+          variant="outline"
+          onClick={handleStartReviewing}
+          className="mt-4"
+          aria-label="Review my annotations"
+        >
+          Review my annotations
+        </Button>
       </Card>
     </SMEFlowLayout>
   );
