@@ -500,13 +500,14 @@ class BaseTrackDecorator(abc.ABC):
         flush: bool,
         should_process_span_data: bool,
     ) -> None:
+        span_data_to_end: Optional[span.SpanData] = None
         if generators_span_to_end is None:
             if should_process_span_data:
                 # the span data must be present in the context stack, otherwise something is wrong
                 span_data_to_end, trace_data_to_end = pop_end_candidates()
             else:
-                # the span data is optional
-                span_data_to_end, trace_data_to_end = pop_end_candidates_if_exists()
+                # the span data is optional and should not be processed (possibly root span duplicating root trace)
+                _, trace_data_to_end = pop_end_candidates_if_exists()
         else:
             span_data_to_end, trace_data_to_end = (
                 generators_span_to_end,
@@ -514,7 +515,7 @@ class BaseTrackDecorator(abc.ABC):
             )
 
         if output is not None:
-            if should_process_span_data:
+            if should_process_span_data and span_data_to_end is not None:
                 # create end arguments from current span data only if appropriate
                 try:
                     end_arguments = self._end_span_inputs_preprocessor(
