@@ -90,7 +90,10 @@ export const useCompareOptimizationsData = () => {
   });
 
   useEffect(() => {
-    pollingStateRef.current = { previousStatus: undefined, postCancellationCount: 0 };
+    pollingStateRef.current = {
+      previousStatus: undefined,
+      postCancellationCount: 0,
+    };
   }, [optimizationId]);
 
   const {
