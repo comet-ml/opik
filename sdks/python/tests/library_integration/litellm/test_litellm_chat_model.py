@@ -239,3 +239,31 @@ def test_litellm_chat_model_with_monitoring_disabled__no_traces_created(
     assert isinstance(result, str)
     assert len(result) > 0
     assert len(fake_backend.trace_trees) == 0
+
+
+def test_litellm_chat_model_with_track_false__no_traces_created(
+    fake_backend, monkeypatch
+):
+    """Test that track=False disables tracing even when monitoring is enabled."""
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS, track=False)
+    result = model.generate_string("Tell me a short fact")
+    opik.flush_tracker()
+
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert len(fake_backend.trace_trees) == 0
+
+
+def test_litellm_chat_model_with_track_true__traces_created(fake_backend, monkeypatch):
+    """Test that track=True enables tracing when monitoring is enabled."""
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS, track=True)
+    result = model.generate_string("Tell me a short fact")
+    opik.flush_tracker()
+
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert len(fake_backend.trace_trees) == 1
