@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -16,6 +17,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -1189,6 +1191,32 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         }
     }
 
+    /**
+     * Adds dataset item filters to the StringTemplate if filters are present.
+     *
+     * @param template the StringTemplate to add filters to
+     * @param filters the list of filters to apply, may be null
+     */
+    private void addDatasetItemFiltersToTemplate(ST template, List<? extends Filter> filters) {
+        Optional.ofNullable(filters)
+                .ifPresent(f -> {
+                    FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.DATASET_ITEM)
+                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                                    datasetItemFilters));
+                });
+    }
+
+    /**
+     * Binds dataset item filter parameters to the R2DBC statement.
+     *
+     * @param statement the R2DBC statement to bind parameters to
+     * @param filters the list of filters to bind, may be null
+     */
+    private void bindDatasetItemFilters(Statement statement, List<? extends Filter> filters) {
+        Optional.ofNullable(filters)
+                .ifPresent(f -> FilterQueryBuilder.bind(statement, f, FilterStrategy.DATASET_ITEM));
+    }
+
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull DatasetItemSearchCriteria criteria, int page, int size,
@@ -1202,12 +1230,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     return asyncTemplate.nonTransaction(connection -> {
                         // Build template with filters
                         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
-                        Optional.ofNullable(criteria.filters())
-                                .ifPresent(filters -> {
-                                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                                                    datasetItemFilters));
-                                });
+                        addDatasetItemFiltersToTemplate(template, criteria.filters());
 
                         var statement = connection.createStatement(template.render())
                                 .bind("datasetId", criteria.datasetId().toString())
@@ -1216,9 +1239,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .bind("offset", (page - 1) * size);
 
                         // Bind filter parameters
-                        Optional.ofNullable(criteria.filters())
-                                .ifPresent(filters -> FilterQueryBuilder.bind(statement, filters,
-                                        FilterStrategy.DATASET_ITEM));
+                        bindDatasetItemFilters(statement, criteria.filters());
 
                         Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                                 "select_dataset_item_versions");
@@ -1393,20 +1414,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.nonTransaction(connection -> {
             // Build template with filters
             ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_COUNT);
-            Optional.ofNullable(criteria.filters())
-                    .ifPresent(filters -> {
-                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                                .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                                        datasetItemFilters));
-                    });
+            addDatasetItemFiltersToTemplate(template, criteria.filters());
 
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", criteria.datasetId().toString())
                     .bind("versionId", versionId.toString());
 
             // Bind filter parameters
-            Optional.ofNullable(criteria.filters())
-                    .ifPresent(filters -> FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM));
+            bindDatasetItemFilters(statement, criteria.filters());
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_dataset_item_versions");
 
