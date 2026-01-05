@@ -501,9 +501,12 @@ class BaseTrackDecorator(abc.ABC):
         should_process_span_data: bool,
     ) -> None:
         if generators_span_to_end is None:
-            span_data_to_end, trace_data_to_end = pop_end_candidates(
-                ignore_span_doesnt_exists=not should_process_span_data
-            )
+            if should_process_span_data:
+                # the span data must be present in the context stack, otherwise something is wrong
+                span_data_to_end, trace_data_to_end = pop_end_candidates()
+            else:
+                # the span data is optional
+                span_data_to_end, trace_data_to_end = pop_end_candidates_if_exists()
         else:
             span_data_to_end, trace_data_to_end = (
                 generators_span_to_end,
@@ -605,9 +608,7 @@ class BaseTrackDecorator(abc.ABC):
         pass
 
 
-def pop_end_candidates(
-    ignore_span_doesnt_exists: bool = False,
-) -> Tuple[Optional[span.SpanData], Optional[trace.TraceData]]:
+def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     """
     Pops span and trace (if trace exists) data created by @track decorator
     from the current context, returns popped objects.
@@ -616,13 +617,30 @@ def pop_end_candidates(
     they are no longer in the context stack.
     """
     span_data_to_end = context_storage.pop_span_data()
-    if not ignore_span_doesnt_exists:
-        assert (
-            span_data_to_end is not None
-        ), "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
+    assert (
+        span_data_to_end is not None
+    ), "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
 
-    trace_data_to_end = None
+    trace_data_to_end = _pop_end_candidate_trace_data()
+    return span_data_to_end, trace_data_to_end
 
+
+def pop_end_candidates_if_exists() -> (
+    Tuple[Optional[span.SpanData], Optional[trace.TraceData]]
+):
+    """
+    Pops span and trace (if any exists) data created by @track decorator
+    from the current context returns popped objects.
+
+    Decorator can't attach any child objects to the popped ones because
+    they are no longer in the context stack.
+    """
+    span_data_to_end = context_storage.pop_span_data()
+    trace_data_to_end = _pop_end_candidate_trace_data()
+    return span_data_to_end, trace_data_to_end
+
+
+def _pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
     possible_trace_data_to_end = context_storage.get_trace_data()
     if (
         context_storage.span_data_stack_empty()
@@ -631,8 +649,9 @@ def pop_end_candidates(
     ):
         trace_data_to_end = context_storage.pop_trace_data()
         TRACES_CREATED_BY_DECORATOR.discard(possible_trace_data_to_end.id)
+        return trace_data_to_end
 
-    return span_data_to_end, trace_data_to_end
+    return None
 
 
 def add_start_candidates(
