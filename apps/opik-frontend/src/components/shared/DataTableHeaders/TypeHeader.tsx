@@ -13,6 +13,7 @@ import {
   LucideProps,
   AlertTriangle,
   Tag,
+  GitCommitVertical,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
@@ -27,6 +28,7 @@ const COLUMN_TYPE_MAP: Record<
 > = {
   guardrails: Construction,
   tags: Tag,
+  version: GitCommitVertical,
   [COLUMN_TYPE.string]: Text,
   [COLUMN_TYPE.number]: Hash,
   [COLUMN_TYPE.list]: List,

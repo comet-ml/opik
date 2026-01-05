@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
-import { DatasetItem } from "@/types/datasets";
+import { DatasetItem, DatasetVersion } from "@/types/datasets";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -11,21 +11,43 @@ type UseDatasetItemBatchMutationParams = {
   workspaceName: string;
 };
 
+type DatasetVersionSummary = Pick<
+  DatasetVersion,
+  "id" | "version_hash" | "version_name" | "tags" | "change_description"
+>;
+
+type MutationContext = {
+  queryKey: [string, { datasetId: string }];
+};
+
 const useDatasetItemBatchMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  return useMutation({
+  return useMutation<
+    DatasetVersionSummary | undefined,
+    AxiosError,
+    UseDatasetItemBatchMutationParams,
+    MutationContext
+  >({
     mutationFn: async ({
       datasetId,
       datasetItems,
       workspaceName,
     }: UseDatasetItemBatchMutationParams) => {
-      const { data } = await api.put(`${DATASETS_REST_ENDPOINT}items`, {
-        dataset_id: datasetId,
-        items: datasetItems,
-        workspace_name: workspaceName,
-      });
+      const { data } = await api.put<DatasetVersionSummary>(
+        `${DATASETS_REST_ENDPOINT}items`,
+        {
+          dataset_id: datasetId,
+          items: datasetItems,
+          workspace_name: workspaceName,
+        },
+        {
+          params: {
+            respond_with_latest_version: true,
+          },
+        },
+      );
       return data;
     },
     onMutate: async (params: UseDatasetItemBatchMutationParams) => {

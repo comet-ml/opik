@@ -103,6 +103,7 @@ export interface LogExperimentPromptVersion {
 export interface LogExperiment {
   id: string;
   datasetName: string;
+  datasetVersionId?: string;
   name?: string;
   metadata?: object;
   prompt_versions?: LogExperimentPromptVersion[];

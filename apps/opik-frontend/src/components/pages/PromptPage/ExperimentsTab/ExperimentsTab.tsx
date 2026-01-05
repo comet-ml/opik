@@ -28,6 +28,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
+import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
@@ -64,151 +65,12 @@ import { useExpandingConfig } from "@/components/pages-shared/experiments/useExp
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
 const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
 const COLUMNS_SORT_KEY = "prompt-experiments-columns-sort";
-
-export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
-  {
-    id: "prompt",
-    label: "Prompt commit",
-    type: COLUMN_TYPE.list,
-    accessorFn: (row) => get(row, ["prompt_versions"], []),
-    cell: MultiResourceCell as never,
-    customMeta: {
-      nameKey: "commit",
-      idKey: "prompt_id",
-      resource: RESOURCE_TYPE.prompt,
-      getSearch: (data: GroupedExperiment) => ({
-        activeVersionId: get(data, "id", null),
-      }),
-    },
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
-  },
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: COLUMN_DATASET_ID,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    customMeta: {
-      nameKey: "dataset_name",
-      idKey: "dataset_id",
-      resource: RESOURCE_TYPE.dataset,
-    },
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "duration.p50",
-    label: "Duration (avg.)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p50,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p50",
-    },
-  },
-  {
-    id: "duration.p90",
-    label: "Duration (p90)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p90,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p90",
-    },
-  },
-  {
-    id: "duration.p99",
-    label: "Duration (p99)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p99,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p99",
-    },
-  },
-  {
-    id: "trace_count",
-    label: "Trace count",
-    type: COLUMN_TYPE.number,
-    cell: TraceCountCell as never,
-    aggregatedCell: TextCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "trace_count",
-      tooltip: "View experiment traces",
-    },
-  },
-  {
-    id: "total_estimated_cost",
-    label: "Total estimated cost",
-    type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
-    aggregatedCell: CostCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "total_estimated_cost",
-    },
-  },
-  {
-    id: "total_estimated_cost_avg",
-    label: "Cost per trace (avg.)",
-    type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
-    aggregatedCell: CostCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "total_estimated_cost_avg",
-    },
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback Scores",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: transformExperimentScores,
-    cell: FeedbackScoreListCell as never,
-    aggregatedCell: FeedbackScoreListCell.Aggregation as never,
-    customMeta: {
-      getHoverCardName: (row: GroupedExperiment) => row.name,
-      areAggregatedScores: true,
-      aggregationKey: "feedback_scores",
-    },
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
-  },
-  {
-    id: COLUMN_COMMENTS_ID,
-    label: "Comments",
-    type: COLUMN_TYPE.string,
-    cell: CommentsCell as never,
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Configuration",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata,
-    cell: CodeCell as never,
-  },
-];
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
@@ -225,6 +87,9 @@ interface ExperimentsTabProps {
 
 const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const isDatasetVersioningEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
+  );
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -263,6 +128,162 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       defaultValue: [],
     },
   );
+
+  const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
+    return [
+      {
+        id: "prompt",
+        label: "Prompt commit",
+        type: COLUMN_TYPE.list,
+        accessorFn: (row) => get(row, ["prompt_versions"], []),
+        cell: MultiResourceCell as never,
+        customMeta: {
+          nameKey: "commit",
+          idKey: "prompt_id",
+          resource: RESOURCE_TYPE.prompt,
+          getSearch: (data: GroupedExperiment) => ({
+            activeVersionId: get(data, "id", null),
+          }),
+        },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
+      },
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+      },
+      {
+        id: COLUMN_DATASET_ID,
+        label: "Dataset",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        customMeta: {
+          nameKey: "dataset_name",
+          idKey: "dataset_id",
+          resource: RESOURCE_TYPE.dataset,
+        },
+      },
+      ...(isDatasetVersioningEnabled
+        ? [
+            {
+              id: "dataset_version",
+              label: "Dataset version",
+              type: COLUMN_TYPE.string,
+              iconType: "version" as const,
+              accessorFn: (row: GroupedExperiment) =>
+                row.dataset_version_summary?.version_name || "",
+              cell: DatasetVersionCell as never,
+            },
+          ]
+        : []),
+      {
+        id: "created_at",
+        label: "Created",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+      },
+      {
+        id: "created_by",
+        label: "Created by",
+        type: COLUMN_TYPE.string,
+      },
+      {
+        id: "duration.p50",
+        label: "Duration (avg.)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p50,
+        cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p50",
+        },
+      },
+      {
+        id: "duration.p90",
+        label: "Duration (p90)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p90,
+        cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p90",
+        },
+      },
+      {
+        id: "duration.p99",
+        label: "Duration (p99)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p99,
+        cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p99",
+        },
+      },
+      {
+        id: "trace_count",
+        label: "Trace count",
+        type: COLUMN_TYPE.number,
+        cell: TraceCountCell as never,
+        aggregatedCell: TextCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "trace_count",
+          tooltip: "View experiment traces",
+        },
+      },
+      {
+        id: "total_estimated_cost",
+        label: "Total estimated cost",
+        type: COLUMN_TYPE.cost,
+        cell: CostCell as never,
+        aggregatedCell: CostCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "total_estimated_cost",
+        },
+      },
+      {
+        id: "total_estimated_cost_avg",
+        label: "Cost per trace (avg.)",
+        type: COLUMN_TYPE.cost,
+        cell: CostCell as never,
+        aggregatedCell: CostCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "total_estimated_cost_avg",
+        },
+      },
+      {
+        id: COLUMN_FEEDBACK_SCORES_ID,
+        label: "Feedback Scores",
+        type: COLUMN_TYPE.numberDictionary,
+        accessorFn: transformExperimentScores,
+        cell: FeedbackScoreListCell as never,
+        aggregatedCell: FeedbackScoreListCell.Aggregation as never,
+        customMeta: {
+          getHoverCardName: (row: GroupedExperiment) => row.name,
+          areAggregatedScores: true,
+          aggregationKey: "feedback_scores",
+        },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
+      },
+      {
+        id: COLUMN_COMMENTS_ID,
+        label: "Comments",
+        type: COLUMN_TYPE.string,
+        cell: CommentsCell as never,
+      },
+      {
+        id: COLUMN_METADATA_ID,
+        label: "Configuration",
+        type: COLUMN_TYPE.dictionary,
+        accessorFn: (row) =>
+          isObject(row.metadata)
+            ? JSON.stringify(row.metadata, null, 2)
+            : row.metadata,
+        cell: CodeCell as never,
+      },
+    ];
+  }, [isDatasetVersioningEnabled]);
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
@@ -332,7 +353,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setColumnsOrder,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
-    defaultColumns: DEFAULT_COLUMNS,
+    defaultColumns: columnsDef,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
     groups,
     sortableBy,
@@ -364,10 +385,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       (g) => g.field === COLUMN_DATASET_ID,
     );
     if (isGroupingByDataset) {
-      return DEFAULT_COLUMNS.filter((col) => col.id !== COLUMN_DATASET_ID);
+      return columnsDef.filter((col) => col.id !== COLUMN_DATASET_ID);
     }
-    return DEFAULT_COLUMNS;
-  }, [groups]);
+    return columnsDef;
+  }, [groups, columnsDef]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;

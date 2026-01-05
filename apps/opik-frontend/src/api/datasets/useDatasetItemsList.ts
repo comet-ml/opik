@@ -11,6 +11,7 @@ export type UseDatasetItemsListParams = {
   size: number;
   search?: string;
   truncate?: boolean;
+  versionId?: string;
 };
 
 export type UseDatasetItemsListResponse = {
@@ -29,6 +30,7 @@ const getDatasetItemsList = async (
     page,
     search,
     truncate = false,
+    versionId,
   }: UseDatasetItemsListParams,
 ): Promise<UseDatasetItemsListResponse> => {
   const { data } = await api.get(
@@ -43,6 +45,7 @@ const getDatasetItemsList = async (
         size,
         page,
         truncate,
+        ...(versionId && { version: versionId }),
       },
     },
   );

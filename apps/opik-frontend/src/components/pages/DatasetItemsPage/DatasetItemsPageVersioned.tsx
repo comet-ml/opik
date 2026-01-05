@@ -215,6 +215,7 @@ const DatasetItemsPageVersioned = () => {
             <UseDatasetDropdown
               datasetName={dataset?.name}
               datasetId={datasetId}
+              datasetVersionId={latestVersion?.id}
             />
           </div>
         </div>

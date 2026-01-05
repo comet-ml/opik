@@ -33,6 +33,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
   datasetItemId?: string;
   datasetName: string | null;
+  datasetVersionId?: string;
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
@@ -196,6 +197,9 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
   return {
     id: v7(),
     datasetName: run.datasetName!,
+    ...(run.datasetVersionId && {
+      datasetVersionId: run.datasetVersionId,
+    }),
     metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,

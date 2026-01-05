@@ -142,6 +142,7 @@ interface UsePromptDatasetItemCombinationArgs {
   isToStopRef: RefObject<boolean>;
   workspaceName: string;
   datasetName: string | null;
+  datasetVersionId?: string;
   selectedRuleIds: string[] | null;
   addAbortController: (key: string, value: AbortController) => void;
   deleteAbortController: (key: string) => void;
@@ -153,6 +154,7 @@ const usePromptDatasetItemCombination = ({
   isToStopRef,
   workspaceName,
   datasetName,
+  datasetVersionId,
   selectedRuleIds,
   addAbortController,
   deleteAbortController,
@@ -243,6 +245,7 @@ const usePromptDatasetItemCombination = ({
           provider: prompt.provider,
           promptId: prompt.id,
           datasetName,
+          datasetVersionId,
           datasetItemId: datasetItemId,
           selectedRuleIds,
           datasetItemData,
@@ -282,6 +285,7 @@ const usePromptDatasetItemCombination = ({
       updateOutput,
       runStreaming,
       datasetName,
+      datasetVersionId,
       deleteAbortController,
       selectedRuleIds,
       throttlingSeconds,

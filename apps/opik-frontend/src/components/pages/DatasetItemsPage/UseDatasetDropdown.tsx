@@ -15,12 +15,14 @@ import useLoadPlayground from "@/hooks/useLoadPlayground";
 export type UseDatasetDropdownProps = {
   datasetName?: string;
   datasetId?: string;
+  datasetVersionId?: string;
   disabled?: boolean;
 };
 
 const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
   datasetName = "",
   datasetId = "",
+  datasetVersionId,
   disabled = false,
 }) => {
   const resetKeyRef = useRef(0);
@@ -37,8 +39,9 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
       datasetId,
+      datasetVersionId,
     });
-  }, [loadPlayground, datasetId]);
+  }, [loadPlayground, datasetId, datasetVersionId]);
 
   const handleOpenPlaygroundClick = () => {
     if (isPlaygroundEmpty) {

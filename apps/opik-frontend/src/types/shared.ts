@@ -74,7 +74,7 @@ export type Explainer = {
   docHash?: string;
 };
 
-export type HeaderIconType = COLUMN_TYPE | "guardrails" | "tags";
+export type HeaderIconType = COLUMN_TYPE | "guardrails" | "tags" | "version";
 
 export type ColumnData<T> = {
   id: string;
