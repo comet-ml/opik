@@ -22,6 +22,7 @@ import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/Ex
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ScopeTag from "@/components/pages/AnnotationQueuePage/ScopeTag";
+import ViewAllItemsButton from "@/components/pages/AnnotationQueuePage/ViewAllItemsButton";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -69,6 +70,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         <h1 className="comet-title-l truncate break-words">{queueName}</h1>
         {annotationQueue && (
           <div className="flex items-center gap-2">
+            <ViewAllItemsButton annotationQueue={annotationQueue} />
             <CopySMELinkButton annotationQueue={annotationQueue} />
             <EditAnnotationQueueButton annotationQueue={annotationQueue} />
             <ExportAnnotatedDataButton annotationQueue={annotationQueue} />
