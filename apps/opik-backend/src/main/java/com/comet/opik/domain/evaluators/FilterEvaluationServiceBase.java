@@ -146,7 +146,13 @@ public abstract class FilterEvaluationServiceBase<E> {
         String normalizedKey = normalizeJsonPath(key);
 
         // Normalize the path to ensure it starts with $. for JSONPath
-        String jsonPath = normalizedKey.startsWith("$") ? normalizedKey : "$." + normalizedKey;
+        // If key is blank, return root path "$" instead of "$." which JsonPath rejects
+        String jsonPath;
+        if (StringUtils.isBlank(normalizedKey)) {
+            jsonPath = "$";
+        } else {
+            jsonPath = normalizedKey.startsWith("$") ? normalizedKey : "$." + normalizedKey;
+        }
 
         try {
             String jsonString;
