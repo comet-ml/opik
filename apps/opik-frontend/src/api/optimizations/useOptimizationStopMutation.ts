@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import get from "lodash/get";
 import api, {
+  OPTIMIZATION_KEY,
   OPTIMIZATIONS_KEY,
   OPTIMIZATIONS_REST_ENDPOINT,
 } from "@/api/api";
@@ -19,7 +19,7 @@ const useOptimizationStopMutation = () => {
   const opikApiKey = useAppStore((state) => state.user.apiKey);
 
   return useMutation({
-    mutationFn: async ({ optimizationId }: UseOptimizationStopMutationParams) =>
+    mutationFn: ({ optimizationId }: UseOptimizationStopMutationParams) =>
       api.put(
         `${OPTIMIZATIONS_REST_ENDPOINT}${optimizationId}`,
         { status: OPTIMIZATION_STATUS.CANCELLED },
@@ -29,9 +29,10 @@ const useOptimizationStopMutation = () => {
           },
         },
       ),
-    onError: (error: AxiosError) => {
+    onError: (error: AxiosError<{ message?: string }>) => {
       const message =
-        get(error, ["response", "data", "message"], error.message) ||
+        error.response?.data?.message ??
+        error.message ??
         "Failed to stop the optimization. Please try again.";
 
       toast({
@@ -40,9 +41,16 @@ const useOptimizationStopMutation = () => {
         variant: "destructive",
       });
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
+    onSuccess: async (_, variables: UseOptimizationStopMutationParams) => {
+      queryClient.invalidateQueries({
         queryKey: [OPTIMIZATIONS_KEY],
+      });
+
+      await queryClient.refetchQueries({
+        queryKey: [
+          OPTIMIZATION_KEY,
+          { optimizationId: variables.optimizationId },
+        ],
       });
 
       toast({
@@ -53,4 +61,3 @@ const useOptimizationStopMutation = () => {
 };
 
 export default useOptimizationStopMutation;
-
