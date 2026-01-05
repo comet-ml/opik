@@ -1,9 +1,12 @@
 import React, { useCallback, useMemo } from "react";
 import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
+import { Clock } from "lucide-react";
 
 import { formatDate } from "@/lib/date";
 import { Experiment } from "@/types/datasets";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import NoData from "@/components/shared/NoData/NoData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,11 +19,12 @@ type OptimizationProgressChartContainerProps = {
   experiments: Experiment[];
   bestEntityId?: string;
   objectiveName?: string;
+  status?: OPTIMIZATION_STATUS;
 };
 
 const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
-> = ({ experiments, bestEntityId, objectiveName = "" }) => {
+> = ({ experiments, bestEntityId, status, objectiveName = "" }) => {
   const chartData = useMemo(() => {
     const retVal: ChartData = {
       data: [],
@@ -68,10 +72,18 @@ const OptimizationProgressChartContainer: React.FC<
     }
 
     if (noData) {
+      const isInProgress =
+        !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+
       return (
         <NoData
           className="min-h-32 text-light-slate"
-          message="No data to show"
+          icon={
+            isInProgress ? <Clock className="text-muted-slate" /> : undefined
+          }
+          message={
+            isInProgress ? "Results will appear shortly" : "No data to show"
+          }
         />
       );
     }
@@ -82,7 +94,7 @@ const OptimizationProgressChartContainer: React.FC<
         bestEntityId={bestEntityId}
       />
     );
-  }, [isPending, noData, chartData, bestEntityId]);
+  }, [isPending, noData, chartData, bestEntityId, status]);
 
   return (
     <Card className="h-[224px] min-w-[400px] flex-auto">

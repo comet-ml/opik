@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import opik
 from opik.rest_api import TraceThread
-from opik.types import FeedbackScoreDict
+from opik.types import BatchFeedbackScoreDict
 
 from .. import helpers, rest_stream_parser, constants
 from ... import config
@@ -74,7 +74,7 @@ class ThreadsClient:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -84,6 +84,8 @@ class ThreadsClient:
                 - `duration > 300` - Filter by thread duration (seconds)
                 - `number_of_messages >= 5` - Filter by message count
                 - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter threads with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter threads with non-empty feedback score
                 - `tags contains "important"` - Filter by tag
 
                 If not provided, all threads in the project will be returned up to the limit.
@@ -127,7 +129,7 @@ class ThreadsClient:
         return threads
 
     def log_threads_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Logs feedback scores for threads in a specific project. This method processes the given
@@ -138,7 +140,8 @@ class ThreadsClient:
             scores: A list of dictionaries containing feedback scores
                 for threads to be logged. Specifying a thread id via `id` key for each score is mandatory.
             project_name: The name of the project to associate with the logged
-                scores. If not provided, the scores won't be associated with any specific project.
+                scores. If not provided, the project name configured in the Opik client will be used.
+                This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
         """
         project_name = project_name or self._opik_client.project_name
 

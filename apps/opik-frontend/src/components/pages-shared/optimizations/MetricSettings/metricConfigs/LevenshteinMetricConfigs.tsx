@@ -3,18 +3,20 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { LevenshteinMetricParameters } from "@/types/optimizations";
-// import { DEFAULT_LEVENSHTEIN_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import DatasetVariablesHint from "../DatasetVariablesHint";
 
 interface LevenshteinMetricConfigsProps {
   configs: Partial<LevenshteinMetricParameters>;
   onChange: (configs: Partial<LevenshteinMetricParameters>) => void;
+  datasetVariables?: string[];
 }
 
 const LevenshteinMetricConfigs = ({
   configs,
   onChange,
+  datasetVariables = [],
 }: LevenshteinMetricConfigsProps) => {
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -36,6 +38,12 @@ const LevenshteinMetricConfigs = ({
               onChange({ ...configs, reference_key: e.target.value })
             }
           />
+          <DatasetVariablesHint
+            datasetVariables={datasetVariables}
+            onSelect={(variable) =>
+              onChange({ ...configs, reference_key: variable })
+            }
+          />
         </div>
 
         <div className="flex items-center space-x-2">
@@ -47,7 +55,7 @@ const LevenshteinMetricConfigs = ({
             }
           />
           <Label htmlFor="case_sensitive" className="cursor-pointer text-sm">
-            Case sensitive
+            Case sensitive comparison
           </Label>
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.metric_case_sensitive]}

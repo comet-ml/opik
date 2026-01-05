@@ -103,4 +103,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private FreeModelConfig freeModel = new FreeModelConfig();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
 }

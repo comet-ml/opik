@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
@@ -28,6 +29,8 @@ const SidebarInviteDevButton: React.FC<SidebarInviteDevButtonProps> = ({
     FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
   );
 
+  const { canInviteMembers } = useUserPermission();
+
   if (!workspace) {
     return null;
   }
@@ -50,6 +53,10 @@ const SidebarInviteDevButton: React.FC<SidebarInviteDevButtonProps> = ({
         compact
       />
     );
+  }
+
+  if (!canInviteMembers) {
+    return null;
   }
 
   const handleClose = () => {

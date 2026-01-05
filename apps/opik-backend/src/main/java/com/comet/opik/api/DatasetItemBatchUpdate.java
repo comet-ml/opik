@@ -24,6 +24,7 @@ import java.util.UUID;
 public record DatasetItemBatchUpdate(
         @Size(min = 1, max = 1000) @Schema(description = "List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.") Set<UUID> ids,
         @Valid List<@NotNull @Valid DatasetItemFilter> filters,
+        @Schema(description = "Dataset ID. Required when using 'filters', optional when using 'ids'.") UUID datasetId,
         @NotNull @Valid @Schema(description = "Update to apply to all dataset items", required = true) DatasetItemUpdate update,
         @Schema(description = "If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.") Boolean mergeTags) {
 

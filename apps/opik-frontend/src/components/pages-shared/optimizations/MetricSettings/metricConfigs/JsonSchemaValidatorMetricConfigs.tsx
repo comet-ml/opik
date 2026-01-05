@@ -5,15 +5,18 @@ import { JsonSchemaValidatorMetricParameters } from "@/types/optimizations";
 import { DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import DatasetVariablesHint from "../DatasetVariablesHint";
 
 interface JsonSchemaValidatorMetricConfigsProps {
   configs: Partial<JsonSchemaValidatorMetricParameters>;
   onChange: (configs: Partial<JsonSchemaValidatorMetricParameters>) => void;
+  datasetVariables?: string[];
 }
 
 const JsonSchemaValidatorMetricConfigs = ({
   configs,
   onChange,
+  datasetVariables = [],
 }: JsonSchemaValidatorMetricConfigsProps) => {
   const referenceKey =
     configs.reference_key ??
@@ -38,6 +41,12 @@ const JsonSchemaValidatorMetricConfigs = ({
               onChange({ ...configs, reference_key: e.target.value })
             }
             placeholder="e.g., expected_output"
+          />
+          <DatasetVariablesHint
+            datasetVariables={datasetVariables}
+            onSelect={(variable) =>
+              onChange({ ...configs, reference_key: variable })
+            }
           />
         </div>
       </div>
