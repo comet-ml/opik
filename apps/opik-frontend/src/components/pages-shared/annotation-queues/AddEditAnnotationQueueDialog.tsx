@@ -298,6 +298,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                             onChange={field.onChange}
                             valueField="name"
                             multiselect
+                            showSelectAll
                             className={cn({
                               "border-destructive": Boolean(
                                 validationErrors?.message,
