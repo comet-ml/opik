@@ -540,7 +540,7 @@ class BaseTrackDecorator(abc.ABC):
 
         client = opik_client.get_client_cached()
 
-        if should_process_span_data:
+        if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
             span_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(),
@@ -607,7 +607,7 @@ class BaseTrackDecorator(abc.ABC):
 
 def pop_end_candidates(
     ignore_span_doesnt_exists: bool = False,
-) -> Tuple[span.SpanData, Optional[trace.TraceData]]:
+) -> Tuple[Optional[span.SpanData], Optional[trace.TraceData]]:
     """
     Pops span and trace (if trace exists) data created by @track decorator
     from the current context, returns popped objects.
