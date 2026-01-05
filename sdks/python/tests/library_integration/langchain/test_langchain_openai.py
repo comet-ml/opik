@@ -542,3 +542,79 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langchain__find_token_usage_dict__multi_turn_returns_latest():
+    """
+    Test that find_token_usage_dict returns the most recent usage_metadata.
+    
+    This is a regression test for a bug where the first token usage was always returned
+    instead of the most recent one in multi-turn conversations.
+    """
+    from opik.integrations.langchain.provider_usage_extractors.langchain_run_helpers import (
+        helpers,
+    )
+
+    multi_turn_run_dict = {
+        "id": "run-123",
+        "name": "ChatOpenAI",
+        "inputs": {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        "outputs": {
+            "generations": [
+                [
+                    {
+                        "message": {
+                            "content": "I'll check the weather for you.",
+                            "kwargs": {
+                                "usage_metadata": {
+                                    "input_tokens": 150,
+                                    "output_tokens": 25,
+                                    "total_tokens": 175,
+                                }
+                            },
+                        }
+                    }
+                ]
+            ]
+        },
+        "events": [
+            {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": {
+                        "kwargs": {
+                            "usage_metadata": {
+                                "input_tokens": 150,
+                                "output_tokens": 25,
+                                "total_tokens": 175,
+                            }
+                        }
+                    }
+                },
+            },
+            {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": {
+                        "kwargs": {
+                            "usage_metadata": {
+                                "input_tokens": 190,
+                                "output_tokens": 13,
+                                "total_tokens": 203,
+                            }
+                        }
+                    }
+                },
+            },
+        ],
+    }
+
+    candidate_keys = {"input_tokens", "output_tokens", "total_tokens"}
+    result = helpers.find_token_usage_dict(
+        multi_turn_run_dict, candidate_keys, all_keys_should_match=False
+    )
+
+    assert result is not None
+    assert result["input_tokens"] == 190
+    assert result["output_tokens"] == 13
+    assert result["total_tokens"] == 203
