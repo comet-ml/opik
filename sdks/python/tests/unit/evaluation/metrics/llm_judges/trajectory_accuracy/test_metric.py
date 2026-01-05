@@ -134,7 +134,7 @@ class TestTrajectoryAccuracy:
 
         metric = TrajectoryAccuracy(model="gpt-4", track=False)
 
-        mock_factory.assert_called_once_with(model_name="gpt-4")
+        mock_factory.assert_called_once_with(model_name="gpt-4", track=False)
         # Test that the model was initialized correctly by testing behavior
         # rather than accessing private attributes
         assert metric is not None

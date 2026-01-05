@@ -1,6 +1,7 @@
 import pytest
 from opik.evaluation import metrics
 from opik import exceptions
+import opik
 from ...testlib import assert_helpers
 import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
@@ -475,3 +476,35 @@ def test__ragas_llm_context_precision():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
+
+
+@pytest.mark.parametrize(
+    "track,expected_trace_count",
+    [
+        (False, 0),  # track=False should prevent LLM tracing
+        (True, 1),  # track=True should enable tracing
+    ],
+)
+def test__usefulness__track_parameter(
+    fake_backend, monkeypatch, track, expected_trace_count
+):
+    """Test that Usefulness metric respects the track parameter for LLM tracing."""
+    # Override the autouse fixture that disables LiteLLM monitoring
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
+    usefulness_metric = metrics.Usefulness(model="gpt-4o", track=track)
+
+    result = usefulness_metric.score(
+        input="What is the capital of France?",
+        output="The capital of France is Paris.",
+    )
+    opik.flush_tracker()
+
+    # Verify the metric returned a valid result
+    assert_helpers.assert_score_result(result)
+
+    # Verify traces were created according to track parameter
+    if expected_trace_count == 0:
+        assert len(fake_backend.trace_trees) == 0
+    else:
+        assert len(fake_backend.trace_trees) > 0

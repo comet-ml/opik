@@ -9,6 +9,8 @@ export interface DatasetVersionPublic {
     tags?: string[];
     /** Indicates whether this is the latest version of the dataset */
     isLatest?: boolean;
+    /** Sequential version name formatted as 'v1', 'v2', etc. */
+    versionName?: string;
     /** Total number of items in this version */
     itemsTotal?: number;
     /** Number of items added since last version */

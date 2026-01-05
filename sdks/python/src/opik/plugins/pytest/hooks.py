@@ -1,7 +1,7 @@
 import logging
 import opik._logging as _logging
 from typing import List, Any, Generator, TYPE_CHECKING
-from opik.types import FeedbackScoreDict
+from opik.types import BatchFeedbackScoreDict
 
 from opik.api_objects import opik_client
 from . import test_runs_storage, experiment_runner, summary
@@ -48,13 +48,15 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
         return
 
     try:
-        traces_feedback_scores: List[FeedbackScoreDict] = []
+        traces_feedback_scores: List[BatchFeedbackScoreDict] = []
 
         for item in llm_test_items:
             report: "pytest.TestReport" = item.report
             trace_id = test_runs_storage.TEST_RUNS_TO_TRACE_DATA[item.nodeid].id
             traces_feedback_scores.append(
-                {"id": trace_id, "name": "Passed", "value": report.passed}
+                BatchFeedbackScoreDict(
+                    id=trace_id, name="Passed", value=float(report.passed)
+                )
             )
 
         client = opik_client.get_client_cached()

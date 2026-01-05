@@ -23,7 +23,16 @@
       "command": "uvx",
       "args": ["mcp-atlassian"],
       "envFile": "${workspaceFolder}/.env.local"
-    },    
+    },
+    "Jira-Headless-CI": {
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
+      "env": {
+        "JIRA_URL": "${JIRA_URL}",
+        "JIRA_USERNAME": "${JIRA_USERNAME}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+      }
+    },
     "Notion": {
       "command": "npx -y mcp-remote https://mcp.notion.com/mcp",
       "env": {},

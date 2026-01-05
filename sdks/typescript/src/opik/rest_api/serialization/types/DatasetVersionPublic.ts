@@ -15,6 +15,7 @@ export const DatasetVersionPublic: core.serialization.ObjectSchema<
     versionHash: core.serialization.property("version_hash", core.serialization.string().optional()),
     tags: core.serialization.list(core.serialization.string()).optional(),
     isLatest: core.serialization.property("is_latest", core.serialization.boolean().optional()),
+    versionName: core.serialization.property("version_name", core.serialization.string().optional()),
     itemsTotal: core.serialization.property("items_total", core.serialization.number().optional()),
     itemsAdded: core.serialization.property("items_added", core.serialization.number().optional()),
     itemsModified: core.serialization.property("items_modified", core.serialization.number().optional()),
@@ -34,6 +35,7 @@ export declare namespace DatasetVersionPublic {
         version_hash?: string | null;
         tags?: string[] | null;
         is_latest?: boolean | null;
+        version_name?: string | null;
         items_total?: number | null;
         items_added?: number | null;
         items_modified?: number | null;

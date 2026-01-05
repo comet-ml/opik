@@ -192,6 +192,7 @@ from .dataset_expansion import DatasetExpansion
 from .dataset_expansion_response import DatasetExpansionResponse
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
+from .dataset_item_changes_public import DatasetItemChangesPublic
 from .dataset_item_compare import DatasetItemCompare
 from .dataset_item_compare_source import DatasetItemCompareSource
 from .dataset_item_filter import DatasetItemFilter
@@ -703,6 +704,7 @@ __all__ = [
     "DatasetExpansionResponse",
     "DatasetItem",
     "DatasetItemBatch",
+    "DatasetItemChangesPublic",
     "DatasetItemCompare",
     "DatasetItemCompareSource",
     "DatasetItemFilter",
