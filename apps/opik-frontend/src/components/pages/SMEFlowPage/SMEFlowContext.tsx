@@ -426,7 +426,9 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   }, [setCurrentView, unprocessedIds, allItemIds]);
 
   const handleNext = useCallback(() => {
-    if (currentItem && hasUnsavedChanges(currentAnnotationState)) {
+    // Always cache the current annotation state when navigating away
+    // This ensures that any changes (including deletions) are preserved
+    if (currentItem) {
       setCachedAnnotationStates((prev) => ({
         ...prev,
         [getAnnotationQueueItemId(currentItem)]: cloneDeep(
@@ -481,10 +483,21 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   }, [currentIndex, getNextUnprocessedIndex]);
 
   const handlePrevious = useCallback(() => {
+    // Always cache the current annotation state when navigating away
+    // This ensures that any changes (including deletions) are preserved
+    if (currentItem) {
+      setCachedAnnotationStates((prev) => ({
+        ...prev,
+        [getAnnotationQueueItemId(currentItem)]: cloneDeep(
+          currentAnnotationState,
+        ),
+      }));
+    }
+
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
-  }, [currentIndex]);
+  }, [currentIndex, currentItem, currentAnnotationState]);
 
   const updateComment = useCallback((text: string) => {
     setCurrentAnnotationState((prev) => ({

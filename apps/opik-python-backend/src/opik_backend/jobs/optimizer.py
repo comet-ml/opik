@@ -21,6 +21,8 @@ from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
     OPTIMIZATION_TIMEOUT_SECS,
+    CancellationChecker,
+    JobMessageParseError,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,11 +36,6 @@ OPTIMIZER_RUNNER_PATH = os.path.join(
 
 # Payload type constant for optimization jobs
 PAYLOAD_TYPE_OPTIMIZATION = "optimization"
-
-
-class JobMessageParseError(Exception):
-    """Raised when job message cannot be parsed."""
-    pass
 
 
 def _parse_job_message(args, kwargs):
@@ -144,30 +141,48 @@ def process_optimizer_job(*args, **kwargs):
         # The executor will use this to stream subprocess stdout/stderr to Redis
         executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
         
-        try:
-            logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
+        # Create cancellation checker with context manager for automatic cleanup
+        with CancellationChecker(str(context.optimization_id)) as cancellation_checker:
             
-            # Execute optimization in isolated subprocess
-            result = executor.execute(
-                file_path=OPTIMIZER_RUNNER_PATH,
-                data=job_message,
-                env_vars=env_vars,
-                payload_type=PAYLOAD_TYPE_OPTIMIZATION,
-                optimization_id=str(context.optimization_id),
-                job_id=str(context.optimization_id),
-            )
+            def on_cancelled():
+                logger.info(
+                    f"Cancellation detected, killing subprocess for {context.optimization_id}"
+                )
+                executor.kill_all_processes(timeout=5)
             
-            # Check for errors
-            if "error" in result:
-                logger.error(f"Optimization failed: {result.get('error')}")
-                raise Exception(result.get("error", "Unknown error"))
+            cancellation_checker.start_background_check(on_cancelled=on_cancelled)
             
-            logger.info(f"Optimization completed successfully: {context.optimization_id}")
-            return result
-        
-        finally:
-            # Ensure log collector is closed (flushes remaining logs)
             try:
-                log_collector.close()
-            except Exception as e:
-                logger.warning(f"Error closing log collector: {e}")
+                logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
+                
+                # Execute optimization in isolated subprocess
+                result = executor.execute(
+                    file_path=OPTIMIZER_RUNNER_PATH,
+                    data=job_message,
+                    env_vars=env_vars,
+                    payload_type=PAYLOAD_TYPE_OPTIMIZATION,
+                    optimization_id=str(context.optimization_id),
+                    job_id=str(context.optimization_id),
+                )
+                
+                # Check if cancelled - don't treat as error (thread-safe check)
+                if cancellation_checker.was_cancelled:
+                    logger.info(f"Optimization was cancelled: {context.optimization_id}")
+                    # Write cancellation message to optimization logs (visible in UI)
+                    log_collector.emit({"message": "Execution cancelled by the user."})
+                    return {"status": "cancelled", "optimization_id": str(context.optimization_id)}
+                
+                # Check for errors (only if not cancelled)
+                if "error" in result:
+                    logger.error(f"Optimization failed: {result.get('error')}")
+                    raise Exception(result.get("error", "Unknown error"))
+                
+                logger.info(f"Optimization completed successfully: {context.optimization_id}")
+                return result
+            
+            finally:
+                # Ensure log collector is closed (flushes remaining logs)
+                try:
+                    log_collector.close()
+                except Exception as e:
+                    logger.warning(f"Error closing log collector: {e}")
