@@ -253,6 +253,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId<endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             <if(lastRetrievedId)>
             LIMIT :limit
@@ -267,6 +268,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
     /**
@@ -1192,20 +1194,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<DatasetItemPage> getItems(@NonNull DatasetItemSearchCriteria criteria, int page, int size,
             @NonNull UUID versionId) {
         return Mono.zip(
-                getCount(criteria.datasetId(), versionId),
+                getCount(criteria, versionId),
                 getColumns(criteria.datasetId(), versionId)).flatMap(tuple -> {
                     Long total = tuple.getT1();
                     Set<Column> columns = tuple.getT2();
 
                     return asyncTemplate.nonTransaction(connection -> {
+                        // Build template with filters
                         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
-                        String query = template.render();
+                        Optional.ofNullable(criteria.filters())
+                                .ifPresent(filters -> {
+                                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                                                    datasetItemFilters));
+                                });
 
-                        var statement = connection.createStatement(query)
+                        var statement = connection.createStatement(template.render())
                                 .bind("datasetId", criteria.datasetId().toString())
                                 .bind("versionId", versionId.toString())
                                 .bind("limit", size)
                                 .bind("offset", (page - 1) * size);
+
+                        // Bind filter parameters
+                        Optional.ofNullable(criteria.filters())
+                                .ifPresent(filters -> FilterQueryBuilder.bind(statement, filters,
+                                        FilterStrategy.DATASET_ITEM));
 
                         Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                                 "select_dataset_item_versions");
@@ -1376,11 +1389,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    private Mono<Long> getCount(UUID datasetId, UUID versionId) {
+    private Mono<Long> getCount(DatasetItemSearchCriteria criteria, UUID versionId) {
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(SELECT_DATASET_ITEM_VERSIONS_COUNT)
-                    .bind("datasetId", datasetId.toString())
+            // Build template with filters
+            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_COUNT);
+            Optional.ofNullable(criteria.filters())
+                    .ifPresent(filters -> {
+                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                                .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                                        datasetItemFilters));
+                    });
+
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", criteria.datasetId().toString())
                     .bind("versionId", versionId.toString());
+
+            // Bind filter parameters
+            Optional.ofNullable(criteria.filters())
+                    .ifPresent(filters -> FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM));
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_dataset_item_versions");
 
@@ -1582,7 +1608,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
                     template.add("item_ids", true);
                 } else if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
-                    filterQueryBuilder.toAnalyticsDbFilters(batchUpdate.filters(), FilterStrategy.DATASET_ITEM)
+                    FilterQueryBuilder.toAnalyticsDbFilters(batchUpdate.filters(), FilterStrategy.DATASET_ITEM)
                             .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
                 }
 
@@ -1611,7 +1637,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 // Bind filter parameters if provided
                 if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
-                    filterQueryBuilder.bind(statement, batchUpdate.filters(), FilterStrategy.DATASET_ITEM);
+                    FilterQueryBuilder.bind(statement, batchUpdate.filters(), FilterStrategy.DATASET_ITEM);
                 }
 
                 // Bind optional update fields
