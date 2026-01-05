@@ -547,7 +547,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
 def test_langchain__find_token_usage_dict__multi_turn_returns_latest():
     """
     Test that find_token_usage_dict returns the most recent usage_metadata.
-    
+
     This is a regression test for a bug where the first token usage was always returned
     instead of the most recent one in multi-turn conversations.
     """
@@ -558,7 +558,9 @@ def test_langchain__find_token_usage_dict__multi_turn_returns_latest():
     multi_turn_run_dict = {
         "id": "run-123",
         "name": "ChatOpenAI",
-        "inputs": {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        "inputs": {
+            "messages": [{"role": "user", "content": "what is the weather in sf"}]
+        },
         "outputs": {
             "generations": [
                 [
