@@ -113,16 +113,18 @@ public interface DatasetItemService {
      *   <li>Resolves dataset ID from batch (creates dataset if needed)</li>
      *   <li>Creates a new version on top of the latest one</li>
      *   <li>If no versions exist, creates the first version</li>
+     *   <li>Returns the newly created DatasetVersion</li>
      * </ul>
      * When versioning is disabled (legacy mode):
      * <ul>
      *   <li>Saves items to the legacy dataset_items table</li>
+     *   <li>Returns empty Mono</li>
      * </ul>
      *
      * @param batch the batch of items to save (must include datasetId or datasetName)
-     * @return Mono completing when save operation finishes
+     * @return Mono emitting the newly created DatasetVersion when versioning is enabled, or empty when disabled
      */
-    Mono<Void> save(DatasetItemBatch batch);
+    Mono<DatasetVersion> save(DatasetItemBatch batch);
 }
 
 @Singleton
@@ -1484,7 +1486,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> save(@NonNull DatasetItemBatch batch) {
+    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -1494,13 +1496,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 log.info("Saving items with versioning for dataset '{}'", datasetId);
                 return saveItemsWithVersion(batch, datasetId)
                         .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
-                                .put(RequestContext.USER_NAME, userName))
-                        .then();
+                                .put(RequestContext.USER_NAME, userName));
             }
 
             // Legacy: save to legacy table
             log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
-            return verifyDatasetExistsAndSave(batch);
+            return verifyDatasetExistsAndSave(batch)
+                    .then(Mono.empty());
         });
     }
 

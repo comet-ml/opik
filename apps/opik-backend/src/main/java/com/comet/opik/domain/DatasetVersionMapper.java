@@ -10,7 +10,7 @@ import org.mapstruct.factory.Mappers;
 import java.util.UUID;
 
 @Mapper
-interface DatasetVersionMapper {
+public interface DatasetVersionMapper {
 
     DatasetVersionMapper INSTANCE = Mappers.getMapper(DatasetVersionMapper.class);
 
