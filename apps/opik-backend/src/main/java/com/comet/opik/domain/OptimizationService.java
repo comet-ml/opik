@@ -250,24 +250,16 @@ class OptimizationServiceImpl implements OptimizationService {
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-                    // If this is a cancellation request for a Studio optimization, signal Redis
-                    Mono<Void> signalCancellation = Mono.empty();
+                    // Validate cancellation request for Studio optimizations
                     if (update.status() == OptimizationStatus.CANCELLED
                             && optimization.studioConfig() != null
-                            && CANCELLABLE_STATUSES.contains(optimization.status())) {
-
-                        log.info("Signalling cancellation for Studio optimization '{}' (current status: '{}')",
-                                id, optimization.status());
-
-                        String cancelKey = String.format(CANCEL_KEY_PATTERN, id);
-                        signalCancellation = redisClient.getBucket(cancelKey)
-                                .set("1", CANCEL_KEY_TTL_SECONDS, TimeUnit.SECONDS)
-                                .doOnSuccess(
-                                        __ -> log.debug("Set cancellation signal in Redis for optimization '{}'", id))
-                                .then();
+                            && !CANCELLABLE_STATUSES.contains(optimization.status())) {
+                        return Mono.error(new IllegalStateException(
+                                "Cannot cancel optimization with status '%s'. Only optimizations with status %s can be cancelled."
+                                        .formatted(optimization.status(), CANCELLABLE_STATUSES)));
                     }
 
-                    return signalCancellation
+                    return signalCancellationIfNeeded(id, optimization, update)
                             .then(optimizationDAO.update(id, update))
                             .doOnSuccess(result -> {
                                 // Sync logs when optimization reaches terminal status
@@ -277,6 +269,32 @@ class OptimizationServiceImpl implements OptimizationService {
                                 }
                             });
                 }));
+    }
+
+    /**
+     * Signals cancellation to Redis if this is a valid cancellation request for a Studio optimization.
+     * The Python worker polls this Redis key to detect cancellation requests.
+     *
+     * @param id The optimization ID
+     * @param optimization The current optimization state
+     * @param update The requested update
+     * @return Mono that completes when the signal is set, or empty if no signal is needed
+     */
+    private Mono<Void> signalCancellationIfNeeded(UUID id, Optimization optimization, OptimizationUpdate update) {
+        if (update.status() != OptimizationStatus.CANCELLED
+                || optimization.studioConfig() == null
+                || !CANCELLABLE_STATUSES.contains(optimization.status())) {
+            return Mono.empty();
+        }
+
+        log.info("Signalling cancellation for Studio optimization '{}' (current status: '{}')",
+                id, optimization.status());
+
+        String cancelKey = String.format(CANCEL_KEY_PATTERN, id);
+        return redisClient.getBucket(cancelKey)
+                .set("1", CANCEL_KEY_TTL_SECONDS, TimeUnit.SECONDS)
+                .doOnSuccess(__ -> log.debug("Set cancellation signal in Redis for optimization '{}'", id))
+                .then();
     }
 
     private void finalizeLogsAsync(String workspaceId, UUID optimizationId) {
