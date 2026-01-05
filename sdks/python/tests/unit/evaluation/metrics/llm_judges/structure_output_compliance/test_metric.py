@@ -156,7 +156,7 @@ class TestStructuredOutputComplianceMetric:
 
         metric = StructuredOutputCompliance(model="gpt-4", track=False)
 
-        mock_factory.assert_called_once_with(model_name="gpt-4")
+        mock_factory.assert_called_once_with(model_name="gpt-4", track=False)
         # Test that the model was initialized correctly by testing behavior
         assert metric is not None
         # We can test the public interface works correctly
