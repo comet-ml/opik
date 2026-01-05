@@ -5,6 +5,9 @@ These tests verify that:
 1. The cancellation checker correctly detects Redis cancellation signals
 2. The background polling thread works correctly
 3. The callback is invoked when cancellation is detected
+4. The context manager works correctly
+5. The was_cancelled property is thread-safe
+6. Redis key cleanup works correctly
 """
 
 import threading
@@ -172,3 +175,84 @@ class TestCancellationChecker:
         checker.stop_background_check()
 
         assert callback_was_called, "Callback should have been invoked after Redis error"
+
+    def test_was_cancelled_property_returns_false_initially(self, mock_redis, optimization_id):
+        """Test that was_cancelled returns False before cancellation."""
+        checker = CancellationChecker(optimization_id)
+        assert checker.was_cancelled is False
+
+    def test_was_cancelled_property_returns_true_after_cancellation(self, mock_redis, optimization_id):
+        """Test that was_cancelled returns True after cancellation is detected."""
+        mock_redis.exists.return_value = True
+
+        checker = CancellationChecker(optimization_id)
+        callback_called = threading.Event()
+
+        def on_cancelled():
+            callback_called.set()
+
+        checker.start_background_check(on_cancelled=on_cancelled, interval_secs=0.1)
+
+        # Wait for cancellation to be detected
+        callback_called.wait(timeout=2)
+
+        assert checker.was_cancelled is True
+
+        checker.stop_background_check()
+
+    def test_context_manager_stops_background_check_on_exit(self, mock_redis, optimization_id):
+        """Test that context manager stops background check on exit."""
+        mock_redis.exists.return_value = False
+
+        with CancellationChecker(optimization_id) as checker:
+            checker.start_background_check(on_cancelled=lambda: None, interval_secs=0.1)
+            assert checker._thread is not None
+            assert checker._thread.is_alive()
+
+        # After exiting context, thread should be stopped
+        time.sleep(0.2)
+        assert checker._thread is None or not checker._thread.is_alive()
+
+    def test_context_manager_returns_checker_instance(self, mock_redis, optimization_id):
+        """Test that context manager returns the checker instance."""
+        with CancellationChecker(optimization_id) as checker:
+            assert isinstance(checker, CancellationChecker)
+            assert checker.optimization_id == optimization_id
+
+    def test_cleanup_cancel_key_deletes_redis_key(self, mock_redis, optimization_id):
+        """Test that cleanup_cancel_key deletes the Redis key."""
+        checker = CancellationChecker(optimization_id)
+        checker.cleanup_cancel_key()
+
+        mock_redis.delete.assert_called_once_with(f"opik:cancel:{optimization_id}")
+
+    def test_cleanup_cancel_key_handles_redis_errors(self, mock_redis, optimization_id):
+        """Test that cleanup_cancel_key handles Redis errors gracefully."""
+        mock_redis.delete.side_effect = Exception("Redis error")
+
+        checker = CancellationChecker(optimization_id)
+        # Should not raise
+        checker.cleanup_cancel_key()
+
+    def test_background_check_cleans_up_redis_key_after_cancellation(self, mock_redis, optimization_id):
+        """Test that background check cleans up Redis key after cancellation."""
+        mock_redis.exists.return_value = True
+
+        checker = CancellationChecker(optimization_id)
+        callback_called = threading.Event()
+
+        def on_cancelled():
+            callback_called.set()
+
+        checker.start_background_check(on_cancelled=on_cancelled, interval_secs=0.1)
+
+        # Wait for cancellation
+        callback_called.wait(timeout=2)
+
+        # Give time for cleanup
+        time.sleep(0.2)
+
+        # Redis key should have been deleted
+        mock_redis.delete.assert_called_with(f"opik:cancel:{optimization_id}")
+
+        checker.stop_background_check()
