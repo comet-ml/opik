@@ -10,6 +10,8 @@ export interface DatasetVersionSummary {
     id?: string;
     /** Hash of the version content */
     versionHash?: string;
+    /** Sequential version name formatted as 'v1', 'v2', etc. */
+    versionName?: string;
     /** Description of changes in this version */
     changeDescription?: string;
     /** Tags associated with this version */
