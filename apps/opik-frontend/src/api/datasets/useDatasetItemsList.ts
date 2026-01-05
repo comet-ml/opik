@@ -4,7 +4,7 @@ import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { generateSearchByFieldFilters, processFilters } from "@/lib/filters";
 
-type UseDatasetItemsListParams = {
+export type UseDatasetItemsListParams = {
   datasetId: string;
   filters?: Filters;
   page: number;

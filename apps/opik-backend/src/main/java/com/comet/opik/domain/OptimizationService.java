@@ -360,8 +360,8 @@ class OptimizationServiceImpl implements OptimizationService {
             log.debug("Generating logs response for Studio optimization: '{}' in workspace: '{}'", optimizationId,
                     workspaceId);
 
-            // Build S3 key from workspace_id and optimization_id
-            String s3Key = String.format("logs/%s/%s.log", workspaceId, optimizationId);
+            // Build S3 key using the shared method from OptimizationLogSyncService
+            String s3Key = OptimizationLogSyncService.formatS3Key(workspaceId, optimizationId);
 
             // TODO: Check if log file exists in S3 and get last modified
             // For now, return null for lastModified (file doesn't exist yet for new optimizations)
