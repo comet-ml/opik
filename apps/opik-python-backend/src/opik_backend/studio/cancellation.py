@@ -1,126 +1,238 @@
 """
-Cancellation checker for Optimization Studio jobs.
+Cancellation monitor for Optimization Studio jobs.
 
-Monitors a Redis key for cancellation signals from the Java backend.
-When a cancellation is detected, it triggers a callback to terminate
-the running optimization subprocess.
+Uses a single background thread to monitor cancellation signals for all
+running optimizations via Redis MGET (multi-get). This is more efficient
+than having a separate polling thread per optimization.
+
+Architecture:
+    - CancellationMonitor: Singleton that polls Redis for all registered optimizations
+    - CancellationHandle: Per-optimization handle for registration and status checking
 """
 
 import logging
+import os
 import threading
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Type
 
 from opik_backend.utils.redis_utils import get_redis_client
 
 logger = logging.getLogger(__name__)
 
+# Redis key pattern for cancellation signals
+CANCEL_KEY_PATTERN = "opik:cancel:{}"
 
-class CancellationChecker:
+# Default polling interval (configurable via env var)
+DEFAULT_POLL_INTERVAL_SECS = 2
+
+
+class CancellationMonitor:
     """
-    Checks for cancellation signals in Redis for a specific optimization.
-
-    The Java backend sets a Redis key (opik:cancel:{optimization_id}) when
-    a user requests cancellation. This class polls that key and triggers
-    a callback when cancellation is detected.
-
-    Can be used as a context manager for automatic cleanup:
-
-        with CancellationChecker(optimization_id) as checker:
-            checker.start_background_check(on_cancelled=my_callback)
-            # ... do work ...
-        # stop_background_check() called automatically
+    Singleton monitor that checks cancellation status for all running optimizations.
+    
+    Uses a single thread with Redis MGET to efficiently check multiple keys at once.
+    Optimizations register themselves and provide a callback for when cancelled.
     """
-
-    CANCEL_KEY_PATTERN = "opik:cancel:{}"
-
-    def __init__(self, optimization_id: str):
-        self.optimization_id = optimization_id
-        self.redis_client = get_redis_client()
+    
+    _instance: Optional["CancellationMonitor"] = None
+    _lock: threading.Lock = threading.Lock()
+    
+    def __new__(cls) -> "CancellationMonitor":
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
+    
+    def __init__(self) -> None:
+        if self._initialized:
+            return
+        
+        self._registrations: Dict[str, Callable[[], None]] = {}
+        self._registrations_lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._cancelled_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._poll_interval = float(os.getenv(
+            "OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS",
+            str(DEFAULT_POLL_INTERVAL_SECS)
+        ))
+        self._initialized = True
+        
+        logger.info(f"CancellationMonitor initialized (poll interval: {self._poll_interval}s)")
+    
+    def register(self, optimization_id: str, on_cancelled: Callable[[], None]) -> None:
+        """
+        Register an optimization for cancellation monitoring.
+        
+        Args:
+            optimization_id: The optimization ID to monitor
+            on_cancelled: Callback to invoke when cancellation is detected
+        """
+        with self._registrations_lock:
+            self._registrations[optimization_id] = on_cancelled
+            logger.debug(f"Registered optimization '{optimization_id}' for cancellation monitoring")
+            
+            # Start monitor thread if not running
+            if self._thread is None or not self._thread.is_alive():
+                self._start_monitor()
+    
+    def unregister(self, optimization_id: str) -> None:
+        """
+        Unregister an optimization from cancellation monitoring.
+        
+        Args:
+            optimization_id: The optimization ID to stop monitoring
+        """
+        with self._registrations_lock:
+            if optimization_id in self._registrations:
+                del self._registrations[optimization_id]
+                logger.debug(f"Unregistered optimization '{optimization_id}' from cancellation monitoring")
+            
+            # Stop monitor thread if no more registrations
+            if not self._registrations and self._thread and self._thread.is_alive():
+                self._stop_monitor()
+    
+    def _start_monitor(self) -> None:
+        """Start the background monitoring thread."""
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._monitor_loop, daemon=True, name="CancellationMonitor")
+        self._thread.start()
+        logger.info("CancellationMonitor thread started")
+    
+    def _stop_monitor(self) -> None:
+        """Stop the background monitoring thread."""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+            if self._thread.is_alive():
+                logger.warning("CancellationMonitor thread did not stop gracefully")
+            self._thread = None
+        logger.info("CancellationMonitor thread stopped")
+    
+    def _monitor_loop(self) -> None:
+        """Main monitoring loop - checks all registered optimizations via MGET."""
+        redis_client = get_redis_client()
+        
+        while not self._stop_event.is_set():
+            try:
+                with self._registrations_lock:
+                    if not self._registrations:
+                        # No registrations, exit loop
+                        break
+                    
+                    # Get all optimization IDs and their callbacks
+                    opt_ids = list(self._registrations.keys())
+                    callbacks = dict(self._registrations)
+                
+                if opt_ids:
+                    # Build keys for MGET
+                    keys = [CANCEL_KEY_PATTERN.format(opt_id) for opt_id in opt_ids]
+                    
+                    # Single MGET call for all keys
+                    results = redis_client.mget(keys)
+                    
+                    # Process results
+                    for opt_id, key, value in zip(opt_ids, keys, results):
+                        if value is not None:
+                            # Cancellation detected
+                            logger.info(f"Cancellation signal detected for optimization '{opt_id}'")
+                            
+                            # Get and invoke callback
+                            callback = callbacks.get(opt_id)
+                            if callback:
+                                try:
+                                    callback()
+                                except Exception as e:
+                                    logger.error(f"Error in cancellation callback for '{opt_id}': {e}")
+                            
+                            # Clean up the key
+                            try:
+                                redis_client.delete(key)
+                                logger.debug(f"Cleaned up cancellation key for '{opt_id}'")
+                            except Exception as e:
+                                logger.warning(f"Error cleaning up cancel key for '{opt_id}': {e}")
+                            
+                            # Remove from registrations (don't call unregister to avoid potential deadlock)
+                            with self._registrations_lock:
+                                self._registrations.pop(opt_id, None)
+                
+            except Exception as e:
+                logger.warning(f"Error in cancellation monitor loop: {e}", exc_info=True)
+            
+            # Wait for next poll interval
+            self._stop_event.wait(self._poll_interval)
+        
+        logger.debug("CancellationMonitor loop exited")
 
-    def __enter__(self):
-        """Context manager entry."""
+
+def get_cancellation_monitor() -> CancellationMonitor:
+    """Get the global CancellationMonitor singleton instance."""
+    return CancellationMonitor()
+
+
+class CancellationHandle:
+    """
+    Handle for a single optimization's cancellation status.
+    
+    Registers with the global CancellationMonitor and provides a simple
+    interface for checking cancellation status.
+    
+    Usage:
+        with CancellationHandle(optimization_id, on_cancelled=my_callback) as handle:
+            # ... do work ...
+            if handle.was_cancelled:
+                # Handle cancellation
+    """
+    
+    def __init__(self, optimization_id: str, on_cancelled: Optional[Callable[[], None]] = None) -> None:
+        self.optimization_id: str = optimization_id
+        self._cancelled_event: threading.Event = threading.Event()
+        self._on_cancelled: Optional[Callable[[], None]] = on_cancelled
+        self._registered: bool = False
+    
+    def __enter__(self) -> "CancellationHandle":
+        """Context manager entry - registers with monitor."""
+        self.register()
         return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - ensures background check is stopped."""
-        self.stop_background_check()
+    
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[Any],
+    ) -> bool:
+        """Context manager exit - unregisters from monitor."""
+        self.unregister()
         return False  # Don't suppress exceptions
-
+    
     @property
     def was_cancelled(self) -> bool:
         """Thread-safe check if cancellation was triggered."""
         return self._cancelled_event.is_set()
-
-    def check_cancelled(self) -> bool:
-        """Checks if a cancellation signal exists in Redis."""
-        key = self.CANCEL_KEY_PATTERN.format(self.optimization_id)
-        is_cancelled = self.redis_client.exists(key)
-        if is_cancelled:
-            logger.info(
-                f"Cancellation signal detected for optimization '{self.optimization_id}'"
-            )
-        return bool(is_cancelled)
-
-    def cleanup_cancel_key(self):
-        """Remove the cancellation key from Redis after processing."""
-        key = self.CANCEL_KEY_PATTERN.format(self.optimization_id)
-        try:
-            self.redis_client.delete(key)
-            logger.debug(f"Cleaned up cancellation key for '{self.optimization_id}'")
-        except Exception as e:
-            logger.warning(f"Error cleaning up cancel key: {e}")
-
-    def start_background_check(
-        self, on_cancelled: Callable[[], None], interval_secs: int = 2
-    ):
-        """
-        Starts a background thread to periodically check for cancellation.
-
-        Args:
-            on_cancelled: Callback function to invoke when cancellation is detected.
-            interval_secs: How often to check for cancellation (default: 2 seconds).
-        """
-        if self._thread and self._thread.is_alive():
-            logger.warning("Cancellation checker already running.")
+    
+    def register(self) -> None:
+        """Register this optimization for cancellation monitoring."""
+        if self._registered:
             return
+        
+        def on_cancelled_wrapper():
+            self._cancelled_event.set()
+            if self._on_cancelled:
+                self._on_cancelled()
+        
+        get_cancellation_monitor().register(self.optimization_id, on_cancelled_wrapper)
+        self._registered = True
+        logger.debug(f"CancellationHandle registered for '{self.optimization_id}'")
+    
+    def unregister(self) -> None:
+        """Unregister this optimization from cancellation monitoring."""
+        if not self._registered:
+            return
+        
+        get_cancellation_monitor().unregister(self.optimization_id)
+        self._registered = False
+        logger.debug(f"CancellationHandle unregistered for '{self.optimization_id}'")
 
-        logger.info(
-            f"Starting background cancellation checker for optimization '{self.optimization_id}'"
-        )
-        self._stop_event.clear()
-        self._cancelled_event.clear()
 
-        def check_loop():
-            while not self._stop_event.is_set():
-                try:
-                    if self.check_cancelled():
-                        self._cancelled_event.set()
-                        on_cancelled()
-                        self.cleanup_cancel_key()
-                        break
-                except Exception as e:
-                    logger.warning(f"Error checking cancellation status: {e}")
-                self._stop_event.wait(interval_secs)
-            logger.debug(
-                f"Cancellation checker loop stopped for '{self.optimization_id}'"
-            )
-
-        self._thread = threading.Thread(target=check_loop, daemon=True)
-        self._thread.start()
-
-    def stop_background_check(self):
-        """Stops the background cancellation checker thread."""
-        if self._thread and self._thread.is_alive():
-            logger.info(
-                f"Stopping background cancellation checker for optimization '{self.optimization_id}'"
-            )
-            self._stop_event.set()
-            self._thread.join(timeout=5)
-            if self._thread.is_alive():
-                logger.warning(
-                    f"Cancellation checker thread for '{self.optimization_id}' did not stop gracefully."
-                )
-            self._thread = None
+# Backwards compatibility alias
+CancellationChecker = CancellationHandle

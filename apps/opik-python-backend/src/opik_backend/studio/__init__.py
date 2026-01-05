@@ -36,7 +36,7 @@ from .helpers import (
     load_and_validate_dataset,
     run_optimization,
 )
-from .cancellation import CancellationChecker
+from .cancellation import CancellationHandle, CancellationMonitor, get_cancellation_monitor
 
 __all__ = [
     # Config
@@ -69,6 +69,8 @@ __all__ = [
     "load_and_validate_dataset",
     "run_optimization",
     # Cancellation
-    "CancellationChecker",
+    "CancellationHandle",
+    "CancellationMonitor",
+    "get_cancellation_monitor",
 ]
 
