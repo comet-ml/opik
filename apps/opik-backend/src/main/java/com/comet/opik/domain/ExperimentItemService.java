@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
@@ -29,6 +30,8 @@ public class ExperimentItemService {
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
+    private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
+    private final @NonNull FeatureFlags featureFlags;
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
@@ -36,8 +39,10 @@ public class ExperimentItemService {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-            var experimentItemsWithValidIds = addIdIfAbsentAndValidateIt(experimentItems, workspaceId);
+            var experimentItemsWithValidIds = validateExperimentItemIdsAndWorkspace(experimentItems, workspaceId,
+                    userName);
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
             return experimentItemDAO.insert(experimentItemsWithValidIds)
@@ -45,10 +50,11 @@ public class ExperimentItemService {
         });
     }
 
-    private Set<ExperimentItem> addIdIfAbsentAndValidateIt(Set<ExperimentItem> experimentItems, String workspaceId) {
+    private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(
+            Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         validateExperimentsWorkspace(experimentItems, workspaceId);
 
-        validateDatasetItemsWorkspace(experimentItems, workspaceId);
+        validateDatasetItemsWorkspace(experimentItems, workspaceId, userName);
 
         return experimentItems.stream()
                 .map(item -> {
@@ -81,7 +87,8 @@ public class ExperimentItemService {
         return new ClientErrorException(message, Response.Status.CONFLICT);
     }
 
-    private void validateDatasetItemsWorkspace(Set<ExperimentItem> experimentItems, String workspaceId) {
+    private void validateDatasetItemsWorkspace(
+            Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         Set<UUID> datasetItemIds = experimentItems
                 .stream()
                 .map(ExperimentItem::datasetItemId)
@@ -89,7 +96,8 @@ public class ExperimentItemService {
 
         boolean allDatasetItemsBelongToWorkspace = Boolean.TRUE
                 .equals(validateDatasetItemWorkspace(workspaceId, datasetItemIds)
-                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                                .put(RequestContext.USER_NAME, userName))
                         .block());
 
         if (!allDatasetItemsBelongToWorkspace) {
@@ -102,6 +110,17 @@ public class ExperimentItemService {
             return Mono.just(true);
         }
 
+        // When versioning is enabled, dataset item IDs are row IDs from dataset_item_versions
+        // When versioning is disabled, dataset item IDs are from dataset_items (legacy table)
+        // We need to check both tables to support backward compatibility
+        if (featureFlags.isDatasetVersioningEnabled()) {
+            // Check versioned table
+            return datasetItemVersionDAO.getDatasetItemWorkspace(datasetItemIds)
+                    .map(items -> items.stream()
+                            .allMatch(item -> workspaceId.equals(item.workspaceId())));
+        }
+
+        // Legacy mode: only check dataset_items table
         return datasetItemDAO.getDatasetItemWorkspace(datasetItemIds)
                 .map(datasetItemWorkspace -> datasetItemWorkspace.stream()
                         .allMatch(datasetItem -> workspaceId.equals(datasetItem.workspaceId())));

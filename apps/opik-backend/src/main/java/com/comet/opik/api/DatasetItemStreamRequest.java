@@ -17,7 +17,8 @@ import java.util.UUID;
 public record DatasetItemStreamRequest(
         @NotBlank String datasetName,
         UUID lastRetrievedId,
-        @Min(1) @Max(2000) @DefaultValue("500") Integer steamLimit) {
+        @Min(1) @Max(2000) @DefaultValue("500") Integer steamLimit,
+        String version) {
 
     @Override
     public Integer steamLimit() {
