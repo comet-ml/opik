@@ -19,6 +19,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         id: core.serialization.string().optional(),
         datasetName: core.serialization.property("dataset_name", core.serialization.string()),
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
         metadata: JsonListString.optional(),
         type: ExperimentType.optional(),
@@ -57,6 +58,7 @@ export declare namespace Experiment {
         id?: string | null;
         dataset_name: string;
         dataset_id?: string | null;
+        project_id?: string | null;
         name?: string | null;
         metadata?: JsonListString.Raw | null;
         type?: ExperimentType.Raw | null;

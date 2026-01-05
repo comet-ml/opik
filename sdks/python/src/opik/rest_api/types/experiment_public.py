@@ -19,6 +19,7 @@ class ExperimentPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     dataset_name: str
     dataset_id: typing.Optional[str] = None
+    project_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListStringPublic] = None
     type: typing.Optional[ExperimentPublicType] = None

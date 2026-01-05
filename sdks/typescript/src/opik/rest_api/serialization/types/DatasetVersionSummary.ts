@@ -12,6 +12,7 @@ export const DatasetVersionSummary: core.serialization.ObjectSchema<
 > = core.serialization.object({
     id: core.serialization.string().optional(),
     versionHash: core.serialization.property("version_hash", core.serialization.string().optional()),
+    versionName: core.serialization.property("version_name", core.serialization.string().optional()),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     tags: core.serialization.list(core.serialization.string()).optional(),
 });
@@ -20,6 +21,7 @@ export declare namespace DatasetVersionSummary {
     export interface Raw {
         id?: string | null;
         version_hash?: string | null;
+        version_name?: string | null;
         change_description?: string | null;
         tags?: string[] | null;
     }

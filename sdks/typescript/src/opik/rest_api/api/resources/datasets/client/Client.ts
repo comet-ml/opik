@@ -45,6 +45,126 @@ export class Datasets {
     constructor(protected readonly _options: Datasets.Options = {}) {}
 
     /**
+     * Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+     *
+     * This endpoint:
+     * - Creates a new version with the applied changes
+     * - Validates that baseVersion matches the latest version (unless override=true)
+     * - Returns 409 Conflict if baseVersion is stale and override is not set
+     *
+     * Use `override=true` query parameter to force version creation even with stale baseVersion.
+     *
+     * @param {string} id
+     * @param {OpikApi.ApplyDatasetItemChangesRequest} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     * @throws {@link OpikApi.ConflictError}
+     *
+     * @example
+     *     await client.datasets.applyDatasetItemChanges("id", {
+     *         body: {
+     *             "key": "value"
+     *         }
+     *     })
+     */
+    public applyDatasetItemChanges(
+        id: string,
+        request: OpikApi.ApplyDatasetItemChangesRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetVersionPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__applyDatasetItemChanges(id, request, requestOptions));
+    }
+
+    private async __applyDatasetItemChanges(
+        id: string,
+        request: OpikApi.ApplyDatasetItemChangesRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetVersionPublic>> {
+        const { override, body: _body } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (override != null) {
+            _queryParams["override"] = override.toString();
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(id)}/items/changes`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            body: serializers.DatasetItemChangesPublic.jsonOrThrow(_body, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetVersionPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/datasets/{id}/items/changes.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Update multiple dataset items
      *
      * @param {OpikApi.DatasetItemBatchUpdate} request
@@ -2213,6 +2333,89 @@ export class Datasets {
     }
 
     /**
+     * Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
+     *
+     * @param {string} versionHash
+     * @param {string} tag
+     * @param {string} id
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.deleteVersionTag("versionHash", "tag", "id")
+     */
+    public deleteVersionTag(
+        versionHash: string,
+        tag: string,
+        id: string,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteVersionTag(versionHash, tag, id, requestOptions));
+    }
+
+    private async __deleteVersionTag(
+        versionHash: string,
+        tag: string,
+        id: string,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionHash)}/tags/${encodeURIComponent(tag)}`,
+            ),
+            method: "DELETE",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling DELETE /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get paginated list of versions for a dataset, ordered by creation time (newest first)
      *
      * @param {string} id
@@ -2319,181 +2522,7 @@ export class Datasets {
     }
 
     /**
-     * Create a new immutable version of the dataset by snapshotting the current state
-     *
-     * @param {string} id
-     * @param {OpikApi.DatasetVersionCreatePublic} request
-     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.BadRequestError}
-     * @throws {@link OpikApi.ConflictError}
-     *
-     * @example
-     *     await client.datasets.createDatasetVersion("id")
-     */
-    public createDatasetVersion(
-        id: string,
-        request: OpikApi.DatasetVersionCreatePublic = {},
-        requestOptions?: Datasets.RequestOptions,
-    ): core.HttpResponsePromise<void> {
-        return core.HttpResponsePromise.fromPromise(this.__createDatasetVersion(id, request, requestOptions));
-    }
-
-    private async __createDatasetVersion(
-        id: string,
-        request: OpikApi.DatasetVersionCreatePublic = {},
-        requestOptions?: Datasets.RequestOptions,
-    ): Promise<core.WithRawResponse<void>> {
-        const _response = await core.fetcher({
-            url: urlJoin(
-                (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.OpikApiEnvironment.Default,
-                `v1/private/datasets/${encodeURIComponent(id)}/versions`,
-            ),
-            method: "POST",
-            headers: {
-                "Comet-Workspace":
-                    (await core.Supplier.get(this._options.workspaceName)) != null
-                        ? await core.Supplier.get(this._options.workspaceName)
-                        : undefined,
-                "X-Fern-Language": "JavaScript",
-                "X-Fern-Runtime": core.RUNTIME.type,
-                "X-Fern-Runtime-Version": core.RUNTIME.version,
-                ...(await this._getCustomAuthorizationHeaders()),
-                ...requestOptions?.headers,
-            },
-            contentType: "application/json",
-            requestType: "json",
-            body: serializers.DatasetVersionCreatePublic.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-            maxRetries: requestOptions?.maxRetries,
-            withCredentials: true,
-            abortSignal: requestOptions?.abortSignal,
-        });
-        if (_response.ok) {
-            return { data: undefined, rawResponse: _response.rawResponse };
-        }
-
-        if (_response.error.reason === "status-code") {
-            switch (_response.error.statusCode) {
-                case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
-                case 409:
-                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
-                default:
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                        rawResponse: _response.rawResponse,
-                    });
-            }
-        }
-
-        switch (_response.error.reason) {
-            case "non-json":
-                throw new errors.OpikApiError({
-                    statusCode: _response.error.statusCode,
-                    body: _response.error.rawBody,
-                    rawResponse: _response.rawResponse,
-                });
-            case "timeout":
-                throw new errors.OpikApiTimeoutError(
-                    "Timeout exceeded when calling POST /v1/private/datasets/{id}/versions.",
-                );
-            case "unknown":
-                throw new errors.OpikApiError({
-                    message: _response.error.errorMessage,
-                    rawResponse: _response.rawResponse,
-                });
-        }
-    }
-
-    /**
-     * Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
-     *
-     * @param {string} versionHash
-     * @param {string} tag
-     * @param {string} id
-     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @example
-     *     await client.datasets.deleteVersionTag("versionHash", "tag", "id")
-     */
-    public deleteVersionTag(
-        versionHash: string,
-        tag: string,
-        id: string,
-        requestOptions?: Datasets.RequestOptions,
-    ): core.HttpResponsePromise<void> {
-        return core.HttpResponsePromise.fromPromise(this.__deleteVersionTag(versionHash, tag, id, requestOptions));
-    }
-
-    private async __deleteVersionTag(
-        versionHash: string,
-        tag: string,
-        id: string,
-        requestOptions?: Datasets.RequestOptions,
-    ): Promise<core.WithRawResponse<void>> {
-        const _response = await core.fetcher({
-            url: urlJoin(
-                (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.OpikApiEnvironment.Default,
-                `v1/private/datasets/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionHash)}/tags/${encodeURIComponent(tag)}`,
-            ),
-            method: "DELETE",
-            headers: {
-                "Comet-Workspace":
-                    (await core.Supplier.get(this._options.workspaceName)) != null
-                        ? await core.Supplier.get(this._options.workspaceName)
-                        : undefined,
-                "X-Fern-Language": "JavaScript",
-                "X-Fern-Runtime": core.RUNTIME.type,
-                "X-Fern-Runtime-Version": core.RUNTIME.version,
-                ...(await this._getCustomAuthorizationHeaders()),
-                ...requestOptions?.headers,
-            },
-            contentType: "application/json",
-            requestType: "json",
-            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-            maxRetries: requestOptions?.maxRetries,
-            withCredentials: true,
-            abortSignal: requestOptions?.abortSignal,
-        });
-        if (_response.ok) {
-            return { data: undefined, rawResponse: _response.rawResponse };
-        }
-
-        if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
-        }
-
-        switch (_response.error.reason) {
-            case "non-json":
-                throw new errors.OpikApiError({
-                    statusCode: _response.error.statusCode,
-                    body: _response.error.rawBody,
-                    rawResponse: _response.rawResponse,
-                });
-            case "timeout":
-                throw new errors.OpikApiTimeoutError(
-                    "Timeout exceeded when calling DELETE /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}.",
-                );
-            case "unknown":
-                throw new errors.OpikApiError({
-                    message: _response.error.errorMessage,
-                    rawResponse: _response.rawResponse,
-                });
-        }
-    }
-
-    /**
-     * Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+     * Restores the dataset to a previous version state by creating a new version with items copied from the specified version. If the version is already the latest, returns it as-is (no-op).
      *
      * @param {string} id
      * @param {OpikApi.DatasetVersionRestorePublic} request

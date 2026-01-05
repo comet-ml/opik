@@ -21,6 +21,11 @@ class DatasetVersionSummaryPublic(UniversalBaseModel):
     Hash of the version content
     """
 
+    version_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Sequential version name formatted as 'v1', 'v2', etc.
+    """
+
     change_description: typing.Optional[str] = pydantic.Field(default=None)
     """
     Description of changes in this version

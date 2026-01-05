@@ -11,5 +11,4 @@ export interface DatasetItemPageCompare {
     total?: number;
     columns?: OpikApi.ColumnCompare[];
     sortableBy?: string[];
-    hasDraft?: boolean;
 }
