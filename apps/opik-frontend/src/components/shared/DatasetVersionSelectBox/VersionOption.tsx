@@ -4,6 +4,7 @@ import { SelectItem } from "@/components/ui/select";
 import { DatasetVersion } from "@/types/datasets";
 import ColoredTag from "../ColoredTag/ColoredTag";
 import { cn } from "@/lib/utils";
+import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface VersionOptionProps {
   version: DatasetVersion;
@@ -19,7 +20,7 @@ const VersionOption: React.FC<VersionOptionProps> = ({
   return (
     <SelectItem
       key={version.id}
-      value={`${datasetId}::${version.version_hash}`}
+      value={formatDatasetVersionKey(datasetId, version.version_hash)}
       withoutCheck
       className={cn(
         "flex h-auto min-h-10 flex-col cursor-pointer justify-center py-2 pl-12 min-w-40 focus:bg-primary-foreground focus:text-foreground",
