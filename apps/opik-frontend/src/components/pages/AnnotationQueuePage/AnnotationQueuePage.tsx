@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import sortBy from "lodash/sortBy";
-import { PenLine } from "lucide-react";
+import { ArrowRight, PenLine } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL";
+import { useWorkspaceNameFromURL } from "@/hooks/useWorkspaceNameFromURL";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/components/shared/NavigationTag";
@@ -22,11 +25,15 @@ import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/Ex
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ScopeTag from "@/components/pages/AnnotationQueuePage/ScopeTag";
+import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
+import { COLUMN_TYPE } from "@/types/shared";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
 
   const annotationQueueId = useAnnotationQueueIdFromURL();
+  const workspaceName = useWorkspaceNameFromURL();
+  const navigate = useNavigate();
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const { data: annotationQueue } = useAnnotationQueueById(
@@ -60,6 +67,48 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
     annotationQueue?.feedback_definition_names,
   ]);
 
+  const handleNavigateToTracesOrThreads = () => {
+    if (!annotationQueue) return;
+
+    const isTraceScope = annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE;
+    const targetPath = isTraceScope
+      ? "/$workspaceName/projects/$projectId/traces"
+      : "/$workspaceName/projects/$projectId/threads";
+
+    const filterField = "annotation_queue_ids";
+
+    navigate({
+      to: targetPath,
+      params: {
+        projectId: annotationQueue.project_id,
+        workspaceName,
+      },
+      search: isTraceScope
+        ? {
+            traces_filters: [
+              {
+                id: filterField,
+                field: filterField,
+                type: COLUMN_TYPE.list,
+                operator: "contains",
+                value: annotationQueue.id,
+              },
+            ],
+          }
+        : {
+            threads_filters: [
+              {
+                id: filterField,
+                field: filterField,
+                type: COLUMN_TYPE.list,
+                operator: "contains",
+                value: annotationQueue.id,
+              },
+            ],
+          },
+    });
+  };
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer
@@ -69,6 +118,17 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         <h1 className="comet-title-l truncate break-words">{queueName}</h1>
         {annotationQueue && (
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNavigateToTracesOrThreads}
+            >
+              View all{" "}
+              {annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE
+                ? "traces"
+                : "threads"}
+              <ArrowRight className="ml-2 size-4" />
+            </Button>
             <CopySMELinkButton annotationQueue={annotationQueue} />
             <EditAnnotationQueueButton annotationQueue={annotationQueue} />
             <ExportAnnotatedDataButton annotationQueue={annotationQueue} />
