@@ -73,6 +73,8 @@ const CompareOptimizationsPage: React.FC = () => {
         <CompareOptimizationsHeader
           title={title}
           status={optimization?.status}
+          optimizationId={optimization?.id}
+          isStudioOptimization={isStudioOptimization}
         />
       </PageBodyStickyContainer>
 

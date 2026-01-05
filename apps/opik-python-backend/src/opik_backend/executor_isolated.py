@@ -296,13 +296,20 @@ class IsolatedSubprocessExecutor:
                 process.wait(timeout=timeout_secs)
                 
                 # Wait for reader threads to finish reading all output
-                self._log_collectors[process.pid].wait_for_reader_threads(timeout=SubprocessLogConfig.get_log_reader_timeout_secs())
-                
-                # Get stdout/stderr from last lines (no memory accumulation)
-                # Safe to do now that threads have finished
-                last_lines = self._log_collectors[process.pid].get_last_lines()
-                stdout = last_lines.get('stdout', '')
-                stderr = last_lines.get('stderr', '')
+                # Note: log collector may have been removed if process was killed externally
+                log_collector = self._log_collectors.get(process.pid)
+                if log_collector:
+                    log_collector.wait_for_reader_threads(timeout=SubprocessLogConfig.get_log_reader_timeout_secs())
+                    
+                    # Get stdout/stderr from last lines (no memory accumulation)
+                    # Safe to do now that threads have finished
+                    last_lines = log_collector.get_last_lines()
+                    stdout = last_lines.get('stdout', '')
+                    stderr = last_lines.get('stderr', '')
+                else:
+                    # Process was killed externally (e.g., cancellation)
+                    stdout = ''
+                    stderr = ''
             else:
                 # Simple mode: use communicate() without logging overhead
                 stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
