@@ -248,9 +248,46 @@ class OpikTracer(BaseTracer):
             )
             return
 
-        # workaround for `.astream()` method usage
-        if trace_data.input == {"input": ""}:
+        # workaround for `.astream()` method usage and LangGraph interrupts
+        # Check if input is empty or contains a Command object that will serialize to empty dict
+        if trace_data.input == {"input": ""} or trace_data.input == {"input": {}}:
             trace_data.input = run_dict["inputs"]
+        elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
+            # Check if the input value is a LangGraph Command object
+            input_value = trace_data.input["input"]
+            if (
+                hasattr(input_value, "__class__")
+                and input_value.__class__.__name__ == "Command"
+            ):
+                # Extract the resume value from the Command object
+                if hasattr(input_value, "resume"):
+                    trace_data.input = {"__resume__": input_value.resume}
+                else:
+                    # Fallback: try to serialize the Command object properly
+                    trace_data.input = run_dict["inputs"]
+
+        # Check if any child span has a GraphInterrupt error and extract interrupt info for output
+        if outputs is not None and isinstance(outputs, dict):
+            # Check child spans for GraphInterrupt
+            for span_id, span_data in self._span_data_map.items():
+                if span_data.trace_id == trace_data.id and span_data.error_info:
+                    error_traceback = span_data.error_info.get("traceback", "")
+                    if (
+                        "GraphInterrupt" in error_traceback
+                        and "Interrupt(" in error_traceback
+                    ):
+                        import re
+
+                        match = re.search(
+                            r"Interrupt\(value='([^']*)'",
+                            error_traceback.replace("\\n", "\n"),
+                        )
+                        if match:
+                            interrupt_value = match.group(1)
+                            # Replace outputs with only the interrupt data
+                            outputs.clear()
+                            outputs["__interrupt__"] = [{"value": interrupt_value}]
+                        break
 
         if trace_additional_metadata:
             trace_data.update(metadata=trace_additional_metadata)
@@ -586,9 +623,23 @@ class OpikTracer(BaseTracer):
             if usage_info is None:
                 usage_info = llm_usage.LLMUsageInfo()
 
-            # workaround for `.astream()` method usage
-            if span_data.input == {"input": ""}:
+            # workaround for `.astream()` method usage and LangGraph interrupts
+            # Check if input is empty or contains a Command object that will serialize to empty dict
+            if span_data.input == {"input": ""} or span_data.input == {"input": {}}:
                 span_data.input = run_dict["inputs"]
+            elif isinstance(span_data.input, dict) and "input" in span_data.input:
+                # Check if the input value is a LangGraph Command object
+                input_value = span_data.input["input"]
+                if (
+                    hasattr(input_value, "__class__")
+                    and input_value.__class__.__name__ == "Command"
+                ):
+                    # Extract the resume value from the Command object
+                    if hasattr(input_value, "resume"):
+                        span_data.input = {"__resume__": input_value.resume}
+                    else:
+                        # Fallback: try to serialize the Command object properly
+                        span_data.input = run_dict["inputs"]
 
             filtered_output, additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])

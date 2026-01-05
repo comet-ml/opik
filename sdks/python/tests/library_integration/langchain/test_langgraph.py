@@ -1,4 +1,4 @@
-from typing import Dict, Any, Annotated
+from typing import Dict, Any, Annotated, Optional
 from pydantic import BaseModel
 
 from langchain_core.messages import HumanMessage
@@ -1092,3 +1092,144 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
         len(callback.created_traces()) == 0
     )  # No new trace created, attached to the existing trace
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__interrupt_resume__second_trace_has_correct_input(
+    fake_backend,
+):
+    """Test that when LangGraph uses interrupts, the second trace (after resume) has correct input.
+
+    When a LangGraph execution is interrupted and then resumed with Command(resume=...),
+    the second trace should have the resume value as input, not an empty dict.
+    """
+    from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import MemorySaver
+
+    class GraphState(TypedDict):
+        question: Optional[str]
+        selected_option: Optional[str]
+        is_ambiguous: Optional[bool]
+        options: Optional[list]
+        response: Optional[str]
+
+    def is_ambiguous(question: str) -> bool:
+        """Simple check: questions with 'it', 'that', 'this' or very short are ambiguous"""
+        ambiguous_words = ["it", "that", "this", "they"]
+        question_lower = question.lower()
+        return (
+            any(word in question_lower for word in ambiguous_words)
+            or len(question.split()) < 3
+        )
+
+    def check_ambiguity_node(state):
+        question = state.get("question", "").strip()
+        selected_option = state.get("selected_option")
+
+        # If user already selected an option, not ambiguous anymore
+        if selected_option:
+            return {"is_ambiguous": False}
+
+        # Check if question is ambiguous
+        ambiguous = is_ambiguous(question)
+        return {"is_ambiguous": ambiguous}
+
+    def provide_options_node(state):
+        options = [
+            "Option 1: Weather information",
+            "Option 2: News updates",
+            "Option 3: Product recommendations",
+            "Option 4: General information",
+        ]
+        response = "Please select one of these options:\n" + "\n".join(
+            f"{i+1}. {opt}" for i, opt in enumerate(options)
+        )
+
+        # Interrupt execution to wait for user input
+        choice = interrupt(response)
+
+        return {"options": options, "selected_option": choice}
+
+    def handle_selection_node(state):
+        selected_option = state.get("selected_option", "").strip()
+
+        # Map selection to answer
+        option_answers = {
+            "1": "Here's the weather information you requested.",
+            "2": "Here are the latest news updates.",
+            "3": "Here are some product recommendations based on your preferences.",
+            "4": "Here's the general information you asked about.",
+        }
+
+        answer = option_answers.get(selected_option, "I'll help you with that.")
+        return {"response": answer}
+
+    def decide_next_node(state):
+        if state.get("is_ambiguous"):
+            return "provide_options"
+        else:
+            return "handle_selection"
+
+    from langgraph.graph import StateGraph, END
+
+    workflow = StateGraph(GraphState)
+    workflow.add_node("check_ambiguity", check_ambiguity_node)
+    workflow.add_node("provide_options", provide_options_node)
+    workflow.add_node("handle_selection", handle_selection_node)
+
+    workflow.add_conditional_edges(
+        "check_ambiguity",
+        decide_next_node,
+        {"provide_options": "provide_options", "handle_selection": "handle_selection"},
+    )
+
+    workflow.set_entry_point("check_ambiguity")
+    workflow.add_edge("provide_options", "check_ambiguity")
+    workflow.add_edge("handle_selection", END)
+
+    # Compile with memory checkpoint for interrupts
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory)
+
+    tracer = OpikTracer(graph=app.get_graph(xray=True))
+
+    # Q1: Ambiguous question - graph will interrupt
+    config = {"configurable": {"thread_id": "test-thread"}, "callbacks": [tracer]}
+    inputs = {"question": "Tell me about it"}
+
+    # First invocation - will hit the interrupt
+    result = app.invoke(inputs, config=config)
+    assert "__interrupt__" in result
+
+    tracer.flush()
+
+    # Q2: Resume execution - will process the selection
+    final_result = app.invoke(Command(resume="1"), config=config)
+    assert final_result["response"] == "Here's the weather information you requested."
+
+    tracer.flush()
+
+    # Verify we have 2 traces (one for initial invoke, one for resume)
+    assert len(fake_backend.trace_trees) == 2
+    assert len(tracer.created_traces()) == 2
+
+    # First trace should have the initial question as input
+    first_trace = fake_backend.trace_trees[0]
+    assert first_trace.input == {"question": "Tell me about it"}
+
+    # First trace output should contain ONLY the interrupt with options presented to user
+    assert first_trace.output is not None
+    assert "__interrupt__" in first_trace.output
+    # Should only have the __interrupt__ key, not the full state
+    assert list(first_trace.output.keys()) == ["__interrupt__"]
+    assert len(first_trace.output["__interrupt__"]) > 0
+    interrupt_data = first_trace.output["__interrupt__"][0]
+    assert "value" in interrupt_data
+    assert "Please select one of these options" in interrupt_data["value"]
+
+    # Second trace should have the Command resume value as input, NOT empty dict
+    second_trace = fake_backend.trace_trees[1]
+    # The input should contain the resume command data
+    assert second_trace.input is not None
+    assert second_trace.input != {}
+    # Opik extracts the resume value from the Command object
+    assert second_trace.input == {"__resume__": "1"}
