@@ -53,7 +53,7 @@ if git diff --cached --name-only | grep -E '^sdks/python/'; then
   cd scripts || exit 1
 
   # Run lint with auto-fix
-  if ! ./dev-runner.sh --lint-sdk; then
+  if ! ./dev-runner.sh --lint-python-sdk; then
     echo "Lint failed. Please fix the remaining linting issues before committing."
     exit 1
   fi
