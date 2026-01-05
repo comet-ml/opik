@@ -61,8 +61,10 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.infrastructure.DatabaseUtils.bindTraceThreadSearchCriteria;
 import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.DatabaseUtils.newTraceThreadFindTemplate;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -2438,9 +2440,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = buildInsertTemplate(trace, workspaceId);
 
             Statement statement = buildInsertStatement(trace, connection, template);
-
-            statement.bind("workspace_id", workspaceId);
-            statement.bind("user_name", userName);
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
 
             Segment segment = startSegment("traces", "Clickhouse", "insert");
 
@@ -2490,9 +2490,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildInsertTemplate(Trace trace, String workspaceId) {
-        var logComment = getLogComment("insert_trace", workspaceId, "");
-        var template = TemplateUtils.newST(INSERT)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(INSERT, "insert_trace", workspaceId, "");
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
@@ -2514,9 +2512,7 @@ class TraceDAOImpl implements TraceDAO {
             String sql = template.render();
 
             Statement statement = createUpdateStatement(id, traceUpdate, connection, sql);
-
-            statement.bind("workspace_id", workspaceId);
-            statement.bind("user_name", userName);
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
 
             Segment segment = startSegment("traces", "Clickhouse", "update");
 
@@ -2565,9 +2561,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update, String queryName, String workspaceId) {
-        var logComment = getLogComment(queryName, workspaceId, "");
-        var template = TemplateUtils.newST(update)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(update, queryName, workspaceId, "");
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2599,9 +2593,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
-        var logComment = getLogComment("get_trace_details_by_id", "", "");
-        var template = TemplateUtils.newST(SELECT_DETAILS_BY_ID)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(SELECT_DETAILS_BY_ID, "get_trace_details_by_id", "", "");
 
         var statement = connection.createStatement(template.render())
                 .bind("id", id);
@@ -2620,9 +2612,7 @@ class TraceDAOImpl implements TraceDAO {
                 projectId != null ? " for project id '" + projectId + "'" : "");
 
         return makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("delete_traces", workspaceId, ids.size());
-            var template = TemplateUtils.newST(DELETE_BY_ID)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(DELETE_BY_ID, "delete_traces", workspaceId, ids.size());
             Optional.ofNullable(projectId)
                     .ifPresent(id -> template.add("project_id", id));
 
@@ -2656,9 +2646,7 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Finding traces by IDs in batch, count '{}'", ids.size());
 
         return makeFluxContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("find_traces_by_ids", workspaceId, ids.size());
-            var template = TemplateUtils.newST(SELECT_BY_IDS)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(SELECT_BY_IDS, "find_traces_by_ids", workspaceId, ids.size());
 
             var statement = connection.createStatement(template.render())
                     .bind("ids", ids.toArray(UUID[]::new))
@@ -2860,9 +2848,8 @@ class TraceDAOImpl implements TraceDAO {
 
             statement.bind("id", traceId);
             statement.bind("project_id", projectId);
-            statement.bind("workspace_id", workspaceId);
-            statement.bind("user_name", userName);
 
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
             bindUpdateParams(traceUpdate, statement);
 
             Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
@@ -3014,9 +3001,7 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.just(List.of());
         }
 
-        var logComment = getLogComment("get_trace_workspace", "", traceIds.size());
-        var template = TemplateUtils.newST(SELECT_TRACE_ID_AND_WORKSPACE)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(SELECT_TRACE_ID_AND_WORKSPACE, "get_trace_workspace", "", traceIds.size());
 
         var statement = connection.createStatement(template.render())
                 .bind("traceIds", traceIds.toArray(UUID[]::new));
@@ -3091,9 +3076,7 @@ class TraceDAOImpl implements TraceDAO {
                 i++;
             }
 
-            statement
-                    .bind("workspace_id", workspaceId)
-                    .bind("user_name", userName);
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
 
             Segment segment = startSegment("traces", "Clickhouse", "batch_insert");
 
@@ -3112,9 +3095,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var logComment = getLogComment("count_traces_per_workspace", "", "");
-        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(TRACE_COUNT_BY_WORKSPACE_ID, "count_traces_per_workspace", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3152,9 +3133,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var logComment = getLogComment("get_trace_bi_information", "", "");
-        var template = TemplateUtils.newST(TRACE_DAILY_BI_INFORMATION)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(TRACE_DAILY_BI_INFORMATION, "get_trace_bi_information", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3212,9 +3191,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var logComment = getLogComment("get_daily_traces_count", "", "");
-        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(TRACE_COUNT_BY_WORKSPACE_ID, "get_daily_traces_count", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3254,11 +3231,10 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
-                    var logComment = getLogComment("get_trace_stats_by_project_ids", workspaceId, projectIds.size());
-                    var template = TemplateUtils.newST(SELECT_TRACES_STATS);
+                    var template = getSTWithLogComment(SELECT_TRACES_STATS, "get_trace_stats_by_project_ids",
+                            workspaceId, projectIds.size());
 
                     template.add("project_stats", true);
-                    template.add("log_comment", logComment);
 
                     Statement statement = connection.createStatement(template.render())
                             .bind("project_ids", projectIds)
@@ -3281,9 +3257,8 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("get_minimal_thread_info_by_ids", workspaceId, threadId.size());
-            var template = TemplateUtils.newST(SELECT_MINIMAL_THREAD_INFO_BY_IDS)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(SELECT_MINIMAL_THREAD_INFO_BY_IDS, "get_minimal_thread_info_by_ids",
+                    workspaceId, threadId.size());
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
@@ -3319,9 +3294,8 @@ class TraceDAOImpl implements TraceDAO {
 
         log.info("Getting last updated trace at for projectIds, size '{}'", projectIds.size());
 
-        var logComment = getLogComment("get_last_updated_trace_at", workspaceId, projectIds.size());
-        var template = TemplateUtils.newST(SELECT_TRACE_LAST_UPDATED_AT)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(SELECT_TRACE_LAST_UPDATED_AT, "get_last_updated_trace_at", workspaceId,
+                projectIds.size());
 
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", projectIds.toArray(UUID[]::new))
@@ -3342,9 +3316,8 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<UUID> getProjectIdFromTrace(@NonNull UUID traceId) {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("get_project_id_from_trace", workspaceId, "");
-            var template = TemplateUtils.newST(SELECT_PROJECT_ID_FROM_TRACE)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_TRACE, "get_project_id_from_trace", workspaceId,
+                    "");
 
             var statement = connection.createStatement(template.render())
                     .bind("id", traceId)
@@ -3364,9 +3337,8 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Getting trace IDs by thread IDs, count '{}'", threadIds.size());
 
         return makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("get_trace_ids_by_thread_ids", workspaceId, threadIds.size());
-            var template = TemplateUtils.newST(SELECT_TRACE_IDS_BY_THREAD_IDS)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_THREAD_IDS, "get_trace_ids_by_thread_ids",
+                    workspaceId, threadIds.size());
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
@@ -3386,9 +3358,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Trace> getPartialById(@NonNull UUID id) {
         log.info("Getting partial trace by id '{}'", id);
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("get_partial_trace_by_id", workspaceId, "");
-            var template = TemplateUtils.newST(SELECT_PARTIAL_BY_ID)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_trace_by_id", workspaceId, "");
 
             var statement = connection.createStatement(template.render())
                     .bind("id", id)
@@ -3425,9 +3395,8 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var logComment = getLogComment("count_traces_by_project_ids", workspaceId, projectIds.size());
-            var template = TemplateUtils.newST(SELECT_COUNT_TRACES_BY_PROJECT_IDS)
-                    .add("log_comment", logComment);
+            var template = getSTWithLogComment(SELECT_COUNT_TRACES_BY_PROJECT_IDS, "count_traces_by_project_ids",
+                    workspaceId, projectIds.size());
 
             var statement = connection.createStatement(template.render())
                     .bind("project_ids", projectIds)
@@ -3499,9 +3468,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST newBulkUpdateTemplate(TraceUpdate traceUpdate, String sql, boolean mergeTags, String workspaceId) {
-        var logComment = getLogComment("bulk_update_traces", workspaceId, "");
-        var template = TemplateUtils.newST(sql)
-                .add("log_comment", logComment);
+        var template = getSTWithLogComment(sql, "bulk_update_traces", workspaceId, "");
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());

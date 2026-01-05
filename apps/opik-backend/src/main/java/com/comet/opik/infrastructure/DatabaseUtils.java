@@ -164,6 +164,12 @@ public class DatabaseUtils {
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
     }
 
+    public static ST getSTWithLogComment(String query, String queryName, String workspaceId, Object details) {
+        var logComment = getLogComment(queryName, workspaceId, details);
+        return TemplateUtils.newST(query)
+                .add("log_comment", logComment);
+    }
+
     public static String getLogComment(String queryName, String workspaceId, Object details) {
         return TemplateUtils.newST(LOG_COMMENT)
                 .add("query_name", queryName != null ? queryName.replace("'", "''") : null)
