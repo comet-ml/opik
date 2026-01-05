@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 import httpx
@@ -28,6 +29,10 @@ def upload_attachment(
             httpx_client=upload_httpx_client,
             monitor=monitor,
         )
+
+        # delete the file after upload if requested
+        if upload_options.delete_after_upload:
+            _delete_attachment_file(upload_options.file_path)
     except Exception as e:
         LOGGER.error(
             "Failed to upload attachment: '%s' from file: [%s] with size: [%s]. Error: %s",
@@ -38,6 +43,14 @@ def upload_attachment(
             exc_info=True,
         )
         raise
+
+
+def _delete_attachment_file(file_path: str) -> None:
+    try:
+        os.unlink(file_path)
+    except OSError as e:
+        LOGGER.info(f"Failed to delete attachment file: '{file_path}'. Reason: {e}.")
+        pass
 
 
 def _do_upload_attachment(

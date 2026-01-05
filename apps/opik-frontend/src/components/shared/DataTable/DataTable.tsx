@@ -381,7 +381,7 @@ const DataTable = <TData, TValue>({
   const renderNoData = () => {
     return (
       <TableRow data-testid="no-data-row">
-        <TableCell colSpan={columns.length}>
+        <TableCell colSpan={table.getAllLeafColumns().length || 1}>
           {noData ? (
             noData
           ) : (

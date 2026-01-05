@@ -15,6 +15,7 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..types.dataset_expansion_response import DatasetExpansionResponse
+from ..types.dataset_item_changes_public import DatasetItemChangesPublic
 from ..types.dataset_item_filter import DatasetItemFilter
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
@@ -43,12 +44,108 @@ class RawDatasetsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    def apply_dataset_item_changes(
+        self,
+        id: str,
+        *,
+        request: DatasetItemChangesPublic,
+        override: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[DatasetVersionPublic]:
+        """
+        Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+        This endpoint:
+        - Creates a new version with the applied changes
+        - Validates that baseVersion matches the latest version (unless override=true)
+        - Returns 409 Conflict if baseVersion is stale and override is not set
+
+        Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Parameters
+        ----------
+        id : str
+
+        request : DatasetItemChangesPublic
+
+        override : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetVersionPublic]
+            Version created successfully
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/changes",
+            method="POST",
+            params={
+                "override": override,
+            },
+            json=request,
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def batch_update_dataset_items(
         self,
         *,
         update: DatasetItemUpdate,
         ids: typing.Optional[typing.Sequence[str]] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -63,6 +160,9 @@ class RawDatasetsClient:
             List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
 
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
+        dataset_id : typing.Optional[str]
+            Dataset ID. Required when using 'filters', optional when using 'ids'.
 
         merge_tags : typing.Optional[bool]
             If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
@@ -82,6 +182,7 @@ class RawDatasetsClient:
                 "filters": convert_and_respect_annotation_metadata(
                     object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
                 ),
+                "dataset_id": dataset_id,
                 "update": convert_and_respect_annotation_metadata(
                     object_=update, annotation=DatasetItemUpdate, direction="write"
                 ),
@@ -615,14 +716,30 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
-        Delete dataset items
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
 
         Parameters
         ----------
-        item_ids : typing.Sequence[str]
+        item_ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to delete (max 1000). Use this to delete specific items by their IDs. Mutually exclusive with 'dataset_id' and 'filters'.
+
+        dataset_id : typing.Optional[str]
+            Dataset ID to scope the deletion. Required when using 'filters'. Mutually exclusive with 'item_ids'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+            Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -636,6 +753,10 @@ class RawDatasetsClient:
             method="POST",
             json={
                 "item_ids": item_ids,
+                "dataset_id": dataset_id,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -646,6 +767,17 @@ class RawDatasetsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1332,6 +1464,40 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def delete_version_tag(
+        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
+
+        Parameters
+        ----------
+        version_hash : str
+
+        tag : str
+
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/{jsonable_encoder(version_hash)}/tags/{jsonable_encoder(tag)}",
+            method="DELETE",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def list_dataset_versions(
         self,
         id: str,
@@ -1394,121 +1560,11 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def create_dataset_version(
-        self,
-        id: str,
-        *,
-        tags: typing.Optional[typing.Sequence[str]] = OMIT,
-        change_description: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
-        """
-        Create a new immutable version of the dataset by snapshotting the current state
-
-        Parameters
-        ----------
-        id : str
-
-        tags : typing.Optional[typing.Sequence[str]]
-            Optional list of tags for this version
-
-        change_description : typing.Optional[str]
-            Optional description of changes in this version
-
-        metadata : typing.Optional[typing.Dict[str, str]]
-            Optional user-defined metadata
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[None]
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}/versions",
-            method="POST",
-            json={
-                "tags": tags,
-                "change_description": change_description,
-                "metadata": metadata,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 409:
-                raise ConflictError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[None]:
-        """
-        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
-
-        Parameters
-        ----------
-        version_hash : str
-
-        tag : str
-
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[None]
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}/versions/{jsonable_encoder(version_hash)}/tags/{jsonable_encoder(tag)}",
-            method="DELETE",
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     def restore_dataset_version(
         self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[DatasetVersionPublic]:
         """
-        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+        Restores the dataset to a previous version state by creating a new version with items copied from the specified version. If the version is already the latest, returns it as-is (no-op).
 
         Parameters
         ----------
@@ -1661,12 +1717,108 @@ class AsyncRawDatasetsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    async def apply_dataset_item_changes(
+        self,
+        id: str,
+        *,
+        request: DatasetItemChangesPublic,
+        override: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[DatasetVersionPublic]:
+        """
+        Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+        This endpoint:
+        - Creates a new version with the applied changes
+        - Validates that baseVersion matches the latest version (unless override=true)
+        - Returns 409 Conflict if baseVersion is stale and override is not set
+
+        Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Parameters
+        ----------
+        id : str
+
+        request : DatasetItemChangesPublic
+
+        override : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetVersionPublic]
+            Version created successfully
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/changes",
+            method="POST",
+            params={
+                "override": override,
+            },
+            json=request,
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def batch_update_dataset_items(
         self,
         *,
         update: DatasetItemUpdate,
         ids: typing.Optional[typing.Sequence[str]] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -1681,6 +1833,9 @@ class AsyncRawDatasetsClient:
             List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
 
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
+        dataset_id : typing.Optional[str]
+            Dataset ID. Required when using 'filters', optional when using 'ids'.
 
         merge_tags : typing.Optional[bool]
             If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
@@ -1700,6 +1855,7 @@ class AsyncRawDatasetsClient:
                 "filters": convert_and_respect_annotation_metadata(
                     object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
                 ),
+                "dataset_id": dataset_id,
                 "update": convert_and_respect_annotation_metadata(
                     object_=update, annotation=DatasetItemUpdate, direction="write"
                 ),
@@ -2235,14 +2391,30 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
-        Delete dataset items
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
 
         Parameters
         ----------
-        item_ids : typing.Sequence[str]
+        item_ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to delete (max 1000). Use this to delete specific items by their IDs. Mutually exclusive with 'dataset_id' and 'filters'.
+
+        dataset_id : typing.Optional[str]
+            Dataset ID to scope the deletion. Required when using 'filters'. Mutually exclusive with 'item_ids'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+            Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2256,6 +2428,10 @@ class AsyncRawDatasetsClient:
             method="POST",
             json={
                 "item_ids": item_ids,
+                "dataset_id": dataset_id,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -2266,6 +2442,17 @@ class AsyncRawDatasetsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -2953,6 +3140,40 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def delete_version_tag(
+        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
+
+        Parameters
+        ----------
+        version_hash : str
+
+        tag : str
+
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/{jsonable_encoder(version_hash)}/tags/{jsonable_encoder(tag)}",
+            method="DELETE",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def list_dataset_versions(
         self,
         id: str,
@@ -3015,121 +3236,11 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def create_dataset_version(
-        self,
-        id: str,
-        *,
-        tags: typing.Optional[typing.Sequence[str]] = OMIT,
-        change_description: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[None]:
-        """
-        Create a new immutable version of the dataset by snapshotting the current state
-
-        Parameters
-        ----------
-        id : str
-
-        tags : typing.Optional[typing.Sequence[str]]
-            Optional list of tags for this version
-
-        change_description : typing.Optional[str]
-            Optional description of changes in this version
-
-        metadata : typing.Optional[typing.Dict[str, str]]
-            Optional user-defined metadata
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[None]
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}/versions",
-            method="POST",
-            json={
-                "tags": tags,
-                "change_description": change_description,
-                "metadata": metadata,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 409:
-                raise ConflictError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[None]:
-        """
-        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
-
-        Parameters
-        ----------
-        version_hash : str
-
-        tag : str
-
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[None]
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}/versions/{jsonable_encoder(version_hash)}/tags/{jsonable_encoder(tag)}",
-            method="DELETE",
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     async def restore_dataset_version(
         self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DatasetVersionPublic]:
         """
-        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+        Restores the dataset to a previous version state by creating a new version with items copied from the specified version. If the version is already the latest, returns it as-is (no-op).
 
         Parameters
         ----------

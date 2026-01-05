@@ -1,17 +1,17 @@
+from unittest import mock
 from unittest.mock import sentinel
 
 import pytest
-from unittest import mock
-from opik.message_processing import streamer_constructors
-from opik.message_processing import messages
 
+from opik.message_processing import messages
+from opik.message_processing import streamer_constructors
 from ...testlib import fake_message_factory
 
 NOT_USED = sentinel.NOT_USED
 
 
 @pytest.fixture
-def batched_streamer_and_mock_message_processor():
+def batched_streamer_and_mock_message_processor(noop_file_upload_preprocessor):
     tested = None
     try:
         mock_message_processor = mock.Mock()
@@ -19,7 +19,8 @@ def batched_streamer_and_mock_message_processor():
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
-            file_upload_manager=mock.Mock(),
+            use_attachment_extraction=False,
+            upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
         )
 
@@ -54,7 +55,7 @@ def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
     ],
 )
 def test_streamer__batching_disabled__messages_that_support_batching_are_processed_independently(
-    objects,
+    objects, noop_file_upload_preprocessor
 ):
     mock_message_processor = mock.Mock()
     tested = None
@@ -63,7 +64,8 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=False,
-            file_upload_manager=mock.Mock(),
+            use_attachment_extraction=False,
+            upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
         )
 

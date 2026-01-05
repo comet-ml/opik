@@ -208,6 +208,18 @@ spec:
               subPath: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.subPath "cacerts" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
               mountPath: /etc/pki/ca-trust/extracted/java/cacerts
           {{- end }}
+          {{- if eq $key "frontend" }}
+          - name: {{ include "opik.name" $ }}-frontend-nginx
+            mountPath: /etc/nginx/templates/default.conf.template
+            subPath: default.conf.template
+            readOnly: true
+          {{-   if $.Values.component.frontend.logFormats }}
+          - name: {{ include "opik.name" $ }}-frontend-nginx
+            mountPath: /etc/nginx/templates/10-log-formats.conf.template
+            subPath: 10-log-formats.conf.template
+            readOnly: true
+          {{-   end }}
+          {{- end }}
           {{- with $value.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -239,6 +251,11 @@ spec:
         - name: ca-trust-store
           emptyDir: {}
         {{- end }}
+      {{- end }}
+      {{- if eq $key "frontend" }}
+      - name: {{ include "opik.name" $ }}-frontend-nginx
+        configMap:
+          name: {{ include "opik.name" $ }}-frontend-nginx
       {{- end }}
       {{- with $value.volumes }}
         {{- toYaml . | nindent 8 }}

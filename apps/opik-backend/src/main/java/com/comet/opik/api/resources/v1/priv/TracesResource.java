@@ -37,6 +37,7 @@ import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.ThreadService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -105,6 +106,7 @@ import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 public class TracesResource {
 
     private final @NonNull TraceService service;
+    private final @NonNull ThreadService threadService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
@@ -639,7 +641,7 @@ public class TracesResource {
 
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
-        TraceThreadPage traceThreadPage = service.getTraceThreads(page, size, searchCriteria)
+        TraceThreadPage traceThreadPage = threadService.find(page, size, searchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
                     if (metadata.cannotUseDynamicSorting()) {
@@ -690,7 +692,7 @@ public class TracesResource {
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
-        Flux<TraceThread> items = service.threadsSearch(request.limit(), searchCriteria)
+        Flux<TraceThread> items = threadService.search(request.limit(), searchCriteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
@@ -716,7 +718,7 @@ public class TracesResource {
         log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}' with truncate '{}'",
                 identifier.threadId(), projectId, workspaceId, identifier.truncate());
 
-        TraceThread thread = service.getThreadById(projectId, identifier.threadId(), identifier.truncate())
+        TraceThread thread = threadService.getById(projectId, identifier.threadId(), identifier.truncate())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -847,6 +849,44 @@ public class TracesResource {
         log.info("Updated thread with thread_model_id: '{}' on workspace_id: '{}'", threadModelId, workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/threads/stats")
+    @Operation(operationId = "getTraceThreadStats", summary = "Get trace thread stats", description = "Get trace thread stats", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace thread stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
+    })
+    @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    public Response getThreadStats(@QueryParam("project_id") UUID projectId,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("filters") String filters,
+            @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
+        var threadFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .filters(threadFilters)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get trace thread stats by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        ProjectStats projectStats = threadService.getStats(searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found trace thread stats by '{}', count '{}' on workspaceId '{}'", searchCriteria,
+                projectStats.stats().size(), workspaceId);
+
+        return Response.ok(projectStats).build();
     }
 
     @PUT

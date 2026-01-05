@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 
 export type TooltipWrapperProps = {
-  content: string | React.ReactElement;
+  content?: string | React.ReactElement | null;
   children?: React.ReactNode;
   side?: "top" | "right" | "bottom" | "left";
   hotkeys?: React.ReactNode[];
@@ -28,6 +28,10 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
   defaultOpen,
   stopClickPropagation,
 }) => {
+  if (!content) {
+    return <>{children}</>;
+  }
+
   return (
     <Tooltip defaultOpen={defaultOpen} delayDuration={delayDuration}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>

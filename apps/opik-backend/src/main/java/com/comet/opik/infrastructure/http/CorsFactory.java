@@ -31,7 +31,9 @@ public class CorsFactory {
             COMET_SDK_API_HEADER,
             COMET_USERNAME_HEADER,
             COMET_REACT_VER_HEADER,
-            RequestContext.WORKSPACE_HEADER);
+            RequestContext.WORKSPACE_HEADER,
+            // used by FE team to test Optimization Studio locally vs remote BE
+            RequestContext.OPIK_API_KEY);
 
     private static final Set<String> ALLOWED_METHODS = Set.of(
             HttpMethod.OPTIONS.toString(),

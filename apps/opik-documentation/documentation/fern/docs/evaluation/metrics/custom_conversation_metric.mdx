@@ -74,22 +74,209 @@ class ConversationLengthMetric(ConversationThreadMetric):
         )
 ```
 
-## Using Custom Conversation Metrics
+## Advanced Example: LLM-as-a-Judge Conversation Metric
 
-You can use this metric with `evaluate_threads`:
+For more sophisticated evaluation, you can use an LLM to judge conversation quality. This pattern is particularly useful when you need nuanced assessment of conversation attributes like helpfulness, coherence, or tone.
+
+Here's an example that evaluates the quality of assistant responses:
+
+### Step 1: Define the Output Schema
+
+```python
+import pydantic
+
+class ConversationQualityScore(pydantic.BaseModel):
+    """Schema for LLM judge output."""
+    score_value: float  # Score between 0.0 and 1.0
+    reason: str  # Explanation for the score
+
+    __hash__ = object.__hash__
+```
+
+### Step 2: Create the Evaluation Prompt
+
+```python
+def create_evaluation_prompt(conversation: list) -> str:
+    """
+    Create a prompt that asks the LLM to evaluate conversation quality.
+    """
+    return f"""Evaluate the quality of the assistant's responses in this conversation.
+Consider the following criteria:
+1. Helpfulness: Does the assistant provide useful, relevant information?
+2. Clarity: Are the responses clear and easy to understand?
+3. Consistency: Does the assistant maintain context across turns?
+4. Professionalism: Is the tone appropriate and respectful?
+
+Return a JSON object with:
+- score_value: A number between 0.0 (poor) and 1.0 (excellent)
+- reason: A brief explanation of your assessment
+
+Conversation:
+{conversation}
+
+Your evaluation (JSON only):
+"""
+```
+
+### Step 3: Implement the Metric
+
+```python
+import logging
+from typing import Optional, Union, Any
+import pydantic
+
+from opik import exceptions
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import (
+    ConversationThreadMetric,
+    types as conversation_types,
+)
+from opik.evaluation.metrics.llm_judges import parsing_helpers
+from opik.evaluation.models import base_model, models_factory
+
+LOGGER = logging.getLogger(__name__)
+
+
+class ConversationQualityMetric(ConversationThreadMetric):
+    """
+    An LLM-as-judge metric that evaluates conversation quality.
+
+    Args:
+        model: The LLM to use as a judge (e.g., "gpt-4", "claude-3-5-sonnet-20241022").
+               If None, uses the default model.
+        name: The name of this metric.
+        track: Whether to track the metric in Opik.
+        project_name: Optional project name for tracking.
+    """
+
+    def __init__(
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        name: str = "conversation_quality_score",
+        track: bool = True,
+        project_name: Optional[str] = None,
+    ):
+        super().__init__(name=name, track=track, project_name=project_name)
+        self._init_model(model)
+
+    def _init_model(
+        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+    ) -> None:
+        """Initialize the LLM model for judging."""
+        if isinstance(model, base_model.OpikBaseModel):
+            self._model = model
+        else:
+            # Get model from factory (supports various providers via LiteLLM)
+            self._model = models_factory.get(model_name=model)
+
+    def score(
+        self,
+        conversation: conversation_types.Conversation,
+        **kwargs: Any,
+    ) -> score_result.ScoreResult:
+        """
+        Evaluate the conversation quality using an LLM judge.
+
+        Args:
+            conversation: List of conversation messages.
+            **kwargs: Additional arguments (ignored).
+
+        Returns:
+            ScoreResult with value between 0.0 and 1.0.
+        """
+        try:
+            # Create the evaluation prompt
+            llm_query = create_evaluation_prompt(conversation)
+
+            # Call the LLM with structured output
+            model_output = self._model.generate_string(
+                input=llm_query,
+                response_format=ConversationQualityScore,
+            )
+
+            # Parse the LLM response
+            score_data = self._parse_llm_output(model_output)
+
+            # Ensure score is within valid range [0.0, 1.0]
+            validated_score = max(0.0, min(1.0, score_data.score_value))
+
+            return score_result.ScoreResult(
+                name=self.name,
+                value=validated_score,
+                reason=score_data.reason,
+            )
+
+        except Exception as e:
+            LOGGER.error(f"Failed to calculate conversation quality: {e}")
+            raise exceptions.MetricComputationError(
+                f"Failed to calculate conversation quality: {e}"
+            ) from e
+
+    def _parse_llm_output(self, model_output: str) -> ConversationQualityScore:
+        """Parse and validate the LLM's output."""
+        try:
+            # Extract JSON from the model output
+            dict_content = parsing_helpers.extract_json_content_or_raise(
+                model_output
+            )
+
+            # Validate against schema
+            return ConversationQualityScore.model_validate(dict_content)
+
+        except pydantic.ValidationError as e:
+            LOGGER.warning(
+                f"Failed to parse LLM output: {model_output}, error: {e}",
+                exc_info=True,
+            )
+            raise
+```
+
+### Step 4: Use the Metric
 
 ```python
 from opik.evaluation import evaluate_threads
 
-# Initialize the metric
+# Initialize the metric with your preferred judge model
+quality_metric = ConversationQualityMetric(
+    model="gpt-4o",  # or "claude-3-5-sonnet-20241022", etc.
+    name="conversation_quality"
+)
+
+# Evaluate threads in your project
+results = evaluate_threads(
+    project_name="my_chatbot_project",
+    eval_project_name="quality_evaluation",
+    metrics=[quality_metric],
+)
+```
+
+### Key Patterns in LLM-as-Judge Metrics
+
+When building LLM-as-judge metrics, follow these best practices:
+
+1. **Structured Output**: Use Pydantic models to ensure consistent LLM responses
+2. **Clear Prompts**: Provide specific evaluation criteria to the judge
+3. **Error Handling**: Wrap LLM calls in try-except blocks with proper logging
+4. **Model Flexibility**: Allow users to specify their preferred judge model
+5. **Reason Field**: Always include an explanation for transparency
+
+## Using Custom Conversation Metrics
+
+You can use custom metrics with `evaluate_threads`:
+
+```python
+from opik.evaluation import evaluate_threads
+
+# Initialize your metrics
 conversation_length_metric = ConversationLengthMetric()
+quality_metric = ConversationQualityMetric(model="gpt-4o")
 
 # Evaluate threads in your project
 results = evaluate_threads(
     project_name="my_chatbot_project",
     filter_string='status = "inactive"',
     eval_project_name="chatbot_evaluation",
-    metrics=[conversation_length_metric],
+    metrics=[conversation_length_metric, quality_metric],
     trace_input_transform=lambda x: x["input"],
     trace_output_transform=lambda x: x["output"],
 )

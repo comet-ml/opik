@@ -93,6 +93,7 @@ interface BaseProjectsSelectBoxProps {
   disabled?: boolean;
   minWidth?: number;
   customOptions?: DropdownOption<string>[];
+  align?: "start" | "end" | "center";
 }
 
 interface SingleSelectProjectsProps extends BaseProjectsSelectBoxProps {
@@ -114,7 +115,7 @@ type ProjectsSelectBoxProps =
   | MultiSelectProjectsProps;
 
 const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
-  const { className, disabled, minWidth, customOptions } = props;
+  const { className, disabled, minWidth, customOptions, align } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
   const { projects, total, isLoading } = useProjectsSelectData({
@@ -161,6 +162,7 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
       }
       buttonClassName={className}
       minWidth={minWidth}
+      align={align}
       disabled={disabled}
       isLoading={isLoading}
       optionsCount={DEFAULT_LOADED_PROJECT_ITEMS}

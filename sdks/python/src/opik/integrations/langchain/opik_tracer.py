@@ -21,6 +21,7 @@ from langchain_core.tracers.schemas import Run
 
 from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
+from opik.decorator import arguments_helpers, span_creation_handler
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
@@ -89,6 +90,7 @@ class OpikTracer(BaseTracer):
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
         thread_id: Optional[str] = None,
         skip_error_callback: Optional[SkipErrorCallback] = None,
+        opik_context_read_only_mode: bool = False,
         **kwargs: Any,
     ) -> None:
         """
@@ -108,6 +110,12 @@ class OpikTracer(BaseTracer):
                 Please note that in traces/spans where errors are intentionally skipped,
                 the output will be replaced with `ERROR_SKIPPED_OUTPUTS`. You can provide
                 the output manually using `opik_context.get_current_span_data().update(output=...)`.
+            opik_context_read_only_mode: Whether to adding/popping spans/traces to/from the context storage.
+                * If False (default), OpikTracer will add created spans/traces to the opik context, so if there is a @track-decorated
+                  function called inside the LangChain runnable, it will be attached to it's parent span from LangChain automatically.
+                * If True, OpikTracer will not modify the context storage and only create spans/traces from LangChain's Run objects.
+                  This might be useful when the environment doesn't support proper context isolation for concurrent operations and you
+                  want to avoid modifying the Opik context stack due to unsafety.
             **kwargs: Additional arguments passed to the parent class constructor.
         """
         validator = parameters_validator.create_validator(
@@ -125,10 +133,7 @@ class OpikTracer(BaseTracer):
         self._trace_default_metadata["created_from"] = "langchain"
 
         if graph:
-            self._trace_default_metadata["_opik_graph_definition"] = {
-                "format": "mermaid",
-                "data": graph.draw_mermaid(),
-            }
+            self.set_graph(graph)
 
         self._trace_default_tags = tags
 
@@ -164,6 +169,23 @@ class OpikTracer(BaseTracer):
 
         self._skip_error_callback = skip_error_callback
 
+        self._opik_context_read_only_mode = opik_context_read_only_mode
+
+    def set_graph(self, graph: "Graph") -> None:
+        """
+        Set the LangGraph graph structure for visualization in Opik traces.
+
+        This method extracts the graph structure and stores it in trace metadata,
+        allowing the graph to be visualized in the Opik UI.
+
+        Args:
+            graph: A LangGraph Graph object (typically obtained via graph.get_graph(xray=True)).
+        """
+        self._trace_default_metadata["_opik_graph_definition"] = {
+            "format": "mermaid",
+            "data": graph.draw_mermaid(),
+        }
+
     def _is_opik_span_created_by_this_tracer(self, span_id: str) -> bool:
         return any(span_.id == span_id for span_ in self._span_data_map.values())
 
@@ -195,7 +217,8 @@ class OpikTracer(BaseTracer):
                 langchain_helpers.split_big_langgraph_outputs(outputs)
             )
 
-        self._ensure_no_hanging_opik_tracer_spans()
+        if not self._opik_context_read_only_mode:
+            self._ensure_no_hanging_opik_tracer_spans()
 
         span_data = self._span_data_map.get(run.id)
         if (
@@ -237,7 +260,8 @@ class OpikTracer(BaseTracer):
 
         assert trace_ is not None
         self._created_traces.append(trace_)
-        self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
+        if not self._opik_context_read_only_mode:
+            self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
         root_run_external_parent_span_id = self._root_run_external_parent_span_id.get()
@@ -260,19 +284,7 @@ class OpikTracer(BaseTracer):
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
         self._update_thread_id_from_metadata(run_dict)
 
-        # Skip creating a span for root runs only when creating a new trace
-        # Keep the span when invoked from a tracked function, existing trace or distributed headers
-
-        if self._distributed_headers:
-            new_span_data = self._attach_span_to_distributed_headers(
-                run_dict=run_dict,
-                metadata=root_metadata,
-            )
-            return TrackRootRunResult(
-                new_trace_data=None,
-                new_span_data=new_span_data,
-            )
-
+        # Track the parent span ID for LangGraph cleanup later
         current_span_data = self._opik_context_storage.top_span_data()
         parent_span_id_when_langgraph_started = (
             current_span_data.id if current_span_data is not None else None
@@ -280,146 +292,49 @@ class OpikTracer(BaseTracer):
         self._root_run_external_parent_span_id.set(
             parent_span_id_when_langgraph_started
         )
-        if current_span_data is not None:
-            # When invoked from a tracked function, keep the root span
-            # and attach it to the parent span (don't skip it)
-            new_span_data = self._attach_span_to_external_span(
-                run_dict=run_dict,
-                current_span_data=current_span_data,
-                root_metadata=root_metadata,
-            )
-            return TrackRootRunResult(
-                new_trace_data=None,
-                new_span_data=new_span_data,
-            )
 
-        current_trace_data = self._opik_context_storage.get_trace_data()
-        if current_trace_data is not None:
-            # When invoked under an existing trace, keep the root span
-            # and attach it to the parent trace (don't skip it)
-            new_span_data = self._attach_span_to_external_trace(
-                run_dict=run_dict,
-                current_trace_data=current_trace_data,
-                root_metadata=root_metadata,
-            )
-            return TrackRootRunResult(
-                new_trace_data=None,
-                new_span_data=new_span_data,
-            )
-
-        return self._initialize_span_and_trace_from_scratch(
-            run_dict=run_dict,
-            root_metadata=root_metadata,
-            allow_duplicating_root_span=allow_duplicating_root_span,
-        )
-
-    def _initialize_span_and_trace_from_scratch(
-        self,
-        run_dict: Dict[str, Any],
-        root_metadata: Dict[str, Any],
-        allow_duplicating_root_span: bool,
-    ) -> TrackRootRunResult:
-        trace_data = trace.TraceData(
+        start_span_arguments = arguments_helpers.StartSpanParameters(
             name=run_dict["name"],
             input=run_dict["inputs"],
-            metadata=root_metadata,
+            type=_get_span_type(run_dict),
             tags=self._trace_default_tags,
+            metadata=root_metadata,
             project_name=self._project_name,
             thread_id=self._thread_id,
         )
 
-        # Skip creating a span for LangGraph root runs - children will be attached directly to trace
-        if _is_root_run(run_dict) and not allow_duplicating_root_span:
+        span_creation_result = span_creation_handler.create_span_respecting_context(
+            start_span_arguments=start_span_arguments,
+            distributed_trace_headers=self._distributed_headers,
+            opik_context_storage=self._opik_context_storage,
+        )
+
+        trace_created_externally = (
+            span_creation_result.trace_data is None
+            and not self._is_opik_trace_created_by_this_tracer(
+                span_creation_result.span_data.trace_id
+            )
+        )
+        if trace_created_externally:
+            self._externally_created_traces_ids.add(
+                span_creation_result.span_data.trace_id
+            )
+
+        should_skip_root_span_creation = (
+            span_creation_result.trace_data is not None
+            and _is_root_run(run_dict)
+            and not allow_duplicating_root_span
+        )
+        if should_skip_root_span_creation:
             return TrackRootRunResult(
-                new_trace_data=trace_data,
+                new_trace_data=span_creation_result.trace_data,
                 new_span_data=None,
             )
 
-        span_data = span.SpanData(
-            trace_id=trace_data.id,
-            parent_span_id=None,
-            name=run_dict["name"],
-            input=run_dict["inputs"],
-            type=_get_span_type(run_dict),
-            metadata=root_metadata,
-            tags=self._trace_default_tags,
-            project_name=self._project_name,
+        return TrackRootRunResult(
+            new_trace_data=span_creation_result.trace_data,
+            new_span_data=span_creation_result.span_data,
         )
-        return TrackRootRunResult(new_trace_data=trace_data, new_span_data=span_data)
-
-    def _attach_span_to_external_span(
-        self,
-        run_dict: Dict[str, Any],
-        current_span_data: span.SpanData,
-        root_metadata: Dict[str, Any],
-    ) -> span.SpanData:
-        project_name = helpers.resolve_child_span_project_name(
-            current_span_data.project_name,
-            self._project_name,
-        )
-
-        span_data = span.SpanData(
-            trace_id=current_span_data.trace_id,
-            parent_span_id=current_span_data.id,
-            name=run_dict["name"],
-            input=run_dict["inputs"],
-            metadata=root_metadata,
-            tags=self._trace_default_tags,
-            project_name=project_name,
-            type=_get_span_type(run_dict),
-        )
-        if not self._is_opik_trace_created_by_this_tracer(span_data.trace_id):
-            self._externally_created_traces_ids.add(span_data.trace_id)
-
-        return span_data
-
-    def _attach_span_to_external_trace(
-        self,
-        run_dict: Dict[str, Any],
-        current_trace_data: trace.TraceData,
-        root_metadata: Dict[str, Any],
-    ) -> span.SpanData:
-        project_name = helpers.resolve_child_span_project_name(
-            current_trace_data.project_name,
-            self._project_name,
-        )
-
-        span_data = span.SpanData(
-            trace_id=current_trace_data.id,
-            parent_span_id=None,
-            name=run_dict["name"],
-            input=run_dict["inputs"],
-            metadata=root_metadata,
-            tags=self._trace_default_tags,
-            project_name=project_name,
-            type=_get_span_type(run_dict),
-        )
-        span_data.update(metadata={"created_from": "langchain"})
-
-        if not self._is_opik_trace_created_by_this_tracer(current_trace_data.id):
-            self._externally_created_traces_ids.add(current_trace_data.id)
-        return span_data
-
-    def _attach_span_to_distributed_headers(
-        self,
-        run_dict: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> span.SpanData:
-        if self._distributed_headers is None:
-            raise ValueError("Distributed headers are not set")
-
-        span_data = span.SpanData(
-            trace_id=self._distributed_headers["opik_trace_id"],
-            parent_span_id=self._distributed_headers["opik_parent_span_id"],
-            name=run_dict["name"],
-            input=run_dict["inputs"],
-            metadata=metadata,
-            tags=self._trace_default_tags,
-            project_name=self._project_name,
-            type=_get_span_type(run_dict),
-        )
-        self._externally_created_traces_ids.add(span_data.trace_id)
-        return span_data
 
     def _process_start_span(self, run: Run, allow_duplicating_root_span: bool) -> None:
         try:
@@ -468,7 +383,11 @@ class OpikTracer(BaseTracer):
         # This is the first run for the chain.
         root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
         if root_run_result.new_trace_data is not None:
-            self._opik_context_storage.set_trace_data(root_run_result.new_trace_data)
+            if not self._opik_context_read_only_mode:
+                self._opik_context_storage.set_trace_data(
+                    root_run_result.new_trace_data
+                )
+
             if (
                 self._opik_client.config.log_start_trace_span
                 and tracing_runtime_config.is_tracing_active()
@@ -501,7 +420,9 @@ class OpikTracer(BaseTracer):
                 trace_data=root_run_result.new_trace_data,
             )
 
-            self._opik_context_storage.add_span_data(root_run_result.new_span_data)
+            if not self._opik_context_read_only_mode:
+                self._opik_context_storage.add_span_data(root_run_result.new_span_data)
+
             if (
                 self._opik_client.config.log_start_trace_span
                 and tracing_runtime_config.is_tracing_active()
@@ -549,7 +470,9 @@ class OpikTracer(BaseTracer):
                 parent_run_id
             ]
 
-        self._opik_context_storage.add_span_data(new_span_data)
+        if not self._opik_context_read_only_mode:
+            self._opik_context_storage.add_span_data(new_span_data)
+
         if (
             self._opik_client.config.log_start_trace_span
             and tracing_runtime_config.is_tracing_active()
@@ -586,19 +509,40 @@ class OpikTracer(BaseTracer):
 
         elif self._distributed_headers:
             # LangGraph with distributed headers - attach to distributed trace
-            new_span_data = self._attach_span_to_distributed_headers(
-                run_dict=run_dict,
+            new_span_data = span.SpanData(
+                trace_id=self._distributed_headers["opik_trace_id"],
+                parent_span_id=self._distributed_headers["opik_parent_span_id"],
+                name=run_dict["name"],
+                input=run_dict["inputs"],
                 metadata=_get_run_metadata(run_dict),
+                tags=self._trace_default_tags,
+                project_name=self._project_name,
+                type=_get_span_type(run_dict),
             )
+            self._externally_created_traces_ids.add(new_span_data.trace_id)
+
         elif (
             current_trace_data := self._opik_context_storage.get_trace_data()
         ) is not None:
             # LangGraph attached to existing trace - attach children directly to trace
-            new_span_data = self._attach_span_to_external_trace(
-                run_dict=run_dict,
-                current_trace_data=current_trace_data,
-                root_metadata=_get_run_metadata(run_dict),
+            project_name = helpers.resolve_child_span_project_name(
+                current_trace_data.project_name,
+                self._project_name,
             )
+
+            new_span_data = span.SpanData(
+                trace_id=current_trace_data.id,
+                parent_span_id=None,
+                name=run_dict["name"],
+                input=run_dict["inputs"],
+                metadata=_get_run_metadata(run_dict),
+                tags=self._trace_default_tags,
+                project_name=project_name,
+                type=_get_span_type(run_dict),
+            )
+
+            if not self._is_opik_trace_created_by_this_tracer(current_trace_data.id):
+                self._externally_created_traces_ids.add(current_trace_data.id)
         else:
             LOGGER.warning(
                 f"Cannot find trace data or distributed headers for LangGraph child run '{run_id}'"
@@ -612,7 +556,9 @@ class OpikTracer(BaseTracer):
             trace_data=None,
         )
 
-        self._opik_context_storage.add_span_data(new_span_data)
+        if not self._opik_context_read_only_mode:
+            self._opik_context_storage.add_span_data(new_span_data)
+
         if (
             self._opik_client.config.log_start_trace_span
             and tracing_runtime_config.is_tracing_active()
@@ -667,7 +613,7 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
-            if span_data is not None:
+            if span_data is not None and not self._opik_context_read_only_mode:
                 self._opik_context_storage.trim_span_data_stack_to_certain_span(
                     span_id=span_data.id
                 )
@@ -713,7 +659,7 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
-            if span_data is not None:
+            if span_data is not None and not self._opik_context_read_only_mode:
                 self._opik_context_storage.trim_span_data_stack_to_certain_span(
                     span_id=span_data.id
                 )

@@ -192,6 +192,7 @@ from .dataset_expansion import DatasetExpansion
 from .dataset_expansion_response import DatasetExpansionResponse
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
+from .dataset_item_changes_public import DatasetItemChangesPublic
 from .dataset_item_compare import DatasetItemCompare
 from .dataset_item_compare_source import DatasetItemCompareSource
 from .dataset_item_filter import DatasetItemFilter
@@ -389,6 +390,8 @@ from .project_metric_response_public_metric_type import ProjectMetricResponsePub
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
 from .project_public_visibility import ProjectPublicVisibility
+from .project_reference import ProjectReference
+from .project_reference_public import ProjectReferencePublic
 from .project_stat_item_object_public import (
     ProjectStatItemObjectPublic,
     ProjectStatItemObjectPublic_Avg,
@@ -421,6 +424,7 @@ from .prompt_version_public_template_structure import PromptVersionPublicTemplat
 from .prompt_version_public_type import PromptVersionPublicType
 from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
+from .prompt_version_update import PromptVersionUpdate
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
@@ -700,6 +704,7 @@ __all__ = [
     "DatasetExpansionResponse",
     "DatasetItem",
     "DatasetItemBatch",
+    "DatasetItemChangesPublic",
     "DatasetItemCompare",
     "DatasetItemCompareSource",
     "DatasetItemFilter",
@@ -890,6 +895,8 @@ __all__ = [
     "ProjectPagePublic",
     "ProjectPublic",
     "ProjectPublicVisibility",
+    "ProjectReference",
+    "ProjectReferencePublic",
     "ProjectStatItemObjectPublic",
     "ProjectStatItemObjectPublic_Avg",
     "ProjectStatItemObjectPublic_Count",
@@ -920,6 +927,7 @@ __all__ = [
     "PromptVersionPublicType",
     "PromptVersionTemplateStructure",
     "PromptVersionType",
+    "PromptVersionUpdate",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
     "ProviderApiKeyProvider",

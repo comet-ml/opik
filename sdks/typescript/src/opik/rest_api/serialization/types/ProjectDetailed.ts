@@ -35,6 +35,7 @@ export const ProjectDetailed: core.serialization.ObjectSchema<
     ),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
+    threadCount: core.serialization.property("thread_count", core.serialization.number().optional()),
     guardrailsFailedCount: core.serialization.property(
         "guardrails_failed_count",
         core.serialization.number().optional(),
@@ -59,6 +60,7 @@ export declare namespace ProjectDetailed {
         total_estimated_cost_sum?: number | null;
         usage?: Record<string, number> | null;
         trace_count?: number | null;
+        thread_count?: number | null;
         guardrails_failed_count?: number | null;
         error_count?: ErrorCountWithDeviationDetailed.Raw | null;
     }

@@ -11,23 +11,28 @@ export enum WIDGET_TYPE {
   EXPERIMENTS_FEEDBACK_SCORES = "experiments_feedback_scores",
 }
 
+export enum EXPERIMENT_DATA_SOURCE {
+  FILTER_AND_GROUP = "filter_and_group",
+  SELECT_EXPERIMENTS = "select_experiments",
+}
+
 export enum WIDGET_CATEGORY {
   OBSERVABILITY = "observability",
   EVALUATION = "evaluation",
   GENERAL = "general",
 }
 
-export enum DASHBOARD_CREATION_TYPE {
-  EMPTY = "empty",
-  TEMPLATE = "template",
-}
-
-export enum TEMPLATE_ID {
+export enum TEMPLATE_TYPE {
   PROJECT_METRICS = "project-metrics",
-  PERFORMANCE = "performance",
+  PROJECT_PERFORMANCE = "project-performance",
+  EXPERIMENT_COMPARISON = "experiment-comparison",
 }
 
-// Widget-specific type definitions with discriminator
+export enum TEMPLATE_SCOPE {
+  PROJECT = "project",
+  EXPERIMENTS = "experiments",
+}
+
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
@@ -36,12 +41,13 @@ export interface ProjectMetricsWidget {
     chartType?: CHART_TYPE.line | CHART_TYPE.bar;
     traceFilters?: Filters;
     threadFilters?: Filters;
+    feedbackScores?: string[];
   } & Record<string, unknown>;
 }
 
 export interface TextMarkdownWidget {
   type: WIDGET_TYPE.TEXT_MARKDOWN;
-  config?: {
+  config: {
     content?: string;
   } & Record<string, unknown>;
 }
@@ -60,56 +66,16 @@ export interface ProjectStatsCardWidget {
 export interface ExperimentsFeedbackScoresWidgetType {
   type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES;
   config: {
+    dataSource?: EXPERIMENT_DATA_SOURCE;
     filters?: Filters;
     groups?: Groups;
+    experimentIds?: string[];
     chartType?: CHART_TYPE;
+    feedbackScores?: string[];
   } & Record<string, unknown>;
 }
 
-// Unified widget config type
-export type AddWidgetConfig = {
-  title: string;
-  subtitle?: string;
-} & (
-  | ProjectMetricsWidget
-  | TextMarkdownWidget
-  | ProjectStatsCardWidget
-  | ExperimentsFeedbackScoresWidgetType
-);
-
-// Update config with optional fields
-export type UpdateWidgetConfig = {
-  title?: string;
-  subtitle?: string;
-} & (
-  | {
-      type: WIDGET_TYPE.PROJECT_METRICS;
-      config?: Partial<ProjectMetricsWidget["config"]>;
-    }
-  | {
-      type: WIDGET_TYPE.TEXT_MARKDOWN;
-      config?: Partial<NonNullable<TextMarkdownWidget["config"]>>;
-    }
-  | {
-      type: WIDGET_TYPE.PROJECT_STATS_CARD;
-      config?: Partial<ProjectStatsCardWidget["config"]>;
-    }
-  | {
-      type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES;
-      config?: Partial<ExperimentsFeedbackScoresWidgetType["config"]>;
-    }
-  | {
-      type?: undefined;
-      config?: Record<string, unknown>;
-    }
-);
-
-// DashboardWidget extends AddWidgetConfig with id
-export type DashboardWidget = {
-  id: string;
-  title: string;
-  subtitle?: string;
-} & (
+type WidgetConfigUnion =
   | ProjectMetricsWidget
   | TextMarkdownWidget
   | ProjectStatsCardWidget
@@ -117,8 +83,14 @@ export type DashboardWidget = {
   | {
       type: string;
       config: Record<string, unknown>;
-    }
-);
+    };
+
+export type DashboardWidget = {
+  id: string;
+  title: string;
+  generatedTitle?: string;
+  subtitle?: string;
+} & WidgetConfigUnion;
 
 export type WidgetSize = {
   w: number;
@@ -189,13 +161,8 @@ export interface WidgetEditorHandle {
   isValid: boolean;
 }
 
-export type WidgetEditorProps = AddWidgetConfig & {
-  onChange: (data: Partial<AddWidgetConfig>) => void;
-  onValidationChange?: (isValid: boolean) => void;
-};
-
 export type WidgetEditorComponent = React.ForwardRefExoticComponent<
-  WidgetEditorProps & React.RefAttributes<WidgetEditorHandle>
+  React.RefAttributes<WidgetEditorHandle>
 >;
 
 export interface WidgetMetadata {
@@ -227,12 +194,16 @@ export interface WidgetConfigDialogProps {
   onOpenChange: (open: boolean) => void;
   sectionId: string;
   widgetId?: string;
-  onSave: (widgetData: Partial<DashboardWidget>) => void;
+  onSave: (widget: DashboardWidget) => void;
 }
 
 export interface DashboardTemplate {
   id: string;
-  title: string;
+  type: TEMPLATE_TYPE;
+  scope: TEMPLATE_SCOPE;
+  name: string;
   description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconColor: string;
   config: DashboardState;
 }

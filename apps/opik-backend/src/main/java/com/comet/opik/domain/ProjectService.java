@@ -287,6 +287,7 @@ class ProjectServiceImpl implements ProjectService {
                 .totalEstimatedCostSum(StatsMapper.getStatsTotalEstimatedCostSum(projectStats))
                 .usage(StatsMapper.getStatsUsage(projectStats))
                 .traceCount(StatsMapper.getStatsTraceCount(projectStats))
+                .threadCount(StatsMapper.getStatsThreadCount(projectStats))
                 .guardrailsFailedCount(StatsMapper.getStatsGuardrailsFailedCount(projectStats))
                 .errorCount(StatsMapper.getStatsErrorCount(projectStats))
                 .build();

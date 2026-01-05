@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { Link, useMatches, useNavigate } from "@tanstack/react-router";
 import copy from "clipboard-copy";
 import sortBy from "lodash/sortBy";
@@ -36,10 +37,16 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
-import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
+import {
+  Organization,
+  ORGANIZATION_PLAN_ENTERPRISE,
+  ORGANIZATION_ROLE_TYPE,
+} from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
@@ -48,6 +55,8 @@ import { buildUrl, isOnPremise, isProduction } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
+import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -86,7 +95,19 @@ const UserMenu = () => {
     { enabled: !!user?.loggedIn && !!workspace },
   );
 
+  const { canInviteMembers } = useUserPermission();
   const inviteMembersURL = useInviteMembersURL();
+  const [inviteSearchQuery, setInviteSearchQuery] = useState("");
+  const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
+
+  const isCollaboratorsTabEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
+  );
+
+  const handleInviteClose = () => {
+    setIsInviteSubmenuOpen(false);
+    setInviteSearchQuery("");
+  };
 
   if (
     !user ||
@@ -120,6 +141,9 @@ const UserMenu = () => {
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   const isAcademic = organization?.academic;
+
+  const isEnterpriseCustomer =
+    organization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
 
   const isLLMOnlyOrganization =
     organization?.role === ORGANIZATION_ROLE_TYPE.opik;
@@ -156,6 +180,7 @@ const UserMenu = () => {
       !isOnPremise() &&
       isOrganizationAdmin &&
       !isAcademic &&
+      !isEnterpriseCustomer &&
       !hideUpgradeButton
     ) {
       return (
@@ -216,6 +241,52 @@ const UserMenu = () => {
         </DropdownMenuContent>
       </DropdownMenu>
     );
+  };
+
+  const renderInviteMembers = () => {
+    if (isCollaboratorsTabEnabled) {
+      if (!canInviteMembers) {
+        return null;
+      }
+
+      return (
+        <DropdownMenuSub
+          open={isInviteSubmenuOpen}
+          onOpenChange={(open) => {
+            setIsInviteSubmenuOpen(open);
+            if (!open) {
+              setInviteSearchQuery("");
+            }
+          }}
+        >
+          <DropdownMenuSubTrigger className="cursor-pointer">
+            <UserPlus className="mr-2 size-4" />
+            <span>Invite members</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <InviteUsersPopover
+              searchQuery={inviteSearchQuery}
+              setSearchQuery={setInviteSearchQuery}
+              onClose={handleInviteClose}
+              asSubContent
+            />
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+      );
+    }
+
+    if (inviteMembersURL) {
+      return (
+        <a href={inviteMembersURL}>
+          <DropdownMenuItem className="cursor-pointer">
+            <UserPlus className="mr-2 size-4" />
+            <span>Invite members</span>
+          </DropdownMenuItem>
+        </a>
+      );
+    }
+
+    return null;
   };
 
   const renderUserMenu = () => {
@@ -326,14 +397,7 @@ const UserMenu = () => {
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {inviteMembersURL ? (
-              <a href={inviteMembersURL}>
-                <DropdownMenuItem className="cursor-pointer">
-                  <UserPlus className="mr-2 size-4" />
-                  <span>Invite members</span>
-                </DropdownMenuItem>
-              </a>
-            ) : null}
+            {renderInviteMembers()}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

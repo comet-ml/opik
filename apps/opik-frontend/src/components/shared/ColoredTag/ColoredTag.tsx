@@ -9,6 +9,7 @@ export interface ColoredTagProps {
   size?: TagProps["size"];
   testId?: string;
   className?: string;
+  IconComponent?: React.ComponentType<{ className?: string }>;
 }
 
 const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
@@ -16,6 +17,7 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
   size = "md",
   testId,
   className,
+  IconComponent,
 }) => {
   const variant = useMemo(() => generateTagVariant(label), [label]);
 
@@ -27,7 +29,10 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
       className={className}
     >
       <TooltipWrapper content={label} stopClickPropagation>
-        <span>{label}</span>
+        <div className="flex min-w-0 items-center gap-1">
+          {IconComponent && <IconComponent className="size-3 shrink-0" />}
+          <span className="truncate">{label}</span>
+        </div>
       </TooltipWrapper>
     </Tag>
   );

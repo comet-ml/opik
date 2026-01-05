@@ -221,6 +221,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         individual = creator.Individual(prompt_candidate.get_messages())
         setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
         setattr(individual, "function_map", prompt_candidate.function_map)
+        setattr(individual, "model", prompt_candidate.model)
+        setattr(individual, "model_kwargs", copy.deepcopy(prompt_candidate.model_kwargs))
         return individual
 
     def _get_adaptive_mutation_rate(self) -> float:
@@ -638,6 +640,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     function_map=getattr(
                         current_best_for_primary, "function_map", prompt.function_map
                     ),
+                    model=getattr(current_best_for_primary, "model", prompt.model),
+                    model_parameters=getattr(
+                        current_best_for_primary, "model_kwargs", prompt.model_kwargs
+                    ),
                 )
             else:
                 # Single-objective
@@ -648,6 +654,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     tools=getattr(current_best_on_front, "tools", prompt.tools),
                     function_map=getattr(
                         current_best_on_front, "function_map", prompt.function_map
+                    ),
+                    model=getattr(current_best_on_front, "model", prompt.model),
+                    model_parameters=getattr(
+                        current_best_on_front, "model_kwargs", prompt.model_kwargs
                     ),
                 )
 
@@ -808,6 +818,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     tools=getattr(best_overall_solution, "tools", prompt.tools),
                     function_map=getattr(
                         best_overall_solution, "function_map", prompt.function_map
+                    ),
+                    model=getattr(best_overall_solution, "model", prompt.model),
+                    model_parameters=getattr(
+                        best_overall_solution, "model_kwargs", prompt.model_kwargs
                     ),
                 )
                 final_primary_score = best_overall_solution.fitness.values[0]

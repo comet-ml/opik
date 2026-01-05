@@ -13,6 +13,7 @@ def attachment_to_message(
     entity_id: str,
     project_name: str,
     url_override: str,
+    delete_after_upload: bool = False,
 ) -> messages.CreateAttachmentMessage:
     if attachment_data.data is None:
         raise ValueError("Attachment data cannot be None")
@@ -32,6 +33,7 @@ def attachment_to_message(
         entity_id=entity_id,
         project_name=project_name,
         encoded_url_override=base_url_path,
+        delete_after_upload=delete_after_upload,
     )
 
 

@@ -158,7 +158,7 @@ Opik 安装脚本现在支持针对不同开发场景的服务配置文件：
 
 ## 💻 Opik 客户端 SDK
 
-Opik 提供一系列客户端库和 REST API 与 Opik 服务端交互，包含 Python、TypeScript 和 Ruby（通过 OpenTelemetry）SDK，方便集成到各类工作流中。详细 API 与 SDK 参考见 [客户端参考文档](apps/opik-documentation/documentation/fern/docs/reference/overview.mdx)。
+Opik 提供一系列客户端库和 REST API 与 Opik 服务端交互，包含 Python、TypeScript 和 Ruby（通过 OpenTelemetry）SDK，方便集成到各类工作流中。详细 API 与 SDK 参考见 [客户端参考文档](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)。
 
 ### Python SDK 快速开始
 
@@ -179,7 +179,7 @@ opik configure
 ```
 
 > [!TIP]  
-> 您也可以在代码中调用 `opik.configure(use_local=True)` 来配置本地自托管，或直接在代码中提供 API key 和 workspace。更多配置选项请参阅 [Python SDK 文档](apps/opik-documentation/documentation/fern/docs/reference/python-sdk/)。
+> 您也可以在代码中调用 `opik.configure(use_local=True)` 来配置本地自托管，或直接在代码中提供 API key 和 workspace。更多配置选项请参阅 [Python SDK 文档](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=python_sdk_docs_link&utm_campaign=opik)。
 
 现在您可以使用 [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik) 记录跟踪！
 

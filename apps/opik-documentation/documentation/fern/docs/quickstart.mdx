@@ -417,24 +417,25 @@ popular integrations:
         ```
       </Step>
       <Step>
-        Wrap your LangGraph graph with the `OpikTracer` decorator:
+        Track your LangGraph graph with `track_langgraph`:
 
         ```python
-        from opik.integrations.langchain import OpikTracer
+        from opik.integrations.langchain import OpikTracer, track_langgraph
 
         # Create your LangGraph graph
         graph = ...
         app = graph.compile(...)
 
-        # Wrap your LangGraph graph with the OpikTracer
-        opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
+        # Create OpikTracer and track the graph once
+        # The graph visualization is automatically extracted by track_langgraph
+        opik_tracer = OpikTracer()
+        app = track_langgraph(app, opik_tracer)
 
-        # Pass the OpikTracer callback to the invoke functions
-        result = app.invoke({"messages": [HumanMessage(content = "How to use LangGraph ?")]},
-                      config={"callbacks": [opik_tracer]})
+        # Now all invocations are automatically tracked!
+        result = app.invoke({"messages": [HumanMessage(content = "How to use LangGraph ?")]})
         ```
 
-        All LangGraph calls will now be logged to Opik.
+        All LangGraph calls will now be logged to Opik. No need to pass callbacks on every invocation!
       </Step>
     </Steps>
 

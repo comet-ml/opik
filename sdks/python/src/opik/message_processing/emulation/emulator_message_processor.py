@@ -9,7 +9,9 @@ from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
 from opik.types import ErrorInfoDict, SpanType
 from . import models
-from .. import message_processors, messages
+from .. import messages
+from ..processors import message_processors
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -353,6 +355,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             messages.CreateSpansBatchMessage: self._handle_create_spans_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._handle_create_traces_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._handle_create_experiment_items_batch_message,  # type: ignore
+            messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
 
     def _handle_create_trace_message(
@@ -552,6 +555,10 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 dataset_item_id=experiment_item_message.dataset_item_id,
             )
             self._experiment_items.append(experiment_item)
+
+    def _noop_handler(self, message: messages.BaseMessage) -> None:
+        # just ignore the message
+        pass
 
     @property
     def experiment_items(self) -> List[models.ExperimentItemModel]:

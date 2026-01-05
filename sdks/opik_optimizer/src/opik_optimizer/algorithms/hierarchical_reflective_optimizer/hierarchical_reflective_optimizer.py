@@ -323,6 +323,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             messages=messages_as_dicts,
             tools=best_prompt.tools,
             function_map=best_prompt.function_map,
+            model=best_prompt.model,
+            model_parameters=best_prompt.model_kwargs,
         )
 
         # Evaluate improved prompt
@@ -408,15 +410,20 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Set project name from parameter
         self.project_name = project_name
 
-        optimization = self.opik_client.create_optimization(
-            dataset_name=dataset.name,
-            objective_name=getattr(metric, "__name__", str(metric)),
-            metadata=self._build_optimization_metadata(),
-            name=self.name,
-            optimization_id=optimization_id,
-        )
+        # If optimization_id is provided (e.g., from Optimization Studio), fetch the existing
+        # optimization instead of creating a new one
+        if optimization_id:
+            optimization = self.opik_client.get_optimization_by_id(optimization_id)
+            logger.debug(f"Using existing optimization with ID: {optimization.id}")
+        else:
+            optimization = self.opik_client.create_optimization(
+                dataset_name=dataset.name,
+                objective_name=getattr(metric, "__name__", str(metric)),
+                metadata=self._build_optimization_metadata(),
+                name=self.name,
+            )
+            logger.debug(f"Created optimization with ID: {optimization.id}")
         self.current_optimization_id = optimization.id
-        logger.debug(f"Created optimization with ID: {optimization.id}")
 
         reporting.display_header(
             algorithm=self.__class__.__name__,

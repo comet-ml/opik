@@ -16,28 +16,52 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { Control } from "react-hook-form";
 import { cn } from "@/lib/utils";
+import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
+import { TEMPLATE_TYPE } from "@/types/dashboard";
+import DashboardTemplateCard from "./DashboardTemplateCard";
 
 interface DashboardFormFields {
   name: string;
   description?: string;
   projectId?: string;
+  experimentIds?: string[];
 }
 
 interface DashboardDialogDetailsStepProps {
   control: Control<DashboardFormFields>;
-  showProjectSelector: boolean;
-  defaultDescriptionOpen?: boolean;
+  templateType?: string;
+  showProjectSelect?: boolean;
+  showExperimentsSelect?: boolean;
   onSubmit: () => void;
 }
 
 const DashboardDialogDetailsStep: React.FunctionComponent<
   DashboardDialogDetailsStepProps
-> = ({ control, showProjectSelector, defaultDescriptionOpen, onSubmit }) => {
+> = ({
+  control,
+  templateType,
+  showProjectSelect,
+  showExperimentsSelect,
+  onSubmit,
+}) => {
+  const template = templateType
+    ? DASHBOARD_TEMPLATES[templateType as TEMPLATE_TYPE]
+    : null;
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Name field */}
+      {template && (
+        <DashboardTemplateCard
+          name={template.name}
+          description={template.description}
+          icon={template.icon}
+          iconColor={template.iconColor}
+        />
+      )}
+
       <FormField
         control={control}
         name="name"
@@ -68,8 +92,7 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
         }}
       />
 
-      {/* Project selector (conditional) */}
-      {showProjectSelector && (
+      {showProjectSelect && (
         <FormField
           control={control}
           name="projectId"
@@ -95,12 +118,35 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
         />
       )}
 
-      {/* Description accordion */}
+      {showExperimentsSelect && (
+        <FormField
+          control={control}
+          name="experimentIds"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, ["experimentIds"]);
+
+            return (
+              <FormItem>
+                <FormLabel>Experiments</FormLabel>
+                <FormControl>
+                  <ExperimentsSelectBox
+                    value={field.value || []}
+                    onValueChange={field.onChange}
+                    multiselect
+                    className={cn({
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      )}
+
       <div className="flex flex-col gap-2 border-t border-border pt-2">
-        <Accordion
-          type="multiple"
-          defaultValue={defaultDescriptionOpen ? ["description"] : undefined}
-        >
+        <Accordion type="multiple" defaultValue={["description"]}>
           <AccordionItem value="description">
             <AccordionTrigger>Description</AccordionTrigger>
             <AccordionContent>

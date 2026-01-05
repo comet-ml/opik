@@ -1,11 +1,13 @@
 package com.comet.opik.domain.filter;
 
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.FieldType;
 
 public enum FilterStrategy {
     TRACE,
     TRACE_AGGREGATION,
     ANNOTATION_AGGREGATION,
+    EXPERIMENT_AGGREGATION,
     SPAN,
     EXPERIMENT_ITEM,
     DATASET_ITEM,
@@ -16,6 +18,7 @@ public enum FilterStrategy {
     SPAN_FEEDBACK_SCORES_IS_EMPTY,
     EXPERIMENT,
     PROMPT,
+    PROMPT_VERSION,
     DATASET,
     ANNOTATION_QUEUE,
     ALERT,
@@ -33,6 +36,17 @@ public enum FilterStrategy {
         String fieldName = field.getQueryParamField();
         int firstDot = fieldName.indexOf('.');
 
+        // Handle dynamic fields like "metadata.environment" in MySQL (state DB)
+        if (this == PROMPT_VERSION && firstDot > 0) {
+            // For DICTIONARY_STATE_DB fields (like METADATA), return just the column name
+            // e.g: "metadata.environment" - "metadata" is the JSON column name
+            var columnName = fieldName.substring(0, firstDot);
+            if (field.getType() == FieldType.DICTIONARY_STATE_DB) {
+                return columnName;
+            }
+            throw new IllegalArgumentException("Invalid field type: '%s'".formatted(field.getType()));
+        }
+
         // For EXPERIMENT_ITEM, handle fields like "output.some_field" where "output" is a column name
         if (this == EXPERIMENT_ITEM && firstDot > 0) {
             // Field like "output.some_field" - "output" is the column name, "some_field" is JSON path
@@ -44,6 +58,7 @@ public enum FilterStrategy {
                 case STRING -> "JSON_VALUE(%s, :dynamicJsonPath%%1$d)".formatted(columnName);
                 case NUMBER -> "toFloat64OrNull(JSON_VALUE(%s, :dynamicJsonPath%%1$d))".formatted(columnName);
                 case DICTIONARY -> columnName;
+                case LIST -> "JSONExtractArrayRaw(%s, :dynamicJsonPath%%1$d)".formatted(columnName);
                 default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
             };
         }
@@ -57,6 +72,7 @@ public enum FilterStrategy {
                 case STRING -> "data[:dynamicField%1$d]";
                 case NUMBER -> "toFloat64OrNull(data[:dynamicField%1$d])";
                 case DICTIONARY -> "data[:dynamicField%1$d]";
+                case LIST -> "JSONExtractArrayRaw(data[:dynamicField%1$d])";
                 default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
             };
         }
@@ -67,6 +83,7 @@ public enum FilterStrategy {
             case STRING -> "JSON_VALUE(data[:dynamicField%1$d], '$')";
             case DICTIONARY -> "data[:dynamicField%1$d]";
             case NUMBER -> "toFloat64OrNull(JSON_VALUE(data[:dynamicField%1$d], '$'))";
+            case LIST -> "JSONExtractArrayRaw(data[:dynamicField%1$d])";
             default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
         };
     }

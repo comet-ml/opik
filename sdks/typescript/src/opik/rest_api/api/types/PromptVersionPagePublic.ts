@@ -9,4 +9,5 @@ export interface PromptVersionPagePublic {
     size?: number;
     total?: number;
     content?: OpikApi.PromptVersionPublic[];
+    sortableBy?: string[];
 }

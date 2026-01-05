@@ -333,7 +333,7 @@ def test_llama_index_stream_chat__happyflow(
             id=ANY_BUT_NONE,
             name="chat",
             input={"messages": expected_messages},
-            output=None,
+            output={"output": ANY_BUT_NONE},  # Streaming traces now capture output
             metadata=ANY_DICT.containing({"created_from": "llama_index"}),
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
@@ -490,7 +490,9 @@ async def test_llama_index_async_stream_chat__happyflow(
             id=ANY_BUT_NONE,
             name="chat",
             input={"messages": expected_messages},
-            output=None,
+            output={
+                "output": ANY_BUT_NONE
+            },  # Async streaming traces now capture output
             metadata=ANY_DICT.containing({"created_from": "llama_index"}),
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,

@@ -66,14 +66,45 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         system_fallback: str,
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
+        validation_dataset: Dataset | None = None,
     ) -> None:
         self._base_prompt = base_prompt
         self._optimizer = optimizer
         self._metric = metric
         self._system_fallback = system_fallback
         self._dataset = dataset
+        self._validation_dataset = validation_dataset
         self._experiment_config = experiment_config
         self._metric_name = getattr(metric, "__name__", str(metric))
+
+        # Pre-compute item ID sets for fast lookup during evaluate()
+        self._train_item_ids: set[str] = {
+            str(item.get("id")) for item in dataset.get_items() if item.get("id")
+        }
+        self._val_item_ids: set[str] = set()
+        if validation_dataset is not None:
+            self._val_item_ids = {
+                str(item.get("id"))
+                for item in validation_dataset.get_items()
+                if item.get("id")
+            }
+
+    def _resolve_dataset_for_batch(self, dataset_item_ids: list[str]) -> Dataset:
+        """
+        Determine which dataset to use based on the batch item IDs.
+
+        GEPA passes items from either trainset or valset to evaluate(), never mixed.
+        We check validation first (if provided), then fall back to train.
+        """
+        if not dataset_item_ids:
+            return self._dataset
+
+        # Check validation dataset first (if provided)
+        if self._validation_dataset is not None and self._val_item_ids:
+            if any(id_ in self._val_item_ids for id_ in dataset_item_ids):
+                return self._validation_dataset
+
+        return self._dataset
 
     def evaluate(
         self,
@@ -104,6 +135,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 break
             dataset_item_ids.append(str(dataset_item_id))
 
+        # Resolve which dataset to use based on item IDs (train vs validation)
+        target_dataset = self._resolve_dataset_for_batch(dataset_item_ids)
+
         # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {
@@ -118,7 +152,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         )
         experiment_config = self._optimizer._prepare_experiment_config(
             prompt=prompt_variant,
-            dataset=self._dataset,
+            dataset=target_dataset,
             metric=self._metric,
             experiment_config=self._experiment_config,
             configuration_updates=configuration_updates,
@@ -196,7 +230,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         try:
             _, eval_result = task_evaluator.evaluate_with_result(
-                dataset=self._dataset,
+                dataset=target_dataset,
                 evaluated_task=llm_task,
                 metric=self._metric,
                 num_threads=self._optimizer.n_threads,

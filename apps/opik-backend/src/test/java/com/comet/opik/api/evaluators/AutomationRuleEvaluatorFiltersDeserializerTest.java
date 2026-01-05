@@ -13,8 +13,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.toProjects;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -304,9 +306,10 @@ class AutomationRuleEvaluatorFiltersDeserializerTest {
         @DisplayName("Should round-trip serialize and deserialize filters correctly")
         void shouldRoundTripSerializeDeserialize() throws Exception {
             // Given: Create an evaluator with SpanFilters
+            UUID projectId = UUID.randomUUID();
             AutomationRuleEvaluatorSpanLlmAsJudge originalEvaluator = AutomationRuleEvaluatorSpanLlmAsJudge.builder()
                     .id(UUID.randomUUID())
-                    .projectId(UUID.randomUUID())
+                    .projects(toProjects(Set.of(projectId)))
                     .name("Test Rule")
                     .samplingRate(1.0f)
                     .enabled(true)

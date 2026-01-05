@@ -13,6 +13,7 @@ import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.OptimizationField;
 import com.comet.opik.api.filter.PromptField;
+import com.comet.opik.api.filter.PromptVersionField;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
@@ -31,8 +32,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.filter.Operator.NO_VALUE_OPERATORS;
+import static com.comet.opik.api.sorting.SortingFactoryPromptVersions.PROMPT_VERSIONS_FIELDS_PATTERN;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -98,11 +101,15 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
+    private static final String EXPERIMENT_ID_DB = "experiment_id";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
+    private static final String COMMIT_DB = "commit";
+    private static final String TEMPLATE_DB = "template";
+    private static final String CHANGE_DESCRIPTION_DB = "change_description";
 
     /**
      * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
@@ -118,7 +125,6 @@ public class FilterQueryBuilder {
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
     private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
-    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -131,6 +137,8 @@ public class FilterQueryBuilder {
                             "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
                             // MAP values are stored as JSON strings (e.g., "hello" with quotes), so we use the raw value
                             // CONTAINS works because the pattern is found inside the value regardless of surrounding quotes
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.MAP,
                             "ilike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
@@ -140,7 +148,9 @@ public class FilterQueryBuilder {
                             FieldType.MAP,
                             "notILike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.DICTIONARY,
-                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
+                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
@@ -149,7 +159,9 @@ public class FilterQueryBuilder {
                             FieldType.MAP,
                             "startsWith(lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
-                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
+                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT(:filter%2$d ,'%%')")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
@@ -158,7 +170,9 @@ public class FilterQueryBuilder {
                             FieldType.MAP,
                             "endsWith(lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
-                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
+                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d)")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)"),
@@ -169,6 +183,8 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
                             // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
@@ -186,6 +202,8 @@ public class FilterQueryBuilder {
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
                             Map.entry(FieldType.DICTIONARY,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
                             // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
@@ -200,14 +218,18 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
-                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)"))))
+                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) > CAST(:filter%2$d AS DOUBLE)"))))
                     .put(Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s >= :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s >= :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s >= :filter%2$d"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
-                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"))))
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) >= CAST(:filter%2$d AS DOUBLE)"))))
                     .put(Operator.LESS_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)"),
                             Map.entry(FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)"),
@@ -217,14 +239,18 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
-                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)"))))
+                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) < CAST(:filter%2$d AS DOUBLE)"))))
                     .put(Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s <= :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s <= :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s <= :filter%2$d"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
-                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"))))
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) <= CAST(:filter%2$d AS DOUBLE)"))))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
@@ -262,6 +288,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .build());
@@ -305,6 +332,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
+                    .put(SpanField.TRACE_ID, TRACE_ID_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -334,6 +362,21 @@ public class FilterQueryBuilder {
                     .put(PromptField.VERSION_COUNT, VERSION_COUNT_DB)
                     .put(PromptField.TEMPLATE_STRUCTURE, TEMPLATE_STRUCTURE_DB)
                     .build());
+
+    private static final Map<PromptVersionField, String> PROMPT_VERSION_FIELDS_MAP = Map.ofEntries(
+            Map.entry(PromptVersionField.ID, ID_DB),
+            Map.entry(PromptVersionField.COMMIT, COMMIT_DB),
+            Map.entry(PromptVersionField.TEMPLATE, TEMPLATE_DB),
+            Map.entry(PromptVersionField.CHANGE_DESCRIPTION, CHANGE_DESCRIPTION_DB),
+            Map.entry(PromptVersionField.METADATA, METADATA_ANALYTICS_DB),
+            Map.entry(PromptVersionField.TYPE, TYPE_DB),
+            Map.entry(PromptVersionField.TAGS, TAGS_DB),
+            Map.entry(PromptVersionField.CREATED_AT, CREATED_AT_DB),
+            Map.entry(PromptVersionField.CREATED_BY, CREATED_BY_DB)).entrySet().stream()
+            .collect(Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey,
+                    // Add the table alias as prefix to the db field name
+                    entry -> PROMPT_VERSIONS_FIELDS_PATTERN.formatted(entry.getValue())));
 
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<DatasetField, String>builder()
@@ -399,10 +442,6 @@ public class FilterQueryBuilder {
                     .put(AutomationRuleEvaluatorField.ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, ENABLED_DB))
                     .put(AutomationRuleEvaluatorField.SAMPLING_RATE,
                             String.format(AUTOMATION_RULE_TABLE_ALIAS, SAMPLING_RATE_DB))
-                    .put(AutomationRuleEvaluatorField.PROJECT_ID,
-                            String.format(AUTOMATION_RULE_TABLE_ALIAS, PROJECT_ID_DB))
-                    .put(AutomationRuleEvaluatorField.PROJECT_NAME,
-                            String.format(AUTOMATION_PROJECT_TABLE_ALIAS, NAME_DB))
                     .put(AutomationRuleEvaluatorField.CREATED_AT,
                             String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_AT_DB))
                     .put(AutomationRuleEvaluatorField.LAST_UPDATED_AT,
@@ -452,6 +491,9 @@ public class FilterQueryBuilder {
                 TraceField.VISIBILITY_MODE,
                 TraceField.ERROR_INFO));
 
+        map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
+                TraceField.EXPERIMENT_ID));
+
         map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
                 TraceField.USAGE_COMPLETION_TOKENS,
                 TraceField.USAGE_PROMPT_TOKENS,
@@ -482,7 +524,8 @@ public class FilterQueryBuilder {
                 SpanField.USAGE_TOTAL_TOKENS,
                 SpanField.DURATION,
                 SpanField.ERROR_INFO,
-                SpanField.TYPE));
+                SpanField.TYPE,
+                SpanField.TRACE_ID));
 
         map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
                 TraceField.FEEDBACK_SCORES,
@@ -512,6 +555,16 @@ public class FilterQueryBuilder {
                 PromptField.TAGS,
                 PromptField.VERSION_COUNT,
                 PromptField.TEMPLATE_STRUCTURE));
+
+        map.put(FilterStrategy.PROMPT_VERSION, Set.of(
+                PromptVersionField.ID,
+                PromptVersionField.COMMIT,
+                PromptVersionField.TEMPLATE,
+                PromptVersionField.CHANGE_DESCRIPTION,
+                PromptVersionField.TYPE,
+                PromptVersionField.TAGS,
+                PromptVersionField.CREATED_AT,
+                PromptVersionField.CREATED_BY));
 
         map.put(FilterStrategy.DATASET, Set.of(
                 DatasetField.ID,
@@ -589,8 +642,6 @@ public class FilterQueryBuilder {
                 AutomationRuleEvaluatorField.TYPE,
                 AutomationRuleEvaluatorField.ENABLED,
                 AutomationRuleEvaluatorField.SAMPLING_RATE,
-                AutomationRuleEvaluatorField.PROJECT_ID,
-                AutomationRuleEvaluatorField.PROJECT_NAME,
                 AutomationRuleEvaluatorField.CREATED_AT,
                 AutomationRuleEvaluatorField.LAST_UPDATED_AT,
                 AutomationRuleEvaluatorField.CREATED_BY,
@@ -606,6 +657,7 @@ public class FilterQueryBuilder {
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
+            FieldType.DICTIONARY_STATE_DB,
             FieldType.MAP,
             FieldType.FEEDBACK_SCORES_NUMBER);
 
@@ -625,18 +677,18 @@ public class FilterQueryBuilder {
                 .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
     }
 
-    public String toAnalyticsDbOperator(@NonNull Filter filter) {
+    public static String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
     }
 
-    public Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+    public static Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
         return filters.stream()
                 .filter(filter -> filter.field() == TraceField.GUARDRAILS)
                 .findFirst()
                 .map(filter -> true);
     }
 
-    public Optional<String> toAnalyticsDbFilters(
+    public static Optional<String> toAnalyticsDbFilters(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
         var stringJoiner = new StringJoiner(" %s ".formatted(ANALYTICS_DB_AND_OPERATOR));
         stringJoiner.setEmptyValue("");
@@ -653,7 +705,7 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
-    private Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
+    private static Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
@@ -684,13 +736,13 @@ public class FilterQueryBuilder {
         return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
-    private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
+    private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter);
         var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
         return "(%s)".formatted(formattedTemplate);
     }
 
-    private String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
+    private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
         // this is a special case where the DB field is determined by the filter strategy rather than the filter field
         if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return FEEDBACK_SCORE_COUNT_DB;
@@ -708,6 +760,7 @@ public class FilterQueryBuilder {
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
+            case PromptVersionField promptVersionField -> PROMPT_VERSION_FIELDS_MAP.get(promptVersionField);
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
             case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
             case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
@@ -727,7 +780,7 @@ public class FilterQueryBuilder {
         };
     }
 
-    public Statement bind(
+    public static Statement bind(
             @NonNull Statement statement,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
@@ -754,6 +807,9 @@ public class FilterQueryBuilder {
                         String keyName = fieldName.substring(firstDot + 1);
 
                         statement = statement.bind("dynamicField%d".formatted(i), keyName);
+                    } else if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                        var jsonPath = getStateSQLJsonPath(fieldName);
+                        statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
                     } else {
                         // Default dynamic field binding for other strategies
                         statement = statement.bind("dynamicField%d".formatted(i), fieldName);
@@ -775,23 +831,67 @@ public class FilterQueryBuilder {
     }
 
     public Map<String, Object> toStateSQLMapping(@NonNull List<? extends Filter> filters) {
+        return toStateSQLMapping(filters, null);
+    }
+
+    public Map<String, Object> toStateSQLMapping(
+            @NonNull List<? extends Filter> filters, FilterStrategy filterStrategy) {
         Map<String, Object> stateSQLMapping = new HashMap<>();
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
             stateSQLMapping.put("filter%d".formatted(i), filter.value());
+
+            // Handle dynamic fields
+            if (filterStrategy != null && filter.field().isDynamic(filterStrategy)) {
+                var fieldName = filter.field().getQueryParamField();
+                if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                    var jsonPath = getStateSQLJsonPath(fieldName);
+                    stateSQLMapping.put("dynamicJsonPath%d".formatted(i), jsonPath);
+                }
+            }
+
+            // Handle filter keys for DICTIONARY fields
+            if (StringUtils.isNotBlank(filter.key())
+                    && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
+                var key = getKey(filter);
+                stateSQLMapping.put("filterKey%d".formatted(i), key);
+            }
         }
 
         return stateSQLMapping;
     }
 
-    private String getKey(Filter filter) {
+    /**
+     * Generates a JSON path for dynamic fields, typically metadata, for the state DB (MySQL) SQL.
+     * Splits fields, e.g: "metadata.environment" into JSON path format: $."environment"
+     * Uses quoted dot notation to handle keys with spaces and special characters.
+     *
+     * @param fieldName Full field name like "metadata.environment"
+     * @return JSON path in format $."key" e.g: $."environment"
+     */
+    private static String getStateSQLJsonPath(String fieldName) {
+        var jsonKey = fieldName.substring(fieldName.indexOf('.') + 1);
+        return getSQLJsonPath(jsonKey);
+    }
 
-        if (filter.key().startsWith(JSONPATH_ROOT) || filter.field().getType() != FieldType.DICTIONARY) {
+    private static String getSQLJsonPath(String jsonKey) {
+        return "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
+    }
+
+    private static String getKey(Filter filter) {
+
+        if (filter.key().startsWith(JSONPATH_ROOT)
+                || (filter.field().getType() != FieldType.DICTIONARY
+                        && filter.field().getType() != FieldType.DICTIONARY_STATE_DB)) {
             return filter.key();
         }
 
         if (filter.key().startsWith("[") || filter.key().startsWith(".")) {
             return "%s%s".formatted(JSONPATH_ROOT, filter.key());
+        }
+
+        if (filter.field().getType() == FieldType.DICTIONARY_STATE_DB) {
+            return getSQLJsonPath(filter.key());
         }
 
         return "%s.%s".formatted(JSONPATH_ROOT, filter.key());

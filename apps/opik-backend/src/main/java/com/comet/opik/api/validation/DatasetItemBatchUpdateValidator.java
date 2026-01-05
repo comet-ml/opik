@@ -19,8 +19,8 @@ public class DatasetItemBatchUpdateValidator
 
         // Check if `ids` is provided
         boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
-        // Check if filters are provided
-        boolean hasFilters = CollectionUtils.isNotEmpty(batchUpdate.filters());
+        // Check if filters are provided (empty array means "select all items", null means not provided)
+        boolean hasFilters = batchUpdate.filters() != null;
 
         // Validate that at least one of ids or filters is provided
         if (!hasIds && !hasFilters) {
@@ -33,6 +33,14 @@ public class DatasetItemBatchUpdateValidator
         if (hasIds && hasFilters) {
             context.buildConstraintViolationWithTemplate(
                     "Cannot provide both 'ids' and 'filters'. Use 'ids' for specific items or 'filters' to update items matching the filter criteria.")
+                    .addConstraintViolation();
+            return false;
+        }
+
+        // Validate that datasetId is provided when using filters
+        if (hasFilters && batchUpdate.datasetId() == null) {
+            context.buildConstraintViolationWithTemplate(
+                    "'dataset_id' is required when using 'filters'. This ensures updates are scoped to a specific dataset.")
                     .addConstraintViolation();
             return false;
         }

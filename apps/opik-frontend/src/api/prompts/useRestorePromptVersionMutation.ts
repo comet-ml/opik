@@ -45,6 +45,7 @@ const useRestorePromptVersionMutation = () => {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["prompt"] });
       return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });

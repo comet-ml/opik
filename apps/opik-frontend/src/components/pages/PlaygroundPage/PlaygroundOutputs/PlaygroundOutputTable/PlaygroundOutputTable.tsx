@@ -164,6 +164,7 @@ const PlaygroundOutputTable = ({
         label: `Output ${getAlphabetLetter(promptIdx)}`,
         type: COLUMN_TYPE.string,
         cell: PlaygroundOutputCell as never,
+        minSize: 350,
         customMeta: {
           promptId: promptId,
         },
@@ -224,7 +225,7 @@ const PlaygroundOutputTable = ({
 
   return (
     <div
-      className="playground-table overflow-x-auto pt-11" // eslint-disable-line tailwindcss/no-custom-classname
+      className="playground-table overflow-x-auto" // eslint-disable-line tailwindcss/no-custom-classname
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       <DataTable

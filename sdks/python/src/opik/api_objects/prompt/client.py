@@ -143,7 +143,14 @@ class PromptClient:
                 commit=commit,
             )
 
-            # Client-side validation for template_structure if requested
+            should_skip_validation = (
+                prompt_version.template_structure is None
+                and raise_if_not_template_structure == "text"
+            )
+            if should_skip_validation:
+                return prompt_version
+
+            # Client-side validation for template_structure if requested and not skipped
             if (
                 raise_if_not_template_structure is not None
                 and prompt_version.template_structure != raise_if_not_template_structure

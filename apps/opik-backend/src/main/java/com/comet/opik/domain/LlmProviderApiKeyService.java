@@ -25,7 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.LlmProvider.CUSTOM_LLM;
-import static com.comet.opik.infrastructure.BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID;
+import static com.comet.opik.infrastructure.FreeModelConfig.FREE_MODEL_PROVIDER_ID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -73,13 +73,17 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
         var content = new ArrayList<>(providerApiKeys);
 
-        // Inject virtual built-in provider if enabled
-        var builtinConfig = configuration.getBuiltinLlmProvider();
-        if (builtinConfig.isEnabled()) {
+        // Inject virtual free model provider if enabled
+        var freeModelConfig = configuration.getFreeModel();
+        if (freeModelConfig.isEnabled()) {
+            // Model label shows actual model name (e.g., "gpt-4o-mini")
+            // Frontend will append "(free)" suffix
             var virtualProvider = ProviderApiKey.builder()
-                    .id(BUILTIN_PROVIDER_ID)
-                    .provider(LlmProvider.OPIK_BUILTIN)
-                    .configuration(Map.of("models", builtinConfig.getModel()))
+                    .id(FREE_MODEL_PROVIDER_ID)
+                    .provider(LlmProvider.OPIK_FREE)
+                    .configuration(Map.of(
+                            "models", freeModelConfig.getModel(),
+                            "model_label", freeModelConfig.getActualModel()))
                     .readOnly(true)
                     .build();
             // Add at the end so user-configured providers are auto-selected by default in the Playground

@@ -151,3 +151,120 @@ def test_evaluate_threads__happy_path(
         project_name=project_name,
         feedback_scores=feedback_scores,
     )
+
+
+def test_evaluate_threads__no_truncation_for_long_traces(
+    opik_client, temporary_project_name
+):
+    """E2E test verifying that long trace content is not truncated during evaluation.
+
+    The test creates a trace with output exceeding 15,000 characters with a unique marker
+    at the end, then verifies the marker is present in the transform function, proving
+    that truncation did not occur.
+    """
+    thread_id = str(uuid.uuid4())[-6:]
+
+    # Create a long output that exceeds the truncation threshold (~9935 chars)
+    # with a unique marker at the end that would be lost if truncated
+    marker = "UNIQUE_END_MARKER_XYZ123"
+    long_content = "a" * 15000 + marker
+
+    # Create a trace with very long output
+    opik_client.trace(
+        name=f"long-trace:{thread_id}",
+        input={"input": "test input"},
+        output={"output": long_content},
+        project_name=temporary_project_name,
+        thread_id=thread_id,
+    )
+
+    opik_client.flush()
+
+    threads_client_ = opik_client.get_threads_client()
+
+    # Wait for thread to be created
+    if not synchronization.until(
+        lambda: _one_thread_is_active(temporary_project_name, threads_client_),
+        max_try_seconds=30,
+    ):
+        raise AssertionError(
+            f"Failed to create thread in project '{temporary_project_name}'"
+        )
+
+    # Close thread before evaluating
+    opik_client.rest_client.traces.close_trace_thread(
+        project_name=temporary_project_name, thread_id=thread_id
+    )
+
+    # Wait for thread to be closed
+    if not synchronization.until(
+        lambda: _all_threads_closed(temporary_project_name, threads_client_),
+        max_try_seconds=30,
+    ):
+        raise AssertionError(
+            f"Failed to close thread in project '{temporary_project_name}'"
+        )
+
+    # Track what the transform receives
+    received_outputs = []
+
+    def input_transform(x):
+        return x.get("input", "")
+
+    def output_transform(x):
+        """Transform that captures the output to verify it's not truncated."""
+        # When truncated, x might be a string (malformed JSON) instead of dict
+        if isinstance(x, str):
+            # This is the bug! Truncation causes malformed JSON string
+            received_outputs.append(f"TRUNCATED_STRING:{x[:100]}...")
+            return "TRUNCATED"
+        output = x.get("output", "")
+        received_outputs.append(output)
+        return output
+
+    # Create a simple metric that just checks the output
+    class ContentVerificationMetric(metrics.base_metric.BaseMetric):
+        def __init__(self):
+            super().__init__(
+                name="content_verification",
+                track=False,
+            )
+
+        def score(self, conversation, **ignored_kwargs):
+            # Just return a dummy score - we're really testing the transform
+            return metrics.score_result.ScoreResult(
+                name=self.name,
+                value=1.0,
+                reason="Content verification",
+            )
+
+    # Run evaluation
+    result = evaluator.evaluate_threads(
+        project_name=temporary_project_name,
+        filter_string=f'id = "{thread_id}"',
+        metrics=[ContentVerificationMetric()],
+        eval_project_name=temporary_project_name,
+        trace_input_transform=input_transform,
+        trace_output_transform=output_transform,
+        verbose=0,
+    )
+
+    assert result is not None
+    assert len(result.results) == 1
+
+    # Verify that the transform received the full content with the marker
+    assert len(received_outputs) > 0, "Transform should have been called"
+    transformed_content = received_outputs[0]
+
+    # This is the critical assertion: if truncation occurred, the marker would be missing
+    assert marker in transformed_content, (
+        f"Content was truncated! Expected marker '{marker}' not found. "
+        f"Content length: {len(transformed_content)}, expected: {len(long_content)}. "
+        f"Last 100 chars: {transformed_content[-100:]}"
+    )
+
+    # Also verify the full length is preserved
+    assert len(transformed_content) == len(long_content), (
+        f"Content length mismatch: got {len(transformed_content)}, "
+        f"expected {len(long_content)}"
+    )

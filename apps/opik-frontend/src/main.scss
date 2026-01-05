@@ -74,6 +74,12 @@
     --chart-tick-stroke: #373d4d;
     --chart-grid-stroke: #f1f5f8;
 
+    /* Template icon colors */
+    --template-icon-metrics: #5899da;
+    --template-icon-performance: #ef6868;
+    --template-icon-scratch: #945fcf;
+    --template-icon-experiments: #10b981;
+
     /* DataTable colors */
 
     /* Trace thread colors */
@@ -283,6 +289,12 @@
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
     --chart-grid-stroke: #303030;
+
+    /* Template icon colors - Dark Mode */
+    --template-icon-metrics: #5899da;
+    --template-icon-performance: #ef6868;
+    --template-icon-scratch: #945fcf;
+    --template-icon-experiments: #10b981;
 
     /* Diff colors - Dark Mode */
     --diff-removed-bg: #7f1d1d;

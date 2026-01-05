@@ -2,6 +2,7 @@ import uniqid from "uniqid";
 import cloneDeep from "lodash/cloneDeep";
 import map from "lodash/map";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
 import {
   BaseDashboardConfig,
   DashboardSection,
@@ -9,8 +10,8 @@ import {
   DashboardState,
   DashboardWidget,
   WIDGET_TYPE,
-  AddWidgetConfig,
   WidgetResolver,
+  TEMPLATE_TYPE,
 } from "@/types/dashboard";
 import { areLayoutsEqual } from "@/lib/dashboard/layout";
 import { isLooseEqual } from "@/lib/utils";
@@ -18,6 +19,57 @@ import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDate
 
 export const DASHBOARD_VERSION = 1;
 const DEFAULT_SECTION_NAME = "New section";
+
+const TEMPLATE_ID_PREFIX = "template:";
+
+export const UNSET_PROJECT_OPTION = [
+  {
+    value: "",
+    label: "None",
+  },
+];
+
+export const UNSET_PROJECT_VALUE = "";
+
+export const GLOBAL_PROJECT_CONFIG_MESSAGE =
+  "Using the dashboard's default project settings";
+
+export const WIDGET_PROJECT_SELECTOR_DESCRIPTION =
+  "Widgets use the dashboard's project settings by default. You can override them here and select a different project.";
+
+export const resolveProjectIdFromConfig = (
+  widgetProjectId: string | undefined,
+  globalProjectId: string | undefined,
+): {
+  projectId: string | undefined;
+  isUsingGlobalProject: boolean;
+  infoMessage: string | undefined;
+} => {
+  const isUsingGlobalProject =
+    isEmpty(widgetProjectId) && !isEmpty(globalProjectId);
+
+  const projectId = !isEmpty(widgetProjectId)
+    ? widgetProjectId
+    : globalProjectId;
+
+  const infoMessage = isUsingGlobalProject
+    ? GLOBAL_PROJECT_CONFIG_MESSAGE
+    : undefined;
+
+  return {
+    projectId,
+    isUsingGlobalProject,
+    infoMessage,
+  };
+};
+
+export const createTemplateId = (templateId: TEMPLATE_TYPE): string => {
+  return `${TEMPLATE_ID_PREFIX}${templateId}`;
+};
+
+export const isTemplateId = (id: string | null): boolean => {
+  return id?.startsWith(TEMPLATE_ID_PREFIX) ?? false;
+};
 
 export const WIDGET_TYPES = WIDGET_TYPE;
 
@@ -64,6 +116,7 @@ export const areWidgetsEqual = (
     prev.id === next.id &&
     prev.type === next.type &&
     prev.title === next.title &&
+    prev.generatedTitle === next.generatedTitle &&
     prev.subtitle === next.subtitle &&
     isLooseEqual(prev.config, next.config)
   );
@@ -120,26 +173,28 @@ export const isDashboardChanged = (
 export const createDefaultWidgetConfig = (
   widgetType: string,
   widgetResolver: WidgetResolver | null,
-): AddWidgetConfig => {
+): Omit<DashboardWidget, "id"> => {
   if (!widgetResolver) {
     return {
       type: widgetType as WIDGET_TYPE,
       title: "",
+      generatedTitle: "",
       subtitle: "",
       config: {},
-    } as AddWidgetConfig;
+    };
   }
 
   const widgetComponents = widgetResolver(widgetType);
   const defaultConfig = widgetComponents.getDefaultConfig();
-  const defaultTitle = widgetComponents.calculateTitle(defaultConfig);
+  const generatedTitle = widgetComponents.calculateTitle(defaultConfig);
 
   return {
     type: widgetType as WIDGET_TYPE,
-    title: defaultTitle,
+    title: "",
+    generatedTitle: generatedTitle,
     subtitle: "",
     config: defaultConfig,
-  } as AddWidgetConfig;
+  };
 };
 
 export const regenerateAllIds = (
@@ -195,5 +250,29 @@ export const regenerateAllIds = (
     sections: newSections,
     lastModified: Date.now(),
     config: clonedConfig,
+  };
+};
+
+export const updateWidgetWithGeneratedTitle = (
+  currentWidget: DashboardWidget,
+  updates: Partial<DashboardWidget>,
+  widgetResolver: WidgetResolver | null,
+): DashboardWidget => {
+  const merged = {
+    ...currentWidget,
+    ...updates,
+    config:
+      updates.config !== undefined
+        ? { ...currentWidget.config, ...updates.config }
+        : currentWidget.config,
+  };
+
+  const generatedTitle = widgetResolver
+    ? widgetResolver(merged.type).calculateTitle(merged.config)
+    : "";
+
+  return {
+    ...merged,
+    generatedTitle,
   };
 };

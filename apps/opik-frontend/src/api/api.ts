@@ -49,7 +49,6 @@ export const PROJECTS_KEY = "projects";
 export const PROJECT_STATISTICS_KEY = "project-statistics";
 export const OPTIMIZATIONS_KEY = "optimizations";
 export const OPTIMIZATION_KEY = "optimization";
-export const OPTIMIZATION_STUDIO_KEY = "optimization-studio";
 export const ANNOTATION_QUEUES_KEY = "annotation-queues";
 export const ANNOTATION_QUEUE_KEY = "annotation-queue";
 export const WORKSPACE_CONFIG_KEY = "workspace-config";

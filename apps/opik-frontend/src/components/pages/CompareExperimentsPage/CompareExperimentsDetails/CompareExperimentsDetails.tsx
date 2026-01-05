@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import { BooleanParam, useQueryParam } from "use-query-params";
 import { Maximize2, Minimize2, PenLine } from "lucide-react";
@@ -16,6 +16,13 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { AggregatedFeedbackScore } from "@/types/shared";
+import { generateExperimentIdFilter } from "@/lib/filters";
+import ViewSelector, {
+  VIEW_TYPE,
+} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { Separator } from "@/components/ui/separator";
 
 type ExperimentScoreTagsProps = {
   experiment: Experiment;
@@ -58,11 +65,13 @@ type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
   experiments: Experiment[];
   isPending: boolean;
+  view: VIEW_TYPE;
+  onViewChange: (value: VIEW_TYPE) => void;
 };
 
 const CompareExperimentsDetails: React.FunctionComponent<
   CompareExperimentsDetailsProps
-> = ({ experiments, experimentsIds, isPending }) => {
+> = ({ experiments, experimentsIds, isPending, view, onViewChange }) => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const isCompare = experimentsIds.length > 1;
@@ -72,6 +81,11 @@ const CompareExperimentsDetails: React.FunctionComponent<
   const title = !isCompare
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;
+
+  // TODO: Remove when dashboards are enabled by default - this entire expand/collapse charts feature will be replaced by dashboard view
+  const isDashboardsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DASHBOARDS_ENABLED,
+  );
 
   const [showCharts = true, setShowCharts] = useQueryParam(
     "chartsExpanded",
@@ -96,6 +110,13 @@ const CompareExperimentsDetails: React.FunctionComponent<
     isCompare,
     experiments,
   });
+
+  const experimentTracesSearch = useMemo(
+    () => ({
+      traces_filters: generateExperimentIdFilter(experimentsIds[0]),
+    }),
+    [experimentsIds],
+  );
 
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
@@ -149,7 +170,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   const renderCharts = () => {
-    if (!isCompare || !showCharts || isPending) return null;
+    if (!isCompare || !showCharts || isPending || view === VIEW_TYPE.DASHBOARDS)
+      return null;
 
     return (
       <div className="mb-2 mt-4 overflow-auto">
@@ -191,7 +213,19 @@ const CompareExperimentsDetails: React.FunctionComponent<
     <div className="pb-4 pt-6">
       <div className="mb-4 flex min-h-8 items-center justify-between">
         <h1 className="comet-title-l truncate break-words">{title}</h1>
-        {renderCompareFeedbackScoresButton()}
+        <div className="flex shrink-0 items-center gap-2">
+          {isCompare &&
+            view !== VIEW_TYPE.DASHBOARDS &&
+            renderCompareFeedbackScoresButton()}
+          {isDashboardsEnabled && (
+            <>
+              {isCompare && view !== VIEW_TYPE.DASHBOARDS && (
+                <Separator orientation="vertical" className="mx-2 h-6" />
+              )}
+              <ViewSelector value={view} onChange={onViewChange} />
+            </>
+          )}
+        </div>
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (
@@ -213,6 +247,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
               resource={RESOURCE_TYPE.prompt}
             />
           )}
+        {!isCompare && experiment?.project_id && (
+          <NavigationTag
+            resource={RESOURCE_TYPE.traces}
+            id={experiment.project_id}
+            name="Traces"
+            search={experimentTracesSearch}
+            tooltipContent="View all traces for this experiment"
+          />
+        )}
       </div>
       {renderSubSection()}
       {renderCharts()}

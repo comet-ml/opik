@@ -12,6 +12,7 @@ export interface ProjectStatsSummaryItem {
     totalEstimatedCostSum?: number;
     usage?: Record<string, number>;
     traceCount?: number;
+    threadCount?: number;
     guardrailsFailedCount?: number;
     errorCount?: OpikApi.ErrorCountWithDeviation;
 }

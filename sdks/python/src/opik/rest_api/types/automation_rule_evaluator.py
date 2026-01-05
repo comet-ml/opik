@@ -8,6 +8,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code import LlmAsJudgeCode
+from .project_reference import ProjectReference
 from .span_filter import SpanFilter
 from .span_llm_as_judge_code import SpanLlmAsJudgeCode
 from .span_user_defined_metric_python_code import SpanUserDefinedMetricPythonCode
@@ -20,8 +21,26 @@ from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
-    project_id: str
-    project_name: typing.Optional[str] = None
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Primary project ID (legacy field for backwards compatibility)
+    """
+
+    project_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Primary project name (legacy field for backwards compatibility)
+    """
+
+    projects: typing.Optional[typing.List[ProjectReference]] = pydantic.Field(default=None)
+    """
+    Projects assigned to this rule (unique, sorted alphabetically by name)
+    """
+
+    project_ids: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Project IDs for write operations (used when creating/updating rules)
+    """
+
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None

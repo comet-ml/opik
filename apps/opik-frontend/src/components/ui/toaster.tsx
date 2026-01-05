@@ -22,7 +22,7 @@ export function Toaster() {
                 <ToastDescription>{description}</ToastDescription>
               )}
               {actions && (
-                <div className="flex items-center justify-between pt-1.5">
+                <div className="flex flex-col items-start gap-0 pt-1.5">
                   {actions.map((a) => a)}
                 </div>
               )}

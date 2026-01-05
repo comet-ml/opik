@@ -21,6 +21,36 @@ export interface Dataset {
   tags?: string[];
   created_at: string;
   last_updated_at: string;
+  status?: DATASET_STATUS;
+  latest_version?: Pick<
+    DatasetVersion,
+    "id" | "version_hash" | "version_name" | "tags" | "change_description"
+  >;
+}
+
+export interface DatasetVersion {
+  id: string;
+  dataset_id: string;
+  version_hash: string;
+  version_name?: string;
+  items_total: number;
+  items_added: number;
+  items_modified: number;
+  items_deleted: number;
+  change_description?: string;
+  metadata?: Record<string, unknown>;
+  tags?: string[];
+  created_at: string;
+  created_by: string;
+  last_updated_at: string;
+  last_updated_by: string;
+}
+
+export enum DATASET_STATUS {
+  unknown = "unknown",
+  processing = "processing",
+  completed = "completed",
+  failed = "failed",
 }
 
 export enum DATASET_ITEM_SOURCE {
@@ -28,6 +58,13 @@ export enum DATASET_ITEM_SOURCE {
   trace = "trace",
   span = "span",
   sdk = "sdk",
+}
+
+export enum DATASET_ITEM_DRAFT_STATUS {
+  unchanged = "unchanged",
+  added = "added",
+  edited = "edited",
+  // deleted items are filtered out, not shown
 }
 
 export interface DatasetItem {
@@ -39,6 +76,11 @@ export interface DatasetItem {
   tags?: string[];
   created_at: string;
   last_updated_at: string;
+}
+
+export interface DatasetItemWithDraft extends DatasetItem {
+  draftStatus?: DATASET_ITEM_DRAFT_STATUS;
+  tempId?: string;
 }
 
 export interface DatasetItemColumn {
@@ -69,6 +111,7 @@ export interface Experiment {
   id: string;
   dataset_id: string;
   dataset_name: string;
+  project_id?: string;
   optimization_id?: string;
   type: EXPERIMENT_TYPE;
   status: string;

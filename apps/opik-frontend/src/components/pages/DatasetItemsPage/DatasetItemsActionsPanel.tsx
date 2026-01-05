@@ -6,7 +6,6 @@ import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { DatasetItem } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
@@ -16,6 +15,14 @@ import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { Filters } from "@/types/filters";
+import {
+  useBulkDeleteItems,
+  useBulkAddItems,
+  useIsAllItemsSelected,
+} from "@/store/DatasetDraftStore";
+import { useToast } from "@/components/ui/use-toast";
+import { DATASET_ITEM_SOURCE } from "@/types/datasets";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -24,6 +31,10 @@ type DatasetItemsActionsPanelProps = {
   datasetName: string;
   columnsToExport: string[];
   dynamicColumns: string[];
+  filters?: Filters;
+  search?: string;
+  totalCount?: number;
+  isDraftMode?: boolean;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -35,9 +46,12 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   datasetName,
   columnsToExport,
   dynamicColumns,
+  filters = [],
+  search = "",
+  totalCount = 0,
+  isDraftMode = false,
 }) => {
   const resetKeyRef = useRef(0);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [expansionDialogOpen, setExpansionDialogOpen] =
     useState<boolean>(false);
   const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
@@ -48,17 +62,63 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+  const bulkDeleteItems = useBulkDeleteItems();
+  const bulkAddItems = useBulkAddItems();
+  const isAllItemsSelected = useIsAllItemsSelected();
+  const { toast } = useToast();
 
   const deleteDatasetItemsHandler = useCallback(() => {
-    mutate({
-      ids: selectedDatasetItems.map((i) => i.id),
-    });
-  }, [selectedDatasetItems, mutate]);
+    if (!isAllItemsSelected) {
+      // Use draft store for specific IDs
+      const ids = selectedDatasetItems.map((i) => i.id);
+      bulkDeleteItems(ids);
+    } else {
+      // Use API for filter-based deletion
+      mutate({
+        datasetId,
+        ids: selectedDatasetItems.map((i) => i.id),
+        isAllItemsSelected,
+        filters,
+        search,
+      });
+    }
+  }, [
+    datasetId,
+    selectedDatasetItems,
+    mutate,
+    isAllItemsSelected,
+    filters,
+    search,
+    bulkDeleteItems,
+  ]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);
     setGeneratedSamplesDialogOpen(true);
   }, []);
+
+  const handleAddGeneratedItems = useCallback(
+    (items: DatasetItem[]) => {
+      const now = new Date().toISOString();
+      const itemsToAdd = items.map((item) => ({
+        data: item.data,
+        source: DATASET_ITEM_SOURCE.manual,
+        tags: item.tags || [],
+        created_at: now,
+        last_updated_at: now,
+      }));
+
+      bulkAddItems(itemsToAdd);
+
+      toast({
+        title: "Samples added to draft",
+        description: `${items.length} sample${
+          items.length !== 1 ? "s" : ""
+        } added to your draft changes`,
+      });
+    },
+    [bulkAddItems, toast],
+  );
 
   const mapRowData = useCallback(async () => {
     const datasetItems = await getDataForExport();
@@ -92,17 +152,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   return (
     <div className="flex items-center gap-2">
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={deleteDialogOpen}
-        setOpen={setDeleteDialogOpen}
-        onConfirm={deleteDatasetItemsHandler}
-        title="Delete dataset items"
-        description="Deleting dataset items will also remove the related sample data from any linked experiments. This action can't be undone. Are you sure you want to continue?"
-        confirmText="Delete dataset items"
-        confirmButtonVariant="destructive"
-      />
-
       <DatasetExpansionDialog
         key={`dataset-expansion-${resetKeyRef.current}`}
         datasetId={datasetId}
@@ -113,11 +162,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
       <GeneratedSamplesDialog
         key={`generate-samples-${resetKeyRef.current}`}
-        datasetId={datasetId}
-        datasetName={datasetName}
         samples={generatedSamples}
         open={generatedSamplesDialogOpen}
         setOpen={setGeneratedSamplesDialogOpen}
+        onAddItems={handleAddGeneratedItems}
       />
 
       <AddTagDialog
@@ -127,6 +175,9 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={addTagDialogOpen}
         setOpen={setAddTagDialogOpen}
         onSuccess={() => {}}
+        filters={filters}
+        search={search}
+        totalCount={totalCount}
       />
 
       <Button
@@ -157,7 +208,12 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       </TooltipWrapper>
 
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
+        disabled={
+          disabled ||
+          columnsToExport.length === 0 ||
+          !isExportEnabled ||
+          isDraftMode
+        }
         getData={mapRowData}
         generateFileName={generateFileName}
         tooltipContent={
@@ -170,10 +226,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         <Button
           variant="outline"
           size="icon-sm"
-          onClick={() => {
-            setDeleteDialogOpen(true);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
+          onClick={deleteDatasetItemsHandler}
           disabled={disabled}
         >
           <Trash />

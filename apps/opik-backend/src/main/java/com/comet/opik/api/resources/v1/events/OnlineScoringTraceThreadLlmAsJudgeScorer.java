@@ -38,6 +38,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -147,7 +148,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         final AutomationRuleEvaluator<?, ?> rule;
 
         try {
-            rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),
+            rule = automationRuleEvaluatorService.findById(message.ruleId(), Set.of(message.projectId()),
                     message.workspaceId());
         } catch (NotFoundException ex) {
             log.warn(

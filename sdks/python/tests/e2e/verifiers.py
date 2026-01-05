@@ -1,11 +1,13 @@
 import base64
 import json
+import re
 from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Union
 from unittest import mock
 
 import pytest
 import opik
 from opik import Attachment, Prompt, ChatPrompt, synchronization
+from opik.api_objects.attachment import decoder_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
 from opik.rest_api.types import (
@@ -278,6 +280,68 @@ def verify_attachments(
     data_sizes: Dict[str, int],
     timeout: int = 10,
 ) -> None:
+    attachment_list = _wait_for_attachments_list(
+        opik_client=opik_client,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        expected_size=len(attachments),
+        timeout=timeout,
+    )
+    url_override = opik_client._config.url_override
+
+    for attachment in attachment_list:
+        expected_attachment = attachments.get(attachment.file_name, None)
+        assert (
+            expected_attachment is not None
+        ), f"Attachment {attachment.file_name} not found in expected attachments"
+
+        assert (
+            attachment.file_size == data_sizes[expected_attachment.file_name]
+        ), f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} != {data_sizes[expected_attachment.file_name]}"
+
+        assert (
+            attachment.mime_type == expected_attachment.content_type
+        ), f"Wrong content type for attachment {attachment.file_name}: {attachment.mime_type} != {expected_attachment.content_type}"
+
+        if not url_helpers.is_aws_presigned_url(attachment.link):
+            assert attachment.link.startswith(
+                url_override
+            ), f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
+
+
+def verify_auto_extracted_attachments(
+    opik_client: opik.Opik,
+    entity_type: Literal["trace", "span"],
+    entity_id: str,
+    expected_sizes: List[int],
+    timeout: int = 10,
+) -> None:
+    attachment_list = _wait_for_attachments_list(
+        opik_client=opik_client,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        expected_size=len(expected_sizes),
+        timeout=timeout,
+    )
+
+    file_name_pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_REGEX)
+
+    for attachment in attachment_list:
+        assert (
+            attachment.file_size in expected_sizes
+        ), f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} not in {expected_sizes}"
+        assert file_name_pattern.match(
+            attachment.file_name
+        ), f"Wrong file name for attachment {attachment.file_name} - it does not match {file_name_pattern.pattern}"
+
+
+def _wait_for_attachments_list(
+    opik_client: opik.Opik,
+    entity_type: Literal["trace", "span"],
+    entity_id: str,
+    expected_size: int,
+    timeout: int,
+) -> List[Attachment]:
     if not synchronization.until(
         lambda: (
             _get_trace_or_span(
@@ -306,7 +370,7 @@ def verify_attachments(
                 url_override_path=url_override_path,
             )
         )
-        == len(attachments),
+        == expected_size,
         allow_errors=True,
         max_try_seconds=timeout,
     ):
@@ -314,32 +378,13 @@ def verify_attachments(
             f"Failed to get all expected attachments for {entity_type} with id {entity_id}."
         )
 
-    attachment_list = _get_attachments(
+    return _get_attachments(
         opik_client=opik_client,
         project_id=trace_or_span.project_id,
         entity_type=entity_type,
         entity_id=entity_id,
         url_override_path=url_override_path,
     )
-
-    for attachment in attachment_list:
-        expected_attachment = attachments.get(attachment.file_name, None)
-        assert (
-            expected_attachment is not None
-        ), f"Attachment {attachment.file_name} not found in expected attachments"
-
-        assert (
-            attachment.file_size == data_sizes[expected_attachment.file_name]
-        ), f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} != {data_sizes[expected_attachment.file_name]}"
-
-        assert (
-            attachment.mime_type == expected_attachment.content_type
-        ), f"Wrong content type for attachment {attachment.file_name}: {attachment.mime_type} != {expected_attachment.content_type}"
-
-        if not url_helpers.is_aws_presigned_url(attachment.link):
-            assert attachment.link.startswith(
-                url_override
-            ), f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
 
 
 def _get_attachments(

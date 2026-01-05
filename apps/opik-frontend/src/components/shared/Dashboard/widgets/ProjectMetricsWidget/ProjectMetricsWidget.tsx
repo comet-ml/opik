@@ -6,7 +6,7 @@ import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import { useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 import { DashboardWidgetComponentProps } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
@@ -22,15 +22,19 @@ import {
 } from "@/components/pages/TracesPage/MetricsTab/utils";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
+import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const globalConfig = useDashboardStore(
-    useShallow((state) => ({
-      projectId: state.config?.projectIds?.[0],
-      dateRange: state.config?.dateRange ?? DEFAULT_DATE_PRESET,
-    })),
+    useShallow((state) => {
+      const config = selectMixedConfig(state);
+      return {
+        projectId: config?.projectIds?.[0],
+        dateRange: config?.dateRange ?? DEFAULT_DATE_PRESET,
+      };
+    }),
   );
 
   const widget = useDashboardStore(
@@ -56,20 +60,23 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
-  const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = globalConfig.projectId || widgetProjectId;
+  const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
+    useMemo(() => {
+      const { projectId: resolvedProjectId, infoMessage } =
+        resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
 
-    const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
-      globalConfig.dateRange,
-    );
+      const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
+        globalConfig.dateRange,
+      );
 
-    return {
-      projectId: finalProjectId,
-      interval,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+      return {
+        projectId: resolvedProjectId,
+        infoMessage,
+        interval,
+        intervalStart,
+        intervalEnd,
+      };
+    }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
@@ -81,6 +88,21 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.TOKEN_USAGE ||
     metricName === METRIC_NAME_TYPE.TRACE_COUNT ||
     metricName === METRIC_NAME_TYPE.THREAD_COUNT;
+
+  const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
+
+  const filterLineCallback = useCallback(
+    (lineName: string) => {
+      if (
+        metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
+        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
+      )
+        return true;
+      if (!feedbackScores || feedbackScores.length === 0) return true;
+      return feedbackScores.includes(lineName);
+    },
+    [feedbackScores, metricName],
+  );
 
   if (!widget) {
     return null;
@@ -141,6 +163,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
+          filterLineCallback={filterLineCallback}
           renderValue={
             isCostMetric
               ? renderCostTooltipValue
@@ -165,21 +188,23 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   return (
     <DashboardWidget>
-      <DashboardWidget.Header
-        title={widget.title}
-        subtitle={widget.subtitle}
-        preview={preview}
-        actions={
-          !preview ? (
+      {preview ? (
+        <DashboardWidget.PreviewHeader />
+      ) : (
+        <DashboardWidget.Header
+          title={widget.title || widget.generatedTitle || ""}
+          subtitle={widget.subtitle}
+          infoMessage={infoMessage}
+          actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}
               widgetId={widgetId!}
               widgetTitle={widget.title}
             />
-          ) : undefined
-        }
-        dragHandle={!preview ? <DashboardWidget.DragHandle /> : undefined}
-      />
+          }
+          dragHandle={<DashboardWidget.DragHandle />}
+        />
+      )}
       <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
     </DashboardWidget>
   );

@@ -1018,7 +1018,7 @@ paths:
               style: simple
               schema:
                 type: string
-              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
+              example: "${basePath}/v1/private/automations/evaluators/{evaluatorId}"
   /v1/private/automations/evaluators/delete:
     post:
       tags:
@@ -1289,6 +1289,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/{id}/items/changes:
+    post:
+      tags:
+      - Datasets
+      summary: Apply changes to dataset items
+      description: |
+        Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+        This endpoint:
+        - Creates a new version with the applied changes
+        - Validates that baseVersion matches the latest version (unless override=true)
+        - Returns 409 Conflict if baseVersion is stale and override is not set
+
+        Use `override=true` query parameter to force version creation even with stale baseVersion.
+      operationId: applyDatasetItemChanges
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: override
+        in: query
+        schema:
+          type: boolean
+          default: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemChanges_Public"
+      responses:
+        "201":
+          description: Version created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Dataset or version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Version conflict - baseVersion is not the latest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/items/batch:
     patch:
       tags:
@@ -1560,7 +1617,12 @@ paths:
       tags:
       - Datasets
       summary: Delete dataset items
-      description: Delete dataset items
+      description: |
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
       operationId: deleteDatasetItems
       requestBody:
         content:
@@ -1570,6 +1632,8 @@ paths:
       responses:
         "204":
           description: No content
+        "400":
+          description: Bad request - invalid parameters or conflicting fields
   /v1/private/datasets/delete-batch:
     post:
       tags:
@@ -1935,6 +1999,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}:
+    delete:
+      tags:
+      - Datasets
+      summary: Delete version tag
+      description: "Remove a tag from a dataset version. The version itself is not\
+        \ deleted, only the tag reference."
+      operationId: deleteVersionTag
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Tag deleted successfully
   /v1/private/datasets/{id}/versions:
     get:
       tags:
@@ -1977,84 +2069,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
-    post:
-      tags:
-      - Datasets
-      summary: Create dataset version
-      description: Create a new immutable version of the dataset by snapshotting the
-        current state
-      operationId: createDatasetVersion
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DatasetVersionCreate_Public"
-      responses:
-        "201":
-          description: Created
-          headers:
-            Location:
-              required: true
-              style: simple
-              schema:
-                type: string
-              example: "${basePath}/v1/private/datasets/{datasetId}/versions"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-        "409":
-          description: Conflict - Tag already exists
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-  /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}:
-    delete:
-      tags:
-      - Datasets
-      summary: Delete version tag
-      description: "Remove a tag from a dataset version. The version itself is not\
-        \ deleted, only the tag reference."
-      operationId: deleteVersionTag
-      parameters:
-      - name: versionHash
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: tag
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "204":
-          description: Tag deleted successfully
   /v1/private/datasets/{id}/versions/restore:
     post:
       tags:
       - Datasets
       summary: Restore dataset to a previous version
-      description: "Restores the dataset to a previous version state. All draft items\
-        \ are replaced with items from the specified version. If the version is not\
-        \ the latest, a new version snapshot is created. If the version is the latest,\
-        \ only draft items are replaced (revert functionality)."
+      description: "Restores the dataset to a previous version state by creating a\
+        \ new version with items copied from the specified version. If the version\
+        \ is already the latest, returns it as-is (no-op)."
       operationId: restoreDatasetVersion
       parameters:
       - name: id
@@ -3085,58 +3107,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio:
-    get:
-      tags:
-      - Optimizations
-      summary: Find Studio optimizations
-      description: Find Studio optimizations
-      operationId: findStudioOptimizations
-      parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: dataset_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: dataset_deleted
-        in: query
-        schema:
-          type: boolean
-      - name: filters
-        in: query
-        schema:
-          type: string
-      responses:
-        "200":
-          description: Studio optimizations resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OptimizationPage_Public"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/{id}:
     get:
       tags:
@@ -3185,33 +3155,6 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/optimizations/studio/{id}:
-    get:
-      tags:
-      - Optimizations
-      summary: Get Studio optimization by id
-      description: Get Studio optimization with config included
-      operationId: getStudioOptimizationById
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Studio optimization resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Optimization_Public"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/studio/{id}/logs:
     get:
       tags:
@@ -3651,6 +3594,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+    patch:
+      tags:
+      - Prompts
+      summary: Update prompt versions
+      description: |
+        Update one or more prompt versions.
+
+        Note: Prompt versions are immutable by design.
+        Only organizational properties, such as tags etc., can be updated.
+        Core properties like template and metadata cannot be modified after creation.
+
+        PATCH semantics:
+        - non-empty values update the field
+        - null values preserve existing field values (no change)
+        - empty values explicitly clear the field
+      operationId: updatePromptVersions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/prompts/{id}:
     get:
       tags:
@@ -3809,6 +3782,19 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: search
+        in: query
+        description: Search text to find in template or change description fields
+        schema:
+          type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: OK
@@ -4949,6 +4935,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/traces/threads/stats:
+    get:
+      tags:
+      - Traces
+      summary: Get trace thread stats
+      description: Get trace thread stats
+      operationId: getTraceThreadStats
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: "Filter trace threads created up to this time (ISO-8601 format).\
+            \ If not provided, defaults to current time. Must be after 'from_time'."
+          format: date-time
+      responses:
+        "200":
+          description: Trace thread stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/traces/{traceId}/comments/{commentId}:
     get:
       tags:
@@ -6621,7 +6648,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -6631,10 +6657,30 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference"
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Project IDs for write operations (used when creating/updating
+            rules)
+          items:
+            type: string
+            description: Project IDs for write operations (used when creating/updating
+              rules)
+            format: uuid
         name:
           minLength: 1
           type: string
@@ -6684,7 +6730,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6702,7 +6747,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6720,7 +6764,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6738,7 +6781,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6756,7 +6798,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6774,7 +6815,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -6891,6 +6931,21 @@ components:
           - DOUBLE
         description:
           type: string
+    ProjectReference:
+      required:
+      - project_id
+      - project_name
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+        project_name:
+          type: string
+          description: Project name
+      description: Project reference with ID and name
+      readOnly: true
     SpanFilter:
       type: object
       properties:
@@ -7054,7 +7109,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7072,7 +7126,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7090,7 +7143,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7108,7 +7160,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7126,7 +7177,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7144,7 +7194,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7161,13 +7210,23 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Project IDs for write operations (used when creating/updating
+            rules)
+          items:
+            type: string
+            description: Project IDs for write operations (used when creating/updating
+              rules)
+            format: uuid
         name:
           minLength: 1
           type: string
@@ -7465,7 +7524,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7482,7 +7540,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -7492,10 +7549,20 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference_Public"
         name:
           minLength: 1
           type: string
@@ -7565,7 +7632,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7583,7 +7649,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7601,7 +7666,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7619,7 +7683,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7637,7 +7700,6 @@ components:
       - action
       - code
       - name
-      - project_id
       - type
       type: object
       allOf:
@@ -7754,6 +7816,21 @@ components:
           - DOUBLE
         description:
           type: string
+    ProjectReference_Public:
+      required:
+      - project_id
+      - project_name
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+        project_name:
+          type: string
+          description: Project name
+      description: Project reference with ID and name
+      readOnly: true
     SpanFilter_Public:
       type: object
       properties:
@@ -7909,7 +7986,6 @@ components:
       required:
       - action
       - name
-      - project_id
       - type
       type: object
       properties:
@@ -7919,10 +7995,20 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Primary project ID (legacy field for backwards compatibility)
           format: uuid
         project_name:
           type: string
+          description: Primary project name (legacy field for backwards compatibility)
           readOnly: true
+        projects:
+          uniqueItems: true
+          type: array
+          description: "Projects assigned to this rule (unique, sorted alphabetically\
+            \ by name)"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ProjectReference_Public"
         name:
           minLength: 1
           type: string
@@ -8016,7 +8102,6 @@ components:
       required:
       - action
       - name
-      - project_id
       type: object
       properties:
         name:
@@ -8029,7 +8114,17 @@ components:
           type: boolean
         project_id:
           type: string
+          description: "Primary project ID (legacy field, maintained for backwards\
+            \ compatibility)"
           format: uuid
+        project_ids:
+          uniqueItems: true
+          type: array
+          description: Multiple project IDs (new field for multi-project support)
+          items:
+            type: string
+            description: Multiple project IDs (new field for multi-project support)
+            format: uuid
         type:
           type: string
           enum:
@@ -8057,7 +8152,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8074,7 +8168,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8091,7 +8184,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8108,7 +8200,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8125,7 +8216,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8142,7 +8232,6 @@ components:
       - action
       - code
       - name
-      - project_id
       type: object
       allOf:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
@@ -8490,6 +8579,80 @@ components:
           type: string
         config:
           $ref: "#/components/schemas/JsonNode_Public"
+    DatasetVersion_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_hash:
+          type: string
+          readOnly: true
+        tags:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        is_latest:
+          type: boolean
+          description: Indicates whether this is the latest version of the dataset
+          readOnly: true
+        version_name:
+          type: string
+          description: "Sequential version name formatted as 'v1', 'v2', etc."
+          readOnly: true
+        items_total:
+          type: integer
+          description: Total number of items in this version
+          format: int32
+          readOnly: true
+        items_added:
+          type: integer
+          description: Number of items added since last version
+          format: int32
+          readOnly: true
+        items_modified:
+          type: integer
+          description: Number of items modified since last version
+          format: int32
+          readOnly: true
+        items_deleted:
+          type: integer
+          description: Number of items deleted since last version
+          format: int32
+          readOnly: true
+        change_description:
+          type: string
+          readOnly: true
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+            readOnly: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    DatasetItemChanges_Public:
+      type: object
     DatasetItemBatchUpdate:
       required:
       - update
@@ -8511,6 +8674,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItemFilter"
+        dataset_id:
+          type: string
+          description: "Dataset ID. Required when using 'filters', optional when using\
+            \ 'ids'."
+          format: uuid
         update:
           $ref: "#/components/schemas/DatasetItemUpdate"
         merge_tags:
@@ -8543,6 +8711,9 @@ components:
           type: string
         value:
           type: string
+      description: Filters to select dataset items to delete within the specified
+        dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'.
+        Empty array means 'delete all items in the dataset'.
     DatasetItemUpdate:
       type: object
       properties:
@@ -8654,6 +8825,9 @@ components:
         version_hash:
           type: string
           description: Hash of the version content
+        version_name:
+          type: string
+          description: "Sequential version name formatted as 'v1', 'v2', etc."
         change_description:
           type: string
           description: Description of changes in this version
@@ -9057,17 +9231,35 @@ components:
           minLength: 1
           type: string
     DatasetItemsDelete:
-      required:
-      - item_ids
       type: object
       properties:
         item_ids:
           maxItems: 1000
           minItems: 1
+          uniqueItems: true
           type: array
+          description: List of dataset item IDs to delete (max 1000). Use this to
+            delete specific items by their IDs. Mutually exclusive with 'dataset_id'
+            and 'filters'.
           items:
             type: string
+            description: List of dataset item IDs to delete (max 1000). Use this to
+              delete specific items by their IDs. Mutually exclusive with 'dataset_id'
+              and 'filters'.
             format: uuid
+        dataset_id:
+          type: string
+          description: Dataset ID to scope the deletion. Required when using 'filters'.
+            Mutually exclusive with 'item_ids'.
+          format: uuid
+        filters:
+          type: array
+          description: Filters to select dataset items to delete within the specified
+            dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'.
+            Empty array means 'delete all items in the dataset'.
+          items:
+            $ref: "#/components/schemas/DatasetItemFilter"
+      description: Request to delete multiple dataset items
     DatasetExpansionResponse:
       type: object
       properties:
@@ -9235,8 +9427,6 @@ components:
           type: array
           items:
             type: string
-        hasDraft:
-          type: boolean
     DatasetItem_Compare:
       required:
       - data
@@ -9469,6 +9659,9 @@ components:
         version_hash:
           type: string
           description: Hash of the version content
+        version_name:
+          type: string
+          description: "Sequential version name formatted as 'v1', 'v2', etc."
         change_description:
           type: string
           description: Description of changes in this version
@@ -9769,8 +9962,6 @@ components:
           type: array
           items:
             type: string
-        hasDraft:
-          type: boolean
     Column:
       type: object
       properties:
@@ -9883,31 +10074,6 @@ components:
           maxLength: 100
           minLength: 0
           type: string
-    DatasetVersionCreate_Public:
-      type: object
-      properties:
-        tags:
-          type: array
-          description: Optional list of tags for this version
-          example:
-          - baseline
-          - v1.0
-          items:
-            maxLength: 100
-            minLength: 0
-            type: string
-            description: Optional list of tags for this version
-            example: "[\"baseline\",\"v1.0\"]"
-        change_description:
-          type: string
-          description: Optional description of changes in this version
-          example: Initial baseline version with production data
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-            description: Optional user-defined metadata
-          description: Optional user-defined metadata
     DatasetVersionPage_Public:
       type: object
       properties:
@@ -9924,74 +10090,6 @@ components:
         total:
           type: integer
           format: int64
-    DatasetVersion_Public:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        dataset_id:
-          type: string
-          format: uuid
-          readOnly: true
-        version_hash:
-          type: string
-          readOnly: true
-        tags:
-          uniqueItems: true
-          type: array
-          readOnly: true
-          items:
-            type: string
-            readOnly: true
-        is_latest:
-          type: boolean
-          description: Indicates whether this is the latest version of the dataset
-          readOnly: true
-        items_total:
-          type: integer
-          description: Total number of items in this version
-          format: int32
-          readOnly: true
-        items_added:
-          type: integer
-          description: Number of items added since last version
-          format: int32
-          readOnly: true
-        items_modified:
-          type: integer
-          description: Number of items modified since last version
-          format: int32
-          readOnly: true
-        items_deleted:
-          type: integer
-          description: Number of items deleted since last version
-          format: int32
-          readOnly: true
-        change_description:
-          type: string
-          readOnly: true
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-            readOnly: true
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
     DatasetVersionRestore_Public:
       required:
       - version_ref
@@ -10034,6 +10132,10 @@ components:
           minLength: 1
           type: string
         dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
           type: string
           format: uuid
           readOnly: true
@@ -10858,6 +10960,10 @@ components:
           minLength: 1
           type: string
         dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
           type: string
           format: uuid
           readOnly: true
@@ -11828,7 +11934,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -11892,7 +11998,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -11952,7 +12058,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -12575,6 +12681,10 @@ components:
           type: integer
           format: int64
           readOnly: true
+        thread_count:
+          type: integer
+          format: int64
+          readOnly: true
         guardrails_failed_count:
           type: integer
           format: int64
@@ -12786,6 +12896,9 @@ components:
         trace_count:
           type: integer
           format: int64
+        thread_count:
+          type: integer
+          format: int64
         guardrails_failed_count:
           type: integer
           format: int64
@@ -12888,6 +13001,10 @@ components:
             readOnly: true
           readOnly: true
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        thread_count:
           type: integer
           format: int64
           readOnly: true
@@ -13018,6 +13135,12 @@ components:
           - jinja2
         change_description:
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         variables:
           uniqueItems: true
           type: array
@@ -13112,6 +13235,12 @@ components:
           - jinja2
         change_description:
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         variables:
           uniqueItems: true
           type: array
@@ -13229,6 +13358,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersion_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     PromptVersion_Public:
       required:
       - template
@@ -13259,6 +13392,12 @@ components:
           - jinja2
         change_description:
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         template_structure:
           type: string
           readOnly: true
@@ -13367,10 +13506,65 @@ components:
           type: array
           items:
             type: string
+    PromptVersionBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: IDs of prompt versions to update
+          items:
+            type: string
+            description: IDs of prompt versions to update
+            format: uuid
+        update:
+          $ref: "#/components/schemas/PromptVersionUpdate"
+        merge_tags:
+          type: boolean
+          description: |
+            Tag merge behavior:
+            - true: Add new tags to existing tags (union)
+            - false: Replace all existing tags with new tags (default behaviour if not provided)
+          default: false
+      description: |
+        Request to update one or more prompt versions.
+        Note: Prompt versions are immutable by design - only organizational properties (such as tags etc.) can be updated.
+    PromptVersionUpdate:
+      type: object
+      properties:
+        tags:
+          uniqueItems: true
+          type: array
+          description: |
+            Tags to set or merge with existing tags. Follows PATCH semantics:
+            - If merge_tags is true, these tags will be added to existing tags.
+            - If merge_tags is false, these tags will replace all existing tags.
+            - null: preserve existing tags (no change).
+            - empty set: clear all tags merge_tags is false.
+          items:
+            minLength: 1
+            type: string
+            description: |
+              Tags to set or merge with existing tags. Follows PATCH semantics:
+              - If merge_tags is true, these tags will be added to existing tags.
+              - If merge_tags is false, these tags will replace all existing tags.
+              - null: preserve existing tags (no change).
+              - empty set: clear all tags merge_tags is false.
+      description: |
+        Update to apply to prompt versions.
+        Note: Prompt versions are immutable by design.
+        Only organizational properties (such as tags etc.) can be updated.
+        Core properties like template, metadata etc. cannot be modified after creation.
     ServiceTogglesConfig:
       required:
       - alertsEnabled
       - anthropicProviderEnabled
+      - collaboratorsTabEnabled
       - csvUploadEnabled
       - customllmProviderEnabled
       - dashboardsEnabled
@@ -13381,7 +13575,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - opikbuiltinProviderEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -13429,7 +13622,7 @@ components:
           type: boolean
         customllmProviderEnabled:
           type: boolean
-        opikbuiltinProviderEnabled:
+        collaboratorsTabEnabled:
           type: boolean
     SpanBatchUpdate:
       required:

@@ -29,8 +29,8 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
             onChange({ ...configs, task_introduction: e.target.value })
           }
           placeholder="Describe the task context and what you're evaluating..."
-          className="text-xs"
-          rows={5}
+          className="min-h-16 text-xs"
+          rows={3}
         />
       </div>
 
@@ -50,8 +50,8 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
             onChange({ ...configs, evaluation_criteria: e.target.value })
           }
           placeholder="Define evaluation criteria: accuracy, completeness, relevance..."
-          className="text-xs"
-          rows={5}
+          className="min-h-16 text-xs"
+          rows={3}
         />
       </div>
     </div>

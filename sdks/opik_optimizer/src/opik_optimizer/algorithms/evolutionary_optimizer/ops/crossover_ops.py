@@ -8,6 +8,7 @@ from deap import creator as _creator
 
 from .. import prompts as evo_prompts
 from .. import reporting
+from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
 
 
@@ -116,15 +117,23 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
     child1 = creator.Individual(messages_1_orig)
     child2 = creator.Individual(messages_2_orig)
 
-    # Preserve tools and function_map from parents
+    # Preserve tools, function_map, model, and model_kwargs from parents
     if hasattr(ind1, "tools"):
         setattr(child1, "tools", getattr(ind1, "tools"))
     if hasattr(ind1, "function_map"):
         setattr(child1, "function_map", getattr(ind1, "function_map"))
+    if hasattr(ind1, "model"):
+        setattr(child1, "model", getattr(ind1, "model"))
+    if hasattr(ind1, "model_kwargs"):
+        setattr(child1, "model_kwargs", getattr(ind1, "model_kwargs"))
     if hasattr(ind2, "tools"):
         setattr(child2, "tools", getattr(ind2, "tools"))
     if hasattr(ind2, "function_map"):
         setattr(child2, "function_map", getattr(ind2, "function_map"))
+    if hasattr(ind2, "model"):
+        setattr(child2, "model", getattr(ind2, "model"))
+    if hasattr(ind2, "model_kwargs"):
+        setattr(child2, "model_kwargs", getattr(ind2, "model_kwargs"))
 
     return child1, child2
 
@@ -201,18 +210,38 @@ def llm_deap_crossover(
         first_child_messages = children[0]
         second_child_messages = children[1] if len(children) > 1 else children[0]
 
-        child1 = creator.Individual(first_child_messages)
-        child2 = creator.Individual(second_child_messages)
+        validated_children: list[list[dict[str, Any]]] = []
+        for idx, child_messages in enumerate(
+            (first_child_messages, second_child_messages), start=1
+        ):
+            try:
+                prompt_candidate = chat_prompt.ChatPrompt(messages=child_messages)
+            except ValueError as exc:
+                raise ValueError(
+                    f"LLM crossover produced invalid child prompt #{idx}: {exc}"
+                ) from exc
+            validated_children.append(prompt_candidate.get_messages())
 
-        # Preserve tools and function_map from parents
+        child1 = creator.Individual(validated_children[0])
+        child2 = creator.Individual(validated_children[1])
+
+        # Preserve tools, function_map, model, and model_kwargs from parents
         if hasattr(ind1, "tools"):
             setattr(child1, "tools", getattr(ind1, "tools"))
         if hasattr(ind1, "function_map"):
             setattr(child1, "function_map", getattr(ind1, "function_map"))
+        if hasattr(ind1, "model"):
+            setattr(child1, "model", getattr(ind1, "model"))
+        if hasattr(ind1, "model_kwargs"):
+            setattr(child1, "model_kwargs", getattr(ind1, "model_kwargs"))
         if hasattr(ind2, "tools"):
             setattr(child2, "tools", getattr(ind2, "tools"))
         if hasattr(ind2, "function_map"):
             setattr(child2, "function_map", getattr(ind2, "function_map"))
+        if hasattr(ind2, "model"):
+            setattr(child2, "model", getattr(ind2, "model"))
+        if hasattr(ind2, "model_kwargs"):
+            setattr(child2, "model_kwargs", getattr(ind2, "model_kwargs"))
 
         return child1, child2
     except Exception as e:

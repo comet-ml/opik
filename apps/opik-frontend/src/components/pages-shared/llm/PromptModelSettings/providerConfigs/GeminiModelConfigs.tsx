@@ -4,8 +4,10 @@ import SliderInputControl from "@/components/shared/SliderInputControl/SliderInp
 import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   DEFAULT_GEMINI_CONFIGS,
-  THINKING_LEVEL_OPTIONS,
+  THINKING_LEVEL_OPTIONS_PRO,
+  THINKING_LEVEL_OPTIONS_FLASH,
 } from "@/constants/llm";
+import { GeminiThinkingLevel } from "@/types/providers";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
@@ -24,6 +26,17 @@ const GeminiModelConfigs = ({
   onChange,
 }: geminiModelConfigsProps) => {
   const isGemini3Pro = model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO;
+  const isGemini3Flash = model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH;
+  const hasThinkingLevel = isGemini3Pro || isGemini3Flash;
+
+  // Get appropriate options based on model
+  // Flash supports all 4 levels (minimal, low, medium, high)
+  // Pro supports only 2 levels (low, high)
+  // Both default to "high" (dynamic reasoning)
+  const thinkingLevelOptions = isGemini3Flash
+    ? THINKING_LEVEL_OPTIONS_FLASH
+    : THINKING_LEVEL_OPTIONS_PRO;
+  const defaultThinkingLevel = "high";
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -75,7 +88,7 @@ const GeminiModelConfigs = ({
         />
       )}
 
-      {isGemini3Pro && (
+      {hasThinkingLevel && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingLevel" className="text-sm font-medium">
@@ -85,11 +98,11 @@ const GeminiModelConfigs = ({
           </div>
           <SelectBox
             id="thinkingLevel"
-            value={configs.thinkingLevel || "low"}
-            onChange={(value: "low" | "high") =>
+            value={configs.thinkingLevel || defaultThinkingLevel}
+            onChange={(value: GeminiThinkingLevel) =>
               onChange({ thinkingLevel: value })
             }
-            options={THINKING_LEVEL_OPTIONS}
+            options={thinkingLevelOptions}
             placeholder="Select thinking level"
           />
         </div>

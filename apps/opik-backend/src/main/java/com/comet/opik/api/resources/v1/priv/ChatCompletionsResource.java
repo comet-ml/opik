@@ -86,7 +86,7 @@ public class ChatCompletionsResource {
         }
 
         // Include actual model and provider in response headers for frontend span tracking.
-        // For OPIK_BUILTIN provider, the user-facing model name (e.g., "opik-builtin-model") differs
+        // For OPIK_FREE provider, the user-facing model name (e.g., "opik-free-model") differs
         // from the actual model used (e.g., "gpt-4o-mini"), and these headers allow correct cost calculation.
         var response = Response.ok()
                 .type(type)

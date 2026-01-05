@@ -1,6 +1,7 @@
 """Helper functions for Optimization Studio job processing."""
 
 import logging
+import os
 from typing import Callable, Any
 
 import opik
@@ -16,7 +17,14 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 def initialize_opik_client(context: OptimizationJobContext) -> opik.Opik:
-    """Initialize Opik SDK client.
+    """Initialize Opik SDK client by setting environment variables.
+    
+    Sets Opik environment variables from the job context, then creates a client.
+    This ensures both our explicit client and the opik_optimizer SDK's internal
+    clients use the same configuration.
+    
+    Note: This sets process-level env vars. For proper isolation in multi-tenant
+    scenarios, consider using IsolatedSubprocessExecutor.
     
     Args:
         context: Job context containing workspace and API key info
@@ -24,20 +32,30 @@ def initialize_opik_client(context: OptimizationJobContext) -> opik.Opik:
     Returns:
         Initialized Opik client
     """
-    opik_kwargs = {"workspace": context.workspace_name}
+    # Set environment variables for Opik SDK
+    # The opik_optimizer SDK creates its own opik.Opik() clients internally,
+    # which read configuration from these environment variables.
+    if context.opik_api_key:
+        os.environ["OPIK_API_KEY"] = context.opik_api_key
+        logger.info("Set OPIK_API_KEY environment variable (cloud deployment)")
+    else:
+        # Clear any previous API key to prevent credential leakage between jobs
+        os.environ.pop("OPIK_API_KEY", None)
+        logger.info("No OPIK_API_KEY provided (local deployment)")
+    
+    if context.workspace_name:
+        os.environ["OPIK_WORKSPACE"] = context.workspace_name
+        logger.info(f"Set OPIK_WORKSPACE: {context.workspace_name}")
+    else:
+        os.environ.pop("OPIK_WORKSPACE", None)
     
     if OPIK_URL:
-        opik_kwargs["host"] = OPIK_URL
-        logger.info(f"Using Opik URL override: '{OPIK_URL}'")
+        os.environ["OPIK_URL_OVERRIDE"] = OPIK_URL
+        logger.info(f"Set OPIK_URL_OVERRIDE: {OPIK_URL}")
     
-    if context.opik_api_key:
-        opik_kwargs["api_key"] = context.opik_api_key
-        logger.info("Using Opik API key from job message (cloud deployment)")
-    else:
-        logger.info("No Opik API key provided (local deployment)")
-    
-    client = opik.Opik(**opik_kwargs)
-    logger.info(f"Opik SDK initialized for workspace: {context.workspace_name}")
+    # Create client - it will read from the environment variables we just set
+    client = opik.Opik()
+    logger.info("Opik SDK initialized from environment variables")
     
     return client
 

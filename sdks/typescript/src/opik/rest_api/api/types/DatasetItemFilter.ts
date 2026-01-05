@@ -4,6 +4,9 @@
 
 import * as OpikApi from "../index";
 
+/**
+ * Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
+ */
 export interface DatasetItemFilter {
     field?: string;
     operator?: OpikApi.DatasetItemFilterOperator;

@@ -5,6 +5,7 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.dataset_expansion_response import DatasetExpansionResponse
+from ..types.dataset_item_changes_public import DatasetItemChangesPublic
 from ..types.dataset_item_filter import DatasetItemFilter
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
@@ -45,12 +46,59 @@ class DatasetsClient:
         """
         return self._raw_client
 
+    def apply_dataset_item_changes(
+        self,
+        id: str,
+        *,
+        request: DatasetItemChangesPublic,
+        override: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetVersionPublic:
+        """
+        Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+        This endpoint:
+        - Creates a new version with the applied changes
+        - Validates that baseVersion matches the latest version (unless override=true)
+        - Returns 409 Conflict if baseVersion is stale and override is not set
+
+        Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Parameters
+        ----------
+        id : str
+
+        request : DatasetItemChangesPublic
+
+        override : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Version created successfully
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.apply_dataset_item_changes(id='id', request={'key': 'value'
+        }, )
+        """
+        _response = self._raw_client.apply_dataset_item_changes(
+            id, request=request, override=override, request_options=request_options
+        )
+        return _response.data
+
     def batch_update_dataset_items(
         self,
         *,
         update: DatasetItemUpdate,
         ids: typing.Optional[typing.Sequence[str]] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -65,6 +113,9 @@ class DatasetsClient:
             List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
 
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
+        dataset_id : typing.Optional[str]
+            Dataset ID. Required when using 'filters', optional when using 'ids'.
 
         merge_tags : typing.Optional[bool]
             If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
@@ -84,7 +135,12 @@ class DatasetsClient:
         client.datasets.batch_update_dataset_items(update=DatasetItemUpdate(), )
         """
         _response = self._raw_client.batch_update_dataset_items(
-            update=update, ids=ids, filters=filters, merge_tags=merge_tags, request_options=request_options
+            update=update,
+            ids=ids,
+            filters=filters,
+            dataset_id=dataset_id,
+            merge_tags=merge_tags,
+            request_options=request_options,
         )
         return _response.data
 
@@ -465,14 +521,30 @@ class DatasetsClient:
         return _response.data
 
     def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Delete dataset items
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
 
         Parameters
         ----------
-        item_ids : typing.Sequence[str]
+        item_ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to delete (max 1000). Use this to delete specific items by their IDs. Mutually exclusive with 'dataset_id' and 'filters'.
+
+        dataset_id : typing.Optional[str]
+            Dataset ID to scope the deletion. Required when using 'filters'. Mutually exclusive with 'item_ids'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+            Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -485,9 +557,11 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.delete_dataset_items(item_ids=['item_ids'], )
+        client.datasets.delete_dataset_items()
         """
-        _response = self._raw_client.delete_dataset_items(item_ids=item_ids, request_options=request_options)
+        _response = self._raw_client.delete_dataset_items(
+            item_ids=item_ids, dataset_id=dataset_id, filters=filters, request_options=request_options
+        )
         return _response.data
 
     def delete_datasets_batch(
@@ -966,6 +1040,36 @@ class DatasetsClient:
         _response = self._raw_client.create_version_tag(version_hash, id, tag=tag, request_options=request_options)
         return _response.data
 
+    def delete_version_tag(
+        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
+
+        Parameters
+        ----------
+        version_hash : str
+
+        tag : str
+
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
+        """
+        _response = self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
+        return _response.data
+
     def list_dataset_versions(
         self,
         id: str,
@@ -1002,84 +1106,11 @@ class DatasetsClient:
         _response = self._raw_client.list_dataset_versions(id, page=page, size=size, request_options=request_options)
         return _response.data
 
-    def create_dataset_version(
-        self,
-        id: str,
-        *,
-        tags: typing.Optional[typing.Sequence[str]] = OMIT,
-        change_description: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Create a new immutable version of the dataset by snapshotting the current state
-
-        Parameters
-        ----------
-        id : str
-
-        tags : typing.Optional[typing.Sequence[str]]
-            Optional list of tags for this version
-
-        change_description : typing.Optional[str]
-            Optional description of changes in this version
-
-        metadata : typing.Optional[typing.Dict[str, str]]
-            Optional user-defined metadata
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.create_dataset_version(id='id', )
-        """
-        _response = self._raw_client.create_dataset_version(
-            id, tags=tags, change_description=change_description, metadata=metadata, request_options=request_options
-        )
-        return _response.data
-
-    def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
-        """
-        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
-
-        Parameters
-        ----------
-        version_hash : str
-
-        tag : str
-
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
-        """
-        _response = self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
-        return _response.data
-
     def restore_dataset_version(
         self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetVersionPublic:
         """
-        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+        Restores the dataset to a previous version state by creating a new version with items copied from the specified version. If the version is already the latest, returns it as-is (no-op).
 
         Parameters
         ----------
@@ -1170,12 +1201,62 @@ class AsyncDatasetsClient:
         """
         return self._raw_client
 
+    async def apply_dataset_item_changes(
+        self,
+        id: str,
+        *,
+        request: DatasetItemChangesPublic,
+        override: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetVersionPublic:
+        """
+        Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+        This endpoint:
+        - Creates a new version with the applied changes
+        - Validates that baseVersion matches the latest version (unless override=true)
+        - Returns 409 Conflict if baseVersion is stale and override is not set
+
+        Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Parameters
+        ----------
+        id : str
+
+        request : DatasetItemChangesPublic
+
+        override : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Version created successfully
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.apply_dataset_item_changes(id='id', request={'key': 'value'
+            }, )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.apply_dataset_item_changes(
+            id, request=request, override=override, request_options=request_options
+        )
+        return _response.data
+
     async def batch_update_dataset_items(
         self,
         *,
         update: DatasetItemUpdate,
         ids: typing.Optional[typing.Sequence[str]] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -1190,6 +1271,9 @@ class AsyncDatasetsClient:
             List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
 
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
+        dataset_id : typing.Optional[str]
+            Dataset ID. Required when using 'filters', optional when using 'ids'.
 
         merge_tags : typing.Optional[bool]
             If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
@@ -1212,7 +1296,12 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.batch_update_dataset_items(
-            update=update, ids=ids, filters=filters, merge_tags=merge_tags, request_options=request_options
+            update=update,
+            ids=ids,
+            filters=filters,
+            dataset_id=dataset_id,
+            merge_tags=merge_tags,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1627,14 +1716,30 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Delete dataset items
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
 
         Parameters
         ----------
-        item_ids : typing.Sequence[str]
+        item_ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to delete (max 1000). Use this to delete specific items by their IDs. Mutually exclusive with 'dataset_id' and 'filters'.
+
+        dataset_id : typing.Optional[str]
+            Dataset ID to scope the deletion. Required when using 'filters'. Mutually exclusive with 'item_ids'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+            Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1649,10 +1754,12 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.delete_dataset_items(item_ids=['item_ids'], )
+            await client.datasets.delete_dataset_items()
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_dataset_items(item_ids=item_ids, request_options=request_options)
+        _response = await self._raw_client.delete_dataset_items(
+            item_ids=item_ids, dataset_id=dataset_id, filters=filters, request_options=request_options
+        )
         return _response.data
 
     async def delete_datasets_batch(
@@ -2167,6 +2274,39 @@ class AsyncDatasetsClient:
         )
         return _response.data
 
+    async def delete_version_tag(
+        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
+
+        Parameters
+        ----------
+        version_hash : str
+
+        tag : str
+
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
+        return _response.data
+
     async def list_dataset_versions(
         self,
         id: str,
@@ -2208,90 +2348,11 @@ class AsyncDatasetsClient:
         )
         return _response.data
 
-    async def create_dataset_version(
-        self,
-        id: str,
-        *,
-        tags: typing.Optional[typing.Sequence[str]] = OMIT,
-        change_description: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Create a new immutable version of the dataset by snapshotting the current state
-
-        Parameters
-        ----------
-        id : str
-
-        tags : typing.Optional[typing.Sequence[str]]
-            Optional list of tags for this version
-
-        change_description : typing.Optional[str]
-            Optional description of changes in this version
-
-        metadata : typing.Optional[typing.Dict[str, str]]
-            Optional user-defined metadata
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.datasets.create_dataset_version(id='id', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.create_dataset_version(
-            id, tags=tags, change_description=change_description, metadata=metadata, request_options=request_options
-        )
-        return _response.data
-
-    async def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
-        """
-        Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
-
-        Parameters
-        ----------
-        version_hash : str
-
-        tag : str
-
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
-        return _response.data
-
     async def restore_dataset_version(
         self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetVersionPublic:
         """
-        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+        Restores the dataset to a previous version state by creating a new version with items copied from the specified version. If the version is already the latest, returns it as-is (no-op).
 
         Parameters
         ----------

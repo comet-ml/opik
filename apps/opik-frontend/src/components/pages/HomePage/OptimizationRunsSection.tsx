@@ -25,6 +25,7 @@ import { formatDate } from "@/lib/date";
 import { toString } from "@/lib/utils";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
+import { getOptimizerLabel } from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "home-optimizations-columns-width";
@@ -62,8 +63,14 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
       label: "Optimizer",
       type: COLUMN_TYPE.string,
       accessorFn: (row) => {
-        const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
-        return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+        const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
+        if (metadataVal) {
+          return isObject(metadataVal)
+            ? JSON.stringify(metadataVal, null, 2)
+            : toString(metadataVal);
+        }
+        const studioVal = row.studio_config?.optimizer?.type;
+        return studioVal ? getOptimizerLabel(studioVal) : "-";
       },
       explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
     },

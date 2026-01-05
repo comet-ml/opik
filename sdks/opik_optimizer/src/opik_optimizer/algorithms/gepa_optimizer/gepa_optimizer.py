@@ -374,6 +374,7 @@ class GepaOptimizer(BaseOptimizer):
                 system_fallback=seed_prompt_text,
                 dataset=dataset,
                 experiment_config=experiment_config,
+                validation_dataset=validation_dataset,
             )
 
             try:

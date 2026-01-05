@@ -26,6 +26,7 @@ jobs:
           run: |
               set -e
               cd deployment/helm_chart/opik
+              helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
               helm repo add bitnami https://charts.bitnami.com/bitnami
               helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
               helm dependency build

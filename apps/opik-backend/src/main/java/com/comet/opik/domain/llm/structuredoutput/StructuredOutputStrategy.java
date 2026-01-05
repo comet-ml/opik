@@ -43,7 +43,7 @@ public interface StructuredOutputStrategy {
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
             case VERTEX_AI -> VertexAIModelName.byQualifiedName(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
-            case ANTHROPIC, CUSTOM_LLM, OPIK_BUILTIN -> false; // TODO: Should we pick a model that supports structured output?
+            case ANTHROPIC, CUSTOM_LLM, OPIK_FREE -> false; // TODO: Should we pick a model that supports structured output?
         };
 
         return isStructuredOutputSupported ? new ToolCallingStrategy() : new InstructionStrategy();

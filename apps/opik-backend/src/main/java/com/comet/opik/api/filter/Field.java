@@ -52,12 +52,14 @@ public interface Field {
     String TRACE_ID_QUERY_PARAM = "trace_id";
     String SPAN_ID_QUERY_PARAM = "span_id";
     String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
+    String EXPERIMENT_ID_QUERY_PARAM = "experiment_id";
     String WEBHOOK_URL_QUERY_PARAM = "webhook_url";
     String ALERT_TYPE_QUERY_PARAM = "alert_type";
     String ENABLED_QUERY_PARAM = "enabled";
     String SAMPLING_RATE_QUERY_PARAM = "sampling_rate";
-    String PROJECT_ID_QUERY_PARAM = "project_id";
-    String PROJECT_NAME_QUERY_PARAM = "project_name";
+    String COMMIT_QUERY_PARAM = "commit";
+    String TEMPLATE_QUERY_PARAM = "template";
+    String CHANGE_DESCRIPTION_QUERY_PARAM = "change_description";
 
     @JsonValue
     String getQueryParamField();

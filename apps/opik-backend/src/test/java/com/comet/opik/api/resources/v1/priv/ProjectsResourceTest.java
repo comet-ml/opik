@@ -136,9 +136,9 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "totalEstimatedCostSum", "usage",
-            "traceCount", "guardrailsFailedCount", "errorCount"};
+            "traceCount", "threadCount", "guardrailsFailedCount", "errorCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
-            "lastUpdatedTraceAt"};
+            "lastUpdatedTraceAt", "threadCount"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -1473,6 +1473,22 @@ class ProjectsResourceTest {
         return ProjectStatsSummaryItemMapper.INSTANCE.mapFromProject(project);
     }
 
+    private ProjectStatsSummaryItem mapFromProjectToSummary(Project project, List<Trace> traces) {
+        return ProjectStatsSummaryItemMapper.INSTANCE.mapFromProject(project)
+                .toBuilder()
+                .threadCount(calculateExpectedThreadCount(traces))
+                .build();
+    }
+
+    private long calculateExpectedThreadCount(List<Trace> traces) {
+        return traces.stream()
+                .map(Trace::threadId)
+                .filter(Objects::nonNull)
+                .filter(threadId -> !threadId.isEmpty())
+                .distinct()
+                .count();
+    }
+
     private Project buildProjectStats(Project project, String apiKey, String workspaceName) {
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                 .map(trace -> {
@@ -1565,6 +1581,7 @@ class ProjectsResourceTest {
                 .feedbackScores(getScoreAverages(traces))
                 .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
                 .traceCount((long) traces.size())
+                .threadCount(calculateExpectedThreadCount(traces))
                 .guardrailsFailedCount(traces.stream()
                         .map(Trace::guardrailsValidations)
                         .filter(Objects::nonNull)
@@ -1754,16 +1771,16 @@ class ProjectsResourceTest {
                     recentErrorCount,
                     pastPeriodErrorCount);
 
-            // Create expected project with error count
-            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
-                    createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithSpecificErrors))
-                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
-                    .toList();
+            // Create expected project with error count and thread count
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithSpecificErrors),
+                            tracesWithSpecificErrors));
 
             var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
                     workspaceName);
 
-            // Verify error count using recursive comparison
+            // Verify error count and thread count using recursive comparison
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
         }
 
@@ -1787,16 +1804,16 @@ class ProjectsResourceTest {
                     recentErrorCount,
                     pastPeriodErrorCount);
 
-            // Create expected project with error count
-            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
-                    createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithSpecificErrors))
-                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
-                    .toList();
+            // Create expected project with error count and thread count
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithSpecificErrors),
+                            tracesWithSpecificErrors));
 
             var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
                     workspaceName);
 
-            // Verify error count using recursive comparison
+            // Verify error count and thread count using recursive comparison
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
         }
 
@@ -1816,16 +1833,16 @@ class ProjectsResourceTest {
             // Create traces without errors
             List<Trace> tracesWithNoErrors = createTracesWithoutErrors(project.name(), workspaceName, apiKey);
 
-            // Create expected project with error count of zero
-            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
-                    createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithNoErrors))
-                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
-                    .toList();
+            // Create expected project with error count of zero and thread count
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithNoErrors),
+                            tracesWithNoErrors));
 
             var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
                     workspaceName);
 
-            // Error count might be null or have count = 0
+            // Error count might be null or have count = 0, also verify thread count
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
         }
 
@@ -1855,21 +1872,24 @@ class ProjectsResourceTest {
             int recentErrorCount2 = PodamUtils.getIntegerInRange(1, 5);
             int pastPeriodErrorCount = 0;
 
-            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
-                    createProjectSummary(project1.toBuilder().id(projectId1).build(),
-                            createTracesWithSpecificErrors(project1.name(), workspaceName, apiKey, recentErrorCount1,
-                                    pastPeriodErrorCount1)),
-                    createProjectSummary(project2.toBuilder().id(projectId2).build(),
-                            createTracesWithSpecificErrors(project2.name(), workspaceName, apiKey, recentErrorCount2,
-                                    pastPeriodErrorCount)),
-                    createProjectSummary(project3.toBuilder().id(projectId3).build(),
-                            createTracesWithoutErrors(project3.name(), workspaceName, apiKey)))
-                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
-                    .toList();
+            // Create traces for each project
+            List<Trace> traces1 = createTracesWithSpecificErrors(project1.name(), workspaceName, apiKey,
+                    recentErrorCount1, pastPeriodErrorCount1);
+            List<Trace> traces2 = createTracesWithSpecificErrors(project2.name(), workspaceName, apiKey,
+                    recentErrorCount2, pastPeriodErrorCount);
+            List<Trace> traces3 = createTracesWithoutErrors(project3.name(), workspaceName, apiKey);
+
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project1.toBuilder().id(projectId1).build(), traces1), traces1),
+                    mapFromProjectToSummary(
+                            createProjectSummary(project2.toBuilder().id(projectId2).build(), traces2), traces2),
+                    mapFromProjectToSummary(
+                            createProjectSummary(project3.toBuilder().id(projectId3).build(), traces3), traces3));
 
             var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(null, apiKey, workspaceName);
 
-            // Error count might be null or have count = 0
+            // Error count might be null or have count = 0, also verify thread count
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary.reversed());
         }
 

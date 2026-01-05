@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
@@ -86,13 +86,29 @@ async function inviteUsersRequest(variables: InviteUsersVariables) {
 }
 
 export function useInviteUsersMutation() {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationKey: ["workspace", "invite-users"],
     mutationFn: inviteUsersRequest,
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({ description: "Invite sent successfully" });
+      queryClient.invalidateQueries({
+        queryKey: ["workspace-members", { workspaceId: variables.workspaceId }],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [
+          "workspace-email-invites",
+          { workspaceId: variables.workspaceId },
+        ],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [
+          "workspace-permissions",
+          { workspaceId: variables.workspaceId },
+        ],
+      });
     },
     onError: (error) => {
       const message = extractServerMessage(error) || "Invite request failed";

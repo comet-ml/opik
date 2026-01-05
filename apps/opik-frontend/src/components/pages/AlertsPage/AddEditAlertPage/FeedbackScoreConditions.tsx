@@ -8,7 +8,9 @@ import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import AlertFeedbackScoresSelect from "@/components/shared/AlertFeedbackScoresSelect/AlertFeedbackScoresSelect";
+import FeedbackDefinitionsAndScoresSelectBox, {
+  ScoreSource,
+} from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { DropdownOption } from "@/types/shared";
 import { AlertFormType, FeedbackScoreConditionType } from "./schema";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
@@ -54,6 +56,13 @@ const FeedbackScoreConditions: React.FC<FeedbackScoreConditionsProps> = ({
     control: form.control,
     name: `triggers.${triggerIndex}.conditions` as "triggers.0.conditions",
   });
+
+  const scoreSource =
+    eventType === ALERT_EVENT_TYPE.trace_feedback_score
+      ? ScoreSource.TRACES
+      : eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
+        ? ScoreSource.THREADS
+        : ScoreSource.TRACES;
 
   const addCondition = () => {
     conditionsFieldArray.append(DEFAULT_FEEDBACK_SCORE_CONDITION);
@@ -128,10 +137,11 @@ const FeedbackScoreConditions: React.FC<FeedbackScoreConditionsProps> = ({
                           </Label>
                         )}
                         <FormControl>
-                          <AlertFeedbackScoresSelect
+                          <FeedbackDefinitionsAndScoresSelectBox
                             value={field.value as string}
                             onChange={field.onChange}
-                            eventType={eventType}
+                            scoreSource={scoreSource}
+                            multiselect={false}
                             className={cn("h-8 rounded-r-none", {
                               "border-destructive": Boolean(
                                 validationErrors?.message,

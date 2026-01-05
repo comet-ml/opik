@@ -20,6 +20,7 @@ export const PromptVersionDetail: core.serialization.ObjectSchema<
     metadata: JsonNodeDetail.optional(),
     type: PromptVersionDetailType.optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
+    tags: core.serialization.list(core.serialization.string()).optional(),
     variables: core.serialization.list(core.serialization.string()).optional(),
     templateStructure: core.serialization.property(
         "template_structure",
@@ -38,6 +39,7 @@ export declare namespace PromptVersionDetail {
         metadata?: JsonNodeDetail.Raw | null;
         type?: PromptVersionDetailType.Raw | null;
         change_description?: string | null;
+        tags?: string[] | null;
         variables?: string[] | null;
         template_structure?: PromptVersionDetailTemplateStructure.Raw | null;
         created_at?: string | null;

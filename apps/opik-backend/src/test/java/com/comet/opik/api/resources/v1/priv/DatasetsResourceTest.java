@@ -754,7 +754,9 @@ class DatasetsResourceTest {
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
 
-            var delete = new DatasetItemsDelete(items.stream().map(DatasetItem::id).toList());
+            var delete = DatasetItemsDelete.builder()
+                    .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
+                    .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -1243,7 +1245,9 @@ class DatasetsResourceTest {
 
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
 
-            var delete = new DatasetItemsDelete(items.stream().map(DatasetItem::id).toList());
+            var delete = DatasetItemsDelete.builder()
+                    .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
+                    .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -2968,11 +2972,14 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
+            var expectedTags = datasetUpdate.tags() == null
+                    ? dataset.tags() // if null, keep previous tags
+                    : (datasetUpdate.tags().isEmpty() ? null : datasetUpdate.tags()); // if empty, clears tags
             var expectedDataset = dataset.toBuilder()
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
                     .visibility(datasetUpdate.visibility())
-                    .tags(datasetUpdate.tags() == null ? dataset.tags() : datasetUpdate.tags())
+                    .tags(expectedTags)
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
@@ -4297,8 +4304,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Get the dataset ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            UUID datasetId = retrieved1.datasetId();
+
+            // Verify initial state
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
@@ -4310,6 +4320,7 @@ class DatasetsResourceTest {
 
             // Batch update by filters with merge
             var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
                     .filters(List.of(filter))
                     .update(DatasetItemUpdate.builder()
                             .tags(Set.of("newtag"))
@@ -4349,8 +4360,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Get the dataset ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            UUID datasetId = retrieved1.datasetId();
+
+            // Verify initial state
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
@@ -4362,6 +4376,7 @@ class DatasetsResourceTest {
 
             // Batch update by filters with mergeTags=false (should auto-set to true)
             var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
                     .filters(List.of(filter))
                     .update(DatasetItemUpdate.builder()
                             .tags(Set.of("newtag"))
@@ -4417,19 +4432,192 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("Error: batch update with empty filters")
-        void batchUpdateDatasetItems__whenEmptyFilters__thenBadRequest() {
+        @DisplayName("Success: batch update with empty filters updates all items")
+        void batchUpdateDatasetItems__whenEmptyFilters__thenUpdatesAllItems() {
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag3"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get the dataset ID
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            UUID datasetId = retrieved1.datasetId();
+
+            // Verify initial state
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("tag1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("tag2");
+            assertThat(retrieved3.tags()).containsExactlyInAnyOrder("tag3");
+
+            // Batch update with empty filters - should update ALL items
             var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
                     .filters(List.of())
                     .update(DatasetItemUpdate.builder()
-                            .tags(Set.of("tag"))
+                            .tags(Set.of("newtag"))
                             .build())
                     .mergeTags(true)
                     .build();
 
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify ALL items were updated (empty filters = select all)
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("tag1", "newtag");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("tag2", "newtag");
+            assertThat(updated3.tags()).containsExactlyInAnyOrder("tag3", "newtag");
+        }
+
+        @Test
+        @DisplayName("Success: batch update by filters with dataset_id only affects specified dataset")
+        void batchUpdateDatasetItems__whenFilterWithDatasetId__thenAffectsOnlySpecifiedDataset() {
+            // Create two separate datasets with items that have similar tags
+            var dataset1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(null)
+                    .datasetName("dataset-1")
+                    .build();
+
+            var dataset2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(null)
+                    .datasetName("dataset-2")
+                    .build();
+
+            // Create items with matching tags in both datasets
+            var dataset1Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("target-tag"))
+                    .build();
+            var dataset1Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other-tag"))
+                    .build();
+
+            var dataset2Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("target-tag"))
+                    .build();
+            var dataset2Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other-tag"))
+                    .build();
+
+            var batch1 = dataset1.toBuilder()
+                    .items(List.of(dataset1Item1, dataset1Item2))
+                    .build();
+
+            var batch2 = dataset2.toBuilder()
+                    .items(List.of(dataset2Item1, dataset2Item2))
+                    .build();
+
+            // Save both datasets
+            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
+            putAndAssert(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Get the actual dataset IDs that were created
+            var retrievedDataset1Item1 = datasetResourceClient.getDatasetItem(dataset1Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            UUID dataset1Id = retrievedDataset1Item1.datasetId();
+
+            // Verify initial state
+            var retrievedDataset1Item2 = datasetResourceClient.getDatasetItem(dataset1Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var retrievedDataset2Item1 = datasetResourceClient.getDatasetItem(dataset2Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var retrievedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(retrievedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag");
+            assertThat(retrievedDataset1Item2.tags()).containsExactlyInAnyOrder("other-tag");
+            assertThat(retrievedDataset2Item1.tags()).containsExactlyInAnyOrder("target-tag");
+            assertThat(retrievedDataset2Item2.tags()).containsExactlyInAnyOrder("other-tag");
+
+            // Create a filter that targets items with "target-tag"
+            var filter = DatasetItemFilter.builder()
+                    .field(DatasetItemField.TAGS)
+                    .operator(Operator.CONTAINS)
+                    .value("target-tag")
+                    .build();
+
+            // Batch update by filter WITH dataset_id specified - should only affect dataset1
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(dataset1Id)
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("updated-tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify: Only dataset1 items were updated, dataset2 items remain unchanged
+            var updatedDataset1Item1 = datasetResourceClient.getDatasetItem(dataset1Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var updatedDataset1Item2 = datasetResourceClient.getDatasetItem(dataset1Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var updatedDataset2Item1 = datasetResourceClient.getDatasetItem(dataset2Item1.id(), API_KEY,
+                    TEST_WORKSPACE);
+            var updatedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Dataset1 items with target-tag should be updated
+            assertThat(updatedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag", "updated-tag");
+            assertThat(updatedDataset1Item2.tags()).containsExactlyInAnyOrder("other-tag"); // unchanged
+
+            // Dataset2 items should NOT be updated (different dataset)
+            assertThat(updatedDataset2Item1.tags()).containsExactlyInAnyOrder("target-tag"); // NOT updated
+            assertThat(updatedDataset2Item2.tags()).containsExactlyInAnyOrder("other-tag"); // unchanged
+        }
+
+        @Test
+        @DisplayName("Error: batch update by filters without dataset_id should fail")
+        void batchUpdateDatasetItems__whenFilterWithoutDatasetId__thenFails() {
+            // Create a dataset with items
+            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("some-tag"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Create a filter
+            var filter = DatasetItemFilter.builder()
+                    .field(DatasetItemField.TAGS)
+                    .operator(Operator.CONTAINS)
+                    .value("some-tag")
+                    .build();
+
+            // Attempt to batch update by filter WITHOUT dataset_id - should fail
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("new-tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            // Should fail with validation error requiring dataset_id
             try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
                     TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                var errorBody = actualResponse.readEntity(String.class);
+                assertThat(errorBody).contains("dataset_id");
             }
         }
     }
@@ -4440,7 +4628,7 @@ class DatasetsResourceTest {
     class DeleteDatasetItems {
 
         @Test
-        @DisplayName("Success")
+        @DisplayName("Success: delete by IDs")
         void deleteDatasetItem() {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
@@ -4451,7 +4639,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            var itemIds = items.stream().map(DatasetItem::id).toList();
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
+                    .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -4459,7 +4649,7 @@ class DatasetsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetItemsDelete(itemIds)))) {
+                    .post(Entity.json(deleteRequest))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
@@ -4482,8 +4672,11 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when dataset item does not exists, then return no content")
         void deleteDatasetItem__whenDatasetItemDoesNotExists__thenReturnNoContent() {
-            var id = UUID.randomUUID().toString();
-            var itemIds = List.of(UUID.fromString(id));
+            var id = UUID.randomUUID();
+
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(Set.of(id))
+                    .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -4492,39 +4685,321 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetItemsDelete(itemIds)))) {
+                    .post(Entity.json(deleteRequest))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
         }
 
-        @ParameterizedTest
-        @MethodSource("invalidDatasetItemBatches")
-        @DisplayName("when dataset item batch is not valid, then return 422")
-        void deleteDatasetItem__whenDatasetItemIsNotValid__thenReturn422(List<UUID> itemIds, String errorMessage) {
+        @Test
+        @DisplayName("Error: delete with both ids and filters")
+        void deleteDatasetItems__whenBothIdsAndFilters__thenBadRequest() {
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag");
+
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(Set.of(UUID.randomUUID()))
+                    .filters(List.of(filter))
+                    .build();
+
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
                     .path("delete")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetItemsDelete(itemIds)))) {
+                    .post(Entity.json(deleteRequest))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(errorMessage);
             }
         }
 
-        public Stream<Arguments> invalidDatasetItemBatches() {
-            return Stream.of(
-                    arguments(List.of(),
-                            "itemIds size must be between 1 and 1000"),
-                    arguments(null,
-                            "itemIds must not be null"),
-                    arguments(IntStream.range(1, 10001).mapToObj(__ -> UUID.randomUUID()).toList(),
-                            "itemIds size must be between 1 and 1000"));
+        @Test
+        @DisplayName("Error: delete with neither ids nor filters")
+        void deleteDatasetItems__whenNeitherIdsNorFilters__thenBadRequest() {
+            var deleteRequest = DatasetItemsDelete.builder().build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: delete with too many ids")
+        void deleteDatasetItems__whenTooManyIds__thenBadRequest() {
+            var ids = IntStream.range(0, 1001).mapToObj(__ -> UUID.randomUUID()).collect(Collectors.toSet());
+
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(ids)
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("itemIds size must be between 1 and 1000");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: delete by filters")
+        void deleteDatasetItems__whenUsingFilters__thenSucceed() {
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("delete-me", "tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("delete-me", "tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("keep-me", "tag3"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("delete-me", "tag1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("delete-me", "tag2");
+            assertThat(retrieved3.tags()).containsExactlyInAnyOrder("keep-me", "tag3");
+
+            // Get dataset ID from one of the items
+            var datasetId = retrieved1.datasetId();
+
+            // Create filter to match items with "delete-me" tag
+            var tagFilter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "delete-me");
+
+            // Delete by filters with explicit dataset_id
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of(tagFilter))
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            // Verify items matching filters were deleted
+            try (var response1 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path(item1.id().toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+
+            try (var response2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path(item2.id().toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+
+            // Verify item not matching filter was NOT deleted
+            var stillExists = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(stillExists.tags()).containsExactlyInAnyOrder("keep-me", "tag3");
+        }
+
+        @Test
+        @DisplayName("Success: delete by filters with dataset_id prevents cross-dataset deletion")
+        void deleteDatasetItems__whenUsingFiltersWithDatasetId__thenOnlyDeletesFromTargetDataset() {
+            // Create two different datasets
+            var dataset1Id = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+            var dataset2Id = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            // Create items with identical tags in both datasets
+            var item1Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("delete-me", "dataset1"))
+                    .build();
+            var item2Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("delete-me", "dataset1"))
+                    .build();
+            var item3Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("keep-me", "dataset1"))
+                    .build();
+
+            var item1Dataset2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("delete-me", "dataset2"))
+                    .build();
+            var item2Dataset2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("delete-me", "dataset2"))
+                    .build();
+
+            // Insert items into dataset 1
+            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1Dataset1, item2Dataset1, item3Dataset1))
+                    .datasetId(dataset1Id)
+                    .datasetName(null)
+                    .build();
+            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Insert items into dataset 2
+            var batch2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1Dataset2, item2Dataset2))
+                    .datasetId(dataset2Id)
+                    .datasetName(null)
+                    .build();
+            putAndAssert(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            assertThat(datasetResourceClient.getDatasetItem(item1Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+            assertThat(datasetResourceClient.getDatasetItem(item2Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+            assertThat(datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+            assertThat(datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+            assertThat(datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+
+            // Create filter to delete items with "delete-me" tag
+            var tagFilter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "delete-me");
+
+            // Delete by filters with explicit dataset_id (only from dataset1)
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .datasetId(dataset1Id)
+                    .filters(List.of(tagFilter))
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            // Verify items from dataset1 with "delete-me" tag were deleted
+            try (var response1 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path(item1Dataset1.id().toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+
+            try (var response2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path(item2Dataset1.id().toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+
+            // Verify item from dataset1 without "delete-me" tag was NOT deleted
+            var stillExistsDataset1 = datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(stillExistsDataset1.tags()).containsExactlyInAnyOrder("keep-me", "dataset1");
+
+            // CRITICAL: Verify ALL items from dataset2 remain untouched (proves dataset_id filter works)
+            var stillExistsDataset2Item1 = datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(stillExistsDataset2Item1.tags()).containsExactlyInAnyOrder("delete-me", "dataset2");
+
+            var stillExistsDataset2Item2 = datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(stillExistsDataset2Item2.tags()).containsExactlyInAnyOrder("delete-me", "dataset2");
+        }
+
+        @Test
+        @DisplayName("Success: delete all items in dataset using dataset_id filter only")
+        void deleteDatasetItems__whenOnlyDatasetIdFilter__thenDeletesAllItemsInDataset() {
+            // Create items
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag3"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1).isNotNull();
+            assertThat(retrieved2).isNotNull();
+            assertThat(retrieved3).isNotNull();
+
+            // Get dataset ID
+            var datasetId = retrieved1.datasetId();
+
+            // Delete with only dataset_id - should delete ALL items in that dataset
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            // Verify ALL items were deleted
+            for (var item : List.of(item1, item2, item3)) {
+                try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                        .path("items")
+                        .path(item.id().toString())
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                        .get()) {
+                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
+                }
+            }
         }
     }
 
@@ -5818,6 +6293,8 @@ class DatasetsResourceTest {
                             FieldType.STRING, Operator.NOT_EQUAL, null, "sql_test")),
                     arguments(new ExperimentsComparisonFilter("sql_tag",
                             FieldType.STRING, Operator.CONTAINS, null, "sql_")),
+                    arguments(new ExperimentsComparisonFilter("sql_urls",
+                            FieldType.LIST, Operator.CONTAINS, null, "sql_match")),
                     arguments(new ExperimentsComparisonFilter("json_node",
                             FieldType.DICTIONARY, Operator.EQUAL, "test2", "12338")),
                     arguments(new ExperimentsComparisonFilter("json_node",
@@ -5886,7 +6363,9 @@ class DatasetsResourceTest {
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
             // Delete the dataset item using the correct POST endpoint
-            var deleteRequest = new DatasetItemsDelete(List.of(datasetItem.id()));
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(Set.of(datasetItem.id()))
+                    .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -6001,6 +6480,8 @@ class DatasetsResourceTest {
                                 {
                                     put("sql_tag", JsonUtils.readTree("sql_test"));
                                     put("sql_rate", JsonUtils.readTree(100));
+                                    put("sql_urls", JsonUtils.readTree(List.of("https://example.com",
+                                            "https://test.org", "https://sql_match.io")));
                                     put("input", JsonUtils
                                             .getJsonNodeFromString(
                                                     JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))));
@@ -6283,12 +6764,7 @@ class DatasetsResourceTest {
                             field,
                             FieldType.DATE_TIME.getQueryParamType(),
                             Operator.EQUAL.getQueryParamOperator(),
-                            Instant.now().toString())),
-                    Arguments.of(template.formatted(
-                            field,
-                            FieldType.LIST.getQueryParamType(),
-                            Operator.CONTAINS.getQueryParamOperator(),
-                            RandomStringUtils.randomAlphanumeric(10))));
+                            Instant.now().toString())));
         }
     }
 

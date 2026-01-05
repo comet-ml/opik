@@ -4,7 +4,7 @@ import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { generateSearchByFieldFilters, processFilters } from "@/lib/filters";
 
-type UseDatasetItemsListParams = {
+export type UseDatasetItemsListParams = {
   datasetId: string;
   filters?: Filters;
   page: number;
@@ -17,6 +17,7 @@ export type UseDatasetItemsListResponse = {
   content: DatasetItem[];
   columns: DatasetItemColumn[];
   total: number;
+  has_draft?: boolean;
 };
 
 const getDatasetItemsList = async (
@@ -29,7 +30,7 @@ const getDatasetItemsList = async (
     search,
     truncate = false,
   }: UseDatasetItemsListParams,
-) => {
+): Promise<UseDatasetItemsListResponse> => {
   const { data } = await api.get(
     `${DATASETS_REST_ENDPOINT}${datasetId}/items`,
     {

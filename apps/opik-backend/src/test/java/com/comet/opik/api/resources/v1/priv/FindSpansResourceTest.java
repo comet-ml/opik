@@ -84,6 +84,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -451,7 +452,8 @@ class FindSpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY, MAP, ENUM, ERROR_CONTAINER, STRING_STATE_DB, CUSTOM ->
+                case STRING, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                        CUSTOM ->
                     RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
@@ -464,13 +466,13 @@ class FindSpansResourceTest {
                         DATE_TIME_STATE_DB ->
                     null;
                 case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
-                case DICTIONARY, MAP -> "";
+                case DICTIONARY, DICTIONARY_STATE_DB, MAP -> "";
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                case STRING, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
                         DATE_TIME_STATE_DB ->
                     " ";
                 case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER ->
@@ -1453,6 +1455,86 @@ class FindSpansResourceTest {
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
                     values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterTraceIdEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var traceId = UUID.randomUUID();
+
+            // Create 5 spans with the same trace_id (these should be returned by the filter)
+            var expectedSpanCount = 5;
+            var expectedSpans = IntStream.range(0, expectedSpanCount)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .traceId(traceId)
+                            .name("span-" + i)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(expectedSpans, apiKey, workspaceName);
+
+            // Create 3 spans with different trace_ids (these should NOT be returned)
+            var unexpectedSpans = IntStream.range(0, 3)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .traceId(UUID.randomUUID())
+                            .name("other-span-" + i)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            // Apply trace_id filter
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.TRACE_ID)
+                    .operator(Operator.EQUAL)
+                    .value(traceId.toString())
+                    .build());
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("project_name", projectName);
+            queryParams.put("filters", toURLEncodedQueryParam(filters));
+
+            // Execute the request and verify results
+            try (var actualResponse = spanResourceClient.callGetSpansWithQueryParams(apiKey, workspaceName,
+                    queryParams)) {
+                var actualPage = actualResponse.readEntity(Span.SpanPage.class);
+                var actualSpans = actualPage.content();
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+                // Verify we got the correct number of spans
+                assertThat(actualSpans).hasSize(expectedSpanCount);
+                assertThat(actualPage.total()).isEqualTo(expectedSpanCount);
+
+                // Verify all returned spans have the correct trace_id
+                assertThat(actualSpans)
+                        .allMatch(span -> span.traceId().equals(traceId),
+                                "All returned spans should have traceId: " + traceId);
+
+                // Verify no spans with different trace_ids are returned
+                var unexpectedTraceIds = unexpectedSpans.stream()
+                        .map(Span::traceId)
+                        .collect(Collectors.toSet());
+
+                assertThat(actualSpans)
+                        .noneMatch(span -> unexpectedTraceIds.contains(span.traceId()),
+                                "No spans with different trace_ids should be returned");
+            }
         }
 
         @ParameterizedTest

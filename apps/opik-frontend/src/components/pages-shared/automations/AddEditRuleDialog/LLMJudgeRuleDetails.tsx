@@ -301,6 +301,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   validationErrors={validationErrors}
                   possibleTypes={MESSAGE_TYPE_OPTIONS}
                   disableMedia={isThreadScope}
+                  promptVariables={datasetColumnNames}
                   onChange={(messages: LLMMessage[]) =>
                     handleMessagesChange(messages, field.onChange, form)
                   }
@@ -335,7 +336,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   <LLMPromptMessagesVariables
                     parsingError={parsingVariablesError}
                     validationErrors={validationErrors}
-                    projectId={form.watch("projectId")}
+                    projectId={form.watch("projectIds")[0] || ""}
                     variables={field.value}
                     onChange={field.onChange}
                     projectName={projectName}

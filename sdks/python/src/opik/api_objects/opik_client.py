@@ -2,7 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
+from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
 
 import httpx
 
@@ -42,9 +42,9 @@ from ..message_processing import (
     messages,
     streamer_constructors,
     message_queue,
-    message_processors_chain,
 )
 from ..message_processing.batching import sequence_splitter
+from ..message_processing.processors import message_processors_chain
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
@@ -55,7 +55,13 @@ from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
 )
-from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
+from ..types import (
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+    FeedbackScoreDict,
+    LLMProvider,
+    SpanType,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,13 +113,7 @@ class Opik:
         self._use_batching = _use_batching
 
         self._initialize_streamer(
-            url_override=config_.url_override,
-            workers=config_.background_workers,
-            file_upload_worker_count=config_.file_upload_background_workers,
-            api_key=config_.api_key,
-            check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
-            enable_json_request_compression=config_.enable_json_request_compression,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
@@ -152,24 +152,17 @@ class Opik:
 
     def _initialize_streamer(
         self,
-        url_override: str,
-        workers: int,
-        file_upload_worker_count: int,
-        api_key: Optional[str],
-        check_tls_certificate: bool,
         use_batching: bool,
-        enable_json_request_compression: bool,
     ) -> None:
-        httpx_client_ = httpx_client.get(
+        self._httpx_client = httpx_client.get(
             workspace=self._workspace,
-            api_key=api_key,
-            check_tls_certificate=check_tls_certificate,
-            compress_json_requests=enable_json_request_compression,
+            api_key=self._config.api_key,
+            check_tls_certificate=self._config.check_tls_certificate,
+            compress_json_requests=self._config.enable_json_request_compression,
         )
-        self._httpx_client = httpx_client_
         self._rest_client = rest_api_client.OpikApi(
-            base_url=url_override,
-            httpx_client=httpx_client_,
+            base_url=self._config.url_override,
+            httpx_client=self._httpx_client,
         )
         self._rest_client._client_wrapper._timeout = (
             httpx.USE_CLIENT_DEFAULT
@@ -181,19 +174,22 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
-        self._message_processor = (
+        self.__internal_api__message_processor__ = (
             message_processors_chain.create_message_processors_chain(
                 rest_client=self._rest_client
             )
         )
         self._streamer = streamer_constructors.construct_online_streamer(
-            n_consumers=workers,
+            n_consumers=self._config.background_workers,
             rest_client=self._rest_client,
-            httpx_client=httpx_client_,
+            httpx_client=self._httpx_client,
             use_batching=use_batching,
-            file_upload_worker_count=file_upload_worker_count,
+            use_attachment_extraction=self._config.is_attachment_extraction_active,
+            min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
+            file_upload_worker_count=self._config.file_upload_background_workers,
             max_queue_size=max_queue_size,
-            message_processor=self._message_processor,
+            message_processor=self.__internal_api__message_processor__,
+            url_override=self._config.url_override,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
@@ -295,7 +291,9 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_traces_feedback_scores(feedback_scores, project_name)
+            self.log_traces_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
         if attachments is not None:
             for attachment_data in attachments:
@@ -470,7 +468,9 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_spans_feedback_scores(feedback_scores, project_name)
+            self.log_spans_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
         return span.span_client.create_span(
             trace_id=trace_id,
@@ -639,23 +639,34 @@ class Opik:
         )
 
     def log_spans_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for spans.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
             project_name: The name of the project in which the spans are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": span1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": span2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_spans_feedback_scores(scores=scores)
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self._project_name,
+            project_name=project_name or self.project_name,
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -677,23 +688,34 @@ class Opik:
             self._streamer.put(add_span_feedback_scores_batch_message)
 
     def log_traces_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for traces.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
             project_name: The name of the project in which the traces are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": trace1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": trace2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_traces_feedback_scores(scores=scores)
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self._project_name,
+            project_name=project_name or self.project_name,
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -716,16 +738,17 @@ class Opik:
             self._streamer.put(add_trace_feedback_scores_batch_message)
 
     def log_threads_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for threads.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a thread id via `id` key for each score is mandatory.
             project_name: The name of the project in which the threads are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
@@ -733,13 +756,10 @@ class Opik:
         Example:
             >>> from opik import Opik
             >>> client = Opik()
+            >>> # Batch logging across multiple projects
             >>> scores = [
-            >>>     {
-            >>>         "id": "thread_123",
-            >>>         "name": "user_satisfaction",
-            >>>         "value": 0.85,
-            >>>         "reason": "User seemed satisfied with the conversation"
-            >>>     }
+            >>>     {"id": "thread_123", "name": "user_satisfaction", "value": 0.85, "project_name": "project-A"},
+            >>>     {"id": "thread_456", "name": "user_satisfaction", "value": 0.92, "project_name": "project-B"},
             >>> ]
             >>> client.log_threads_feedback_scores(scores=scores)
         """
@@ -1155,7 +1175,7 @@ class Opik:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -1165,6 +1185,8 @@ class Opik:
                 - `input contains "question"` - Filter by input content
                 - `usage.total_tokens > 1000` - Filter by token usage
                 - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter traces with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter traces with non-empty feedback score
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
@@ -1247,7 +1269,7 @@ class Opik:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -1257,6 +1279,8 @@ class Opik:
                 - `input contains "question"` - Filter by input content
                 - `usage.total_tokens > 1000` - Filter by token usage
                 - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter spans with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter spans with non-empty feedback score
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID

@@ -8,6 +8,10 @@ from .dataset_item_filter_operator import DatasetItemFilterOperator
 
 
 class DatasetItemFilter(UniversalBaseModel):
+    """
+    Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
+    """
+
     field: typing.Optional[str] = None
     operator: typing.Optional[DatasetItemFilterOperator] = None
     key: typing.Optional[str] = None

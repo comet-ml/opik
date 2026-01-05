@@ -155,6 +155,10 @@ def test_create_message_batcher__ready_to_flush_returns_True__is_flush_interval_
 
 
 def test_create_span_message_batcher__add_duplicated_span__previous_span_is_removed_from_batcher():
+    """
+    Tests the handling of duplicate spans in a span message batcher, specifically focusing on ensuring
+    that newer ones replace older duplicated spans.
+    """
     MAX_BATCH_SIZE = 5
 
     batches = []
@@ -169,8 +173,14 @@ def test_create_span_message_batcher__add_duplicated_span__previous_span_is_remo
     )
     assert batcher.is_empty()
 
-    span_messages = fake_message_factory.fake_span_create_message_batch(
-        count=2, approximate_span_size=fake_message_factory.ONE_KILOBYTE
+    span_messages = []
+    span_messages += fake_message_factory.fake_span_create_message_batch(
+        count=1,
+        approximate_span_size=fake_message_factory.ONE_KILOBYTE,
+        has_ended=False,
+    )
+    span_messages += fake_message_factory.fake_span_create_message_batch(
+        count=1, approximate_span_size=fake_message_factory.ONE_KILOBYTE, has_ended=True
     )
 
     batcher.add(span_messages[0])
@@ -188,3 +198,39 @@ def test_create_span_message_batcher__add_duplicated_span__previous_span_is_remo
     assert len(batches) == 1
     assert len(batches[0].batch) == 1
     assert batches[0].batch[0].id == span_messages[1].span_id
+
+
+def test_create_span_message_batcher__add_duplicated_span__previous_span_is_not_removed_from_batcher__not_ended_span():
+    """
+    Tests the behavior of adding a duplicate span to a span message batcher and ensures
+    that the previous span is not removed when adding a duplicate span if both are not ended.
+    """
+    MAX_BATCH_SIZE = 5
+
+    batches = []
+
+    def flush_callback(batch):
+        batches.append(batch)
+
+    batcher = batchers.CreateSpanMessageBatcher(
+        max_batch_size=MAX_BATCH_SIZE,
+        flush_callback=flush_callback,
+        flush_interval_seconds=NOT_USED,
+    )
+    assert batcher.is_empty()
+
+    span_messages = fake_message_factory.fake_span_create_message_batch(
+        count=2,
+        approximate_span_size=fake_message_factory.ONE_KILOBYTE,
+        has_ended=False,
+    )
+
+    batcher.add(span_messages[0])
+    assert batcher.size() == 1
+
+    # modify the second span to be considered the same as the first one
+    span_messages[1].span_id = span_messages[0].span_id
+    batcher.add(span_messages[1])
+
+    # assert that both spans are in the batcher
+    assert batcher.size() == 2

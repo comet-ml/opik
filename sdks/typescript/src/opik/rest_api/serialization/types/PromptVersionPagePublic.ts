@@ -15,6 +15,7 @@ export const PromptVersionPagePublic: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     content: core.serialization.list(PromptVersionPublic).optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace PromptVersionPagePublic {
@@ -23,5 +24,6 @@ export declare namespace PromptVersionPagePublic {
         size?: number | null;
         total?: number | null;
         content?: PromptVersionPublic.Raw[] | null;
+        sortableBy?: string[] | null;
     }
 }
