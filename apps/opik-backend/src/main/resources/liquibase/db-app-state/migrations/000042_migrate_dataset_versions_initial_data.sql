@@ -8,7 +8,7 @@ INSERT INTO dataset_versions (id, dataset_id, version_hash, workspace_id, items_
 SELECT 
     d.id,                                    -- version_id = dataset_id (key insight for cross-DB coordination)
     d.id,                                    -- dataset_id
-    '',                                      -- version_hash (empty for initial version)
+    'v1',                                    -- version_hash (version 1 identifier)
     d.workspace_id,                          -- workspace_id
     0,                                       -- items_total (will be computed by application)
     0,                                       -- items_added (initial version has no delta)

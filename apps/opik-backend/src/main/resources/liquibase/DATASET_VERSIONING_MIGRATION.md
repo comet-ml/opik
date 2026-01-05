@@ -72,7 +72,7 @@ ClickHouse (db-app-analytics):
 |--------|--------|-------|
 | `id` | `datasets.id` | **Version ID = Dataset ID** |
 | `dataset_id` | `datasets.id` | Links to parent dataset |
-| `version_hash` | `''` | Empty for initial version |
+| `version_hash` | `'v1'` | Version 1 identifier |
 | `workspace_id` | `datasets.workspace_id` | Workspace isolation |
 | `items_total` | `0` | Will be computed by application |
 | `items_added` | `0` | No delta for initial version |
@@ -100,8 +100,8 @@ ClickHouse (db-app-analytics):
 | `item_last_updated_at` | `dataset_items.last_updated_at` | When item was modified |
 | `item_created_by` | `dataset_items.created_by` | Original creator |
 | `item_last_updated_by` | `dataset_items.last_updated_by` | Last modifier |
-| `created_at` | `now64(9)` | When snapshot was created |
-| `created_by` | `'migration'` | Migration marker |
+| `created_at` | `dataset_items.created_at` | Preserve original creation time |
+| `created_by` | `dataset_items.created_by` | Preserve original creator |
 | `workspace_id` | `dataset_items.workspace_id` | Workspace isolation |
 
 ## Testing the Migration
@@ -198,9 +198,9 @@ mvn liquibase:update
    -- ClickHouse: Confirm coordination with MySQL
    SELECT dataset_id, dataset_version_id, COUNT(*) as item_count
    FROM dataset_item_versions
-   WHERE dataset_id != dataset_version_id
+   WHERE dataset_version_id = dataset_id  -- version 1 items
    GROUP BY dataset_id, dataset_version_id;
-   -- Should return 0 rows (all items point to version 1 = dataset_id)
+   -- Should return counts for all datasets
    ```
 
 6. **Verify data integrity:**
@@ -243,7 +243,7 @@ SELECT COUNT(*) FROM dataset_version_tags WHERE tag = 'latest' AND version_id = 
 -- Should return 0
 
 -- ClickHouse: Versioned items should be removed
-SELECT COUNT(*) FROM dataset_item_versions WHERE created_by = 'migration';
+SELECT COUNT(*) FROM dataset_item_versions WHERE dataset_version_id = dataset_id;
 -- Should return 0
 ```
 

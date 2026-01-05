@@ -139,17 +139,15 @@ WHERE di.dataset_id = div.dataset_id
   AND div.dataset_version_id = div.dataset_id
 LIMIT 10;
 
--- 12. Verify migration markers
+-- 12. Verify version 1 items exist
 SELECT 
-    'Migration Markers Check' as validation,
+    'Version 1 Items Check' as validation,
     dataset_id,
     dataset_version_id,
-    created_by,
-    last_updated_by,
     COUNT(*) as item_count
 FROM dataset_item_versions
-WHERE created_by = 'migration' AND last_updated_by = 'migration'
-GROUP BY dataset_id, dataset_version_id, created_by, last_updated_by;
+WHERE dataset_version_id = dataset_id  -- version 1 items
+GROUP BY dataset_id, dataset_version_id;
 
 -- 13. Verify item identity tracking
 -- For version 1, dataset_item_id should equal id
@@ -180,7 +178,6 @@ SELECT 'Migration Summary - ClickHouse' as report;
 SELECT 'Total Draft Items' as metric, COUNT(*) as count FROM dataset_items;
 SELECT 'Total Versioned Items' as metric, COUNT(*) as count FROM dataset_item_versions;
 SELECT 'Version 1 Items' as metric, COUNT(*) as count FROM dataset_item_versions WHERE dataset_version_id = dataset_id;
-SELECT 'Migrated Items' as metric, COUNT(*) as count FROM dataset_item_versions WHERE created_by = 'migration';
 
 -- ============================================================================
 -- ROLLBACK VERIFICATION (run after rollback if needed)
@@ -198,7 +195,7 @@ WHERE tag = 'latest' AND version_id = dataset_id;
 
 -- 17. ClickHouse Rollback Check (run in ClickHouse client)
 SELECT 'Post-Rollback Check - ClickHouse' as report;
-SELECT 'Migrated Items Remaining' as metric, COUNT(*) as count 
+SELECT 'Version 1 Items Remaining' as metric, COUNT(*) as count 
 FROM dataset_item_versions 
-WHERE created_by = 'migration';
+WHERE dataset_version_id = dataset_id;
 

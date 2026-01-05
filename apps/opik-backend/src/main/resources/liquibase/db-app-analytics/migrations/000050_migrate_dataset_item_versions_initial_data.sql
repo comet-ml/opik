@@ -42,10 +42,10 @@ SELECT
     last_updated_at,                         -- item_last_updated_at (when item was last modified)
     created_by,                              -- item_created_by
     last_updated_by,                         -- item_last_updated_by
-    now64(9),                                -- created_at (when version snapshot was created)
-    now64(9),                                -- last_updated_at (when version snapshot was created)
-    'migration',                             -- created_by (migration script)
-    'migration',                             -- last_updated_by (migration script)
+    created_at,                              -- created_at (preserve original creation time)
+    last_updated_at,                         -- last_updated_at (preserve original update time)
+    created_by,                              -- created_by (preserve original creator)
+    last_updated_by,                         -- last_updated_by (preserve original updater)
     workspace_id                             -- workspace_id
 FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
 WHERE dataset_id NOT IN (
@@ -53,5 +53,5 @@ WHERE dataset_id NOT IN (
     FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
 );
 
---rollback DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions WHERE created_by = 'migration' AND last_updated_by = 'migration';
+--rollback DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions WHERE dataset_version_id = dataset_id;
 

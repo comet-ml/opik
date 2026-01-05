@@ -16,6 +16,7 @@ Successfully implemented data migration scripts for the dataset versioning refac
 **Key Operations:**
 - Creates version records in `dataset_versions` table
   - Uses `dataset_id` as `version_id` (deterministic coordination)
+  - Sets version_hash to "v1" (version 1 identifier)
   - Sets change_description to "Initial version (migrated from draft)"
   - Preserves original creation timestamps and creators
   
@@ -34,8 +35,8 @@ Successfully implemented data migration scripts for the dataset versioning refac
 - Copies items from `dataset_items` to `dataset_item_versions`
   - Uses `dataset_id` as `dataset_version_id` (matches MySQL version 1)
   - Sets `dataset_item_id = id` for version 1 (establishes item identity)
-  - Preserves all item data, metadata, and timestamps
-  - Marks records with `created_by = 'migration'` for tracking
+  - Preserves all item data, metadata, timestamps, and original creators
+  - Users remain unaware of the migration (transparent preservation)
 
 **Idempotency:** Uses `WHERE NOT IN` clause to prevent duplicate records
 
@@ -101,13 +102,13 @@ Successfully implemented data migration scripts for the dataset versioning refac
 - ✅ No data loss
 - ✅ Original creation times visible
 
-### 4. Migration Markers
-**Implementation:** Set `created_by = 'migration'` in ClickHouse
+### 4. Transparent Migration
+**Implementation:** Preserve original creators and timestamps in ClickHouse
 
 **Benefits:**
-- ✅ Easy identification of migrated records
-- ✅ Simplifies validation queries
-- ✅ Enables targeted rollback
+- ✅ Users remain unaware of the migration
+- ✅ Complete audit trail preservation
+- ✅ No artificial markers in production data
 
 ## Migration Flow
 
