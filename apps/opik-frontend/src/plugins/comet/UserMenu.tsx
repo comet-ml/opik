@@ -42,7 +42,11 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
-import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
+import {
+  Organization,
+  ORGANIZATION_PLAN_ENTERPRISE,
+  ORGANIZATION_ROLE_TYPE,
+} from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
@@ -52,6 +56,7 @@ import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -90,6 +95,7 @@ const UserMenu = () => {
     { enabled: !!user?.loggedIn && !!workspace },
   );
 
+  const { canInviteMembers } = useUserPermission();
   const inviteMembersURL = useInviteMembersURL();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
@@ -136,6 +142,9 @@ const UserMenu = () => {
 
   const isAcademic = organization?.academic;
 
+  const isEnterpriseCustomer =
+    organization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
+
   const isLLMOnlyOrganization =
     organization?.role === ORGANIZATION_ROLE_TYPE.opik;
 
@@ -171,6 +180,7 @@ const UserMenu = () => {
       !isOnPremise() &&
       isOrganizationAdmin &&
       !isAcademic &&
+      !isEnterpriseCustomer &&
       !hideUpgradeButton
     ) {
       return (
@@ -235,6 +245,10 @@ const UserMenu = () => {
 
   const renderInviteMembers = () => {
     if (isCollaboratorsTabEnabled) {
+      if (!canInviteMembers) {
+        return null;
+      }
+
       return (
         <DropdownMenuSub
           open={isInviteSubmenuOpen}

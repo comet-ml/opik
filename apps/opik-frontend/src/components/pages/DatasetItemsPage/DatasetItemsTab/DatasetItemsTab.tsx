@@ -20,7 +20,12 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import StatusMessage from "@/components/shared/StatusMessage/StatusMessage";
-import { DatasetItem, DATASET_STATUS } from "@/types/datasets";
+import {
+  DatasetItem,
+  DatasetItemWithDraft,
+  DATASET_ITEM_DRAFT_STATUS,
+  DATASET_STATUS,
+} from "@/types/datasets";
 import { Filter, Filters } from "@/types/filters";
 import {
   COLUMN_DATA_ID,
@@ -40,6 +45,7 @@ import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEdi
 import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Check, Loader2 } from "lucide-react";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
@@ -54,6 +60,13 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
+import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import {
+  useIsDraftMode,
+  useIsAllItemsSelected,
+  useSetIsAllItemsSelected,
+  useDeletedIds,
+} from "@/store/DatasetDraftStore";
 
 /**
  * Transform data column filters from "data.columnName" format to backend format.
@@ -139,7 +152,8 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [isAllItemsSelected, setIsAllItemsSelected] = useState(false);
+  const isAllItemsSelected = useIsAllItemsSelected();
+  const setIsAllItemsSelected = useSetIsAllItemsSelected();
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
@@ -161,13 +175,22 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [filters],
   );
 
+  const isDraftMode = useIsDraftMode();
+  const deletedIds = useDeletedIds();
+
+  // Compute effective size for draft mode: use 100 if in draft mode and size is default (10)
+  const effectiveSize = useMemo(
+    () => (isDraftMode && size === 10 ? 100 : (size as number)),
+    [isDraftMode, size],
+  );
+
   const { data, isPending, isPlaceholderData, isFetching } =
-    useDatasetItemsList(
+    useDatasetItemsWithDraft(
       {
         datasetId,
         filters: transformedFilters,
         page: page as number,
-        size: size as number,
+        size: effectiveSize,
         search: search!,
         truncate: false,
       },
@@ -177,6 +200,8 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       },
     );
   const totalCount = data?.total ?? 0;
+
+  const rows = useMemo(() => data?.content ?? [], [data?.content]);
 
   const datasetColumns = useMemo(
     () =>
@@ -189,7 +214,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       datasetId,
       filters: transformedFilters,
       page: page as number,
-      size: size as number,
+      size: effectiveSize,
       search: search!,
       truncate: false,
     },
@@ -232,8 +257,12 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     defaultValue: {},
   });
 
-  const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
-  const noDataText = "There are no dataset items yet";
+  const noDataText = useMemo(() => {
+    if (isDraftMode && deletedIds.size > 0 && totalCount > rows.length) {
+      return "No rows on this page";
+    }
+    return "There are no dataset items yet";
+  }, [isDraftMode, deletedIds.size, totalCount, rows.length]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {
@@ -268,7 +297,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         return next;
       });
     },
-    [isAllItemsSelected],
+    [isAllItemsSelected, setIsAllItemsSelected],
   );
 
   const effectiveIsAllItemsSelected = useMemo(() => {
@@ -396,9 +425,32 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [setActiveRowId],
   );
 
+  const getDraftStatusBorderClass = useCallback(
+    (item: DatasetItemWithDraft): string => {
+      const { draftStatus } = item;
+
+      if (!draftStatus || draftStatus === DATASET_ITEM_DRAFT_STATUS.unchanged) {
+        return "border-l-2 border-l-transparent";
+      }
+
+      const DRAFT_STATUS_STYLES: Record<string, string> = {
+        [DATASET_ITEM_DRAFT_STATUS.added]: "border-l-2 border-l-green-500",
+        [DATASET_ITEM_DRAFT_STATUS.edited]: "border-l-2 border-l-amber-500",
+      };
+
+      return DRAFT_STATUS_STYLES[draftStatus] ?? "border-l-2";
+    },
+    [],
+  );
+
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<DatasetItem>(),
+      generateSelectColumDef<DatasetItem>({
+        cellClassName: (context) => {
+          const item = context.row.original as DatasetItemWithDraft;
+          return getDraftStatusBorderClass(item);
+        },
+      }),
       mapColumnDataFields<DatasetItem, DatasetItem>({
         id: COLUMN_ID_ID,
         label: "ID",
@@ -417,7 +469,13 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         cell: DatasetItemRowActionsCell,
       }),
     ];
-  }, [columnsData, columnsOrder, handleRowClick, selectedColumns]);
+  }, [
+    columnsData,
+    columnsOrder,
+    handleRowClick,
+    selectedColumns,
+    getDraftStatusBorderClass,
+  ]);
 
   const columnsToExport = useMemo(() => {
     return columns
@@ -453,9 +511,10 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const handleClearSelection = useCallback(() => {
     setRowSelection({});
     setIsAllItemsSelected(false);
-  }, []);
+  }, [setIsAllItemsSelected]);
 
   const showSelectAllBanner =
+    !isDraftMode &&
     selectedRows.length > 0 &&
     selectedRows.length === rows.length &&
     selectedRows.length < totalCount;
@@ -468,18 +527,32 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     <>
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={handleSearchChange}
-            placeholder="Search"
-            className="w-[320px]"
-            dimension="sm"
-          />
-          <FiltersButton
-            columns={filtersColumnData}
-            filters={filters}
-            onChange={setFilters}
-          />
+          <TooltipWrapper
+            content={isDraftMode ? "Save changes to search" : undefined}
+          >
+            <div>
+              <SearchInput
+                searchText={search!}
+                setSearchText={handleSearchChange}
+                placeholder="Search"
+                className="w-[320px]"
+                dimension="sm"
+                disabled={isDraftMode}
+              />
+            </div>
+          </TooltipWrapper>
+          <TooltipWrapper
+            content={isDraftMode ? "Save changes to filter" : undefined}
+          >
+            <div>
+              <FiltersButton
+                columns={filtersColumnData}
+                filters={filters}
+                onChange={setFilters}
+                disabled={isDraftMode}
+              />
+            </div>
+          </TooltipWrapper>
         </div>
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel
@@ -489,10 +562,10 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             datasetName={datasetName ?? ""}
             columnsToExport={columnsToExport}
             dynamicColumns={dynamicColumnsIds}
-            isAllItemsSelected={effectiveIsAllItemsSelected}
             filters={filters}
             search={search ?? ""}
             totalCount={totalCount}
+            isDraftMode={isDraftMode}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -571,15 +644,22 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           </DataTableNoData>
         }
       />
-      <div className="py-4">
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-          isLoadingTotal={isProcessing}
-        />
+      <div className="flex justify-end py-4">
+        <TooltipWrapper
+          content={isDraftMode ? "Save changes to navigate pages" : undefined}
+        >
+          <div>
+            <DataTablePagination
+              page={page as number}
+              pageChange={setPage}
+              size={effectiveSize}
+              sizeChange={setSize}
+              total={data?.total ?? 0}
+              isLoadingTotal={isProcessing}
+              disabled={isDraftMode}
+            />
+          </div>
+        </TooltipWrapper>
       </div>
       <DatasetItemEditor
         datasetItemId={activeRowId as string}
@@ -599,7 +679,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       />
 
       <AddDatasetItemSidebar
-        datasetId={datasetId}
         open={openAddSidebar}
         setOpen={setOpenAddSidebar}
         columns={datasetColumns}

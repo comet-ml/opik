@@ -16,6 +16,13 @@ import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
+import {
+  useBulkDeleteItems,
+  useBulkAddItems,
+  useIsAllItemsSelected,
+} from "@/store/DatasetDraftStore";
+import { useToast } from "@/components/ui/use-toast";
+import { DATASET_ITEM_SOURCE } from "@/types/datasets";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -24,10 +31,10 @@ type DatasetItemsActionsPanelProps = {
   datasetName: string;
   columnsToExport: string[];
   dynamicColumns: string[];
-  isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
   totalCount?: number;
+  isDraftMode?: boolean;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -39,10 +46,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   datasetName,
   columnsToExport,
   dynamicColumns,
-  isAllItemsSelected = false,
   filters = [],
   search = "",
   totalCount = 0,
+  isDraftMode = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [expansionDialogOpen, setExpansionDialogOpen] =
@@ -55,15 +62,26 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+  const bulkDeleteItems = useBulkDeleteItems();
+  const bulkAddItems = useBulkAddItems();
+  const isAllItemsSelected = useIsAllItemsSelected();
+  const { toast } = useToast();
 
   const deleteDatasetItemsHandler = useCallback(() => {
-    mutate({
-      datasetId,
-      ids: selectedDatasetItems.map((i) => i.id),
-      isAllItemsSelected,
-      filters,
-      search,
-    });
+    if (!isAllItemsSelected) {
+      // Use draft store for specific IDs
+      const ids = selectedDatasetItems.map((i) => i.id);
+      bulkDeleteItems(ids);
+    } else {
+      // Use API for filter-based deletion
+      mutate({
+        datasetId,
+        ids: selectedDatasetItems.map((i) => i.id),
+        isAllItemsSelected,
+        filters,
+        search,
+      });
+    }
   }, [
     datasetId,
     selectedDatasetItems,
@@ -71,12 +89,36 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     isAllItemsSelected,
     filters,
     search,
+    bulkDeleteItems,
   ]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);
     setGeneratedSamplesDialogOpen(true);
   }, []);
+
+  const handleAddGeneratedItems = useCallback(
+    (items: DatasetItem[]) => {
+      const now = new Date().toISOString();
+      const itemsToAdd = items.map((item) => ({
+        data: item.data,
+        source: DATASET_ITEM_SOURCE.manual,
+        tags: item.tags || [],
+        created_at: now,
+        last_updated_at: now,
+      }));
+
+      bulkAddItems(itemsToAdd);
+
+      toast({
+        title: "Samples added to draft",
+        description: `${items.length} sample${
+          items.length !== 1 ? "s" : ""
+        } added to your draft changes`,
+      });
+    },
+    [bulkAddItems, toast],
+  );
 
   const mapRowData = useCallback(async () => {
     const datasetItems = await getDataForExport();
@@ -120,11 +162,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
       <GeneratedSamplesDialog
         key={`generate-samples-${resetKeyRef.current}`}
-        datasetId={datasetId}
-        datasetName={datasetName}
         samples={generatedSamples}
         open={generatedSamplesDialogOpen}
         setOpen={setGeneratedSamplesDialogOpen}
+        onAddItems={handleAddGeneratedItems}
       />
 
       <AddTagDialog
@@ -134,7 +175,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={addTagDialogOpen}
         setOpen={setAddTagDialogOpen}
         onSuccess={() => {}}
-        isAllItemsSelected={isAllItemsSelected}
         filters={filters}
         search={search}
         totalCount={totalCount}
@@ -168,7 +208,12 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       </TooltipWrapper>
 
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
+        disabled={
+          disabled ||
+          columnsToExport.length === 0 ||
+          !isExportEnabled ||
+          isDraftMode
+        }
         getData={mapRowData}
         generateFileName={generateFileName}
         tooltipContent={

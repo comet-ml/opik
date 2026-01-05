@@ -1,8 +1,6 @@
 import React, { useCallback, useState, useMemo, useEffect } from "react";
 import { ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
 
-import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
-import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,24 +15,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tag } from "@/components/ui/tag";
 import { DatasetItem } from "@/types/datasets";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
-import { useToast } from "@/components/ui/use-toast";
-import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 
 type GeneratedSamplesDialogProps = {
-  datasetId: string;
-  datasetName: string;
   samples: DatasetItem[];
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSamplesAdded?: () => void;
+  onAddItems?: (items: DatasetItem[]) => void;
 };
 
 const GeneratedSamplesDialog: React.FunctionComponent<
   GeneratedSamplesDialogProps
-> = ({ datasetId, datasetName, samples, open, setOpen, onSamplesAdded }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+> = ({ samples, open, setOpen, onAddItems }) => {
   const [selectedSamples, setSelectedSamples] = useState<Set<string>>(
     new Set(samples.map((sample) => sample.id)),
   );
@@ -42,9 +35,6 @@ const GeneratedSamplesDialog: React.FunctionComponent<
   const [expandedSamples, setExpandedSamples] = useState<Set<string>>(
     new Set(),
   );
-
-  const { mutate, isPending, error, isError } = useDatasetItemBatchMutation();
-  const { toast } = useToast();
 
   // Update selectedSamples when samples prop changes (ensure all samples are selected by default)
   useEffect(() => {
@@ -191,36 +181,9 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
     if (selectedItems.length === 0) return;
 
-    mutate(
-      {
-        workspaceName,
-        datasetId,
-        datasetItems: selectedItems,
-      },
-      {
-        onSuccess: () => {
-          toast({
-            title: "Samples added successfully",
-            description: `${selectedItems.length} sample${
-              selectedItems.length !== 1 ? "s" : ""
-            } added to ${datasetName}`,
-          });
-          onSamplesAdded?.();
-          setOpen(false);
-        },
-      },
-    );
-  }, [
-    datasetId,
-    datasetName,
-    samples,
-    selectedSamples,
-    mutate,
-    onSamplesAdded,
-    setOpen,
-    toast,
-    workspaceName,
-  ]);
+    onAddItems?.(selectedItems);
+    setOpen(false);
+  }, [samples, selectedSamples, onAddItems, setOpen]);
 
   const allSelected = selectedSamples.size === samples.length;
   const noneSelected = selectedSamples.size === 0;
@@ -235,17 +198,6 @@ const GeneratedSamplesDialog: React.FunctionComponent<
         </DialogHeader>
         <DialogAutoScrollBody className="flex-1">
           <div className="space-y-4">
-            {/* Error Display */}
-            {isError && (
-              <Alert variant="destructive" size="sm">
-                <AlertTriangle className="size-4" />
-                <AlertTitle>Failed to add samples</AlertTitle>
-                <AlertDescription>
-                  {(error as Error)?.message ||
-                    "An error occurred while adding samples to the dataset. Please try again."}
-                </AlertDescription>
-              </Alert>
-            )}
             {/* Empty Samples State */}
             {!samples.length && (
               <Alert variant="callout" size="sm">
@@ -416,24 +368,9 @@ const GeneratedSamplesDialog: React.FunctionComponent<
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button
-            onClick={handleAddToDataset}
-            disabled={isPending || noneSelected}
-          >
-            {isPending && <Spinner size="small" className="mr-2" />}
-            {isPending ? (
-              <span className="flex items-center gap-1">
-                Adding samples to dataset
-                <span className="text-xs opacity-75">
-                  ({selectedSamples.size} of {samples.length})
-                </span>
-              </span>
-            ) : (
-              <>
-                Add {selectedSamples.size} Sample
-                {selectedSamples.size !== 1 ? "s" : ""} to Dataset
-              </>
-            )}
+          <Button onClick={handleAddToDataset} disabled={noneSelected}>
+            Add {selectedSamples.size} Sample
+            {selectedSamples.size !== 1 ? "s" : ""} to Dataset
           </Button>
         </DialogFooter>
       </DialogContent>

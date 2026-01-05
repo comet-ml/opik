@@ -1,7 +1,6 @@
 """Configuration for Optimization Studio."""
 
 import os
-from typing import Dict
 
 # Opik Configuration
 OPIK_URL = os.getenv("OPIK_URL_OVERRIDE")
@@ -17,12 +16,18 @@ LLM_API_KEYS = {
 DEFAULT_REFERENCE_KEY = "answer"
 DEFAULT_CASE_SENSITIVE = False
 
+# Execution timeout for optimization jobs (default: 2 hours)
+OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "7200"))
+
+# Dataset sampling (limits items used during optimization to prevent OOM)
+DATASET_SAMPLES = int(os.getenv("OPTSTUDIO_DATASET_SAMPLES", "20"))
+
 # Optimization Runtime Parameters
 # These are passed to optimizer.optimize_prompt() for all optimizer types
 OPTIMIZER_RUNTIME_PARAMS = {
     # Generic parameters (all optimizers)
     "max_trials": int(os.getenv("OPTIMIZER_MAX_TRIALS", "10")),
-    "n_samples": int(os.getenv("OPTIMIZER_N_SAMPLES", "20")),
+    "n_samples": DATASET_SAMPLES,
     
     # GEPA-specific parameters (ignored by other optimizers)
     "reflection_minibatch_size": int(os.getenv("OPTIMIZER_GEPA_REFLECTION_BATCH_SIZE", "5")),

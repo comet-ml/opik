@@ -10,14 +10,20 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum OptimizationStatus {
-    RUNNING("running"),
-    COMPLETED("completed"),
-    CANCELLED("cancelled"),
-    INITIALIZED("initialized"),
-    ERROR("error");
+    RUNNING("running", false),
+    COMPLETED("completed", true),
+    CANCELLED("cancelled", true),
+    INITIALIZED("initialized", false),
+    ERROR("error", true);
 
     @JsonValue
     private final String value;
+
+    /**
+     * Indicates whether this status represents a terminal (final) state.
+     * Terminal statuses trigger log finalization and cleanup.
+     */
+    private final boolean terminal;
 
     @JsonCreator
     public static OptimizationStatus fromString(String value) {

@@ -101,6 +101,7 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
+    private static final String EXPERIMENT_ID_DB = "experiment_id";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -287,6 +288,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .build());
@@ -330,6 +332,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
+                    .put(SpanField.TRACE_ID, TRACE_ID_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -488,6 +491,9 @@ public class FilterQueryBuilder {
                 TraceField.VISIBILITY_MODE,
                 TraceField.ERROR_INFO));
 
+        map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
+                TraceField.EXPERIMENT_ID));
+
         map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
                 TraceField.USAGE_COMPLETION_TOKENS,
                 TraceField.USAGE_PROMPT_TOKENS,
@@ -518,7 +524,8 @@ public class FilterQueryBuilder {
                 SpanField.USAGE_TOTAL_TOKENS,
                 SpanField.DURATION,
                 SpanField.ERROR_INFO,
-                SpanField.TYPE));
+                SpanField.TYPE,
+                SpanField.TRACE_ID));
 
         map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
                 TraceField.FEEDBACK_SCORES,
