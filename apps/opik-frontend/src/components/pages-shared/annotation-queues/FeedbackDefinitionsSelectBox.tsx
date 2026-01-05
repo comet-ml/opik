@@ -31,6 +31,7 @@ interface MultiSelectFeedbackDefinitionsProps
   value: string[];
   onChange: (value: string[]) => void;
   multiselect: true;
+  showSelectAll?: boolean;
 }
 
 type FeedbackDefinitionsSelectBoxProps =
@@ -74,6 +75,7 @@ const FeedbackDefinitionsSelectBox: React.FC<
         placeholder: "Select feedback definitions",
         onChange: props.onChange,
         multiselect: true as const,
+        showSelectAll: props.showSelectAll,
       }
     : {
         options,
