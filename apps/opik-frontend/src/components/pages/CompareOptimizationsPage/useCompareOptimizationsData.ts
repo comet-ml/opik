@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnSort } from "@tanstack/react-table";
@@ -21,6 +21,10 @@ import { useOptimizationScores } from "@/components/pages-shared/experiments/use
 
 const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
+const POST_CANCELLATION_REFETCH_COUNT = 2;
+
+const isInProgressStatus = (status?: OPTIMIZATION_STATUS) =>
+  status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
@@ -80,36 +84,45 @@ export const useCompareOptimizationsData = () => {
 
   const optimizationId = optimizationsIds?.[0];
 
+  const pollingStateRef = useRef({
+    previousStatus: undefined as OPTIMIZATION_STATUS | undefined,
+    postCancellationCount: 0,
+  });
+
   const {
     data: optimization,
     isPending: isOptimizationPending,
     refetch: refetchOptimization,
   } = useOptimizationById(
-    {
-      optimizationId,
-    },
+    { optimizationId },
     {
       placeholderData: keepPreviousData,
       enabled: !!optimizationId,
       refetchInterval: (query) => {
         if (!optimizationId) return false;
+
         const status = query.state.data?.status;
+        const polling = pollingStateRef.current;
+
         if (
-          status &&
-          IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
-            status as OPTIMIZATION_STATUS,
-          )
+          status === OPTIMIZATION_STATUS.CANCELLED &&
+          isInProgressStatus(polling.previousStatus)
         ) {
-          return OPTIMIZATION_ACTIVE_REFETCH_INTERVAL;
+          polling.postCancellationCount = POST_CANCELLATION_REFETCH_COUNT;
         }
-        return REFETCH_INTERVAL;
+        polling.previousStatus = status;
+
+        const needsFastPolling =
+          isInProgressStatus(status) || polling.postCancellationCount-- > 0;
+
+        return needsFastPolling
+          ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
+          : REFETCH_INTERVAL;
       },
     },
   );
 
-  const isActiveOptimization =
-    !!optimization?.status &&
-    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+  const isActiveOptimization = isInProgressStatus(optimization?.status);
 
   const {
     data,
