@@ -73,6 +73,8 @@ const CompareOptimizationsPage: React.FC = () => {
         <CompareOptimizationsHeader
           title={title}
           status={optimization?.status}
+          optimizationId={optimization?.id}
+          isStudioOptimization={isStudioOptimization}
         />
       </PageBodyStickyContainer>
 
@@ -97,7 +99,6 @@ const CompareOptimizationsPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <CompareOptimizationsToolbar
             isStudioOptimization={isStudioOptimization}
-            optimization={optimization}
             view={view}
             onViewChange={setView}
             search={search!}
