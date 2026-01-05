@@ -22,7 +22,7 @@ ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
 # Create version.json for checking version
-RUN echo "{\"version\": \"$VITE_APP_VERSION\"}" > dist/version.json
+RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support

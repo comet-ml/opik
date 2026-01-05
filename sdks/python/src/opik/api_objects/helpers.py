@@ -13,7 +13,7 @@ from ..rest_api.types import (
     trace_filter_public,
     trace_thread_filter,
 )
-from ..types import FeedbackScoreDict
+from ..types import BatchFeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ def parse_search_expressions(
 
 
 def parse_feedback_score_messages(
-    scores: List[FeedbackScoreDict],
+    scores: List[BatchFeedbackScoreDict],
     project_name: str,
     parsed_item_class: Type[ScoreMessageT],
     logger: logging.Logger,
@@ -155,9 +155,13 @@ def parse_feedback_score_messages(
 
     score_messages = [
         parsed_item_class(
+            id=score_dict["id"],
+            name=score_dict["name"],
+            value=score_dict["value"],
             source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-            project_name=project_name,
-            **score_dict,
+            project_name=score_dict.get("project_name") or project_name,
+            reason=score_dict.get("reason"),
+            category_name=score_dict.get("category_name"),
         )
         for score_dict in valid_scores
     ]

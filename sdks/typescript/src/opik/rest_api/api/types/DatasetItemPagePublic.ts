@@ -11,5 +11,4 @@ export interface DatasetItemPagePublic {
     total?: number;
     columns?: OpikApi.ColumnPublic[];
     sortableBy?: string[];
-    hasDraft?: boolean;
 }

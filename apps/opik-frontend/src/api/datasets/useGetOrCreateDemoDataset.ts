@@ -9,7 +9,8 @@ import {
 
 /**
  * Hook to create a demo dataset for optimization templates.
- * Creates dataset and populates with items. If dataset already exists, uses it.
+ * Creates dataset and populates with items. If dataset already exists but is empty,
+ * it will be populated with items.
  */
 const useGetOrCreateDemoDataset = () => {
   const queryClient = useQueryClient();
@@ -46,8 +47,11 @@ const useGetOrCreateDemoDataset = () => {
         const dataset = newDataset || datasets?.content?.[0];
         if (!dataset?.id) return null;
 
-        // Only add items if dataset was newly created
-        if (newDataset) {
+        // add items if dataset was newly created OR if existing dataset is empty
+        const shouldAddItems =
+          newDataset || (dataset && dataset.dataset_items_count === 0);
+
+        if (shouldAddItems) {
           await api.put(`${DATASETS_REST_ENDPOINT}items`, {
             dataset_id: dataset.id,
             items: datasetItems.map((item: DemoDatasetItem) => ({

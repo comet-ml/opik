@@ -45,6 +45,7 @@ import {
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
+import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
@@ -147,22 +148,6 @@ type AddEditRuleDialogProps = {
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
   defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
-};
-
-const isPythonCodeRule = (rule: EvaluatorsRule) => {
-  return (
-    rule.type === EVALUATORS_RULE_TYPE.python_code ||
-    rule.type === EVALUATORS_RULE_TYPE.thread_python_code ||
-    rule.type === EVALUATORS_RULE_TYPE.span_python_code
-  );
-};
-
-const isLLMJudgeRule = (rule: EvaluatorsRule) => {
-  return (
-    rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
-    rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
-    rule.type === EVALUATORS_RULE_TYPE.span_llm_judge
-  );
 };
 
 const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
