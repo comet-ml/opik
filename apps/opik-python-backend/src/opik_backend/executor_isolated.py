@@ -212,7 +212,12 @@ class IsolatedSubprocessExecutor:
         """
         env = os.environ.copy()
         if env_vars:
-            env.update(env_vars)
+            # Filter out None values and log them - subprocess.Popen requires all values to be strings
+            for key, value in env_vars.items():
+                if value is None:
+                    self.logger.warning(f"Skipping environment variable '{key}' with None value")
+                else:
+                    env[key] = value
 
         env["PYTHONUNBUFFERED"] = '1'
         env["LOG_FORMAT"] = 'json'
@@ -254,9 +259,15 @@ class IsolatedSubprocessExecutor:
         )
 
         try:
-            # Initialize logger BEFORE process starts if configured
-            # Lazy initialization on first use
-            if SubprocessLogConfig.is_fully_configured():
+            # Initialize logger BEFORE process starts
+            # Check if a log collector was pre-registered (e.g., for optimization jobs)
+            pre_registered_collector = self._log_collectors.pop(0, None)  # 0 is placeholder key
+            
+            if pre_registered_collector is not None:
+                # Use pre-registered collector (e.g., RedisBatchLogCollector for optimizations)
+                self._log_collectors[process.pid] = pre_registered_collector
+            elif SubprocessLogConfig.is_fully_configured():
+                # Fallback to HTTP-based logging if configured
                 try:
                     from opik_backend.subprocess_logger import BatchLogCollector
                     self._log_collectors[process.pid] = BatchLogCollector(

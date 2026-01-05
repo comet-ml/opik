@@ -20,9 +20,7 @@ const useOptimizationCreateMutation = () => {
     mutationFn: async ({ optimization }: UseProjectCreateMutationParams) => {
       const { headers } = await api.post(
         OPTIMIZATIONS_REST_ENDPOINT,
-        {
-          ...optimization,
-        },
+        optimization,
         {
           headers: {
             ...(opikApiKey && { opikApiKey }),

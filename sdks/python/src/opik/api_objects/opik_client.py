@@ -2,7 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
+from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
 
 import httpx
 
@@ -55,7 +55,13 @@ from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
 )
-from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
+from ..types import (
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+    FeedbackScoreDict,
+    LLMProvider,
+    SpanType,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -285,7 +291,9 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_traces_feedback_scores(feedback_scores, project_name)
+            self.log_traces_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
         if attachments is not None:
             for attachment_data in attachments:
@@ -460,7 +468,9 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_spans_feedback_scores(feedback_scores, project_name)
+            self.log_spans_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
         return span.span_client.create_span(
             trace_id=trace_id,
@@ -629,23 +639,34 @@ class Opik:
         )
 
     def log_spans_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for spans.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
             project_name: The name of the project in which the spans are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": span1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": span2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_spans_feedback_scores(scores=scores)
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self._project_name,
+            project_name=project_name or self.project_name,
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -667,23 +688,34 @@ class Opik:
             self._streamer.put(add_span_feedback_scores_batch_message)
 
     def log_traces_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for traces.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
             project_name: The name of the project in which the traces are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": trace1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": trace2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_traces_feedback_scores(scores=scores)
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self._project_name,
+            project_name=project_name or self.project_name,
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -706,16 +738,17 @@ class Opik:
             self._streamer.put(add_trace_feedback_scores_batch_message)
 
     def log_threads_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for threads.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a thread id via `id` key for each score is mandatory.
             project_name: The name of the project in which the threads are logged. If not set, the project name
                 which was configured when the Opik instance was created will be used.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
@@ -723,13 +756,10 @@ class Opik:
         Example:
             >>> from opik import Opik
             >>> client = Opik()
+            >>> # Batch logging across multiple projects
             >>> scores = [
-            >>>     {
-            >>>         "id": "thread_123",
-            >>>         "name": "user_satisfaction",
-            >>>         "value": 0.85,
-            >>>         "reason": "User seemed satisfied with the conversation"
-            >>>     }
+            >>>     {"id": "thread_123", "name": "user_satisfaction", "value": 0.85, "project_name": "project-A"},
+            >>>     {"id": "thread_456", "name": "user_satisfaction", "value": 0.92, "project_name": "project-B"},
             >>> ]
             >>> client.log_threads_feedback_scores(scores=scores)
         """
@@ -1145,7 +1175,7 @@ class Opik:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -1155,6 +1185,8 @@ class Opik:
                 - `input contains "question"` - Filter by input content
                 - `usage.total_tokens > 1000` - Filter by token usage
                 - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter traces with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter traces with non-empty feedback score
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
@@ -1237,7 +1269,7 @@ class Opik:
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
                 - `metadata`: =, contains, >, <
-                - `feedback_scores`: =, >, <, >=, <=
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
@@ -1247,6 +1279,8 @@ class Opik:
                 - `input contains "question"` - Filter by input content
                 - `usage.total_tokens > 1000` - Filter by token usage
                 - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter spans with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter spans with non-empty feedback score
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
