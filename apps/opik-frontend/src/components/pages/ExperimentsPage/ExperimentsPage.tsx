@@ -78,6 +78,7 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -105,8 +106,9 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "dataset_version",
     label: "Dataset version",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.dataset_version?.version_name || "",
-    cell: TextCell as never,
+    iconType: "version",
+    accessorFn: (row) => row.dataset_version_summary?.version_name || "",
+    cell: DatasetVersionCell as never,
   },
   {
     id: "created_at",

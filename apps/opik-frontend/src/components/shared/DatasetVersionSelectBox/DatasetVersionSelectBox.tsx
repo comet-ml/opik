@@ -36,7 +36,7 @@ export interface DatasetVersionData {
 }
 
 interface DatasetVersionSelectBoxProps {
-  value: string | null; // "datasetId::versionHash" format
+  value: string | null; // "datasetId::versionId" format
   versionName?: string;
   onChange: (value: string | null) => void;
   workspaceName: string;
@@ -112,7 +112,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
 
     const formattedValue = formatDatasetVersionKey(
       newDataset.id,
-      latestVersion.version_hash,
+      latestVersion.id,
     );
     onChange(formattedValue);
     setIsDialogOpen(false);
@@ -157,7 +157,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
                   key={version.id}
                   version={version}
                   datasetId={dataset.id}
-                  isSelected={parsed?.versionHash === version.version_hash}
+                  isSelected={parsed?.versionId === version.id}
                 />
               ))
             )}

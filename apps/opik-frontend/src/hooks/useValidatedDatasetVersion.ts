@@ -8,6 +8,8 @@ const MAX_VERSIONS_TO_FETCH = 1000;
 interface UseValidatedDatasetVersionReturn {
   storedKey: string | null;
   versionName: string | undefined;
+  versionId: string | undefined;
+  versionHash: string | undefined;
   setVersionKey: (key: string | null) => void;
 }
 
@@ -41,18 +43,20 @@ export const useValidatedDatasetVersion =
       return {
         storedKey: null,
         versionName: undefined,
+        versionId: undefined,
+        versionHash: undefined,
         setVersionKey: setStoredKey,
       };
     }
 
-    const version = data?.content?.find(
-      (v) => v.version_hash === parsed.versionHash,
-    );
+    const version = data?.content?.find((v) => v.id === parsed.versionId);
 
     if (!version) {
       return {
         storedKey: null,
         versionName: undefined,
+        versionId: undefined,
+        versionHash: undefined,
         setVersionKey: setStoredKey,
       };
     }
@@ -60,6 +64,8 @@ export const useValidatedDatasetVersion =
     return {
       storedKey: localStorageValue,
       versionName: version.version_name,
+      versionId: version.id,
+      versionHash: version.version_hash,
       setVersionKey: setStoredKey,
     };
   };

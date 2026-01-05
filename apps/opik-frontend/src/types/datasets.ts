@@ -111,7 +111,7 @@ export interface Experiment {
   id: string;
   dataset_id: string;
   dataset_name: string;
-  dataset_version?: Pick<
+  dataset_version_summary?: Pick<
     DatasetVersion,
     "id" | "version_hash" | "version_name" | "tags" | "change_description"
   >;

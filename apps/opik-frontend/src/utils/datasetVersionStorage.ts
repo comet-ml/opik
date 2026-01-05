@@ -1,31 +1,31 @@
 /**
  * Utility functions for parsing and formatting dataset version storage format.
- * Format: "datasetId::versionHash"
+ * Format: "datasetId::versionId"
  */
 
 /**
- * Formats dataset ID and version hash into storage string format.
+ * Formats dataset ID and version ID into storage string format.
  * @param datasetId - The dataset ID
- * @param versionHash - The version hash
- * @returns Formatted string in format "datasetId::versionHash"
+ * @param versionId - The version ID (UUID)
+ * @returns Formatted string in format "datasetId::versionId"
  */
 export const formatDatasetVersionKey = (
   datasetId: string,
-  versionHash: string,
+  versionId: string,
 ): string => {
-  return `${datasetId}::${versionHash}`;
+  return `${datasetId}::${versionId}`;
 };
 
 /**
- * Parses storage string format into dataset ID and version hash.
- * @param key - The storage key string in format "datasetId::versionHash" or null
- * @returns Parsed object with datasetId and versionHash, or null if invalid
+ * Parses storage string format into dataset ID and version ID.
+ * @param key - The storage key string in format "datasetId::versionId" or null
+ * @returns Parsed object with datasetId and versionId, or null if invalid
  */
 export const parseDatasetVersionKey = (
   key: string | null,
-): { datasetId: string; versionHash: string } | null => {
+): { datasetId: string; versionId: string } | null => {
   if (!key) return null;
-  const [datasetId, versionHash] = key.split("::");
-  if (!datasetId || !versionHash) return null;
-  return { datasetId, versionHash };
+  const [datasetId, versionId] = key.split("::");
+  if (!datasetId || !versionId) return null;
+  return { datasetId, versionId };
 };

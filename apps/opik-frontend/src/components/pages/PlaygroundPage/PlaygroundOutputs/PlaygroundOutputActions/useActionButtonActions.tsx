@@ -40,7 +40,7 @@ interface UseActionButtonActionsArguments {
   workspaceName: string;
   datasetName: string | null;
   datasetId?: string;
-  datasetVersionHash?: string;
+  datasetVersionId?: string;
 }
 
 const useActionButtonActions = ({
@@ -48,7 +48,7 @@ const useActionButtonActions = ({
   workspaceName,
   datasetName,
   datasetId,
-  datasetVersionHash,
+  datasetVersionId,
 }: UseActionButtonActionsArguments) => {
   const queryClient = useQueryClient();
   const { navigate } = useNavigateToExperiment();
@@ -193,7 +193,7 @@ const useActionButtonActions = ({
       isToStopRef,
       datasetItems,
       datasetName,
-      datasetVersionHash,
+      datasetVersionId,
       selectedRuleIds,
       addAbortController,
       deleteAbortController,

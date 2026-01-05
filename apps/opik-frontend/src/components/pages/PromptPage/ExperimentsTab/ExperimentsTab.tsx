@@ -28,6 +28,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
+import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
@@ -107,8 +108,9 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "dataset_version",
     label: "Dataset version",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.dataset_version?.version_name || "",
-    cell: TextCell as never,
+    iconType: "version",
+    accessorFn: (row) => row.dataset_version_summary?.version_name || "",
+    cell: DatasetVersionCell as never,
   },
   {
     id: "created_at",

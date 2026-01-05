@@ -22,7 +22,8 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
 
-  const { datasetId, versionName, setDatasetId } = usePlaygroundDataset();
+  const { datasetId, versionName, versionHash, setDatasetId } =
+    usePlaygroundDataset();
   const hasDataset = !!datasetId;
 
   const { DialogComponent } = useNavigationBlocker({
@@ -90,6 +91,7 @@ const PlaygroundPage = () => {
           <PlaygroundOutputs
             datasetId={datasetId}
             versionName={versionName}
+            versionHash={versionHash}
             onChangeDatasetId={setDatasetId}
             workspaceName={workspaceName}
           />

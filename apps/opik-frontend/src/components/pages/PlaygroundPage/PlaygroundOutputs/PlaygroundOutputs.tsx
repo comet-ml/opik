@@ -32,6 +32,7 @@ interface PlaygroundOutputsProps {
   workspaceName: string;
   datasetId: string | null;
   versionName?: string;
+  versionHash?: string;
   onChangeDatasetId: (id: string | null) => void;
 }
 
@@ -64,6 +65,7 @@ const PlaygroundOutputs = ({
   workspaceName,
   datasetId,
   versionName,
+  versionHash,
   onChangeDatasetId,
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
@@ -76,7 +78,7 @@ const PlaygroundOutputs = ({
   const setSize = useSetDatasetSize();
   const resetDatasetFilters = useResetDatasetFilters();
 
-  // Parse datasetId to extract plain ID for API calls (handles both "id" and "id::hash" formats)
+  // Parse datasetId to extract plain ID for API calls (handles both "id" and "id::versionId" formats)
   const parsedDatasetId = useMemo(() => {
     if (!datasetId) return null;
     const parsed = parseDatasetVersionKey(datasetId);
@@ -118,6 +120,7 @@ const PlaygroundOutputs = ({
       size,
       truncate: true,
       filters: transformedFilters,
+      versionId: versionHash, // Send hash, not ID
     },
     {
       enabled: !!parsedDatasetId,

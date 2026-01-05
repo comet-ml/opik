@@ -179,7 +179,7 @@ const PlaygroundOutputActions = ({
       datasetItems,
       datasetName,
       datasetId: plainDatasetId || undefined,
-      datasetVersionHash: parsedDatasetId?.versionHash || undefined,
+      datasetVersionId: parsedDatasetId?.versionId || undefined,
     });
 
   const hasMediaCompatibilityIssues = useMemo(() => {
