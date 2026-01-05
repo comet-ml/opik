@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
@@ -11,7 +11,6 @@ const MAX_LOADED_DATASETS = 10000;
 interface UseDatasetVersionSelectParams {
   workspaceName: string;
   search: string;
-  isLoadedMore: boolean;
   openDatasetId: string | null;
   selectedDatasetId: string | null;
 }
@@ -24,15 +23,16 @@ export interface UseDatasetVersionSelectReturn {
   isLoadingVersions: boolean;
   filteredDatasets: Dataset[];
   loadMore: () => void;
+  hasMore: boolean;
 }
 
 export default function useDatasetVersionSelect({
   workspaceName,
   search,
-  isLoadedMore,
   openDatasetId,
   selectedDatasetId,
 }: UseDatasetVersionSelectParams): UseDatasetVersionSelectReturn {
+  const [isLoadedMore, setIsLoadedMore] = useState(false);
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
     {
       workspaceName,
@@ -80,8 +80,10 @@ export default function useDatasetVersionSelect({
   }, [datasets, search]);
 
   const loadMore = useCallback(() => {
-    // Load more is handled by parent component via isLoadedMore state
+    setIsLoadedMore(true);
   }, []);
+
+  const hasMore = datasetTotal > DEFAULT_LOADED_DATASETS && !isLoadedMore;
 
   return {
     datasets,
@@ -91,5 +93,6 @@ export default function useDatasetVersionSelect({
     isLoadingVersions,
     filteredDatasets,
     loadMore,
+    hasMore,
   };
 }

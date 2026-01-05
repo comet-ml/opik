@@ -71,7 +71,6 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
   const resetDialogKeyRef = useRef(0);
 
   const [search, setSearch] = useState("");
-  const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -82,15 +81,15 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
 
   const {
     datasets,
-    datasetTotal,
     isLoadingDatasets,
     versions,
     isLoadingVersions,
     filteredDatasets,
+    loadMore,
+    hasMore,
   } = useDatasetVersionSelect({
     workspaceName,
     search,
-    isLoadedMore,
     openDatasetId,
     selectedDatasetId: datasetId,
   });
@@ -197,11 +196,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
               <div className="comet-body-s text-light-slate">
                 Showing first {DEFAULT_LOADED_DATASETS} items.
               </div>
-              <Button
-                variant="link"
-                onClick={() => setIsLoadedMore(true)}
-                type="button"
-              >
+              <Button variant="link" onClick={loadMore} type="button">
                 Load more
               </Button>
             </div>
@@ -218,8 +213,6 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     }
     inputRef.current?.focus();
   };
-
-  const hasMore = datasetTotal > DEFAULT_LOADED_DATASETS && !isLoadedMore;
 
   return (
     <>
