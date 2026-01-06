@@ -1293,10 +1293,38 @@ class DatasetItemServiceImpl implements DatasetItemService {
             List<ExperimentsComparisonFilter> filters) {
         log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
                 experimentIds, filters);
-        return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
-                .switchIfEmpty(Mono.just(ProjectStats.empty()))
-                .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'", datasetId,
-                        stats.stats().size()));
+
+        if (!featureFlags.isDatasetVersioningEnabled()) {
+            // Feature toggle OFF - use legacy DAO
+            log.debug("Dataset versioning disabled, using legacy DAO for stats");
+            return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
+                    .switchIfEmpty(Mono.just(ProjectStats.empty()))
+                    .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'",
+                            datasetId, stats.stats().size()));
+        }
+
+        // Feature toggle ON - use versioned DAO with latest version
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+
+            if (latestVersion.isEmpty()) {
+                // No versions exist yet - fall back to legacy DAO
+                log.info("No versions found for dataset '{}', falling back to legacy DAO for stats", datasetId);
+                return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
+                        .switchIfEmpty(Mono.just(ProjectStats.empty()))
+                        .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'",
+                                datasetId, stats.stats().size()));
+            }
+
+            UUID versionId = latestVersion.get().id();
+            log.debug("Dataset versioning enabled, using version '{}' for stats", versionId);
+            return versionDao.getExperimentItemsStats(datasetId, versionId, experimentIds, filters)
+                    .switchIfEmpty(Mono.just(ProjectStats.empty()))
+                    .doOnSuccess(stats -> log.info(
+                            "Found experiment items stats for dataset '{}', version '{}', count '{}'",
+                            datasetId, versionId, stats.stats().size()));
+        });
     }
 
     @Override
