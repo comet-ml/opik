@@ -77,6 +77,31 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     </div>
   );
 
+  const renderCodeSection = () => {
+    if (canExecuteCode) {
+      return (
+        <CodeExecutor
+          executionUrl={executionUrl}
+          executionLogs={executionLogs}
+          data={codeWithConfig}
+          copyData={codeWithConfigToCopy}
+          apiKey={apiKey}
+          workspaceName={workspaceName}
+          highlightedLines={lines}
+          onRunCodeCallback={onRunCodeCallback}
+        />
+      );
+    }
+
+    return (
+      <CodeHighlighter
+        data={codeWithConfig}
+        copyData={codeWithConfigToCopy}
+        highlightedLines={lines}
+      />
+    );
+  };
+
   if (isPhonePortrait) {
     return (
       <div className="flex flex-col gap-6">
@@ -92,28 +117,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
           <div className="comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap">
             2. Run the following code to get started
           </div>
-          {canExecuteCode ? (
-            <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
-              <CodeExecutor
-                executionUrl={executionUrl}
-                executionLogs={executionLogs}
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                apiKey={apiKey}
-                workspaceName={workspaceName}
-                highlightedLines={lines}
-                onRunCodeCallback={onRunCodeCallback}
-              />
-            </CodeBlockWithHeader>
-          ) : (
-            <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
-              <CodeHighlighter
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                highlightedLines={lines}
-              />
-            </CodeBlockWithHeader>
-          )}
+          <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
+            {renderCodeSection()}
+          </CodeBlockWithHeader>
         </div>
       </div>
     );
@@ -133,24 +139,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         <div className="comet-body-s mb-3">
           2. Run the following code to get started
         </div>
-        {canExecuteCode ? (
-          <CodeExecutor
-            executionUrl={executionUrl}
-            executionLogs={executionLogs}
-            data={codeWithConfig}
-            copyData={codeWithConfigToCopy}
-            apiKey={apiKey}
-            workspaceName={workspaceName}
-            highlightedLines={lines}
-            onRunCodeCallback={onRunCodeCallback}
-          />
-        ) : (
-          <CodeHighlighter
-            data={codeWithConfig}
-            copyData={codeWithConfigToCopy}
-            highlightedLines={lines}
-          />
-        )}
+        {renderCodeSection()}
       </div>
     </div>
   );

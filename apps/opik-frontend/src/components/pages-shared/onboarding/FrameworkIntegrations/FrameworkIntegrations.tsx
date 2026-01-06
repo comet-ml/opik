@@ -44,78 +44,75 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
     }
   };
 
+  const getFrameworkLogo = (item: FrameworkIntegration, size: string) => (
+    <img
+      alt={item.label}
+      src={
+        themeMode === THEME_MODE.DARK && item.logoWhite
+          ? item.logoWhite
+          : item.logo
+      }
+      className={`${size} shrink-0`}
+    />
+  );
+
+  const renderMobileFrameworkSelector = () => (
+    <div className="flex flex-col gap-1">
+      <label className="comet-body-s-accented px-0.5 pb-0.5">
+        Select framework
+      </label>
+      <Select value={integration.label} onValueChange={handleFrameworkSelect}>
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {integrationList.map((item) => (
+            <SelectItem key={item.label} value={item.label}>
+              <div className="flex items-center gap-2">
+                {getFrameworkLogo(item, "size-4")}
+                <span>{item.label}</span>
+              </div>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const renderDesktopFrameworkSelector = () => (
+    <>
+      <IntegrationTabs.Title>Select framework</IntegrationTabs.Title>
+      <IntegrationTabs>
+        {integrationList.map((item, index) => (
+          <IntegrationTabs.Item
+            key={item.label}
+            onClick={() => setIntegrationIndex(index)}
+            isActive={index === integrationIndex}
+          >
+            {getFrameworkLogo(item, "size-[32px]")}
+            <div className="ml-1 truncate">{item.label}</div>
+          </IntegrationTabs.Item>
+        ))}
+      </IntegrationTabs>
+      <Button className="w-fit pl-2" variant="ghost" asChild>
+        <a
+          href={buildDocsUrl("/tracing/integrations/overview")}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Explore all integrations
+          <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
+        </a>
+      </Button>
+    </>
+  );
+
   return (
     <IntegrationListLayout
       leftSidebar={
-        isPhonePortrait ? (
-          // Mobile: Use Select dropdown
-          <div className="flex flex-col gap-1">
-            <label className="comet-body-s-accented px-0.5 pb-0.5">
-              Select framework
-            </label>
-            <Select
-              value={integration.label}
-              onValueChange={handleFrameworkSelect}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {integrationList.map((item) => (
-                  <SelectItem key={item.label} value={item.label}>
-                    <div className="flex items-center gap-2">
-                      <img
-                        alt={item.label}
-                        src={
-                          themeMode === THEME_MODE.DARK && item.logoWhite
-                            ? item.logoWhite
-                            : item.logo
-                        }
-                        className="size-4 shrink-0"
-                      />
-                      <span>{item.label}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          // Desktop: Use tabs
-          <>
-            <IntegrationTabs.Title>Select framework</IntegrationTabs.Title>
-            <IntegrationTabs>
-              {integrationList.map((item, index) => (
-                <IntegrationTabs.Item
-                  key={item.label}
-                  onClick={() => setIntegrationIndex(index)}
-                  isActive={index === integrationIndex}
-                >
-                  <img
-                    alt={item.label}
-                    src={
-                      themeMode === THEME_MODE.DARK && item.logoWhite
-                        ? item.logoWhite
-                        : item.logo
-                    }
-                    className="size-[32px] shrink-0"
-                  />
-                  <div className="ml-1 truncate">{item.label}</div>
-                </IntegrationTabs.Item>
-              ))}
-            </IntegrationTabs>
-            <Button className="w-fit pl-2" variant="ghost" asChild>
-              <a
-                href={buildDocsUrl("/tracing/integrations/overview")}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Explore all integrations
-                <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
-              </a>
-            </Button>
-          </>
-        )
+        isPhonePortrait
+          ? renderMobileFrameworkSelector()
+          : renderDesktopFrameworkSelector()
       }
       rightSidebar={
         <>
