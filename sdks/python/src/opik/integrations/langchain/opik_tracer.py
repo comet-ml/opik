@@ -252,7 +252,7 @@ class OpikTracer(BaseTracer):
         if error_str is not None:
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
             if interrupt_value := _parse_graph_interrupt_value(error_str):
-                outputs = {"interrupt": interrupt_value}
+                outputs = {"__interrupt__": interrupt_value}
                 trace_additional_metadata["langgraph_interrupt"] = True
                 # Don't set error_info - this is not an error
             elif not self._should_skip_error(error_str):
@@ -298,9 +298,8 @@ class OpikTracer(BaseTracer):
             )
             return
 
-        # workaround for `.astream()` method usage and LangGraph interrupts
-        # Check if input is empty or contains a Command object that will serialize to empty dict
-        if trace_data.input == {"input": ""} or trace_data.input == {"input": {}}:
+        # workaround for `.astream()` method usage
+        if trace_data.input == {"input": ""}:
             trace_data.input = run_dict["inputs"]
         elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
             # Check if the input value is a LangGraph Command object
@@ -309,21 +308,19 @@ class OpikTracer(BaseTracer):
                 trace_data.input = {"__resume__": input_value.resume}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
-        if outputs is not None:
-            for _, span_data in self._span_data_map.items():
-                if (
-                    span_data.trace_id == trace_data.id
-                    and span_data.output is not None
-                    and span_data.metadata is not None
-                    and span_data.metadata.get("langgraph_interrupt") is True
-                ):
-                    # Use the interrupt output from the child span
-                    outputs = span_data.output
-                    # Also propagate the interrupt metadata to trace
-                    if trace_additional_metadata is None:
-                        trace_additional_metadata = {}
-                    trace_additional_metadata["langgraph_interrupt"] = True
-                    break
+        for _, span_data in self._span_data_map.items():
+            if (
+                span_data.trace_id == trace_data.id
+                and span_data.metadata is not None
+                and span_data.metadata.get("langgraph_interrupt") is True
+            ):
+                # Use the interrupt output from the child span
+                outputs = span_data.output
+                # Also propagate the interrupt metadata to trace
+                if trace_additional_metadata is None:
+                    trace_additional_metadata = {}
+                trace_additional_metadata["langgraph_interrupt"] = True
+                break
 
         if trace_additional_metadata:
             trace_data.update(metadata=trace_additional_metadata)
@@ -666,10 +663,9 @@ class OpikTracer(BaseTracer):
             elif isinstance(span_data.input, dict):
                 # Check if the input value is a LangGraph Command object
                 input_value = span_data.input.get("input")
-                if _is_command_object(input_value):
-                    command: LangGraphCommand = input_value
+                if input_value is not None and _is_command_object(input_value):
                     # Extract the resume value from the Command object
-                    span_data.input = {"__resume__": command.resume}
+                    span_data.input = {"__resume__": input_value.resume}
 
             filtered_output, additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
@@ -727,7 +723,7 @@ class OpikTracer(BaseTracer):
             if interrupt_value := _parse_graph_interrupt_value(error_str):
                 span_data.init_end_time().update(
                     metadata={"langgraph_interrupt": True},
-                    output={"interrupt": interrupt_value},
+                    output={"__interrupt__": interrupt_value},
                 )
             # Don't set error_info - this is not an error
             elif self._should_skip_error(error_str):
