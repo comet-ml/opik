@@ -78,6 +78,14 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     </div>
   );
 
+  const getSectionTitleClassName = () =>
+    cn(
+      "mb-3",
+      isPhonePortrait
+        ? "comet-body-s-accented overflow-x-auto whitespace-nowrap"
+        : "comet-body-s",
+    );
+
   const renderCodeSection = () => {
     if (canExecuteCode) {
       return (
@@ -105,14 +113,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderInstallSection = () => (
     <div>
-      <div
-        className={cn(
-          "mb-3",
-          isPhonePortrait
-            ? "comet-body-s-accented overflow-x-auto whitespace-nowrap"
-            : "comet-body-s",
-        )}
-      >
+      <div className={getSectionTitleClassName()}>
         1. Install Opik using pip from the command line
       </div>
       {isPhonePortrait ? (
@@ -129,14 +130,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderRunCodeSection = () => (
     <div>
-      <div
-        className={cn(
-          "mb-3",
-          isPhonePortrait
-            ? "comet-body-s-accented overflow-x-auto whitespace-nowrap"
-            : "comet-body-s",
-        )}
-      >
+      <div className={getSectionTitleClassName()}>
         2. Run the following code to get started
       </div>
       {isPhonePortrait ? (
