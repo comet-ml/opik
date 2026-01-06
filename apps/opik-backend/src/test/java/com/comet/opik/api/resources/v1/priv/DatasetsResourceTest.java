@@ -4152,6 +4152,13 @@ class DatasetsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchUpdateDatasetItems {
 
+        // TODO: These tests fail when dataset versioning is enabled because GET by ID returns stale data:
+        // - Batch update creates a new version with updated items (version 2 becomes 'latest')
+        // - GET by ID queries without filtering by version, so it returns items from old version 1
+        // - Tests expect updated tags but get old tags from the previous version
+        // This is a BUG that needs to be fixed: GET by ID should return items from the latest version
+        // by default, not from any arbitrary version. Users expect to see their latest changes.
+
         @Test
         @DisplayName("Success: batch add tags with merge")
         void batchUpdateDatasetItems__whenAddingTagsWithMerge__thenSucceed() {
