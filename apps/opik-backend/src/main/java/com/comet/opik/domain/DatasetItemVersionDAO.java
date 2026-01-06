@@ -675,8 +675,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
                 FROM feedback_scores_combined_grouped
-            ),
-            comments_final AS (
+            )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                FROM feedback_scores_final
+                GROUP BY entity_id
+                HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            , comments_final AS (
                 SELECT
                     id AS comment_id,
                     text,
