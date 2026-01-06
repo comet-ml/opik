@@ -136,7 +136,10 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         2. Run the following code to get started
       </div>
       {isPhonePortrait ? (
-        <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
+        <CodeBlockWithHeader
+          title="Python"
+          copyText={canExecuteCode ? undefined : codeWithConfigToCopy}
+        >
           {renderCodeSection()}
         </CodeBlockWithHeader>
       ) : (
