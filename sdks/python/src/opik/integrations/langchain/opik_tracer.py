@@ -93,38 +93,32 @@ def _is_command_object(obj: Any) -> bool:
     return isinstance(obj, LangGraphCommand)
 
 
-def _is_graph_interrupt(error_traceback: str) -> bool:
+def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
     """
-    Check if an error traceback is a GraphInterrupt.
+    Parse GraphInterrupt error traceback to extract the interrupt value as a string.
 
-    Args:
-        error_traceback: The error traceback string to check.
-
-    Returns:
-        True if the error is a GraphInterrupt, False otherwise.
-    """
-    return "GraphInterrupt" in error_traceback and "Interrupt(" in error_traceback
-
-
-def _parse_graph_interrupt(error_traceback: str) -> Optional[str]:
-    """
-    Parse GraphInterrupt error traceback to extract the interrupt value.
+    The function extracts the value from the Interrupt object representation in the traceback.
+    It handles both string values (with quotes) and non-string values.
 
     Args:
         error_traceback: The error traceback string containing GraphInterrupt information.
 
     Returns:
-        The interrupt value if found, None otherwise.
+        The interrupt value as a string if found, None otherwise.
     """
-    if not _is_graph_interrupt(error_traceback):
+    if not error_traceback.startswith("GraphInterrupt("):
         return None
 
+    # Try to match any values: Interrupt(value=<something>)
+    # This captures everything between value= and the next comma or closing paren
     match = re.search(
-        r"Interrupt\(value='([^']*)'",
-        error_traceback.replace("\\n", "\n"),
+        r"Interrupt\(value=([^,)]+)",
+        error_traceback,
     )
     if match:
-        return match.group(1)
+        value = match.group(1).strip().strip("'").strip('"')
+        # Convert the value to string representation
+        return str(value)
 
     return None
 
@@ -257,11 +251,9 @@ class OpikTracer(BaseTracer):
 
         if error_str is not None:
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
-            if _is_graph_interrupt(error_str):
-                # Extract interrupt value and set it as output
-                interrupt_value = _parse_graph_interrupt(error_str)
-                if interrupt_value is not None:
-                    outputs = {"__interrupt__": [{"value": interrupt_value}]}
+            if interrupt_value := _parse_graph_interrupt_value(error_str):
+                outputs = {"interrupt": interrupt_value}
+                trace_additional_metadata["langgraph_interrupt"] = True
                 # Don't set error_info - this is not an error
             elif not self._should_skip_error(error_str):
                 error_info = ErrorInfoDict(
@@ -317,16 +309,20 @@ class OpikTracer(BaseTracer):
                 trace_data.input = {"__resume__": input_value.resume}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
-        if outputs is not None and isinstance(outputs, dict):
-            for span_id, span_data in self._span_data_map.items():
+        if outputs is not None:
+            for _, span_data in self._span_data_map.items():
                 if (
                     span_data.trace_id == trace_data.id
                     and span_data.output is not None
-                    and isinstance(span_data.output, dict)
-                    and "__interrupt__" in span_data.output
+                    and span_data.metadata is not None
+                    and span_data.metadata.get("langgraph_interrupt") is True
                 ):
                     # Use the interrupt output from the child span
                     outputs = span_data.output
+                    # Also propagate the interrupt metadata to trace
+                    if trace_additional_metadata is None:
+                        trace_additional_metadata = {}
+                    trace_additional_metadata["langgraph_interrupt"] = True
                     break
 
         if trace_additional_metadata:
@@ -728,16 +724,12 @@ class OpikTracer(BaseTracer):
             error_str = run_dict["error"]
 
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
-            if _is_graph_interrupt(error_str):
-                # Extract interrupt value and set it as output
-                interrupt_value = _parse_graph_interrupt(error_str)
-                if interrupt_value is not None:
-                    span_data.init_end_time().update(
-                        output={"__interrupt__": [{"value": interrupt_value}]}
-                    )
-                else:
-                    span_data.init_end_time().update(output=None)
-                # Don't set error_info - this is not an error
+            if interrupt_value := _parse_graph_interrupt_value(error_str):
+                span_data.init_end_time().update(
+                    metadata={"langgraph_interrupt": True},
+                    output={"interrupt": interrupt_value},
+                )
+            # Don't set error_info - this is not an error
             elif self._should_skip_error(error_str):
                 span_data.init_end_time().update(output=ERROR_SKIPPED_OUTPUTS)
             else:

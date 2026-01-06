@@ -1213,8 +1213,10 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
         id=ANY_BUT_NONE,
         name="LangGraph",
         input=initial_input,
-        output=ANY_DICT.containing({"__interrupt__": ANY_LIST}),
-        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+        output=ANY_DICT.containing({"interrupt": ANY_STRING}),
+        metadata=ANY_DICT.containing(
+            {"created_from": "langchain", "langgraph_interrupt": True}
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -1248,8 +1250,10 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                 id=ANY_BUT_NONE,
                 name="provide_options",
                 input=ANY_DICT,
-                output=ANY_DICT.containing({"__interrupt__": ANY_LIST}),
-                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                output=ANY_DICT.containing({"interrupt": ANY_STRING}),
+                metadata=ANY_DICT.containing(
+                    {"created_from": "langchain", "langgraph_interrupt": True}
+                ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 error_info=None,
