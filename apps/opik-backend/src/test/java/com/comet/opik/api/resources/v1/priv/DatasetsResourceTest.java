@@ -6843,6 +6843,8 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7006,6 +7008,8 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7087,6 +7091,8 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7157,6 +7163,8 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7288,6 +7296,8 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
