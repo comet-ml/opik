@@ -139,10 +139,7 @@ public class OpenTelemetryMapper {
                         // Store as 'thread_id' in metadata for trace grouping
                         // First value wins if multiple attributes map to THREAD_ID
                         if (!metadata.has("thread_id")) {
-                            var threadIdValue = value.getStringValue();
-                            if (StringUtils.isNotBlank(threadIdValue)) {
-                                metadata.put("thread_id", threadIdValue);
-                            }
+                            extractToJsonColumn(metadata, "thread_id", value);
                         }
                         break;
 
