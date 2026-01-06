@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
@@ -1154,7 +1155,65 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds())) {
                     log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                             datasetItemSearchCriteria, page, size);
-                    return getItemsFromExperimentVersion(datasetItemSearchCriteria, page, size, workspaceId);
+
+                    // Get the first experiment ID to determine which version to use
+                    UUID experimentId = datasetItemSearchCriteria.experimentIds().iterator().next();
+
+                    // Query the experiment to get its dataset_version_id - context is available here
+                    return experimentDao.getById(experimentId)
+                            .switchIfEmpty(Mono.defer(() -> {
+                                log.warn("Experiment '{}' not found in database, falling back to latest version",
+                                        experimentId);
+                                // Return a dummy experiment with null versionId to trigger fallback
+                                return Mono.just(Experiment.builder()
+                                        .id(experimentId)
+                                        .datasetVersionId(null)
+                                        .build());
+                            }))
+                            .flatMap(experiment -> {
+                                UUID versionId = experiment.datasetVersionId();
+
+                                if (versionId == null) {
+                                    // Experiment is not linked to a version - fall back to latest version
+                                    log.warn(
+                                            "Experiment '{}' is not linked to a dataset version, falling back to latest version",
+                                            experimentId);
+                                    return getItemsFromLatestVersionWithExperimentItems(datasetItemSearchCriteria, page,
+                                            size, workspaceId);
+                                }
+
+                                log.info("Fetching items from experiment's linked version '{}' for dataset '{}'",
+                                        versionId,
+                                        datasetItemSearchCriteria.datasetId());
+
+                                // Fetch experiment items output columns and merge with dataset item columns
+                                return Mono.zip(
+                                        versionDao.getItemsWithExperimentItems(datasetItemSearchCriteria, page, size,
+                                                versionId),
+                                        versionDao
+                                                .getExperimentItemsOutputColumns(datasetItemSearchCriteria.datasetId(),
+                                                        datasetItemSearchCriteria.experimentIds())
+                                                .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID,
+                                                        workspaceId)))
+                                        .map(tuple -> {
+                                            DatasetItemPage itemPage = tuple.getT1();
+                                            List<Column> experimentColumns = tuple.getT2();
+
+                                            // Merge dataset columns with experiment columns
+                                            Set<Column> allColumns = new HashSet<>(itemPage.columns());
+                                            allColumns.addAll(experimentColumns);
+
+                                            return new DatasetItemPage(
+                                                    itemPage.content(),
+                                                    itemPage.page(),
+                                                    itemPage.size(),
+                                                    itemPage.total(),
+                                                    allColumns,
+                                                    itemPage.sortableBy());
+                                        })
+                                        .defaultIfEmpty(
+                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                            });
                 }
 
                 // Otherwise, fetch items from the latest version
@@ -1191,50 +1250,42 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
-    private Mono<DatasetItemPage> getItemsFromExperimentVersion(DatasetItemSearchCriteria criteria, int page, int size,
-            String workspaceId) {
-        // Get the first experiment ID to determine which version to use
-        // All experiments in the comparison should be linked to the same dataset version
-        UUID experimentId = criteria.experimentIds().iterator().next();
+    private Mono<DatasetItemPage> getItemsFromLatestVersionWithExperimentItems(DatasetItemSearchCriteria criteria,
+            int page, int size, String workspaceId) {
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(), workspaceId);
 
-        // Query the experiment to get its dataset_version_id
-        return Mono.deferContextual(ctx -> experimentDao.getById(experimentId))
-                .flatMap(experiment -> {
-                    UUID versionId = experiment.datasetVersionId();
+        if (latestVersion.isEmpty()) {
+            // No versions exist yet - this shouldn't happen with versioning enabled
+            log.error("No versions found for dataset '{}' when versioning is enabled", criteria.datasetId());
+            return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        }
 
-                    if (versionId == null) {
-                        // Experiment is not linked to a version (shouldn't happen with versioning enabled, but handle gracefully)
-                        log.warn("Experiment '{}' is not linked to a dataset version, falling back to latest version",
-                                experimentId);
-                        return getItemsFromLatestVersion(criteria, page, size, workspaceId);
-                    }
+        UUID versionId = latestVersion.get().id();
+        log.info("Fetching items with experiment items from latest version '{}' for dataset '{}'", versionId,
+                criteria.datasetId());
 
-                    log.info("Fetching items from experiment's linked version '{}' for dataset '{}'", versionId,
-                            criteria.datasetId());
+        // Fetch experiment items output columns and merge with dataset item columns
+        return Mono.zip(
+                versionDao.getItemsWithExperimentItems(criteria, page, size, versionId),
+                versionDao.getExperimentItemsOutputColumns(criteria.datasetId(), criteria.experimentIds())
+                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)))
+                .map(tuple -> {
+                    DatasetItemPage itemPage = tuple.getT1();
+                    List<Column> experimentColumns = tuple.getT2();
 
-                    // Fetch experiment items output columns and merge with dataset item columns
-                    return Mono.zip(
-                            versionDao.getItemsWithExperimentItems(criteria, page, size, versionId),
-                            versionDao.getExperimentItemsOutputColumns(criteria.datasetId(), criteria.experimentIds())
-                                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)))
-                            .map(tuple -> {
-                                DatasetItemPage itemPage = tuple.getT1();
-                                List<Column> experimentColumns = tuple.getT2();
+                    // Merge dataset columns with experiment columns
+                    Set<Column> allColumns = new HashSet<>(itemPage.columns());
+                    allColumns.addAll(experimentColumns);
 
-                                // Merge dataset columns with experiment columns
-                                Set<Column> allColumns = new HashSet<>(itemPage.columns());
-                                allColumns.addAll(experimentColumns);
-
-                                return new DatasetItemPage(
-                                        itemPage.content(),
-                                        itemPage.page(),
-                                        itemPage.size(),
-                                        itemPage.total(),
-                                        allColumns,
-                                        itemPage.sortableBy());
-                            })
-                            .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-                });
+                    return new DatasetItemPage(
+                            itemPage.content(),
+                            itemPage.page(),
+                            itemPage.size(),
+                            itemPage.total(),
+                            allColumns,
+                            itemPage.sortableBy());
+                })
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
