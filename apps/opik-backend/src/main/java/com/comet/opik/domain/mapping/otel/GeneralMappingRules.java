@@ -21,7 +21,7 @@ public final class GeneralMappingRules {
                     .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)
                     .build(),
             OpenTelemetryMappingRule.builder()
-                    .rule("thread_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                    .rule("thread_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.THREAD_ID).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("opik.tags").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.TAGS).build(),
             OpenTelemetryMappingRule.builder()
