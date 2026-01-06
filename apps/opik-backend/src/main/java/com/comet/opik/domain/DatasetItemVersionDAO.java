@@ -1478,7 +1478,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(DatasetItemResultMapper::mapItem)
                                 .collectList()
-                                .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null));
+                                .map(items -> new DatasetItemPage(items, page, items.size(), total, columns,
+                                        sortingFactory.getSortableFields()));
                     });
                 });
     }
@@ -1552,7 +1553,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             Long count = itemsAndCount.getT2();
                             Set<Column> columns = tuple.getT2();
 
-                            return new DatasetItemPage(items, page, items.size(), count, columns, null);
+                            return new DatasetItemPage(items, page, items.size(), count, columns,
+                                    sortingFactory.getSortableFields());
                         });
             });
         });
