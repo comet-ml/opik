@@ -67,6 +67,7 @@ import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -84,6 +85,7 @@ class ExperimentDAO {
                 name,
                 workspace_id,
                 metadata,
+                tags,
                 created_by,
                 last_updated_by,
                 prompt_version_id,
@@ -105,6 +107,7 @@ class ExperimentDAO {
                 new.name,
                 new.workspace_id,
                 new.metadata,
+                new.tags,
                 new.created_by,
                 new.last_updated_by,
                 new.prompt_version_id,
@@ -122,6 +125,7 @@ class ExperimentDAO {
                 :name AS name,
                 :workspace_id AS workspace_id,
                 :metadata AS metadata,
+                :tags AS tags,
                 :created_by AS created_by,
                 :last_updated_by AS last_updated_by,
                 :prompt_version_id AS prompt_version_id,
@@ -397,6 +401,7 @@ class ExperimentDAO {
                 e.id as id,
                 e.name as name,
                 e.metadata as metadata,
+                e.tags as tags,
                 e.created_at as created_at,
                 e.last_updated_at as last_updated_at,
                 e.created_by as created_by,
@@ -753,6 +758,7 @@ class ExperimentDAO {
                 name,
                 workspace_id,
                 metadata,
+                tags,
                 created_by,
                 last_updated_by,
                 prompt_version_id,
@@ -771,6 +777,7 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                <if(tags)> :tags <else> tags <endif> as tags,
                 created_by,
                 :user_name as last_updated_by,
                 prompt_version_id,
@@ -820,6 +827,12 @@ class ExperimentDAO {
                 .bind("dataset_version_id", Optional.ofNullable(experiment.datasetVersionId())
                         .map(UUID::toString)
                         .orElse(""));
+
+        if (experiment.tags() != null) {
+            statement.bind("tags", experiment.tags().toArray(String[]::new));
+        } else {
+            statement.bind("tags", new String[]{});
+        }
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -921,6 +934,10 @@ class ExperimentDAO {
                     .projectId(RowUtils.getOptionalValue(row, "project_id", UUID.class))
                     .name(row.get("name", String.class))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
+                    .tags(Optional.ofNullable(row.get("tags", String[].class))
+                            .map(tags -> Arrays.stream(tags).collect(toSet()))
+                            .filter(set -> !set.isEmpty())
+                            .orElse(null))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
@@ -1417,6 +1434,10 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
+        if (experimentUpdate.tags() != null) {
+            template.add("tags", true);
+        }
+
         if (experimentUpdate.type() != null) {
             template.add("type", experimentUpdate.type().getValue());
         }
@@ -1439,6 +1460,10 @@ class ExperimentDAO {
 
         if (experimentUpdate.metadata() != null) {
             statement.bind("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.tags() != null) {
+            statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
         }
 
         if (experimentUpdate.type() != null) {

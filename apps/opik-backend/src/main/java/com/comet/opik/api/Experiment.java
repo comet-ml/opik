@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -29,6 +30,7 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) String name,
         @Schema(implementation = JsonListString.class) @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) JsonNode metadata,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) Set<String> tags,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentType type,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) UUID optimizationId,
         @JsonView({

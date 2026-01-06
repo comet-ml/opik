@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
@@ -20,6 +21,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record ExperimentUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String name,
         JsonNode metadata,
+        Set<String> tags,
         ExperimentType type,
         @Schema(description = "The status of the experiment") ExperimentStatus status,
         List<@NotNull @Valid ExperimentScore> experimentScores) {
