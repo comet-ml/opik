@@ -737,7 +737,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     // 2. If feature toggle is ON and no version specified, use latest version
                     // 3. Otherwise, use legacy table (existing behavior)
 
-                    String versionHashOrTag = request.version();
+                    String versionHashOrTag = request.datasetVersion();
 
                     // Case 1: Version explicitly specified
                     if (versionHashOrTag != null && !versionHashOrTag.isBlank()) {

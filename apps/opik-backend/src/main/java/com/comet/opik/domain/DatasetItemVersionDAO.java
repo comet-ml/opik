@@ -1195,26 +1195,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Adds dataset item filters to the StringTemplate if filters are present.
      *
      * @param template the StringTemplate to add filters to
-     * @param filters the list of filters to apply, may be null
+     * @param filters the list of filters to apply, may be null or empty
      */
     private void addDatasetItemFiltersToTemplate(ST template, List<? extends Filter> filters) {
-        Optional.ofNullable(filters)
-                .ifPresent(f -> {
-                    FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.DATASET_ITEM)
-                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                                    datasetItemFilters));
-                });
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                            datasetItemFilters));
+        }
     }
 
     /**
      * Binds dataset item filter parameters to the R2DBC statement.
      *
      * @param statement the R2DBC statement to bind parameters to
-     * @param filters the list of filters to bind, may be null
+     * @param filters the list of filters to bind, may be null or empty
      */
     private void bindDatasetItemFilters(Statement statement, List<? extends Filter> filters) {
-        Optional.ofNullable(filters)
-                .ifPresent(f -> FilterQueryBuilder.bind(statement, f, FilterStrategy.DATASET_ITEM));
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+        }
     }
 
     @Override
