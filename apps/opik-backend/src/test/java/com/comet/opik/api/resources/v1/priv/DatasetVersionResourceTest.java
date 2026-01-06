@@ -1343,6 +1343,67 @@ class DatasetVersionResourceTest {
             var version2 = getLatestVersion(datasetId);
             assertThat(version2.itemsTotal()).isEqualTo(2);
         }
+
+        @Test
+        @DisplayName("Success: Filter versioned dataset items by data field")
+        void getItems__whenFilteringVersionedItems__thenReturnMatchingItems() {
+            // Given - Create dataset with items that have specific data fields
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create items with different descriptions
+            var item1 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "Name", JsonUtils.readTree("\"Cat\""),
+                            "Description", JsonUtils.readTree("\"Cat looking at camera\"")))
+                    .build();
+            var item2 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "Name", JsonUtils.readTree("\"Dog\""),
+                            "Description", JsonUtils.readTree("\"Dog at the garden\"")))
+                    .build();
+            var item3 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "Name", JsonUtils.readTree("\"Bird\""),
+                            "Description", JsonUtils.readTree("\"Blue jay perched on a wooden fence\"")))
+                    .build();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(item1, item2, item3))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get the version
+            var version = getLatestVersion(datasetId);
+
+            // When - Filter by Description field that does NOT contain "Dog"
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.NOT_CONTAINS, "Description", "Dog");
+            var filteredItems = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then - Should return only items without "Dog" in Description (Cat and Bird)
+            assertThat(filteredItems.content()).hasSize(2);
+            assertThat(filteredItems.total()).isEqualTo(2);
+
+            // Verify the returned items are Cat and Bird (filter worked correctly)
+            // Note: JsonNode toString() includes escaped quotes for string values
+            var names = filteredItems.content().stream()
+                    .map(item -> item.data().get("Name").toString())
+                    .toList();
+            assertThat(names).containsExactlyInAnyOrder("\"\\\"Cat\\\"\"", "\"\\\"Bird\\\"\"");
+
+            // Verify Dog item is not in the results
+            assertThat(names).doesNotContain("Dog");
+        }
     }
 
     @Nested
