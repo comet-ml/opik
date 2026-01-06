@@ -102,45 +102,58 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     );
   };
 
-  if (isPhonePortrait) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap">
-            1. Install Opik using pip from the command line
-          </div>
-          <CodeBlockWithHeader title="Terminal" copyText={CODE_BLOCK_1}>
-            <CodeHighlighter data={CODE_BLOCK_1} />
-          </CodeBlockWithHeader>
-        </div>
-        <div>
-          <div className="comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap">
-            2. Run the following code to get started
-          </div>
-          <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
-            {renderCodeSection()}
-          </CodeBlockWithHeader>
-        </div>
+  const renderInstallSection = () => (
+    <div>
+      <div
+        className={
+          isPhonePortrait
+            ? "comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap"
+            : "comet-body-s mb-3"
+        }
+      >
+        1. Install Opik using pip from the command line
       </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6 rounded-md border bg-background p-6">
-      <div>
-        <div className="comet-body-s mb-3">
-          1. Install Opik using pip from the command line.
-        </div>
+      {isPhonePortrait ? (
+        <CodeBlockWithHeader title="Terminal" copyText={CODE_BLOCK_1}>
+          <CodeHighlighter data={CODE_BLOCK_1} />
+        </CodeBlockWithHeader>
+      ) : (
         <div className="min-h-7">
           <CodeHighlighter data={CODE_BLOCK_1} />
         </div>
+      )}
+    </div>
+  );
+
+  const renderRunCodeSection = () => (
+    <div>
+      <div
+        className={
+          isPhonePortrait
+            ? "comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap"
+            : "comet-body-s mb-3"
+        }
+      >
+        2. Run the following code to get started
       </div>
-      <div>
-        <div className="comet-body-s mb-3">
-          2. Run the following code to get started
-        </div>
-        {renderCodeSection()}
-      </div>
+      {isPhonePortrait ? (
+        <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
+          {renderCodeSection()}
+        </CodeBlockWithHeader>
+      ) : (
+        renderCodeSection()
+      )}
+    </div>
+  );
+
+  const containerClassName = isPhonePortrait
+    ? "flex flex-col gap-6"
+    : "flex flex-col gap-6 rounded-md border bg-background p-6";
+
+  return (
+    <div className={containerClassName}>
+      {renderInstallSection()}
+      {renderRunCodeSection()}
     </div>
   );
 };
