@@ -244,7 +244,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 id,
                 dataset_item_id,
                 dataset_id,
-                data,
+                <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
                 trace_id,
                 span_id,
                 source,
@@ -1500,8 +1500,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     Set<Column> columns = tuple.getT2();
 
                     return asyncTemplate.nonTransaction(connection -> {
-                        // Build template with filters
+                        // Build template with filters and truncation
                         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
+                        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                        template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
                         addDatasetItemFiltersToTemplate(template, criteria.filters());
 
                         var statement = connection.createStatement(template.render())
