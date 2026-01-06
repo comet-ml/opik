@@ -366,7 +366,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	SELECT *
             	FROM experiment_items_scope ei
             	WHERE workspace_id = :workspace_id
-            	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
+            	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters || dataset_item_filters)>
                 AND trace_id IN (
                     SELECT
                         id
@@ -391,6 +391,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND fsc.feedback_scores_count = 0
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+                <if(dataset_item_filters)>
+                AND ei.dataset_item_id IN (
+                    SELECT id FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :datasetId
+                    AND dataset_version_id = :versionId
+                    AND <dataset_item_filters>
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -507,7 +518,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	SELECT *
             	FROM experiment_items_scope ei
             	WHERE workspace_id = :workspace_id
-            	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
+            	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters || dataset_item_filters)>
                 AND trace_id IN (
                     SELECT
                         id
@@ -532,6 +543,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND fsc.feedback_scores_count = 0
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+                <if(dataset_item_filters)>
+                AND ei.dataset_item_id IN (
+                    SELECT id FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :datasetId
+                    AND dataset_version_id = :versionId
+                    AND <dataset_item_filters>
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -1409,8 +1431,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
         // Add filters if present - need to add all filter strategies
         if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.DATASET_ITEM)
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            var datasetItemFiltersOpt = FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
+                    FilterStrategy.DATASET_ITEM);
+            datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                    datasetItemFilters));
 
             FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
                     .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
