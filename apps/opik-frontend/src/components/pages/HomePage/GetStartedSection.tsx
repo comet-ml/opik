@@ -15,6 +15,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import { cn } from "@/lib/utils";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -87,9 +88,10 @@ const GetStartedSection = () => {
           <div className="pb-8">
             <SheetTitle>Log a trace</SheetTitle>
             <div
-              className={`comet-body-s mt-4 self-center text-center text-muted-slate ${
-                isPhonePortrait ? "w-full px-4" : "m-auto w-[468px]"
-              }`}
+              className={cn(
+                "comet-body-s mt-4 self-center text-center text-muted-slate",
+                isPhonePortrait ? "w-full px-4" : "m-auto w-[468px]",
+              )}
             >
               Select a framework and follow the instructions to integrate Comet
               with your code, or explore our ready-to-run examples on the right
