@@ -1338,10 +1338,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .map(item -> {
                     // Generate new stable ID for new items
                     UUID id = idGenerator.generateId();
-                    // Use draftItemId as the stable ID field
+                    // Use id as the stable ID field
                     return item.toBuilder()
                             .id(id)
-                            .draftItemId(id)
+                            .datasetItemId(id)
                             .datasetId(datasetId)
                             .build();
                 })
@@ -1369,7 +1369,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return Mono.error(new ClientErrorException(
                     Response.status(Response.Status.BAD_REQUEST)
                             .entity(new ErrorMessage(
-                                    List.of("Edited items must have an id or draftItemId")))
+                                    List.of("Edited items must have an id or datasetItemId")))
                             .build()));
         }
 
@@ -1403,7 +1403,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 // Create map from dataset_item_id to existing item
                                 Map<UUID, DatasetItem> existingItemMap = existingItems.stream()
                                         .collect(Collectors.toMap(
-                                                DatasetItem::draftItemId,
+                                                DatasetItem::datasetItemId,
                                                 Function.identity()));
 
                                 // Merge partial changes with existing items
@@ -1445,7 +1445,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private DatasetItem mergeEditWithExisting(DatasetItem existingItem, DatasetItemEdit editItem,
             UUID datasetItemId, UUID datasetId) {
         return existingItem.toBuilder()
-                .draftItemId(datasetItemId) // Set stable ID
+                .datasetItemId(datasetItemId) // Set stable ID
                 .datasetId(datasetId)
                 .data(editItem.data() != null ? editItem.data() : existingItem.data())
                 // Source, traceId, spanId are always preserved from existing item
@@ -1555,12 +1555,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
         UUID newVersionId = idGenerator.generateId();
 
         // All items are "added" for the first version
-        // Set draftItemId as the stable ID for each item
+        // Set datasetItemId as the stable ID for each item
         List<DatasetItem> addedItems = items.stream()
                 .map(item -> {
                     UUID stableId = item.id() != null ? item.id() : idGenerator.generateId();
                     return item.toBuilder()
-                            .draftItemId(stableId)
+                            .datasetItemId(stableId)
                             .datasetId(datasetId)
                             .build();
                 })
@@ -1613,14 +1613,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         if (itemId != null && existingItemIds.contains(itemId)) {
                             // Existing item - treat as edit
                             editedItems.add(item.toBuilder()
-                                    .draftItemId(itemId)
+                                    .datasetItemId(itemId)
                                     .datasetId(datasetId)
                                     .build());
                         } else {
                             // New item - treat as add
                             UUID newItemId = itemId != null ? itemId : idGenerator.generateId();
                             addedItems.add(item.toBuilder()
-                                    .draftItemId(newItemId)
+                                    .datasetItemId(newItemId)
                                     .datasetId(datasetId)
                                     .build());
                         }
