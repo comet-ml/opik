@@ -1498,7 +1498,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 // Build the query using StringTemplate
                 ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS);
 
-                template.add("truncate", criteria.truncate());
+                template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                 template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
                 // Add experiment IDs to template
@@ -1611,7 +1611,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.nonTransaction(connection -> {
             ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
-            template.add("truncate", criteria.truncate());
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
             // Add experiment IDs if present
