@@ -1553,15 +1553,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 // Bind search terms as array
                 if (StringUtils.isNotBlank(criteria.search())) {
-                    filterQueryBuilder.bindSearchTerms(statement, criteria.search());
+                    statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
                 }
 
                 // Bind filter parameters if present
                 if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
-                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(),
+                            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
@@ -1650,12 +1651,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             // Bind search terms if present
             if (StringUtils.isNotBlank(criteria.search())) {
-                filterQueryBuilder.bindSearchTerms(statement, criteria.search());
+                statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
             }
 
             // Bind filter parameters if present
             if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(),
+                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
             }
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
