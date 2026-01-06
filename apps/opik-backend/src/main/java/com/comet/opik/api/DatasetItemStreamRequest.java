@@ -18,7 +18,7 @@ public record DatasetItemStreamRequest(
         @NotBlank String datasetName,
         UUID lastRetrievedId,
         @Min(1) @Max(2000) @DefaultValue("500") Integer steamLimit,
-        String version) {
+        String datasetVersion) {
 
     @Override
     public Integer steamLimit() {

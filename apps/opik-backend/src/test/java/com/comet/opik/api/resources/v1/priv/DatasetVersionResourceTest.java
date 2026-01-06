@@ -2482,7 +2482,7 @@ class DatasetVersionResourceTest {
             var streamRequestV1 = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .steamLimit(100)
-                    .version("v1")
+                    .datasetVersion("v1")
                     .build();
             var streamedItemsV1 = datasetResourceClient.streamDatasetItems(streamRequestV1, API_KEY, TEST_WORKSPACE);
 
@@ -2493,7 +2493,7 @@ class DatasetVersionResourceTest {
             var streamRequestV2 = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .steamLimit(100)
-                    .version(DatasetVersionService.LATEST_TAG)
+                    .datasetVersion(DatasetVersionService.LATEST_TAG)
                     .build();
             var streamedItemsV2 = datasetResourceClient.streamDatasetItems(streamRequestV2, API_KEY, TEST_WORKSPACE);
 
