@@ -1603,6 +1603,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return Mono.empty();
         }
 
+        // Validate UUID versions and add IDs if absent
+        List<DatasetItem> validatedItems = addIdIfAbsent(batch);
+
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -1610,20 +1613,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Saving items with version for dataset '{}', itemCount '{}'",
                     datasetId, batch.items().size());
 
-            // Verify dataset exists
-            datasetService.findById(datasetId, workspaceId, null);
+            // Validate span and trace workspaces before proceeding
+            return validateSpans(workspaceId, validatedItems)
+                    .then(Mono.defer(() -> validateTraces(workspaceId, validatedItems)))
+                    .then(Mono.defer(() -> {
+                        // Verify dataset exists
+                        datasetService.findById(datasetId, workspaceId, null);
 
-            // Get the latest version (if exists) - using overload that takes workspaceId
-            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+                        // Get the latest version (if exists) - using overload that takes workspaceId
+                        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId,
+                                workspaceId);
 
-            if (latestVersion.isEmpty()) {
-                // No versions exist yet - create the first version with all items as "added"
-                return createFirstVersion(datasetId, batch.items(), workspaceId, userName);
-            }
+                        if (latestVersion.isEmpty()) {
+                            // No versions exist yet - create the first version with all items as "added"
+                            return createFirstVersion(datasetId, validatedItems, workspaceId, userName);
+                        }
 
-            // Versions exist - apply delta on top of the latest
-            UUID baseVersionId = latestVersion.get().id();
-            return createVersionWithDelta(datasetId, baseVersionId, batch.items(), workspaceId, userName);
+                        // Versions exist - apply delta on top of the latest
+                        UUID baseVersionId = latestVersion.get().id();
+                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, workspaceId, userName);
+                    }));
         });
     }
 
