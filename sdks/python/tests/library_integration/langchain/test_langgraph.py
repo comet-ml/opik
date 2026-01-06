@@ -505,10 +505,9 @@ def test_langgraph__node_returning_command__output_captured_correctly(
     assert len(node_a_span.output["messages"]) == 1
     assert "Node A answer" in str(node_a_span.output["messages"][0])
 
-    node_b_output = node_b_span.output["output"]["update"]
-    assert "messages" in node_b_output
-    assert len(node_b_output["messages"]) == 1
-    assert "Node B answer" in str(node_b_output["messages"][0])
+    assert "messages" in node_b_span.output
+    assert len(node_b_span.output["messages"]) == 1
+    assert "Node B answer" in str(node_b_span.output["messages"][0])
 
     assert "messages" in node_c_span.output
     assert len(node_c_span.output["messages"]) == 1
