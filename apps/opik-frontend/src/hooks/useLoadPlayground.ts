@@ -13,12 +13,16 @@ import {
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_SELECTED_DATASET_KEY,
+  PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface LoadPlaygroundOptions {
   promptContent?: MessageContent;
@@ -26,6 +30,7 @@ interface LoadPlaygroundOptions {
   promptVersionId?: string;
   autoImprove?: boolean;
   datasetId?: string;
+  datasetVersionId?: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 }
 
@@ -47,8 +52,19 @@ const useLoadPlayground = () => {
       workspaceName,
     });
 
+  const isVersioningEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
+  );
+
   const [, setDatasetId] = useLocalStorageState<string | null>(
     PLAYGROUND_SELECTED_DATASET_KEY,
+    {
+      defaultValue: null,
+    },
+  );
+
+  const [, setDatasetVersionKey] = useLocalStorageState<string | null>(
+    PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
     {
       defaultValue: null,
     },
@@ -76,6 +92,7 @@ const useLoadPlayground = () => {
         promptVersionId,
         autoImprove = false,
         datasetId,
+        datasetVersionId,
         templateStructure,
       } = options;
 
@@ -141,7 +158,21 @@ const useLoadPlayground = () => {
       setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
 
       if (datasetId) {
-        setDatasetId(datasetId);
+        if (isVersioningEnabled && datasetVersionId) {
+          // Use versioned storage format: "datasetId::versionId"
+          const versionKey = formatDatasetVersionKey(
+            datasetId,
+            datasetVersionId,
+          );
+          setDatasetVersionKey(versionKey);
+          // Clear legacy storage to avoid conflicts
+          setDatasetId(null);
+        } else {
+          // Use legacy storage format: "datasetId"
+          setDatasetId(datasetId);
+          // Clear versioned storage to avoid conflicts
+          setDatasetVersionKey(null);
+        }
       }
 
       navigate({
@@ -159,6 +190,8 @@ const useLoadPlayground = () => {
       providerKeys,
       setPromptMap,
       setDatasetId,
+      setDatasetVersionKey,
+      isVersioningEnabled,
       workspaceName,
     ],
   );

@@ -258,11 +258,11 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   });
 
   const noDataText = useMemo(() => {
-    if (isDraftMode && deletedIds.size > 0 && totalCount > rows.length) {
+    if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
       return "No rows on this page";
     }
     return "There are no dataset items yet";
-  }, [isDraftMode, deletedIds.size, totalCount, rows.length]);
+  }, [isDraftMode, deletedIds.size, totalCount]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {

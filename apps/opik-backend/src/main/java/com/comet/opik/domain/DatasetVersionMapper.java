@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionSummary;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
@@ -9,7 +10,7 @@ import org.mapstruct.factory.Mappers;
 import java.util.UUID;
 
 @Mapper
-interface DatasetVersionMapper {
+public interface DatasetVersionMapper {
 
     DatasetVersionMapper INSTANCE = Mappers.getMapper(DatasetVersionMapper.class);
 
@@ -20,6 +21,9 @@ interface DatasetVersionMapper {
     @Mapping(target = "lastUpdatedBy", source = "userName")
     @Mapping(target = "isLatest", ignore = true)
     @Mapping(target = "tags", ignore = true)
+    @Mapping(target = "versionName", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "lastUpdatedAt", ignore = true)
     DatasetVersion toDatasetVersion(
             UUID versionId,
             UUID datasetId,
@@ -30,4 +34,7 @@ interface DatasetVersionMapper {
             int itemsDeleted,
             DatasetVersionCreate request,
             String userName);
+
+    @Mapping(target = "tags", expression = "java(version.tags())")
+    DatasetVersionSummary toDatasetVersionSummary(DatasetVersion version);
 }
