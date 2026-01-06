@@ -4,7 +4,10 @@ RQ Worker Manager for Gunicorn integration.
 This module manages the RQ worker lifecycle as background threads
 when the Flask application starts under Gunicorn.
 
-Supports parallel job processing via OPTSTUDIO_MAX_CONCURRENT_JOBS env var.
+Environment Variables (for self-hosted deployments):
+    OPTSTUDIO_MAX_CONCURRENT_JOBS: Number of parallel optimization workers (default: 5)
+    RQ_QUEUE_NAMES: Comma-separated queue names to listen to (default: opik:optimizer-cloud)
+    RQ_WORKER_ENABLED: Enable/disable RQ worker (default: true)
 """
 
 import logging
@@ -20,7 +23,13 @@ from rq.serializers import JSONSerializer
 
 logger = logging.getLogger(__name__)
 
-# Default number of concurrent optimization jobs
+# Environment variable names
+ENV_RQ_WORKER_ENABLED = "RQ_WORKER_ENABLED"
+ENV_RQ_QUEUE_NAMES = "RQ_QUEUE_NAMES"
+ENV_MAX_CONCURRENT_JOBS = "OPTSTUDIO_MAX_CONCURRENT_JOBS"
+
+# Default values
+DEFAULT_QUEUE_NAME = "opik:optimizer-cloud"
 DEFAULT_MAX_CONCURRENT_JOBS = 5
 
 
@@ -83,11 +92,11 @@ class RqWorkerManager:
         self.should_stop: threading.Event = threading.Event()
         
         # Queue names to listen to (comma-separated)
-        queue_names_str: str = os.getenv('RQ_QUEUE_NAMES', 'opik:optimizer-cloud')
+        queue_names_str: str = os.getenv(ENV_RQ_QUEUE_NAMES, DEFAULT_QUEUE_NAME)
         self.queue_names: List[str] = [name.strip() for name in queue_names_str.split(',') if name.strip()]
         
         # Number of concurrent workers (minimum 1)
-        self.max_concurrent_jobs: int = max(1, int(os.getenv('OPTSTUDIO_MAX_CONCURRENT_JOBS', str(DEFAULT_MAX_CONCURRENT_JOBS))))
+        self.max_concurrent_jobs: int = max(1, int(os.getenv(ENV_MAX_CONCURRENT_JOBS, str(DEFAULT_MAX_CONCURRENT_JOBS))))
         
         # Log configuration
         logger.info("RQ Worker Manager Configuration:")

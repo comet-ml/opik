@@ -17,10 +17,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import opik_backend.utils.redis_utils as redis_utils
 from opik_backend.studio.cancellation import (
     CancellationHandle,
     CancellationMonitor,
     CANCEL_KEY_PATTERN,
+    ENV_CANCEL_POLL_INTERVAL_SECS,
 )
 
 # Use a short poll interval for faster tests (in seconds, supports float)
@@ -33,10 +35,8 @@ class TestCancellationMonitor:
     @pytest.fixture(autouse=True)
     def reset_singletons(self, monkeypatch):
         """Reset singletons and Redis client before each test."""
-        import opik_backend.utils.redis_utils as redis_utils
-        
         # Use short poll interval for tests
-        monkeypatch.setenv("OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS", TEST_POLL_INTERVAL)
+        monkeypatch.setenv(ENV_CANCEL_POLL_INTERVAL_SECS, TEST_POLL_INTERVAL)
         
         # Stop any existing monitor thread
         if CancellationMonitor._instance is not None:
@@ -197,10 +197,8 @@ class TestCancellationHandle:
     @pytest.fixture(autouse=True)
     def reset_singletons(self, monkeypatch):
         """Reset singletons and Redis client before each test."""
-        import opik_backend.utils.redis_utils as redis_utils
-        
         # Use short poll interval for tests
-        monkeypatch.setenv("OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS", TEST_POLL_INTERVAL)
+        monkeypatch.setenv(ENV_CANCEL_POLL_INTERVAL_SECS, TEST_POLL_INTERVAL)
         
         # Stop any existing monitor thread
         if CancellationMonitor._instance is not None:
@@ -359,10 +357,8 @@ class TestCancellationStress:
     @pytest.fixture(autouse=True)
     def reset_singletons(self, monkeypatch):
         """Reset singletons and Redis client before each test."""
-        import opik_backend.utils.redis_utils as redis_utils
-        
         # Use short poll interval for tests
-        monkeypatch.setenv("OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS", TEST_POLL_INTERVAL)
+        monkeypatch.setenv(ENV_CANCEL_POLL_INTERVAL_SECS, TEST_POLL_INTERVAL)
         
         # Stop any existing monitor thread
         if CancellationMonitor._instance is not None:

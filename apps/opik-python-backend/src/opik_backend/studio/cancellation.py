@@ -8,6 +8,9 @@ than having a separate polling thread per optimization.
 Architecture:
     - CancellationMonitor: Singleton that polls Redis for all registered optimizations
     - CancellationHandle: Per-optimization handle for registration and status checking
+
+Environment Variables (for self-hosted deployments):
+    OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS: Polling interval in seconds (default: 2)
 """
 
 import logging
@@ -22,7 +25,10 @@ logger = logging.getLogger(__name__)
 # Redis key pattern for cancellation signals
 CANCEL_KEY_PATTERN = "opik:cancel:{}"
 
-# Default polling interval (configurable via env var)
+# Environment variable for polling interval
+ENV_CANCEL_POLL_INTERVAL_SECS = "OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS"
+
+# Default polling interval
 DEFAULT_POLL_INTERVAL_SECS = 2
 
 
@@ -53,7 +59,7 @@ class CancellationMonitor:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._poll_interval = float(os.getenv(
-            "OPTSTUDIO_CANCEL_POLL_INTERVAL_SECS",
+            ENV_CANCEL_POLL_INTERVAL_SECS,
             str(DEFAULT_POLL_INTERVAL_SECS)
         ))
         self._initialized = True
@@ -232,7 +238,3 @@ class CancellationHandle:
         get_cancellation_monitor().unregister(self.optimization_id)
         self._registered = False
         logger.debug(f"CancellationHandle unregistered for '{self.optimization_id}'")
-
-
-# Backwards compatibility alias
-CancellationChecker = CancellationHandle
