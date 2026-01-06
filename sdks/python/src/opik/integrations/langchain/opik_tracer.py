@@ -93,6 +93,19 @@ def _is_command_object(obj: Any) -> bool:
     return isinstance(obj, LangGraphCommand)
 
 
+def _is_graph_interrupt(error_traceback: str) -> bool:
+    """
+    Check if an error traceback is a GraphInterrupt.
+
+    Args:
+        error_traceback: The error traceback string to check.
+
+    Returns:
+        True if the error is a GraphInterrupt, False otherwise.
+    """
+    return "GraphInterrupt" in error_traceback and "Interrupt(" in error_traceback
+
+
 def _parse_graph_interrupt(error_traceback: str) -> Optional[str]:
     """
     Parse GraphInterrupt error traceback to extract the interrupt value.
@@ -103,7 +116,7 @@ def _parse_graph_interrupt(error_traceback: str) -> Optional[str]:
     Returns:
         The interrupt value if found, None otherwise.
     """
-    if "GraphInterrupt" not in error_traceback or "Interrupt(" not in error_traceback:
+    if not _is_graph_interrupt(error_traceback):
         return None
 
     match = re.search(
@@ -239,11 +252,18 @@ class OpikTracer(BaseTracer):
         trace_additional_metadata: Dict[str, Any] = {}
 
         error_str = run_dict.get("error")
-        outputs = None
+        outputs: Optional[Dict[str, Any]] = None
         error_info = None
 
         if error_str is not None:
-            if not self._should_skip_error(error_str):
+            # GraphInterrupt is not an error - it's a normal control flow for LangGraph
+            if _is_graph_interrupt(error_str):
+                # Extract interrupt value and set it as output
+                interrupt_value = _parse_graph_interrupt(error_str)
+                if interrupt_value is not None:
+                    outputs = {"__interrupt__": [{"value": interrupt_value}]}
+                # Don't set error_info - this is not an error
+            elif not self._should_skip_error(error_str):
                 error_info = ErrorInfoDict(
                     exception_type="Exception",
                     traceback=error_str,
@@ -296,18 +316,18 @@ class OpikTracer(BaseTracer):
             if input_value is not None and _is_command_object(input_value):
                 trace_data.input = {"__resume__": input_value.resume}
 
-        # Check if any child span has a GraphInterrupt error and extract interrupt info for output
+        # Check if any child span has a GraphInterrupt output and use it for trace output
         if outputs is not None and isinstance(outputs, dict):
-            # Check child spans for GraphInterrupt
             for span_id, span_data in self._span_data_map.items():
-                if span_data.trace_id == trace_data.id and span_data.error_info:
-                    error_traceback = span_data.error_info.get("traceback", "")
-                    interrupt_value = _parse_graph_interrupt(error_traceback)
-                    if interrupt_value is not None:
-                        # Replace outputs with only the interrupt data
-                        outputs.clear()
-                        outputs["__interrupt__"] = [{"value": interrupt_value}]
-                        break
+                if (
+                    span_data.trace_id == trace_data.id
+                    and span_data.output is not None
+                    and isinstance(span_data.output, dict)
+                    and "__interrupt__" in span_data.output
+                ):
+                    # Use the interrupt output from the child span
+                    outputs = span_data.output
+                    break
 
         if trace_additional_metadata:
             trace_data.update(metadata=trace_additional_metadata)
@@ -707,7 +727,18 @@ class OpikTracer(BaseTracer):
             span_data = self._span_data_map[run.id]
             error_str = run_dict["error"]
 
-            if self._should_skip_error(error_str):
+            # GraphInterrupt is not an error - it's a normal control flow for LangGraph
+            if _is_graph_interrupt(error_str):
+                # Extract interrupt value and set it as output
+                interrupt_value = _parse_graph_interrupt(error_str)
+                if interrupt_value is not None:
+                    span_data.init_end_time().update(
+                        output={"__interrupt__": [{"value": interrupt_value}]}
+                    )
+                else:
+                    span_data.init_end_time().update(output=None)
+                # Don't set error_info - this is not an error
+            elif self._should_skip_error(error_str):
                 span_data.init_end_time().update(output=ERROR_SKIPPED_OUTPUTS)
             else:
                 error_info = ErrorInfoDict(

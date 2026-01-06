@@ -1,9 +1,11 @@
-from typing import Dict, Any, Annotated, Optional
+from typing import Dict, Any, Annotated, Optional, Literal
 from pydantic import BaseModel
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph import message as langgraph_message
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 import langchain_openai
 
@@ -448,8 +450,6 @@ def test_langgraph__node_returning_command__output_captured_correctly(
 
     Nodes returning Command objects should have their state updates captured in output.
     """
-    from typing import Literal
-    from langchain_core.messages import AIMessage
     from langgraph.types import Command
 
     class State(TypedDict):
@@ -1102,8 +1102,6 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
     When a LangGraph execution is interrupted and then resumed with Command(resume=...),
     the second trace should have the resume value as input, not an empty dict.
     """
-    from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import MemorySaver
 
     class GraphState(TypedDict):
         question: Optional[str]
@@ -1169,8 +1167,6 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
         else:
             return "handle_selection"
 
-    from langgraph.graph import StateGraph, END
-
     workflow = StateGraph(GraphState)
     workflow.add_node("check_ambiguity", check_ambiguity_node)
     workflow.add_node("provide_options", provide_options_node)
@@ -1194,11 +1190,11 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
 
     # Q1: Ambiguous question - graph will interrupt
     config = {"configurable": {"thread_id": "test-thread"}, "callbacks": [tracer]}
-    inputs = {"question": "Tell me about it"}
+    initial_input = {"question": "Tell me about it"}
 
     # First invocation - will hit the interrupt
-    result = app.invoke(inputs, config=config)
-    assert "__interrupt__" in result
+    first_result = app.invoke(initial_input, config=config)
+    assert "__interrupt__" in first_result
 
     tracer.flush()
 
@@ -1212,24 +1208,122 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
     assert len(fake_backend.trace_trees) == 2
     assert len(tracer.created_traces()) == 2
 
-    # First trace should have the initial question as input
-    first_trace = fake_backend.trace_trees[0]
-    assert first_trace.input == {"question": "Tell me about it"}
+    # Build expected trace tree for first trace (interrupted)
+    EXPECTED_FIRST_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=initial_input,
+        output=ANY_DICT.containing({"__interrupt__": ANY_LIST}),
+        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info=None,  # GraphInterrupt is not an error
+        thread_id="test-thread",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="check_ambiguity",
+                input=ANY_DICT,
+                output=ANY_DICT.containing({"is_ambiguous": True}),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="decide_next_node",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        error_info=None,
+                        spans=[],
+                    ),
+                ],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="provide_options",
+                input=ANY_DICT,
+                output=ANY_DICT.containing({"__interrupt__": ANY_LIST}),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[],
+            ),
+        ],
+    )
 
-    # First trace output should contain ONLY the interrupt with options presented to user
-    assert first_trace.output is not None
-    assert "__interrupt__" in first_trace.output
-    # Should only have the __interrupt__ key, not the full state
-    assert list(first_trace.output.keys()) == ["__interrupt__"]
-    assert len(first_trace.output["__interrupt__"]) > 0
-    interrupt_data = first_trace.output["__interrupt__"][0]
-    assert "value" in interrupt_data
-    assert "Please select one of these options" in interrupt_data["value"]
+    # Build expected trace tree for second trace (resumed)
+    # When resuming, the provide_options node completes first (it was interrupted),
+    # then goes back to check_ambiguity, and finally to handle_selection
+    EXPECTED_SECOND_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input={"__resume__": "1"},  # Resume value should be captured as input
+        output=ANY_DICT.containing(
+            {"response": "Here's the weather information you requested."}
+        ),
+        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info=None,
+        thread_id="test-thread",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="provide_options",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="check_ambiguity",
+                input=ANY_DICT,
+                output=ANY_DICT.containing({"is_ambiguous": False}),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="decide_next_node",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        error_info=None,
+                        spans=[],
+                    ),
+                ],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="handle_selection",
+                input=ANY_DICT,
+                output=ANY_DICT.containing(
+                    {"response": "Here's the weather information you requested."}
+                ),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[],
+            ),
+        ],
+    )
 
-    # Second trace should have the Command resume value as input, NOT empty dict
-    second_trace = fake_backend.trace_trees[1]
-    # The input should contain the resume command data
-    assert second_trace.input is not None
-    assert second_trace.input != {}
-    # Opik extracts the resume value from the Command object
-    assert second_trace.input == {"__resume__": "1"}
+    assert_equal(EXPECTED_FIRST_TRACE, fake_backend.trace_trees[0])
+    assert_equal(EXPECTED_SECOND_TRACE, fake_backend.trace_trees[1])
