@@ -99,6 +99,9 @@ def find_token_usage_dict(
     that includes one or more keys from the specified candidate keys and returns it.
     If no such dictionary is found, the function returns None.
 
+    Searches in reverse order to prioritize more recent data (e.g., in multi-turn conversations,
+    the most recent turn's usage data comes last in the structure).
+
     Args:
         all_keys_should_match: if True, all candidate keys must be present in the dictionary.
         data: A nested data structure containing dictionaries, lists, or tuples to search through.
@@ -117,15 +120,15 @@ def find_token_usage_dict(
         elif not all_keys_should_match and len(matched_keys) > 0:
             return data
 
-        # Recursively search through dictionary values
-        for value in data.values():
+        # Recursively search through dictionary values in reverse order
+        for value in list(data.values())[::-1]:
             result = find_token_usage_dict(value, candidate_keys, all_keys_should_match)
             if result is not None:
                 return result
 
-    # Handle list and tuple cases
+    # Handle list and tuple cases - search in reverse order
     elif isinstance(data, (list, tuple)):
-        for item in data:
+        for item in reversed(data):
             result = find_token_usage_dict(item, candidate_keys, all_keys_should_match)
             if result is not None:
                 return result
