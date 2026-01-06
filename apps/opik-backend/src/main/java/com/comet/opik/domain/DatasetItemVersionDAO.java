@@ -1556,28 +1556,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
                 }
 
-                // Bind filter parameters if present - only bind for strategies that generated SQL
+                // Bind filter parameters if present
                 if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                    // Only bind if the corresponding filter SQL was added to the template
-                    if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.DATASET_ITEM)
-                            .isPresent()) {
-                        statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                    }
-                    if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
-                            .isPresent()) {
-                        statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                                FilterStrategy.EXPERIMENT_ITEM);
-                    }
-                    if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES)
-                            .isPresent()) {
-                        statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                                FilterStrategy.FEEDBACK_SCORES);
-                    }
-                    if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
-                            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY).isPresent()) {
-                        statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                                FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    }
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
+                    statement = FilterQueryBuilder.bind(statement, criteria.filters(),
+                            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
@@ -1669,28 +1654,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
             }
 
-            // Bind filter parameters if present - only bind for strategies that generated SQL
+            // Bind filter parameters if present
             if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                // Only bind if the corresponding filter SQL was added to the template
-                if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.DATASET_ITEM)
-                        .isPresent()) {
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                }
-                if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
-                        .isPresent()) {
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                            FilterStrategy.EXPERIMENT_ITEM);
-                }
-                if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES)
-                        .isPresent()) {
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                            FilterStrategy.FEEDBACK_SCORES);
-                }
-                if (FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
-                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY).isPresent()) {
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                }
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
+                statement = FilterQueryBuilder.bind(statement, criteria.filters(),
+                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
             }
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
