@@ -1205,8 +1205,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND ei.dataset_item_id IN (
                     SELECT id FROM dataset_item_versions
                     WHERE workspace_id = :workspace_id
-                    AND dataset_id = :dataset_id
-                    AND dataset_version_id = :version_id
+                    AND dataset_id = :datasetId
+                    AND dataset_version_id = :versionId
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
@@ -1239,8 +1239,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND ei.dataset_item_id IN (
                     SELECT id FROM dataset_item_versions
                     WHERE workspace_id = :workspace_id
-                    AND dataset_id = :dataset_id
-                    AND dataset_version_id = :version_id
+                    AND dataset_id = :datasetId
+                    AND dataset_version_id = :versionId
                     AND <dataset_item_filters>
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -2307,8 +2307,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private void bindStatementParameters(Statement statement, UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters) {
-        statement.bind("dataset_id", datasetId);
-        statement.bind("version_id", versionId.toString());
+        statement.bind("datasetId", datasetId);
+        statement.bind("versionId", versionId.toString());
         if (!experimentIds.isEmpty()) {
             statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
         }
