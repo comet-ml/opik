@@ -19,7 +19,6 @@ from uuid import UUID
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
-from langgraph.types import Command as LangGraphCommand
 
 from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
@@ -80,19 +79,6 @@ def _get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     return run_dict["extra"].get("metadata", {})
 
 
-def _is_command_object(obj: Any) -> bool:
-    """
-    Check if an object is a LangGraph Command instance.
-
-    Args:
-        obj: The object to check.
-
-    Returns:
-        True if the object is a Command instance, False otherwise.
-    """
-    return isinstance(obj, LangGraphCommand)
-
-
 def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
     """
     Parse GraphInterrupt error traceback to extract the interrupt value as a string.
@@ -120,6 +106,21 @@ def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
         # Convert the value to string representation
         return str(value)
 
+    return None
+
+
+def _extract_resume_value_from_command(obj: Any) -> Optional[str]:
+    """
+    Extract the resume value from a serialized LangGraph Command dict.
+
+    Args:
+        obj: A dict representing a serialized Command object (from run.dict()).
+
+    Returns:
+        The resume value as a string if found, None otherwise.
+    """
+    if obj is not None and isinstance(obj, dict) and "resume" in obj:
+        return str(obj["resume"])
     return None
 
 
@@ -302,10 +303,9 @@ class OpikTracer(BaseTracer):
         if trace_data.input == {"input": ""}:
             trace_data.input = run_dict["inputs"]
         elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
-            # Check if the input value is a LangGraph Command object
             input_value = trace_data.input.get("input")
-            if input_value is not None and _is_command_object(input_value):
-                trace_data.input = {"__resume__": input_value.resume}
+            if resume_value := _extract_resume_value_from_command(input_value):
+                trace_data.input = {"__resume__": resume_value}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
         for _, span_data in self._span_data_map.items():
@@ -656,16 +656,13 @@ class OpikTracer(BaseTracer):
             if usage_info is None:
                 usage_info = llm_usage.LLMUsageInfo()
 
-            # workaround for `.astream()` method usage and LangGraph interrupts
-            # Check if input is empty or contains a Command object that will serialize to empty dict
+            # workaround for `.astream()` method usage
             if span_data.input == {"input": ""} or span_data.input == {"input": {}}:
                 span_data.input = run_dict["inputs"]
             elif isinstance(span_data.input, dict):
-                # Check if the input value is a LangGraph Command object
                 input_value = span_data.input.get("input")
-                if input_value is not None and _is_command_object(input_value):
-                    # Extract the resume value from the Command object
-                    span_data.input = {"__resume__": input_value.resume}
+                if resume_value := _extract_resume_value_from_command(input_value):
+                    span_data.input = {"__resume__": resume_value}
 
             filtered_output, additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
