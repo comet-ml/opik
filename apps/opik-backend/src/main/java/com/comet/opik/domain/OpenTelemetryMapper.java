@@ -90,7 +90,7 @@ public class OpenTelemetryMapper {
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
 
-        if (StringUtils.isNotEmpty(integrationName)) {
+        if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
         }
 
@@ -132,6 +132,17 @@ public class OpenTelemetryMapper {
                         List<String> span_tags = extractTags(value);
                         if (CollectionUtils.isNotEmpty(span_tags)) {
                             tags.addAll(span_tags);
+                        }
+                        break;
+
+                    case THREAD_ID :
+                        // Store as 'thread_id' in metadata for trace grouping
+                        // First value wins if multiple attributes map to THREAD_ID
+                        if (!metadata.has("thread_id")) {
+                            var threadIdValue = value.getStringValue();
+                            if (StringUtils.isNotBlank(threadIdValue)) {
+                                metadata.put("thread_id", threadIdValue);
+                            }
                         }
                         break;
 
