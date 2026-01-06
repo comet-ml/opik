@@ -6,7 +6,6 @@ import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
 
 from .. import config, datetime_helpers, logging_messages
-from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
 from ..message_processing import messages
 from ..rest_api.types import (
     span_filter_public,
@@ -87,6 +86,11 @@ def add_usage_to_metadata(
         return None
 
     metadata = {} if metadata is None else {**metadata}
+
+    # Don't overwrite existing metadata.usage - it may contain original provider data
+    # that should be preserved (e.g., during import from exported data)
+    if "usage" in metadata:
+        return metadata
 
     if isinstance(usage, llm_usage.OpikUsage):
         metadata["usage"] = usage.provider_usage.model_dump(exclude_none=True)
