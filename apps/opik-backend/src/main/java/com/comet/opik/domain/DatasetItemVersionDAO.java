@@ -1510,6 +1510,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 addFiltersToTemplate(template, criteria);
 
                 // Add sorting if present
+                var hasDynamicKeys = criteria.sortingFields() != null
+                        && sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
+
                 if (criteria.sortingFields() != null && !criteria.sortingFields().isEmpty()) {
                     String sortingQuery = sortingQueryBuilder.toOrderBySql(
                             criteria.sortingFields(),
@@ -1531,6 +1534,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 // Bind experiment IDs as array
                 if (criteria.experimentIds() != null && !criteria.experimentIds().isEmpty()) {
                     statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+                }
+
+                // Bind dynamic sorting keys if present
+                if (hasDynamicKeys) {
+                    statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
                 }
 
                 // Bind search terms as array
