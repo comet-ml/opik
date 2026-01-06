@@ -111,14 +111,18 @@ def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
 
 def _extract_resume_value_from_command(obj: Any) -> Optional[str]:
     """
-    Extract the resume value from a serialized LangGraph Command dict.
+    Extract the resume value from a LangGraph Command object or serialized Command dict.
 
     Args:
-        obj: A dict representing a serialized Command object (from run.dict()).
+        obj: A Command object or dict representing a serialized Command object (from run.dict()).
 
     Returns:
         The resume value as a string if found, None otherwise.
     """
+    # Check if it's a Command object (has a resume attribute)
+    if hasattr(obj, "resume") and obj.resume is not None:
+        return str(obj.resume)
+    # Check if it's a serialized Command dict
     if obj is not None and isinstance(obj, dict) and "resume" in obj:
         return str(obj["resume"])
     return None
