@@ -1,5 +1,8 @@
 # Opik Python SDK
 
+<!-- NOTE: This README.md is overwritten during PyPI releases with the root README.md -->
+<!-- See .github/workflows/build_and_publish_sdk.yaml -->
+
 [![PyPI version](https://img.shields.io/pypi/v/opik.svg)](https://pypi.org/project/opik/)
 [![Python versions](https://img.shields.io/pypi/pyversions/opik.svg)](https://pypi.org/project/opik/)
 [![Downloads](https://static.pepy.tech/badge/opik)](https://pepy.tech/project/opik)

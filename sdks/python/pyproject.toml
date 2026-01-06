@@ -1,3 +1,240 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opik"
+dynamic = ["version"]
+description = "Comet tool for logging and evaluating LLM traces"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.9"
+license = {text = "Apache 2.0 License"}
+authors = [
+    {name = "Comet ML Inc.", email = "mail@comet.com"}
+]
+keywords = ["opik"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+dependencies = [
+    "boto3-stubs[bedrock-runtime]>=1.34.110",
+    "click",
+    "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
+    "rapidfuzz>=3.0.0,<4.0.0",
+    # LiteLLM dependency comments:
+    # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
+    # - Exclude versions 1.77.2-1.77.4: introduce C++ compiler dependency (madoka), fixed in 1.77.5
+    #   See: https://github.com/BerriAI/litellm/issues/14762
+    # - Exclude versions 1.77.5-1.79.1: remove trace_id/parent_span_id passthrough, fixed in 1.79.2+
+    #   See: https://github.com/BerriAI/litellm/pull/15529
+    # - Exclude version 1.80.9: broken python 3.9 installation.
+    #   See: https://github.com/BerriAI/litellm/issues/17701
+    # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
+    "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1,!=1.80.9",
+    "openai",
+    "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
+    "pydantic>=2.0.0,<3.0.0",
+    "pytest",
+    "rich",
+    "sentry_sdk>=2.0.0",
+    "tenacity",
+    "tqdm",
+    "uuid6",
+    "jinja2",
+]
+
+[project.optional-dependencies]
+proxy = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+]
+
+[project.urls]
+"Source code" = "https://github.com/comet-ml/opik"
+Homepage = "https://www.comet.com"
+
+[project.scripts]
+opik = "opik.cli:cli"
+
+[project.entry-points.pytest11]
+opik = "opik.plugins.pytest.hooks"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "../.." }
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/opik/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opik"]
+
+# ============================================================================
+# Ruff Configuration
+# ============================================================================
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "src/opik/rest_api",
+]
+
+# Auto-fix when possible
+fix = true
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Target Python 3.9 (minimum supported version)
+target-version = "py39"
+
+[tool.ruff.lint]
+# Comprehensive rule selection aligned with Opik Python SDK coding guidelines
+# See sdks/python/README.md for detailed coding guidelines
+select = [
+    "F",      # Pyflakes
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "I",      # isort (import sorting)
+    "N",      # pep8-naming (enforce naming conventions - avoid abbreviations)
+    "UP",     # pyupgrade (modernize Python syntax)
+    "YTT",    # flake8-2020
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins (prevent shadowing builtins)
+    "C4",     # flake8-comprehensions
+    "T10",    # flake8-debugger
+    "ISC",    # flake8-implicit-str-concat
+    "PIE",    # flake8-pie
+    "T20",    # flake8-print (catch print statements)
+    "Q",      # flake8-quotes
+    "RSE",    # flake8-raise (better exception raising)
+    "RET",    # flake8-return (better return statements)
+    "SLF",    # flake8-self (prevent private member access - enforces guideline #4)
+    "SIM",    # flake8-simplify
+    "TID",    # flake8-tidy-imports
+    "TCH",    # flake8-type-checking
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib (prefer pathlib over os.path)
+    "ERA",    # eradicate (find commented-out code)
+    "PLC",    # Pylint conventions
+    "PLE",    # Pylint errors
+    "PLR",    # Pylint refactor
+    "PLW",    # Pylint warnings
+    "RUF",    # Ruff-specific rules
+]
+
+ignore = [
+    # Do not assign a lambda expression, use a def
+    "E731",
+    # Controversial
+    "B006",
+    "B007",
+    "B008",
+    # setattr is used to side-step mypy (intentional per guidelines)
+    "B009",
+    # getattr is used to side-step mypy (intentional per guidelines)
+    "B010",
+    # False positives
+    "B019",
+    # Too many arguments to function call
+    "PLR0913",
+    # Too many returns
+    "PLR0911",
+    # Too many branches
+    "PLR0912",
+    # Too many statements
+    "PLR0915",
+    # Redefined loop name
+    "PLW2901",
+    # Magic number
+    "PLR2004",
+    # Use of assert (common in tests)
+    "S101",
+    # Allow print statements (used in CLI and examples)
+    "T201",
+]
+
+# Per-file ignores for specific patterns
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "ARG001",   # Unused function arguments (fixtures)
+    "ARG002",   # Unused method arguments
+    "SLF001",   # Private member access OK in tests per guideline #9
+    "PLR2004",  # Magic values in tests are fine
+]
+"examples/**/*.py" = [
+    "T201",     # Print statements are expected in examples
+    "ARG001",   # Unused arguments in example code
+]
+"**/conftest.py" = [
+    "ARG001",   # Fixtures often have unused arguments
+]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["opik"]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# ============================================================================
+# Mypy Configuration
+# ============================================================================
+
 [tool.mypy]
 follow_imports = "skip"
 ignore_missing_imports = true
@@ -5,6 +242,10 @@ disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
 python_version = "3.9"
+
+# ============================================================================
+# UV Configuration
+# ============================================================================
 
 [tool.uv]
 managed = false

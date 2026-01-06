@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         files: ^sdks/python
@@ -8,9 +8,28 @@ repos:
       - id: end-of-file-fixer
         files: ^sdks/python
         exclude: "(sdks/python/src/opik/rest_api/)"
+      - id: check-yaml
+        files: ^sdks/python
+      - id: check-json
+        files: ^sdks/python
+      - id: check-toml
+        files: ^sdks/python
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-case-conflict
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.21.2
+    hooks:
+      - id: pyupgrade
+        args: [--py39-plus]
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.9
+    rev: v0.14.6
     hooks:
       - id: ruff
         args: [--fix, --show-fixes]
@@ -21,12 +40,10 @@ repos:
         exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.18.2
     hooks:
       - id: mypy
         files: ^sdks/python
-        # `exclude` option will work only from here.
-        # The rest of mypy configuration can be moved to pyproject.toml
         exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)|(sdks/python/.cursor/)"
         args:
           [
@@ -34,4 +51,14 @@ repos:
             sdks/python/pyproject.toml,
             --disable-error-code,
             misc,
+            --install-types,
+            --non-interactive,
           ]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
+        args: ['--write-changes']
