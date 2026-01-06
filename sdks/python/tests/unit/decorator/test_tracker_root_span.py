@@ -15,7 +15,7 @@ from ...testlib import (
 )
 
 
-def test_track__disable_root_span__at_root_span__nested_function__no_root_span_created(
+def test_track__disable_root_span__no_root_span_created__happy_flow(
     fake_backend, capture_log_check_errors
 ):
     """Test that the root span is not created when create_root_span=False."""
@@ -58,7 +58,7 @@ def test_track__disable_root_span__at_root_span__nested_function__no_root_span_c
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__disable_root_span__at_nested_span__nested_function__all_spans_created(
+def test_track__disable_root_span__at_nested_span__all_spans_created(
     fake_backend, capture_log_check_errors
 ):
     """Test that the nested span is created even if marked with create_duplicate_root_span=False."""
@@ -111,7 +111,7 @@ def test_track__disable_root_span__at_nested_span__nested_function__all_spans_cr
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__disable_root_span__distributed_tracing_with_headers__root_span_is_created(
+def test_track__disable_root_span__distributed_tracing_with_headers__root_span_created(
     fake_backend, capture_log_check_errors
 ):
     """Test that the root span is created when distributed tracing is enabled even if create_duplicate_root_span=False."""
@@ -176,7 +176,7 @@ def test_track__disable_root_span__distributed_tracing_with_headers__root_span_i
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__disable_root_span__trace_already_created_by_hand__root_span_is_created(
+def test_track__disable_root_span__trace_already_created_by_hand__root_span_created(
     fake_backend, capture_log_check_errors
 ):
     """Test that the root span is created anyway when create_duplicate_root_span=False when trace was created manually."""
@@ -248,7 +248,7 @@ def test_track__disable_root_span__trace_already_created_by_hand__root_span_is_c
 
 
 @pytest.mark.asyncio
-async def test_track__disable_root_span__nested_async_function__no_root_span_created(
+async def test_track__disable_root_span__async_function__no_root_span_created__happy_flow(
     fake_backend, capture_log_check_errors
 ):
     """Test that the root span is not created when create_duplicate_root_span=False in an async function."""
@@ -293,56 +293,8 @@ async def test_track__disable_root_span__nested_async_function__no_root_span_cre
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-@pytest.mark.parametrize("span_type", ["llm", "tool"])
-def test_track__disable_root_span__at_root_span__nested_function__no_root_span_created_show_warning_for_type(
-    span_type, fake_backend, capture_log_check_errors
-):
-    """Test that the root span is not created when create_root_span=False."""
-
-    @tracker.track
-    def f_inner(x):
-        return "inner-output"
-
-    @tracker.track(create_duplicate_root_span=False, type=span_type)
-    def f_outer(x):
-        f_inner("inner-input")
-        return "outer-output"
-
-    f_outer("outer-input")
-    tracker.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="f_outer",
-        input={"x": "outer-input"},
-        output={"output": "inner-output"},
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="f_inner",
-                input={"x": "inner-input"},
-                output={"output": "inner-output"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                spans=[],
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-
-    # check that the warning is logged
-    message = "The root span 'f_outer' of type '%s' will not be created because its creation was explicitly disabled along with the root trace."
-    assert message % span_type in capture_log_check_errors.text
-
-
 @pytest.mark.asyncio
-async def test_track__disable_root_span__async_generator__no_root_span_created_at_generator_user_span(
+async def test_track__disable_root_span__async_generator__no_root_span_created(
     fake_backend, capture_log_check_errors
 ):
     """Test that the root span is not created when create_duplicate_root_span=False in an async generator."""
@@ -403,3 +355,51 @@ async def test_track__disable_root_span__async_generator__no_root_span_created_a
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.parametrize("span_type", ["llm", "tool"])
+def test_track__disable_root_span__no_root_span_created__show_warning_for_type(
+    span_type, fake_backend, capture_log_check_errors
+):
+    """Test that the root span is not created when create_root_span=False."""
+
+    @tracker.track
+    def f_inner(x):
+        return "inner-output"
+
+    @tracker.track(create_duplicate_root_span=False, type=span_type)
+    def f_outer(x):
+        f_inner("inner-input")
+        return "outer-output"
+
+    f_outer("outer-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "outer-input"},
+        output={"output": "inner-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_inner",
+                input={"x": "inner-input"},
+                output={"output": "inner-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+    # check that the warning is logged
+    message = "The root span 'f_outer' of type '%s' will not be created because its creation was explicitly disabled along with the root trace."
+    assert message % span_type in capture_log_check_errors.text
