@@ -4,8 +4,7 @@ from typing import Optional, Dict, Any, List, TypeVar, Type, Union
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
-
-from .. import config, datetime_helpers, logging_messages
+from .. import config, datetime_helpers, logging_messages, id_helpers
 from ..message_processing import messages
 from ..rest_api.types import (
     span_filter_public,
@@ -13,6 +12,9 @@ from ..rest_api.types import (
     trace_thread_filter,
 )
 from ..types import BatchFeedbackScoreDict
+
+# Re-export for backward compatibility
+generate_id = id_helpers.generate_id
 
 LOGGER = logging.getLogger(__name__)
 
