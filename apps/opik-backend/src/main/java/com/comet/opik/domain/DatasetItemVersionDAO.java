@@ -97,7 +97,7 @@ public interface DatasetItemVersionDAO {
      * </ul>
      * <p>
      * For items passed to this method:
-     * - Use {@code draftItemId} field as the stable ID (maintained across versions)
+     * - Use {@code datasetItemId} field as the stable ID (maintained across versions)
      * - The {@code id} field is ignored (row IDs are generated internally)
      *
      * @param datasetId the dataset ID
@@ -134,7 +134,7 @@ public interface DatasetItemVersionDAO {
      * Inserts items directly into a new version without copying from any base version.
      * <p>
      * For items passed to this method:
-     * - Use {@code draftItemId} field as the stable ID (maintained across versions)
+     * - Use {@code datasetItemId} field as the stable ID (maintained across versions)
      * - The {@code id} field is ignored (row IDs are generated internally)
      *
      * @param datasetId the dataset ID
@@ -1195,26 +1195,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Adds dataset item filters to the StringTemplate if filters are present.
      *
      * @param template the StringTemplate to add filters to
-     * @param filters the list of filters to apply, may be null
+     * @param filters the list of filters to apply, may be null or empty
      */
     private void addDatasetItemFiltersToTemplate(ST template, List<? extends Filter> filters) {
-        Optional.ofNullable(filters)
-                .ifPresent(f -> {
-                    FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.DATASET_ITEM)
-                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                                    datasetItemFilters));
-                });
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                            datasetItemFilters));
+        }
     }
 
     /**
      * Binds dataset item filter parameters to the R2DBC statement.
      *
      * @param statement the R2DBC statement to bind parameters to
-     * @param filters the list of filters to bind, may be null
+     * @param filters the list of filters to bind, may be null or empty
      */
     private void bindDatasetItemFilters(Statement statement, List<? extends Filter> filters) {
-        Optional.ofNullable(filters)
-                .ifPresent(f -> FilterQueryBuilder.bind(statement, f, FilterStrategy.DATASET_ITEM));
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+        }
     }
 
     @Override
@@ -1503,7 +1503,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
-                .map(DatasetItem::draftItemId)
+                .map(DatasetItem::datasetItemId)
                 .collect(Collectors.toSet());
 
         // Combine deleted and edited IDs for exclusion when copying
@@ -1707,7 +1707,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             // Bind all item-specific parameters
             int i = 0;
             for (DatasetItem item : items) {
-                UUID stableItemId = item.draftItemId();
+                UUID stableItemId = item.datasetItemId();
                 Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
 
                 statement
@@ -1830,7 +1830,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         return DatasetItem.builder()
                 .id(UUID.fromString(row.get("id", String.class)))
-                .draftItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
+                .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
                 .source(Optional.ofNullable(row.get("source", String.class))
