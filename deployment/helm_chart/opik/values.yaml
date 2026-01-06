@@ -210,6 +210,9 @@ component:
       # ============================================================
       # Optimization Studio Configuration (optional)
       # ============================================================
+      # Maximum number of concurrent optimization jobs (default: 5)
+      # Each job runs in a separate worker thread with isolated subprocess
+      # OPTSTUDIO_MAX_CONCURRENT_JOBS: "5"
       # Number of dataset items to sample for optimization (default: 20)
       # Limits memory usage for large datasets
       # OPTSTUDIO_DATASET_SAMPLES: "20"

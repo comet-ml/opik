@@ -12,6 +12,7 @@ Logs from the subprocess are captured and streamed to Redis for S3 sync.
 
 import logging
 import os
+from typing import Any, Dict, Tuple
 
 from opentelemetry import trace
 
@@ -21,7 +22,7 @@ from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
     OPTIMIZATION_TIMEOUT_SECS,
-    CancellationChecker,
+    CancellationHandle,
     JobMessageParseError,
 )
 
@@ -38,7 +39,7 @@ OPTIMIZER_RUNNER_PATH = os.path.join(
 PAYLOAD_TYPE_OPTIMIZATION = "optimization"
 
 
-def _parse_job_message(args, kwargs):
+def _parse_job_message(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Dict[str, Any]:
     """Parse job message from args or kwargs.
     
     Args:
@@ -58,7 +59,7 @@ def _parse_job_message(args, kwargs):
     raise JobMessageParseError("No job message found in args or kwargs")
 
 
-def process_optimizer_job(*args, **kwargs):
+def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     """Process an optimizer job from the Java backend.
     
     This is the main entry point for Optimization Studio jobs. It:
@@ -141,16 +142,15 @@ def process_optimizer_job(*args, **kwargs):
         # The executor will use this to stream subprocess stdout/stderr to Redis
         executor._log_collectors[0] = log_collector  # Use 0 as placeholder PID
         
-        # Create cancellation checker with context manager for automatic cleanup
-        with CancellationChecker(str(context.optimization_id)) as cancellation_checker:
-            
-            def on_cancelled():
-                logger.info(
-                    f"Cancellation detected, killing subprocess for {context.optimization_id}"
-                )
-                executor.kill_all_processes(timeout=5)
-            
-            cancellation_checker.start_background_check(on_cancelled=on_cancelled)
+        # Define cancellation callback
+        def on_cancelled() -> None:
+            logger.info(
+                f"Cancellation detected, killing subprocess for {context.optimization_id}"
+            )
+            executor.kill_all_processes(timeout=5)
+        
+        # Register with centralized cancellation monitor (auto-unregisters on exit)
+        with CancellationHandle(str(context.optimization_id), on_cancelled=on_cancelled) as cancellation_handle:
             
             try:
                 logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
@@ -166,7 +166,7 @@ def process_optimizer_job(*args, **kwargs):
                 )
                 
                 # Check if cancelled - don't treat as error (thread-safe check)
-                if cancellation_checker.was_cancelled:
+                if cancellation_handle.was_cancelled:
                     logger.info(f"Optimization was cancelled: {context.optimization_id}")
                     # Write cancellation message to optimization logs (visible in UI)
                     log_collector.emit({"message": "Execution cancelled by the user."})

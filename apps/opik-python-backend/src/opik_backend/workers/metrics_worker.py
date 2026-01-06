@@ -1,6 +1,11 @@
 import logging
+from typing import Any, Optional
+
 from rq import Worker
+from rq.job import Job
+from rq.queue import Queue
 from opentelemetry.metrics import get_meter
+
 from .death_penalty import NoOpDeathPenalty
 
 logger = logging.getLogger(__name__)
@@ -43,6 +48,14 @@ total_job_time_histogram = meter.create_histogram(
     unit="ms",
 )
 
+# Track concurrent jobs using UpDownCounter (gauge-like behavior)
+# UpDownCounter is thread-safe internally - no external locking needed
+concurrent_jobs_counter = meter.create_up_down_counter(
+    name="rq_worker.jobs.concurrent",
+    description="Number of jobs currently being processed",
+    unit="1",
+)
+
 
 class MetricsWorker(Worker):
     """
@@ -51,22 +64,19 @@ class MetricsWorker(Worker):
 
     death_penalty_class = NoOpDeathPenalty
 
-    def execute_job(self, job, queue):
-        logger.info(f"execute_job called for job {job.id}")
-        logger.info(f"Job status: {job.get_status()}")
+    def execute_job(self, job: Job, queue: Queue) -> bool:
+        """Execute a job and return success status."""
+        logger.debug(f"execute_job called for job {job.id}, status: {job.get_status()}")
         try:
             result = super().execute_job(job, queue)
-            logger.info("execute_job completed successfully")
+            logger.debug(f"execute_job completed for job {job.id}")
             return result
         except Exception as e:
-            logger.error(f"execute_job FAILED: {type(e).__name__}: {e}")
-            logger.error("Full traceback:", exc_info=True)
+            logger.error(f"execute_job FAILED for job {job.id}: {type(e).__name__}: {e}", exc_info=True)
             raise
 
-    def perform_job(self, job, queue):
-        logger.info(f"Starting perform_job for job {job.id}")
-        logger.info(f"Job origin: {job.origin if hasattr(job, 'origin') else 'N/A'}")
-        logger.info(f"Job func_name: {job.func_name if hasattr(job, 'func_name') else 'N/A'}")
+    def perform_job(self, job: Job, queue: Queue) -> bool:
+        logger.debug(f"Starting perform_job for job {job.id}, func: {getattr(job, 'func_name', 'unknown')}")
 
         func_name = job.func_name if hasattr(job, 'func_name') else 'unknown'
         queue_name = queue.name
@@ -80,12 +90,13 @@ class MetricsWorker(Worker):
             )
 
         metric_attributes = {"queue": queue_name, "function": func_name}
+        
+        # Track concurrent jobs (UpDownCounter is thread-safe)
+        concurrent_jobs_counter.add(1, metric_attributes)
 
         try:
-            logger.info("Processing job id=%s func=%s", getattr(job, 'id', 'unknown'), func_name)
-            logger.info("About to call super().perform_job()")
+            logger.info(f"Processing job {job.id} (func={func_name}, queue={queue_name})")
             result = super().perform_job(job, queue)
-            logger.info(f"super().perform_job() returned: {type(result)}")
 
             processing_time_ms = None
             if job.started_at and job.ended_at:
@@ -113,15 +124,14 @@ class MetricsWorker(Worker):
 
             return result
         except Exception as e:
-            logger.error(f"Exception caught in perform_job: {type(e).__name__}")
-            logger.error(f"Exception message: {str(e)}")
-            logger.error("Exception occurred at:", exc_info=True)
-
             jobs_processed_counter.add(1, metric_attributes)
             error_attributes = {**metric_attributes, "error_type": type(e).__name__}
             jobs_failed_counter.add(1, error_attributes)
 
-            logger.error(f"Job '{job.id}' failed: {e}", exc_info=True)
+            logger.error(f"Job '{job.id}' failed: {type(e).__name__}: {e}", exc_info=True)
             raise
+        finally:
+            # Decrement concurrent jobs counter (UpDownCounter is thread-safe)
+            concurrent_jobs_counter.add(-1, metric_attributes)
 
 
