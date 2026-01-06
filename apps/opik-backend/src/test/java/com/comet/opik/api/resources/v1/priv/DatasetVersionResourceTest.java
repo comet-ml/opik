@@ -1379,8 +1379,8 @@ class DatasetVersionResourceTest {
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
-            // Get the version
-            var version = getLatestVersion(datasetId);
+            // Ensure version is created
+            getLatestVersion(datasetId);
 
             // When - Filter by Description field that does NOT contain "Dog"
             var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.NOT_CONTAINS, "Description", "Dog");
@@ -1394,6 +1394,16 @@ class DatasetVersionResourceTest {
             assertThat(filteredItems.content()).hasSize(2);
             assertThat(filteredItems.total()).isEqualTo(2);
 
+            // Verify all returned items have the expected structure and properties
+            filteredItems.content().forEach(item -> {
+                assertThat(item.id()).isNotNull();
+                assertThat(item.source()).isEqualTo(DatasetItemSource.MANUAL);
+                assertThat(item.data()).isNotNull();
+                assertThat(item.data()).containsKeys("Name", "Description");
+                assertThat(item.createdAt()).isNotNull();
+                assertThat(item.lastUpdatedAt()).isNotNull();
+            });
+
             // Verify the returned items are Cat and Bird (filter worked correctly)
             // Note: JsonNode toString() includes escaped quotes for string values
             var names = filteredItems.content().stream()
@@ -1401,8 +1411,17 @@ class DatasetVersionResourceTest {
                     .toList();
             assertThat(names).containsExactlyInAnyOrder("\"\\\"Cat\\\"\"", "\"\\\"Bird\\\"\"");
 
+            var descriptions = filteredItems.content().stream()
+                    .map(item -> item.data().get("Description").toString())
+                    .toList();
+            assertThat(descriptions)
+                    .containsExactlyInAnyOrder(
+                            "\"\\\"Cat looking at camera\\\"\"",
+                            "\"\\\"Blue jay perched on a wooden fence\\\"\"");
+
             // Verify Dog item is not in the results
             assertThat(names).doesNotContain("Dog");
+            assertThat(descriptions).noneMatch(desc -> desc.contains("Dog"));
         }
     }
 
@@ -2463,7 +2482,7 @@ class DatasetVersionResourceTest {
             var streamRequestV1 = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .steamLimit(100)
-                    .version("v1")
+                    .datasetVersion("v1")
                     .build();
             var streamedItemsV1 = datasetResourceClient.streamDatasetItems(streamRequestV1, API_KEY, TEST_WORKSPACE);
 
@@ -2474,7 +2493,7 @@ class DatasetVersionResourceTest {
             var streamRequestV2 = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .steamLimit(100)
-                    .version(DatasetVersionService.LATEST_TAG)
+                    .datasetVersion(DatasetVersionService.LATEST_TAG)
                     .build();
             var streamedItemsV2 = datasetResourceClient.streamDatasetItems(streamRequestV2, API_KEY, TEST_WORKSPACE);
 
