@@ -6,6 +6,7 @@ import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
+import { cn } from "@/lib/utils";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -105,11 +106,12 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   const renderInstallSection = () => (
     <div>
       <div
-        className={
+        className={cn(
+          "mb-3",
           isPhonePortrait
-            ? "comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap"
-            : "comet-body-s mb-3"
-        }
+            ? "comet-body-s-accented overflow-x-auto whitespace-nowrap"
+            : "comet-body-s",
+        )}
       >
         1. Install Opik using pip from the command line
       </div>
@@ -128,11 +130,12 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   const renderRunCodeSection = () => (
     <div>
       <div
-        className={
+        className={cn(
+          "mb-3",
           isPhonePortrait
-            ? "comet-body-s-accented mb-3 overflow-x-auto whitespace-nowrap"
-            : "comet-body-s mb-3"
-        }
+            ? "comet-body-s-accented overflow-x-auto whitespace-nowrap"
+            : "comet-body-s",
+        )}
       >
         2. Run the following code to get started
       </div>
@@ -146,12 +149,13 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     </div>
   );
 
-  const containerClassName = isPhonePortrait
-    ? "flex flex-col gap-6"
-    : "flex flex-col gap-6 rounded-md border bg-background p-6";
-
   return (
-    <div className={containerClassName}>
+    <div
+      className={cn(
+        "flex flex-col gap-6",
+        !isPhonePortrait && "rounded-md border bg-background p-6",
+      )}
+    >
       {renderInstallSection()}
       {renderRunCodeSection()}
     </div>
