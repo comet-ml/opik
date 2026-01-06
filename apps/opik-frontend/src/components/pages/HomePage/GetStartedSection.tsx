@@ -90,7 +90,7 @@ const GetStartedSection = () => {
             <div
               className={cn(
                 "comet-body-s mt-4 self-center text-center text-muted-slate",
-                isPhonePortrait ? "w-full px-4" : "m-auto w-[468px]",
+                isPhonePortrait ? "w-full px-4" : "mx-auto w-[468px]",
               )}
             >
               Select a framework and follow the instructions to integrate Comet
