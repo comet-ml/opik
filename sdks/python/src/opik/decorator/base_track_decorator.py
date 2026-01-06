@@ -506,8 +506,8 @@ class BaseTrackDecorator(abc.ABC):
                 # the span data must be present in the context stack, otherwise something is wrong
                 span_data_to_end, trace_data_to_end = pop_end_candidates()
             else:
-                # the span data is optional and should not be processed (possibly root span duplicating root trace)
-                _, trace_data_to_end = pop_end_candidates_if_exists()
+                # the span data is not in the context, only the root trace data there
+                trace_data_to_end = pop_end_candidate_trace_data()
         else:
             span_data_to_end, trace_data_to_end = (
                 generators_span_to_end,
@@ -622,26 +622,26 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
         span_data_to_end is not None
     ), "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
 
-    trace_data_to_end = _pop_end_candidate_trace_data()
+    trace_data_to_end = pop_end_candidate_trace_data()
     return span_data_to_end, trace_data_to_end
 
 
-def pop_end_candidates_if_exists() -> (
-    Tuple[Optional[span.SpanData], Optional[trace.TraceData]]
-):
+def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
     """
-    Pops span and trace (if any exists) data created by @track decorator
-    from the current context returns popped objects.
+    Pops the most recently created trace data from the stack if it meets specific criteria.
 
-    Decorator can't attach any child objects to the popped ones because
+    This function checks whether the context storage's span data stack is empty, and if so, it attempts
+    to pop and return the most recently created trace data associated with the context. The trace data
+    is only removed if its ID is part of a predefined set of trace IDs created using a decorator. If the
+    criteria are not met, None is returned.
+
+    Note: Decorator can't attach any child objects to the popped ones because
     they are no longer in the context stack.
+
+    Returns:
+        The trace data popped from the stack if the criteria are met;
+        otherwise, None.
     """
-    span_data_to_end = context_storage.pop_span_data()
-    trace_data_to_end = _pop_end_candidate_trace_data()
-    return span_data_to_end, trace_data_to_end
-
-
-def _pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
     possible_trace_data_to_end = context_storage.get_trace_data()
     if (
         context_storage.span_data_stack_empty()
