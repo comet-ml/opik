@@ -2785,6 +2785,8 @@ class DatasetsResourceTest {
                         Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                                 .datasetName(dataset.name())
                                 .type(null)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
                                 .promptVersion(
                                         Experiment.PromptVersionLink.builder()
                                                 .promptId(promptVersion.promptId())
@@ -2805,6 +2807,8 @@ class DatasetsResourceTest {
                         Experiment trial = factory.manufacturePojo(Experiment.class).toBuilder()
                                 .datasetName(dataset.name())
                                 .type(ExperimentType.TRIAL)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
                                 .promptVersion(null)
                                 .promptVersions(null)
                                 .build();
@@ -2862,6 +2866,8 @@ class DatasetsResourceTest {
                         Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                                 .datasetName(dataset.name())
                                 .type(null)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
                                 .promptVersion(null)
                                 .promptVersions(List.of(
                                         Experiment.PromptVersionLink.builder()
