@@ -48,8 +48,12 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                 reason=metric_val.reason,
             )
         else:
+            # metric returned a plain float/int value
             return score_result.ScoreResult(
-                name=metric_name, value=metric_val, scoring_failed=False
+                name=metric_name,
+                value=metric_val,
+                scoring_failed=False,
+                reason=f"Metric returned value: {metric_val}",
             )
 
     if not needs_task_span:
@@ -64,9 +68,12 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                 try:
                     metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
                     return _process_metric_result(metric, metric_val, self.name)
-                except Exception:
+                except Exception as e:
                     return score_result.ScoreResult(
-                        name=self.name, value=0, scoring_failed=True
+                        name=self.name,
+                        value=0,
+                        scoring_failed=True,
+                        reason=f"Scoring failed with error: {type(e).__name__}: {e}",
                     )
 
         return _MetricClassWithoutSpan()
@@ -84,9 +91,12 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                         dataset_item=kwargs, llm_output=llm_output, task_span=task_span
                     )
                     return _process_metric_result(metric, metric_val, self.name)
-                except Exception:
+                except Exception as e:
                     return score_result.ScoreResult(
-                        name=self.name, value=0, scoring_failed=True
+                        name=self.name,
+                        value=0,
+                        scoring_failed=True,
+                        reason=f"Scoring failed with error: {type(e).__name__}: {e}",
                     )
 
         return _MetricClassWithSpan()
