@@ -1,5 +1,6 @@
 import logging
 import datetime
+import re
 from typing import (
     Any,
     Dict,
@@ -18,6 +19,7 @@ from uuid import UUID
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
+from langgraph.types import Command as LangGraphCommand
 
 from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
@@ -76,6 +78,42 @@ def _is_root_run(run_dict: Dict[str, Any]) -> bool:
 
 def _get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     return run_dict["extra"].get("metadata", {})
+
+
+def _is_command_object(obj: Any) -> bool:
+    """
+    Check if an object is a LangGraph Command instance.
+
+    Args:
+        obj: The object to check.
+
+    Returns:
+        True if the object is a Command instance, False otherwise.
+    """
+    return isinstance(obj, LangGraphCommand)
+
+
+def _parse_graph_interrupt(error_traceback: str) -> Optional[str]:
+    """
+    Parse GraphInterrupt error traceback to extract the interrupt value.
+
+    Args:
+        error_traceback: The error traceback string containing GraphInterrupt information.
+
+    Returns:
+        The interrupt value if found, None otherwise.
+    """
+    if "GraphInterrupt" not in error_traceback or "Interrupt(" not in error_traceback:
+        return None
+
+    match = re.search(
+        r"Interrupt\(value='([^']*)'",
+        error_traceback.replace("\\n", "\n"),
+    )
+    if match:
+        return match.group(1)
+
+    return None
 
 
 class OpikTracer(BaseTracer):
@@ -254,17 +292,9 @@ class OpikTracer(BaseTracer):
             trace_data.input = run_dict["inputs"]
         elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
             # Check if the input value is a LangGraph Command object
-            input_value = trace_data.input["input"]
-            if (
-                hasattr(input_value, "__class__")
-                and input_value.__class__.__name__ == "Command"
-            ):
-                # Extract the resume value from the Command object
-                if hasattr(input_value, "resume"):
-                    trace_data.input = {"__resume__": input_value.resume}
-                else:
-                    # Fallback: try to serialize the Command object properly
-                    trace_data.input = run_dict["inputs"]
+            input_value = trace_data.input.get("input")
+            if input_value is not None and _is_command_object(input_value):
+                trace_data.input = {"__resume__": input_value.resume}
 
         # Check if any child span has a GraphInterrupt error and extract interrupt info for output
         if outputs is not None and isinstance(outputs, dict):
@@ -272,21 +302,11 @@ class OpikTracer(BaseTracer):
             for span_id, span_data in self._span_data_map.items():
                 if span_data.trace_id == trace_data.id and span_data.error_info:
                     error_traceback = span_data.error_info.get("traceback", "")
-                    if (
-                        "GraphInterrupt" in error_traceback
-                        and "Interrupt(" in error_traceback
-                    ):
-                        import re
-
-                        match = re.search(
-                            r"Interrupt\(value='([^']*)'",
-                            error_traceback.replace("\\n", "\n"),
-                        )
-                        if match:
-                            interrupt_value = match.group(1)
-                            # Replace outputs with only the interrupt data
-                            outputs.clear()
-                            outputs["__interrupt__"] = [{"value": interrupt_value}]
+                    interrupt_value = _parse_graph_interrupt(error_traceback)
+                    if interrupt_value is not None:
+                        # Replace outputs with only the interrupt data
+                        outputs.clear()
+                        outputs["__interrupt__"] = [{"value": interrupt_value}]
                         break
 
         if trace_additional_metadata:
@@ -627,19 +647,13 @@ class OpikTracer(BaseTracer):
             # Check if input is empty or contains a Command object that will serialize to empty dict
             if span_data.input == {"input": ""} or span_data.input == {"input": {}}:
                 span_data.input = run_dict["inputs"]
-            elif isinstance(span_data.input, dict) and "input" in span_data.input:
+            elif isinstance(span_data.input, dict):
                 # Check if the input value is a LangGraph Command object
-                input_value = span_data.input["input"]
-                if (
-                    hasattr(input_value, "__class__")
-                    and input_value.__class__.__name__ == "Command"
-                ):
+                input_value = span_data.input.get("input")
+                if _is_command_object(input_value):
+                    command: LangGraphCommand = input_value
                     # Extract the resume value from the Command object
-                    if hasattr(input_value, "resume"):
-                        span_data.input = {"__resume__": input_value.resume}
-                    else:
-                        # Fallback: try to serialize the Command object properly
-                        span_data.input = run_dict["inputs"]
+                    span_data.input = {"__resume__": command.resume}
 
             filtered_output, additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
