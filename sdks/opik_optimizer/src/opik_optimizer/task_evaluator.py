@@ -53,7 +53,7 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                 name=metric_name,
                 value=metric_val,
                 scoring_failed=False,
-                reason=f"Metric returned value: {metric_val}",
+                reason="Metric returned a numeric value",
             )
 
     if not needs_task_span:
