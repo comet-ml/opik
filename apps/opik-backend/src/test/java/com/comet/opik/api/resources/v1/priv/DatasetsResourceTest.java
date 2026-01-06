@@ -8089,6 +8089,12 @@ class DatasetsResourceTest {
                     workspaceName,
                     apiKey);
 
+            // Fetch created items to get their actual row IDs (needed for dataset versioning)
+            var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 3), apiKey,
+                    workspaceName);
+            var createdItems = createdItemsPage.content();
+            assertThat(createdItems).hasSize(3);
+
             var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(experiment1.name())
                     .build();
@@ -8106,21 +8112,21 @@ class DatasetsResourceTest {
 
             var experimentItem1 = ExperimentItem.builder()
                     .experimentId(experiment1.id())
-                    .datasetItemId(datasetItem1.id())
+                    .datasetItemId(createdItems.get(0).id())
                     .traceId(trace1.id())
                     .output(JsonUtils.readTree(Map.of("result", "output1")))
                     .build();
 
             var experimentItem2 = ExperimentItem.builder()
                     .experimentId(experiment2.id())
-                    .datasetItemId(datasetItem2.id())
+                    .datasetItemId(createdItems.get(1).id())
                     .traceId(trace2.id())
                     .output(JsonUtils.readTree(Map.of("result", "output2")))
                     .build();
 
             var experimentItem3 = ExperimentItem.builder()
                     .experimentId(experiment3.id())
-                    .datasetItemId(datasetItem3.id())
+                    .datasetItemId(createdItems.get(2).id())
                     .traceId(trace3.id())
                     .output(JsonUtils.readTree(Map.of("result", "output3")))
                     .build();

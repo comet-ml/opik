@@ -402,7 +402,17 @@ public class ExperimentService {
                                         .datasetVersionId(resolvedVersionId)
                                         .build();
                                 return processExperimentCreation(experimentWithVersion, id, name, datasetId);
-                            });
+                            })
+                            .switchIfEmpty(Mono.defer(() -> {
+                                // No version found - proceed with null dataset_version_id
+                                log.info(
+                                        "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
+                                        datasetId);
+                                var experimentWithNullVersion = experiment.toBuilder()
+                                        .datasetVersionId(null)
+                                        .build();
+                                return processExperimentCreation(experimentWithNullVersion, id, name, datasetId);
+                            }));
                 })
                 // If a conflict occurs, we just return the id of the existing experiment.
                 // If any other error occurs, we throw it. The event is not posted for both cases.
