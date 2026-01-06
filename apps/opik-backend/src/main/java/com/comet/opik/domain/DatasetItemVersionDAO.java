@@ -1407,12 +1407,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @param criteria The search criteria containing filters and search terms
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
-        // Add filters if present
+        // Add filters if present - need to add all filter strategies
         if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-            Optional<String> filterQuery = FilterQueryBuilder.toAnalyticsDbFilters(
-                    criteria.filters(),
-                    FilterStrategy.DATASET_ITEM);
-            filterQuery.ifPresent(query -> template.add("filters", query));
+            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+
+            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
+                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
+                            experimentItemFilters));
+
+            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES)
+                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
+                            feedbackScoresFilters));
+
+            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                    .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
+                            feedbackScoresEmptyFilters));
         }
 
         // Add search if present
@@ -1544,6 +1554,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 // Bind search terms as array
                 if (StringUtils.isNotBlank(criteria.search())) {
                     filterQueryBuilder.bindSearchTerms(statement, criteria.search());
+                }
+
+                // Bind filter parameters if present
+                if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
+                    FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
