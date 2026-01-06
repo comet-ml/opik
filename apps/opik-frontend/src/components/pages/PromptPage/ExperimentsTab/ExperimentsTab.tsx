@@ -37,6 +37,7 @@ import useGroupedExperimentsList, {
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_TYPE,
   ColumnData,
   COLUMN_ID_ID,
@@ -162,6 +163,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           nameKey: "dataset_name",
           idKey: "dataset_id",
           resource: RESOURCE_TYPE.dataset,
+        },
+      },
+      {
+        id: COLUMN_PROJECT_ID,
+        label: "Project",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        customMeta: {
+          nameKey: "project_name",
+          idKey: "project_id",
+          resource: RESOURCE_TYPE.project,
         },
       },
       ...(isDatasetVersioningEnabled
@@ -379,15 +391,24 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [setGroupLimit],
   );
 
-  // Filter out dataset column when grouping by dataset
+  // Filter out dataset column when grouping by dataset, project column when grouping by project
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
-    if (isGroupingByDataset) {
-      return columnsDef.filter((col) => col.id !== COLUMN_DATASET_ID);
-    }
-    return columnsDef;
+    const isGroupingByProject = groups.some(
+      (g) => g.field === COLUMN_PROJECT_ID,
+    );
+    
+    return columnsDef.filter((col) => {
+      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) {
+        return false;
+      }
+      if (isGroupingByProject && col.id === COLUMN_PROJECT_ID) {
+        return false;
+      }
+      return true;
+    });
   }, [groups, columnsDef]);
 
   if (isPending || isFeedbackScoresPending) {

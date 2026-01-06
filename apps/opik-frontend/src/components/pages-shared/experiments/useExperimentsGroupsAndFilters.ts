@@ -6,11 +6,13 @@ import { Groups } from "@/types/groups";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import ProjectSelectBox from "@/components/pages-shared/experiments/ProjectSelectBox/ProjectSelectBox";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
@@ -19,6 +21,12 @@ export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: COLUMN_DATASET_ID,
     label: "Dataset",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+  {
+    id: COLUMN_PROJECT_ID,
+    label: "Project",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -56,6 +64,15 @@ export const useExperimentsGroupsAndFilters = ({
       rowsMap: {
         [COLUMN_DATASET_ID]: {
           keyComponent: DatasetSelectBox,
+          keyComponentProps: {
+            className: "w-full min-w-72",
+          },
+          defaultOperator: "=",
+          operators: [{ label: "=", value: "=" }],
+          sortingMessage: "Last experiment created",
+        },
+        [COLUMN_PROJECT_ID]: {
+          keyComponent: ProjectSelectBox,
           keyComponentProps: {
             className: "w-full min-w-72",
           },
