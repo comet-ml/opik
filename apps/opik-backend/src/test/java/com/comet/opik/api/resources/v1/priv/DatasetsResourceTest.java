@@ -4627,6 +4627,13 @@ class DatasetsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteDatasetItems {
 
+        // TODO: These tests fail when dataset versioning is enabled because the behavior changes:
+        // - With versioning OFF: DELETE removes items from the table, GET returns 404
+        // - With versioning ON: DELETE creates a new version without the items, but old versions still exist
+        //   GET by ID will find items in previous versions and return 200 (items are not truly deleted)
+        // These tests should be updated or removed once dataset versioning is enabled in production,
+        // as the current assertions (expecting 404 after delete) don't match the versioned behavior.
+
         @Test
         @DisplayName("Success: delete by IDs")
         void deleteDatasetItem() {
