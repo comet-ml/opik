@@ -201,16 +201,17 @@ public class CostService {
         if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
             return SpanCostCalculator::videoGenerationCost;
         }
-
         if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
             return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
         }
 
-        if (isPositive(inputPrice) || isPositive(outputPrice)) {
-            return SpanCostCalculator::textGenerationCost;
-        }
-
-        return SpanCostCalculator::defaultCost;
+        // Determine calculator based on mode, with fallbacks
+        return switch (mode) {
+            case VIDEO_GENERATION -> isPositive(videoOutputPrice) ? SpanCostCalculator::videoGenerationCost : SpanCostCalculator::defaultCost;
+            case AUDIO_SPEECH -> SpanCostCalculator::audioSpeechCost;
+            // For other modes, check if input/output prices are positive, otherwise use default
+            default -> (isPositive(inputPrice) || isPositive(outputPrice)) ? SpanCostCalculator::textGenerationCost : SpanCostCalculator::defaultCost;
+        };
     }
 
     private static boolean isPositive(BigDecimal value) {
