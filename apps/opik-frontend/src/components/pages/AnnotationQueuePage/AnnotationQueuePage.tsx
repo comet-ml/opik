@@ -21,7 +21,8 @@ import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/Ed
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ScopeTag from "@/components/pages/AnnotationQueuePage/ScopeTag";
+import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
+import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -59,6 +60,16 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
     annotationQueue?.feedback_scores,
     annotationQueue?.feedback_definition_names,
   ]);
+
+  const annotationQueueSearch = useMemo(
+    () => ({
+      type: `${annotationQueue?.scope}s`,
+      [`${annotationQueue?.scope}s_filters`]: generateAnnotationQueueIdFilter(
+        annotationQueue?.id,
+      ),
+    }),
+    [annotationQueue?.scope, annotationQueue?.id],
+  );
 
   return (
     <PageBodyScrollContainer>
@@ -98,10 +109,22 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
               resource={RESOURCE_TYPE.annotationQueue}
             />
           )}
-          {annotationQueue?.scope && (
-            <TooltipWrapper content="Annotation queue scope">
-              <ScopeTag scope={annotationQueue.scope} />
-            </TooltipWrapper>
+          {annotationQueue?.scope && annotationQueue?.project_id && (
+            <NavigationTag
+              resource={
+                annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE
+                  ? RESOURCE_TYPE.traces
+                  : RESOURCE_TYPE.threads
+              }
+              id={annotationQueue.project_id}
+              name={
+                annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE
+                  ? "Traces"
+                  : "Threads"
+              }
+              search={annotationQueueSearch}
+              tooltipContent={`View all ${annotationQueue.scope}s for this queue`}
+            />
           )}
           {annotationQueue?.project_id && (
             <NavigationTag
