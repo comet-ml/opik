@@ -1215,7 +1215,7 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
         input=initial_input,
         output=ANY_DICT.containing({"__interrupt__": ANY_STRING}),
         metadata=ANY_DICT.containing(
-            {"created_from": "langchain", "langgraph_interrupt": True}
+            {"created_from": "langchain", "_langgraph_interrupt": True}
         ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -1252,7 +1252,7 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                 input=ANY_DICT,
                 output=ANY_DICT.containing({"__interrupt__": ANY_STRING}),
                 metadata=ANY_DICT.containing(
-                    {"created_from": "langchain", "langgraph_interrupt": True}
+                    {"created_from": "langchain", "_langgraph_interrupt": True}
                 ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,

@@ -258,7 +258,7 @@ class OpikTracer(BaseTracer):
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
             if interrupt_value := _parse_graph_interrupt_value(error_str):
                 outputs = {"__interrupt__": interrupt_value}
-                trace_additional_metadata["langgraph_interrupt"] = True
+                trace_additional_metadata["_langgraph_interrupt"] = True
                 # Don't set error_info - this is not an error
             elif not self._should_skip_error(error_str):
                 error_info = ErrorInfoDict(
@@ -316,14 +316,14 @@ class OpikTracer(BaseTracer):
             if (
                 span_data.trace_id == trace_data.id
                 and span_data.metadata is not None
-                and span_data.metadata.get("langgraph_interrupt") is True
+                and span_data.metadata.get("_langgraph_interrupt") is True
             ):
                 # Use the interrupt output from the child span
                 outputs = span_data.output
                 # Also propagate the interrupt metadata to trace
                 if trace_additional_metadata is None:
                     trace_additional_metadata = {}
-                trace_additional_metadata["langgraph_interrupt"] = True
+                trace_additional_metadata["_langgraph_interrupt"] = True
                 break
 
         if trace_additional_metadata:
@@ -723,7 +723,7 @@ class OpikTracer(BaseTracer):
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
             if interrupt_value := _parse_graph_interrupt_value(error_str):
                 span_data.init_end_time().update(
-                    metadata={"langgraph_interrupt": True},
+                    metadata={"_langgraph_interrupt": True},
                     output={"__interrupt__": interrupt_value},
                 )
             # Don't set error_info - this is not an error
