@@ -10,7 +10,11 @@ const WorkspaceRolePopover = ({
   options,
 }: ReturnType<typeof useManageUsersRolePopover>) => {
   return (
-    <SelectContent align="start" className="w-[280px] p-2">
+    <SelectContent
+      align="start"
+      position="item-aligned"
+      className="w-[280px] p-2"
+    >
       {options.map((option) => {
         const isSelected = controlValue === option.value;
         const selectItem = (
