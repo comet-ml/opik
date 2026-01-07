@@ -38,6 +38,10 @@ const calculateProjectStatsCardTitle = (
   const source = widgetConfig.source;
   const metric = widgetConfig.metric;
 
+  if (!metric) {
+    return DEFAULT_TITLE;
+  }
+
   if (metric.startsWith(FEEDBACK_SCORE_PREFIX)) {
     const scoreName = metric.replace(FEEDBACK_SCORE_PREFIX, "");
     const sourceLabel = source === TRACE_DATA_TYPE.spans ? "span" : "trace";
