@@ -1143,7 +1143,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH experiment_items_scope AS (
+                SELECT *
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                <if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
