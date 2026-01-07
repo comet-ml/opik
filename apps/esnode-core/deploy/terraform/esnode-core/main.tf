@@ -62,18 +62,7 @@ variable "tsdb_host_path" {
   description = "Host path for TSDB storage"
 }
 
-variable "orchestrator_token" {
-  type        = string
-  default     = ""
-  description = "Bearer token for orchestrator control API (empty to disable auth)"
-  sensitive   = true
-}
 
-variable "orchestrator_allow_public" {
-  type        = bool
-  default     = false
-  description = "Allow orchestrator control API on non-loopback"
-}
 
 provider "helm" {
   kubernetes {
@@ -114,12 +103,5 @@ resource "helm_release" "esnode_core" {
     name  = "tsdb.mountPath"
     value = var.tsdb_host_path
   }
-  set {
-    name  = "config.orchestrator.token"
-    value = var.orchestrator_token
-  }
-  set {
-    name  = "config.orchestrator.allowPublic"
-    value = var.orchestrator_allow_public
-  }
+
 }

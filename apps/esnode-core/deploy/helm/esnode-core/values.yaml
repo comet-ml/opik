@@ -42,10 +42,7 @@ config:
   enableMcp: false
   enableApp: false
   logLevel: info
-  orchestrator:
-    enabled: false
-    allowPublic: false
-    token: ""
+
 
 env:
   - name: NVIDIA_VISIBLE_DEVICES

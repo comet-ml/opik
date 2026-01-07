@@ -254,8 +254,6 @@ gpu_visible_devices = \"all\"
 mig_config_devices = \"\"
 log_level = \"info\"
 
-[orchestrator]
-enabled = false
 EOF"
     fi
 

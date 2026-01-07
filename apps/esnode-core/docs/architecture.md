@@ -10,8 +10,7 @@ ESNODE-Core lives in this repository. ESNODE-Pulse is the licensed controller sh
   - `/status` and `/v1/status` JSON snapshot (load, power, temps, GPUs, last scrape/errors)
   - `/events` SSE stream of status snapshots (5s default)
   - `/healthz`
-- `esnode-orchestrator`: optional autonomous resource manager (embedded lib, CLI-configurable) exposing:
-  - `/orchestrator/metrics` JSON status
+
 - `esnode-pulse`: polling/aggregator that:
   - polls agents’ `/status` and `/metrics`
   - exposes aggregated `/agents` JSON

@@ -29,7 +29,4 @@ data:
 
     log_level = "info"
 
-    [orchestrator]
-    enabled = false
-    allow_public = false
-    token = ""
+

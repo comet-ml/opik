@@ -24,7 +24,4 @@ data:
     local_tsdb_retention_hours = {{ .Values.tsdb.retentionHours }}
     local_tsdb_max_disk_mb = {{ .Values.tsdb.maxDiskMb }}
 
-    [orchestrator]
-    enabled = {{ .Values.config.orchestrator.enabled }}
-    allow_public = {{ .Values.config.orchestrator.allowPublic }}
-    token = "{{ .Values.config.orchestrator.token }}"
+

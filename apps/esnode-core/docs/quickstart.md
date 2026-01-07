@@ -15,7 +15,7 @@ Power requirements:
 >
 > **Control plane note:** Agents can run standalone (full local TUI/CLI) or attach to an ESNODE-Pulse for centralized control. Metrics (`/metrics`, OTLP, logs) stay enabled in both modes.
 >
-> **Operator heads-up:** The local TSDB defaults to a user-writable XDG path (e.g. `~/.local/share/esnode/tsdb`) so non-root runs succeed; set `local_tsdb_path` to `/var/lib/esnode/tsdb` if you prefer a system path. Orchestrator control APIs are loopback-only by default; set `orchestrator.allow_public=true` **and** `orchestrator.token` to expose them safely.
+> **Operator heads-up:** The local TSDB defaults to a user-writable XDG path (e.g. `~/.local/share/esnode/tsdb`) so non-root runs succeed; set `local_tsdb_path` to `/var/lib/esnode/tsdb` if you prefer a system path.
 
 ## Installation options (choose your path)
 - Packages: `.deb` and `.rpm` in `public/distribution/releases/linux-amd64/`
@@ -138,17 +138,7 @@ log_level = "info"
 # managed_node_id = "gpu-node-01"
 # managed_join_token = "ABC123"
 
-[orchestrator]
-enabled = false                # Master toggle for orchestration
-# allow_public = false         # Control API (/orchestrator/*) only binds on loopback unless explicitly set true
-# token = "CHANGEME"           # Optional bearer token required on /orchestrator/* when set
-enable_zombie_reaper = true    # Kill zombie processes
-enable_turbo_mode = false      # Latency optimization
-enable_bin_packing = false     # Task scheduling
-enable_flash_preemption = false# Priority preemption
-enable_dataset_prefetch = false# Storage prefetching
-enable_bandwidth_reserve = false# Network QoS
-enable_fs_cleanup = false      # Disk cleanup
+
 ```
 
 Run ESNODE-Core pointing to this config (if needed):
@@ -186,7 +176,7 @@ esnode-core \
   --local-tsdb-retention-hours 48 \
   --local-tsdb-retention-hours 48 \
   --local-tsdb-max-disk-mb 2048 \
-  --enable-orchestrator false
+
 
 Local TSDB:
 - 2h on-disk blocks (`samples.jsonl` + `index.json`) with label hashes and per-metric counts.
@@ -202,7 +192,7 @@ GPU/MIG visibility notes:
 
 Degradation & status surfaces:
 - The `/status` payload and TUI surfaces now include disk/network/swap degradation flags and an aggregate `degradation_score`. GPU throttle/ECC flags are also exposed via metrics.
-- Orchestrator screen in the TUI shows whether loopback-only is enforced and whether a bearer token is required.
+
 
 Developer tip:
 - `cargo test --workspace` includes a ratatui-backed render smoke test for the TUI; no PTY needed to validate layout rendering.
@@ -217,7 +207,7 @@ docker build -t myregistry/esnode-core:0.1.0 -f Dockerfile .
 
 ### Kubernetes manifests (DaemonSet)
 Manifests live in `deploy/k8s/`:
-- `esnode-configmap.yaml` – default `esnode.toml` (loopback-only orchestrator, TSDB at `/var/lib/esnode/tsdb`, collectors on).
+- `esnode-configmap.yaml` – default `esnode.toml` (TSDB at `/var/lib/esnode/tsdb`, collectors on).
 - `esnode-daemonset.yaml` – hostNetwork/hostPID, privileged for NVML access, mounts `/dev` and TSDB hostPath, adds liveness/readiness probes.
 - `esnode-service.yaml` – headless Service for `/metrics` scraping on port 9100.
 
@@ -231,7 +221,7 @@ kubectl apply -f deploy/k8s/
 
 Notes:
 - Set `image:` to your registry/tag; provide matching tarball per arch if building multi-arch images.
-- Keep `orchestrator.allow_public=false` unless intentionally exposing control APIs; set `orchestrator.token` when enabling public exposure.
+
 - Adjust `local_tsdb_path` to match your volume and permissions; defaults to `/var/lib/esnode/tsdb` in the manifest.
 
 ## Dashboards & alerts
