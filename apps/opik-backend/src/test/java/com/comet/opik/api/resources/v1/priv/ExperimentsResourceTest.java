@@ -5753,56 +5753,37 @@ class ExperimentsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ExperimentTags {
 
-        @Test
-        @DisplayName("when creating experiment with tags, then tags are saved and retrieved correctly")
-        void createExperimentWithTags_thenTagsAreSavedCorrectly() {
+        @ParameterizedTest
+        @MethodSource("createExperimentTagsProvider")
+        @DisplayName("when creating experiment with various tag inputs, then tags are handled correctly")
+        void createExperimentWithVariousTags_thenTagsHandledCorrectly(Set<String> inputTags, Set<String> expectedTags) {
             // given
-            Set<String> expectedTags = Set.of("tag1", "tag2", "tag3");
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .tags(expectedTags)
+                    .tags(inputTags)
                     .build();
 
             // when
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
             // then
-            var retrievedExperiment = getAndAssert(experimentId, experiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags())
-                    .isNotNull()
-                    .containsExactlyInAnyOrderElementsOf(expectedTags);
-        }
-
-        @Test
-        @DisplayName("when creating experiment with empty tags, then experiment is created successfully")
-        void createExperimentWithEmptyTags_thenExperimentCreatedSuccessfully() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .tags(Set.of())
-                    .build();
-
-            // when
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            // then - backend returns null for empty tags
-            var expectedExperiment = experiment.toBuilder().tags(null).build();
+            var expectedExperiment = expectedTags != null ? experiment : experiment.toBuilder().tags(null).build();
             var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags()).isNullOrEmpty();
+
+            if (expectedTags != null) {
+                assertThat(retrievedExperiment.tags())
+                        .isNotNull()
+                        .containsExactlyInAnyOrderElementsOf(expectedTags);
+            } else {
+                assertThat(retrievedExperiment.tags()).isNullOrEmpty();
+            }
         }
 
-        @Test
-        @DisplayName("when creating experiment with null tags, then experiment is created successfully")
-        void createExperimentWithNullTags_thenExperimentCreatedSuccessfully() {
-            // given
-            var experiment = experimentResourceClient.createPartialExperiment()
-                    .tags(null)
-                    .build();
-
-            // when
-            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-
-            // then
-            var retrievedExperiment = getAndAssert(experimentId, experiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags()).isNull();
+        private static java.util.stream.Stream<Arguments> createExperimentTagsProvider() {
+            return java.util.stream.Stream.of(
+                    Arguments.of(Set.of("tag1", "tag2", "tag3"), Set.of("tag1", "tag2", "tag3")),
+                    Arguments.of(Set.of(), null),
+                    Arguments.of(null, null)
+            );
         }
 
         @Test
