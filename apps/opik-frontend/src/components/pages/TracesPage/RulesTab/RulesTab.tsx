@@ -132,6 +132,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     updateType: "replaceIn",
   });
 
+  const [cloneRuleId, setCloneRuleId] = useQueryParam(
+    "cloneRule",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
@@ -166,7 +174,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
   const editingRule = rows.find((r) => r.id === editRuleId);
+  const cloningRule = rows.find((r) => r.id === cloneRuleId);
   const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
+  const isCloneDialogOpen = Boolean(cloningRule);
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -200,6 +210,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     [setEditRuleId],
   );
 
+  const handleOpenCloneDialog = useCallback(
+    (ruleId: string) => {
+      setCloneRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setCloneRuleId],
+  );
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
@@ -229,11 +247,17 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           <RuleRowActionsCell
             {...props}
             openEditDialog={handleOpenEditDialog}
+            openCloneDialog={handleOpenCloneDialog}
           />
         ),
       }),
     ];
-  }, [columnsOrder, selectedColumns, handleOpenEditDialog]);
+  }, [
+    columnsOrder,
+    selectedColumns,
+    handleOpenEditDialog,
+    handleOpenCloneDialog,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -259,6 +283,15 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     [setEditRuleId],
   );
 
+  const handleCloseCloneDialog = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setCloneRuleId(undefined);
+      }
+    },
+    [setCloneRuleId],
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -278,6 +311,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           projectId={projectId}
           setOpen={handleCloseDialog}
           rule={editingRule}
+        />
+        <AddEditRuleDialog
+          key={`clone-${resetDialogKeyRef.current}`}
+          open={isCloneDialogOpen}
+          projectId={projectId}
+          setOpen={handleCloseCloneDialog}
+          rule={cloningRule}
+          mode="clone"
         />
       </>
     );
@@ -353,6 +394,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         projectId={projectId}
         setOpen={handleCloseDialog}
         rule={editingRule}
+      />
+      <AddEditRuleDialog
+        key={`clone-${resetDialogKeyRef.current}`}
+        open={isCloneDialogOpen}
+        projectId={projectId}
+        setOpen={handleCloseCloneDialog}
+        rule={cloningRule}
+        mode="clone"
       />
     </>
   );
