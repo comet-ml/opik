@@ -831,7 +831,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
             {
               id: "annotation_queue_ids",
-              label: "Annotation queue IDs",
+              label: "Annotation queue ID",
               type: COLUMN_TYPE.list,
             },
             {

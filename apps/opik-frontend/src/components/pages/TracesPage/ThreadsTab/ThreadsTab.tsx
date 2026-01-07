@@ -224,7 +224,7 @@ const FILTER_COLUMNS: ColumnData<Thread>[] = [
   ...SHARED_COLUMNS,
   {
     id: "annotation_queue_ids",
-    label: "Annotation queue IDs",
+    label: "Annotation queue ID",
     type: COLUMN_TYPE.list,
   },
   {
