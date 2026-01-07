@@ -21,20 +21,25 @@ This PR introduces **ESNODE-Core**, a high-performance Rust-based agent for infr
     *   Configured Prometheus to scrape `esnode-core`.
     *   Pre-provisioned Grafana with a Prometheus datasource for immediate dashboarding.
 
-4.  **Management Script**:
+4.  **Frontend Integration ("Single Pane of Glass")**:
+    *   Added a new **Infrastructure** page to the Opik sidebar.
+    *   This page embeds the Grafana dashboard directly within the application, providing a seamless user experience.
+    *   Users can monitor model metrics (traces) and machine metrics (GPUs) without leaving the Opik window.
+
+5.  **Management Script**:
     *   Updated `opik.sh` to include `opik-esnode-core-1` in the `OPIK_CONTAINERS` list, ensuring it starts and is verified alongside other core services.
 
 **Value Proposition:**
+*   **Unified Experience**: No need to open separate tabs or remember port numbers. Infrastructure monitoring is just one click away inside the Opik app.
 *   **GPU Visibility**: Direct insight into GPU utilization, memory pressure, and thermal throttling, which are critical for debugging latency in LLM inference.
 *   **Power Awareness**: Real-time power consumption metrics allow for tracking the energy efficiency and carbon footprint of AI workloads (e.g., Tokens/Watt).
-*   **Unified Stack**: Users can now spin up a complete AI engineering platform—monitoring both the *model's mind* (Opik) and the *machine's body* (ESNODE)—with a single command.
 
 **Testing Instructions:**
-1.  Run `./opik.sh` to start the core stack. Verify `opik-esnode-core-1` is healthy.
-2.  Run `docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik-otel up -d` to start the observability stack.
-3.  Visit `http://localhost:3000` (Grafana), login (`admin`/`admin`), and verify Prometheus is connected.
-4.  Explore metrics starting with `esnode_` to see real-time system data.
+1.  Run `./opik.sh` to start and verify the stack.
+2.  Start observability: `docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik-otel up -d`.
+3.  Open Opik (`http://localhost:5173`) and navigate to the new **Infrastructure** menu item.
+4.  Verify the Grafana dashboard loads within the iframe.
 
 **Notes for Reviewers:**
-*   The `esnode-core` service is configured to fail gracefully. If GPU drivers are missing (e.g., on Mac or non-GPU nodes), it simply disables the GPU collector and continues monitoring CPU/RAM without crashing.
-*   The `prometheus` and `grafana` services are optional (behind the `opik-otel` profile) to keep the default footprint light.
+*   The embedded dashboard URL defaults to `http://localhost:3000` but can be configured via `VITE_GRAFANA_URL` for production deployments behind ingress.
+*   The `esnode-core` service is configured to fail gracefully if no GPU is present.

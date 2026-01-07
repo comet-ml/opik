@@ -34,13 +34,16 @@ docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik-o
 
 Once running, you can access the infrastructure dashboard via Grafana:
 
-1.  Open **[http://localhost:3000](http://localhost:3000)** in your browser.
-2.  Login with default credentials:
-    *   **User**: `admin`
-    *   **Password**: `admin`
-3.  Navigate to **Explore** or create a new Dashboard.
-4.  Select `Prometheus` as the datasource.
-5.  Query for metrics starting with `esnode_` (e.g., `esnode_gpu_utilization_percent`, `esnode_node_power_watts`).
+3.  **Embedded in Opik**:
+    *   Navigate to **Infrastructure** in the Opik sidebar.
+    *   This view embeds the Grafana dashboard directly within the Opik application for a seamless "Single Pane of Glass" experience.
+
+    > **Note:** By default, Opik expects Grafana at `http://localhost:3000`. You can configure this by setting `VITE_GRAFANA_URL` in the frontend environment (e.g. `VITE_GRAFANA_URL=http://your-grafana-host:3000`).
+
+4.  **Direct Grafana Access**:
+    *   Open **[http://localhost:3000](http://localhost:3000)**.
+    *   Login with default credentials (`admin`/`admin`).
+    *   Explore dashboards or query metrics starting with `esnode_`.
 
 ## 🔧 Configuration
 
