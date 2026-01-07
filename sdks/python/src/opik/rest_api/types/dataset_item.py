@@ -12,7 +12,7 @@ from .json_node import JsonNode
 
 class DatasetItem(UniversalBaseModel):
     id: typing.Optional[str] = None
-    draft_item_id: typing.Optional[str] = None
+    dataset_item_id: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemSource

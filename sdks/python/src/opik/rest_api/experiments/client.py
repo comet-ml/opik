@@ -125,6 +125,7 @@ class ExperimentsClient:
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        dataset_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -152,6 +153,9 @@ class ExperimentsClient:
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
 
+        dataset_version_id : typing.Optional[str]
+            ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -176,6 +180,7 @@ class ExperimentsClient:
             experiment_scores=experiment_scores,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
+            dataset_version_id=dataset_version_id,
             request_options=request_options,
         )
         return _response.data
@@ -727,6 +732,7 @@ class AsyncExperimentsClient:
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        dataset_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -753,6 +759,9 @@ class AsyncExperimentsClient:
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
+
+        dataset_version_id : typing.Optional[str]
+            ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -781,6 +790,7 @@ class AsyncExperimentsClient:
             experiment_scores=experiment_scores,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
+            dataset_version_id=dataset_version_id,
             request_options=request_options,
         )
         return _response.data
