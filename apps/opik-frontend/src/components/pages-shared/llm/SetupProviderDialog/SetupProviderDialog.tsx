@@ -23,6 +23,8 @@ import {
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import { convertCustomProviderModels } from "@/lib/provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -35,9 +37,14 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   setOpen,
   onProviderAdded,
 }) => {
-  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
-    PROVIDER_TYPE.OPEN_AI,
+  const isOpenAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
   );
+
+  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
+    isOpenAIEnabled ? PROVIDER_TYPE.OPEN_AI : "",
+  );
+
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
