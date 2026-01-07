@@ -6,7 +6,7 @@ import { PROVIDER_TYPE } from "@/types/providers";
 export const CloudAIProviderDetailsFormSchema = z.object({
   provider: z.enum(
     Object.values(PROVIDER_TYPE).filter(
-      (v) => v !== PROVIDER_TYPE.VERTEX_AI && v !== PROVIDER_TYPE.CUSTOM,
+      (v) => v !== PROVIDER_TYPE.VERTEX_AI && v !== PROVIDER_TYPE.CUSTOM && v !== PROVIDER_TYPE.BEDROCK,
     ) as [string, ...string[]],
     {
       message: "Provider is required",
@@ -38,7 +38,7 @@ export const createCustomProviderDetailsFormSchema = (
 ) =>
   z
     .object({
-      provider: z.enum([PROVIDER_TYPE.CUSTOM], {
+      provider: z.enum([PROVIDER_TYPE.CUSTOM, PROVIDER_TYPE.BEDROCK], {
         message: "Provider is required",
       }),
       composedProviderType: z.string(),

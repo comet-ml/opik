@@ -27,16 +27,17 @@ public class ProviderApiKeyValidator
         var provider = providerApiKey.provider();
         var providerName = providerApiKey.providerName();
 
-        if (provider == LlmProvider.CUSTOM_LLM) {
+        if (provider == LlmProvider.CUSTOM_LLM || provider == LlmProvider.BEDROCK) {
             if (isBlank(providerName)) {
-                // For custom providers, provider_name is required and must not be blank
-                context.buildConstraintViolationWithTemplate("provider_name is required for custom LLM providers")
+                // For custom and Bedrock providers, provider_name is required and must not be blank
+                context.buildConstraintViolationWithTemplate(
+                        "provider_name is required for custom LLM and Bedrock providers")
                         .addPropertyNode("providerName")
                         .addConstraintViolation();
                 return false;
             }
 
-            // If custom provider, no need to validate api key
+            // If custom or Bedrock provider, no need to validate api key
             return true;
         }
 

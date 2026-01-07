@@ -43,6 +43,7 @@ import {
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
+import BedrockProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import {
@@ -117,7 +118,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const existingProviderNames = useMemo(() => {
     return configuredProvidersList
-      ?.filter((p) => p.provider === PROVIDER_TYPE.CUSTOM)
+      ?.filter((p) => p.provider === PROVIDER_TYPE.CUSTOM || p.provider === PROVIDER_TYPE.BEDROCK)
       .map((p) => p.provider_name)
       .filter(Boolean) as string[];
   }, [configuredProvidersList]);
@@ -182,17 +183,19 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     );
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
     const isCustom = provider === PROVIDER_TYPE.CUSTOM;
+    const isBedrock = provider === PROVIDER_TYPE.BEDROCK;
+    const isCustomLike = isCustom || isBedrock;
 
     const configuration =
-      isVertex || isCustom
+      isVertex || isCustomLike
         ? {
             location: isVertex ? location : undefined,
-            models: isCustom ? models : undefined,
+            models: isCustomLike ? models : undefined,
           }
         : undefined;
 
     const isEditingCustomProvider =
-      isCustom && !!(providerKey || calculatedProviderKey);
+      isCustomLike && !!(providerKey || calculatedProviderKey);
     const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
 
     if (providerKey || calculatedProviderKey) {
@@ -200,9 +203,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
-          base_url: isCustom ? url : undefined,
+          base_url: isCustomLike ? url : undefined,
           ...(configuration && { configuration }),
-          ...(isCustom && headers !== undefined && { headers }),
+          ...(isCustomLike && headers !== undefined && { headers }),
         },
       });
     } else if (provider) {
@@ -214,10 +217,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           apiKey,
           provider,
-          base_url: isCustom ? url : undefined,
-          provider_name: isCustom ? providerName : undefined,
+          base_url: isCustomLike ? url : undefined,
+          provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
-          ...(isCustom && headers !== undefined && { headers }),
+          ...(isCustomLike && headers !== undefined && { headers }),
         },
       });
     }
@@ -266,6 +269,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
       return <VertexAIProviderDetails form={form} />;
+    }
+
+    if (provider === PROVIDER_TYPE.BEDROCK) {
+      return <BedrockProviderDetails form={form} isEdit={isEdit} />;
     }
 
     if (provider === PROVIDER_TYPE.CUSTOM) {

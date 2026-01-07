@@ -59,8 +59,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
-        // For custom LLM providers, add provider_name to configuration if present
-        if (providerConfig.provider() == LlmProvider.CUSTOM_LLM
+        // For custom LLM providers (including Bedrock), add provider_name to configuration if present
+        if ((providerConfig.provider() == LlmProvider.CUSTOM_LLM || providerConfig.provider() == LlmProvider.BEDROCK)
                 && StringUtils.isNotBlank(providerConfig.providerName())) {
             configuration = new HashMap<>(configuration);
             configuration.put("provider_name", providerConfig.providerName());

@@ -7,6 +7,7 @@ export enum PROVIDER_TYPE {
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
   CUSTOM = "custom-llm",
+  BEDROCK = "bedrock",
   OPIK_FREE = "opik-free",
 }
 
