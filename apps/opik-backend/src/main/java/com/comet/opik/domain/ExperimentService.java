@@ -495,7 +495,7 @@ public class ExperimentService {
                 }).subscribeOn(Schedulers.boundedElastic())
                         .onErrorResume(e -> {
                             if (e instanceof NotFoundException) {
-                                log.warn("Dataset version not found: '{}'", e.getMessage());
+                                log.warn("Dataset version not found: '{}'", e.getMessage(), e);
                                 return Mono.error(new ClientErrorException("Dataset version not found",
                                         Response.Status.CONFLICT));
                             }
