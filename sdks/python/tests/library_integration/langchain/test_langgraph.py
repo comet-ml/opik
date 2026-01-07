@@ -267,7 +267,9 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
     graph_builder.add_edge("chatbot_with_config_passed", END)
 
     graph = graph_builder.compile()
-    input = {"messages": [HumanMessage(content="Tell a short joke?")]}
+    input = {
+        "messages": [HumanMessage(content="Tell a short joke?", id="test-message-id")]
+    }
     _ = graph.invoke(
         input=input,
         config={"callbacks": [opik_tracer]},
@@ -358,7 +360,9 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
             config={"callbacks": [opik_tracer]},
         )
 
-    input = {"messages": [HumanMessage(content="Tell a short joke?")]}
+    input = {
+        "messages": [HumanMessage(content="Tell a short joke?", id="test-message-id-2")]
+    }
     result = invoke_graph_from_tracked_function(input)
 
     expected_input = jsonable_encoder.encode(input)
@@ -505,9 +509,23 @@ def test_langgraph__node_returning_command__output_captured_correctly(
     assert len(node_a_span.output["messages"]) == 1
     assert "Node A answer" in str(node_a_span.output["messages"][0])
 
-    assert "messages" in node_b_span.output
-    assert len(node_b_span.output["messages"]) == 1
-    assert "Node B answer" in str(node_b_span.output["messages"][0])
+    # node_b_command returns a Command object, so output is wrapped
+    # Check if the output contains either direct messages or wrapped in Command structure
+    if "messages" in node_b_span.output:
+        # Direct output structure
+        assert len(node_b_span.output["messages"]) == 1
+        assert "Node B answer" in str(node_b_span.output["messages"][0])
+    elif "output" in node_b_span.output and "update" in node_b_span.output["output"]:
+        # Wrapped Command structure
+        assert "messages" in node_b_span.output["output"]["update"]
+        assert len(node_b_span.output["output"]["update"]["messages"]) == 1
+        assert "Node B answer" in str(
+            node_b_span.output["output"]["update"]["messages"][0]
+        )
+    else:
+        raise AssertionError(
+            f"Unexpected output structure for node_b_span: {node_b_span.output}"
+        )
 
     assert "messages" in node_c_span.output
     assert len(node_c_span.output["messages"]) == 1
