@@ -55,6 +55,11 @@ SkipErrorCallback = Callable[[str], bool]
 # due to a handled/ignored error during execution.
 ERROR_SKIPPED_OUTPUTS = {"warning": "Error output skipped by skip_error_callback."}
 
+# Constants for LangGraph interrupt/resume functionality
+LANGGRAPH_INTERRUPT_OUTPUT_KEY = "__interrupt__"
+LANGGRAPH_RESUME_INPUT_KEY = "__resume__"
+LANGGRAPH_INTERRUPT_METADATA_KEY = "_langgraph_interrupt"
+
 
 class TrackRootRunResult(NamedTuple):
     new_trace_data: Optional[trace.TraceData]
@@ -307,8 +312,8 @@ class OpikTracer(BaseTracer):
         if error_str is not None:
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
             if interrupt_value := _parse_graph_interrupt_value(error_str):
-                outputs = {"__interrupt__": interrupt_value}
-                trace_additional_metadata["_langgraph_interrupt"] = True
+                outputs = {LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value}
+                trace_additional_metadata[LANGGRAPH_INTERRUPT_METADATA_KEY] = True
                 # Don't set error_info - this is not an error
             elif not self._should_skip_error(error_str):
                 error_info = ErrorInfoDict(
@@ -359,21 +364,21 @@ class OpikTracer(BaseTracer):
         elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
             input_value = trace_data.input.get("input")
             if resume_value := _extract_resume_value_from_command(input_value):
-                trace_data.input = {"__resume__": resume_value}
+                trace_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
         for _, span_data in self._span_data_map.items():
             if (
                 span_data.trace_id == trace_data.id
                 and span_data.metadata is not None
-                and span_data.metadata.get("_langgraph_interrupt") is True
+                and span_data.metadata.get(LANGGRAPH_INTERRUPT_METADATA_KEY) is True
             ):
                 # Use the interrupt output from the child span
                 outputs = span_data.output
                 # Also propagate the interrupt metadata to trace
                 if trace_additional_metadata is None:
                     trace_additional_metadata = {}
-                trace_additional_metadata["_langgraph_interrupt"] = True
+                trace_additional_metadata[LANGGRAPH_INTERRUPT_METADATA_KEY] = True
                 break
 
         if trace_additional_metadata:
@@ -716,7 +721,7 @@ class OpikTracer(BaseTracer):
             elif isinstance(span_data.input, dict):
                 input_value = span_data.input.get("input")
                 if resume_value := _extract_resume_value_from_command(input_value):
-                    span_data.input = {"__resume__": resume_value}
+                    span_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
             filtered_output, additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
@@ -773,8 +778,8 @@ class OpikTracer(BaseTracer):
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
             if interrupt_value := _parse_graph_interrupt_value(error_str):
                 span_data.init_end_time().update(
-                    metadata={"_langgraph_interrupt": True},
-                    output={"__interrupt__": interrupt_value},
+                    metadata={LANGGRAPH_INTERRUPT_METADATA_KEY: True},
+                    output={LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value},
                 )
             # Don't set error_info - this is not an error
             elif self._should_skip_error(error_str):

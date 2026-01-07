@@ -13,6 +13,9 @@ import opik
 from opik.integrations.langchain import (
     OpikTracer,
     extract_current_langgraph_span_data,
+    LANGGRAPH_INTERRUPT_OUTPUT_KEY,
+    LANGGRAPH_RESUME_INPUT_KEY,
+    LANGGRAPH_INTERRUPT_METADATA_KEY,
 )
 from opik import jsonable_encoder, context_storage
 from opik.api_objects import span, trace
@@ -1194,7 +1197,7 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
 
     # First invocation - will hit the interrupt
     first_result = app.invoke(initial_input, config=config)
-    assert "__interrupt__" in first_result
+    assert LANGGRAPH_INTERRUPT_OUTPUT_KEY in first_result
 
     tracer.flush()
 
@@ -1213,9 +1216,9 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
         id=ANY_BUT_NONE,
         name="LangGraph",
         input=initial_input,
-        output=ANY_DICT.containing({"__interrupt__": ANY_STRING}),
+        output=ANY_DICT.containing({LANGGRAPH_INTERRUPT_OUTPUT_KEY: ANY_STRING}),
         metadata=ANY_DICT.containing(
-            {"created_from": "langchain", "_langgraph_interrupt": True}
+            {"created_from": "langchain", LANGGRAPH_INTERRUPT_METADATA_KEY: True}
         ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -1250,9 +1253,14 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                 id=ANY_BUT_NONE,
                 name="provide_options",
                 input=ANY_DICT,
-                output=ANY_DICT.containing({"__interrupt__": ANY_STRING}),
+                output=ANY_DICT.containing(
+                    {LANGGRAPH_INTERRUPT_OUTPUT_KEY: ANY_STRING}
+                ),
                 metadata=ANY_DICT.containing(
-                    {"created_from": "langchain", "_langgraph_interrupt": True}
+                    {
+                        "created_from": "langchain",
+                        LANGGRAPH_INTERRUPT_METADATA_KEY: True,
+                    }
                 ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
@@ -1268,7 +1276,9 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
     EXPECTED_SECOND_TRACE = TraceModel(
         id=ANY_BUT_NONE,
         name="LangGraph",
-        input={"__resume__": "1"},  # Resume value should be captured as input
+        input={
+            LANGGRAPH_RESUME_INPUT_KEY: "1"
+        },  # Resume value should be captured as input
         output=ANY_DICT.containing(
             {"response": "Here's the weather information you requested."}
         ),
