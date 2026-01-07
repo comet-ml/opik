@@ -492,7 +492,15 @@ public class ExperimentService {
                     log.info("Using validated dataset version ID '{}' for experiment on dataset '{}'",
                             version.id(), datasetId);
                     return version.id();
-                }).subscribeOn(Schedulers.boundedElastic());
+                }).subscribeOn(Schedulers.boundedElastic())
+                        .onErrorResume(e -> {
+                            if (e instanceof NotFoundException) {
+                                log.warn("Dataset version not found: '{}'", e.getMessage());
+                                return Mono.error(new ClientErrorException("Dataset version not found",
+                                        Response.Status.CONFLICT));
+                            }
+                            return Mono.error(e);
+                        });
             }
 
             // Case 2: No version specified - use latest version

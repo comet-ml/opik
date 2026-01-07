@@ -1115,7 +1115,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             FROM dataset_item_versions
             WHERE id IN :datasetItemRowIds
-            AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             """;
@@ -2254,16 +2253,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_dataset_item_workspace");
 
-            return makeMonoContextAware((userName, workspaceId) -> {
-                statement.bind("workspace_id", workspaceId);
-
-                return Flux.from(statement.execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
-                                row.get("workspace_id", String.class),
-                                UUID.fromString(row.get("id", String.class)))))
-                        .collectList()
-                        .doFinally(signalType -> endSegment(segment));
-            });
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
+                            row.get("workspace_id", String.class),
+                            UUID.fromString(row.get("id", String.class)))))
+                    .collectList()
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 
