@@ -5655,7 +5655,20 @@ class DatasetsResourceTest {
 
             // Creating 5 different experiment ids
             var expectedDatasetItems = datasetItemBatch.items().subList(0, 4).reversed();
-            var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
+
+            // Create actual Experiment records for versioning support and collect their IDs
+            var experimentIds = IntStream.range(0, 5)
+                    .mapToObj(__ -> {
+                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                                .datasetId(datasetId)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
+                                .promptVersion(null)
+                                .promptVersions(null)
+                                .build();
+                        return experimentResourceClient.create(experiment, apiKey, workspaceName);
+                    })
+                    .toList();
 
             // Dataset items 0 and 1 cover the general case.
             // Per each dataset item there are 10 experiment items, so 2 experiment items per each of the 5 experiments.
@@ -6054,8 +6067,20 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatchWithImage, workspaceName, apiKey);
 
-            // Creating 5 different experiment ids
-            var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
+            // Create actual Experiment records for versioning support and collect their IDs
+            var experimentIds = IntStream.range(0, 5)
+                    .mapToObj(__ -> {
+                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                                .datasetId(datasetId)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
+                                .promptVersion(null)
+                                .promptVersions(null)
+                                .build();
+                        return experimentResourceClient.create(experiment, apiKey, workspaceName);
+                    })
+                    .toList();
+
             List<ExperimentItem> experimentItems = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentIds.get(i))
@@ -6260,7 +6285,15 @@ class DatasetsResourceTest {
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
-            UUID experimentId = GENERATOR.generate();
+            // Create actual Experiment record for versioning support
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetId(datasetId)
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+            UUID experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
