@@ -1,5 +1,6 @@
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { ProjectStatsCardWidget } from "@/types/dashboard";
+import { getStaticMetrics } from "./metrics";
 
 const DEFAULT_TITLE = "Project statistics";
 const FEEDBACK_SCORE_PREFIX = "feedback_scores.";
@@ -53,9 +54,13 @@ const calculateProjectStatsCardTitle = (
 };
 
 export const widgetHelpers = {
-  getDefaultConfig: () => ({
-    source: TRACE_DATA_TYPE.traces,
-    metric: "trace_count",
-  }),
+  getDefaultConfig: () => {
+    const traceMetrics = getStaticMetrics(TRACE_DATA_TYPE.traces);
+    const defaultMetric = traceMetrics[0]?.value || "trace_count";
+    return {
+      source: TRACE_DATA_TYPE.traces,
+      metric: defaultMetric,
+    };
+  },
   calculateTitle: calculateProjectStatsCardTitle,
 };
