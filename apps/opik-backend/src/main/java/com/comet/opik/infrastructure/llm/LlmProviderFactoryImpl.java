@@ -146,14 +146,20 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
         return llmProviderApiKeyService.find(workspaceId).content().stream()
                 .filter(providerApiKey -> {
-                    // Match provider type
-                    if (!llmProvider.equals(providerApiKey.provider())) {
-                        return false;
+                    // For custom LLMs and Bedrock, match the model against configured models
+                    // Both use the same "custom-llm/" prefix for models
+                    if (llmProvider == LlmProvider.CUSTOM_LLM) {
+                        // Match against both CUSTOM_LLM and BEDROCK providers since they share the model prefix
+                        if (providerApiKey.provider() != LlmProvider.CUSTOM_LLM
+                                && providerApiKey.provider() != LlmProvider.BEDROCK) {
+                            return false;
+                        }
+                        return isModelConfiguredForProvider(model, providerApiKey);
                     }
 
-                    // For custom LLMs, match the model against configured models
-                    if (llmProvider == LlmProvider.CUSTOM_LLM) {
-                        return isModelConfiguredForProvider(model, providerApiKey);
+                    // Match provider type for non-custom providers
+                    if (!llmProvider.equals(providerApiKey.provider())) {
+                        return false;
                     }
 
                     return true;
