@@ -29,6 +29,7 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
             "prompt_versions",
             core.serialization.list(PromptVersionLinkWrite).optional(),
         ),
+        datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
     });
 
 export declare namespace ExperimentWrite {
@@ -43,5 +44,6 @@ export declare namespace ExperimentWrite {
         experiment_scores?: ExperimentScoreWrite.Raw[] | null;
         prompt_version?: PromptVersionLinkWrite.Raw | null;
         prompt_versions?: PromptVersionLinkWrite.Raw[] | null;
+        dataset_version_id?: string | null;
     }
 }

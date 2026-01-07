@@ -1450,6 +1450,12 @@ paths:
       summary: Create/update dataset items
       description: Create/update dataset items based on dataset item id
       operationId: createOrUpdateDatasetItems
+      parameters:
+      - name: respond_with_latest_version
+        in: query
+        schema:
+          type: boolean
+          default: false
       requestBody:
         content:
           application/json:
@@ -1458,6 +1464,12 @@ paths:
       responses:
         "204":
           description: No content
+        "200":
+          description: Dataset version summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersionSummary"
   /v1/private/datasets/items/from-csv:
     post:
       tags:
@@ -8901,7 +8913,7 @@ components:
         id:
           type: string
           format: uuid
-        draft_item_id:
+        dataset_item_id:
           type: string
           format: uuid
           readOnly: true
@@ -9436,7 +9448,7 @@ components:
         id:
           type: string
           format: uuid
-        draft_item_id:
+        dataset_item_id:
           type: string
           format: uuid
           readOnly: true
@@ -9828,7 +9840,7 @@ components:
         id:
           type: string
           format: uuid
-        draft_item_id:
+        dataset_item_id:
           type: string
           format: uuid
           readOnly: true
@@ -10018,6 +10030,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        dataset_version:
+          type: string
     DatasetUpdate:
       required:
       - name
@@ -10211,6 +10225,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        dataset_version_id:
+          type: string
+          description: "ID of the dataset version this experiment is linked to. If\
+            \ not provided at creation, experiment will be automatically linked to\
+            \ the latest version."
+          format: uuid
+        dataset_version_summary:
+          $ref: "#/components/schemas/DatasetVersionSummary"
     ExperimentScore:
       required:
       - name
@@ -10300,6 +10322,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink_Write"
+        dataset_version_id:
+          type: string
+          description: "ID of the dataset version this experiment is linked to. If\
+            \ not provided at creation, experiment will be automatically linked to\
+            \ the latest version."
+          format: uuid
     JsonListString_Write:
       type: object
       anyOf:
@@ -11039,6 +11067,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink_Public"
+        dataset_version_id:
+          type: string
+          description: "ID of the dataset version this experiment is linked to. If\
+            \ not provided at creation, experiment will be automatically linked to\
+            \ the latest version."
+          format: uuid
+        dataset_version_summary:
+          $ref: "#/components/schemas/DatasetVersionSummary_Public"
     JsonListString_Public:
       type: object
       anyOf:

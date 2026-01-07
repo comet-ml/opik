@@ -45,6 +45,7 @@ public class OpenTelemetryMappingRule {
         PROVIDER, // Attribute sets the provider field
         USAGE, // Attribute contributes to usage map
         TAGS, // Attribute contributes to tag set
+        THREAD_ID, // Attribute sets the threadId for trace grouping (e.g., gen_ai.conversation.id)
         DROP // Attribute should be ignored
     }
 }

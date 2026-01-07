@@ -131,6 +131,37 @@ def test_evaluation__equals():
     )
 
 
+def test_evaluation__equals_with_numeric_inputs():
+    """Test that Equals metric handles numeric inputs by converting to strings."""
+    metric = equals.Equals(track=False)
+
+    # Integer to integer comparison
+    assert metric.score(output=42, reference=42) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+    assert metric.score(output=42, reference=43) == ScoreResult(
+        name=metric.name, value=0.0, reason=None, metadata=None
+    )
+
+    # Float to float comparison
+    assert metric.score(output=3.14, reference=3.14) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+    # Integer to string comparison (should match when string representations are equal)
+    assert metric.score(output=42, reference="42") == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+    assert metric.score(output="42", reference=42) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+    # Mixed types that don't match
+    assert metric.score(output=42, reference="forty-two") == ScoreResult(
+        name=metric.name, value=0.0, reason=None, metadata=None
+    )
+
+
 def test_evaluation__regex_match():
     # everything that ends with 'metric'
     metric_param = ".+metric$"

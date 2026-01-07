@@ -21,4 +21,6 @@ export interface ExperimentWrite {
     experimentScores?: OpikApi.ExperimentScoreWrite[];
     promptVersion?: OpikApi.PromptVersionLinkWrite;
     promptVersions?: OpikApi.PromptVersionLinkWrite[];
+    /** ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version. */
+    datasetVersionId?: string;
 }
