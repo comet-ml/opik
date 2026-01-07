@@ -2096,7 +2096,7 @@ class DatasetVersionResourceTest {
 
         @Test
         @DisplayName("Error: Create experiment with non-existent version ID")
-        void createExperiment_whenInvalidVersionId_thenNotFound() {
+        void createExperiment_whenInvalidVersionId_thenConflict() {
             // given
             var datasetName = UUID.randomUUID().toString();
             var datasetId = createDataset(datasetName);
@@ -2110,15 +2110,15 @@ class DatasetVersionResourceTest {
                     .datasetVersionId(nonExistentVersionId)
                     .build();
 
-            // then - should fail with 404
+            // then - should fail with 409 (aligned with legacy behavior)
             try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
             }
         }
 
         @Test
         @DisplayName("Error: Create experiment with version ID from different dataset")
-        void createExperiment_whenVersionFromDifferentDataset_thenNotFound() {
+        void createExperiment_whenVersionFromDifferentDataset_thenConflict() {
             // given - create two datasets with versions
             var dataset1Name = UUID.randomUUID().toString();
             var dataset1Id = createDataset(dataset1Name);
@@ -2134,9 +2134,9 @@ class DatasetVersionResourceTest {
                     .datasetVersionId(version1.id())
                     .build();
 
-            // then - should fail with 404 (version doesn't belong to dataset2)
+            // then - should fail with 409 (aligned with legacy behavior - version doesn't belong to dataset2)
             try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
             }
         }
 
