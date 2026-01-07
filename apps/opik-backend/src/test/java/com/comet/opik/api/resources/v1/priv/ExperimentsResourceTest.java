@@ -5782,8 +5782,7 @@ class ExperimentsResourceTest {
             return java.util.stream.Stream.of(
                     Arguments.of(Set.of("tag1", "tag2", "tag3"), Set.of("tag1", "tag2", "tag3")),
                     Arguments.of(Set.of(), null),
-                    Arguments.of(null, null)
-            );
+                    Arguments.of(null, null));
         }
 
         @Test
