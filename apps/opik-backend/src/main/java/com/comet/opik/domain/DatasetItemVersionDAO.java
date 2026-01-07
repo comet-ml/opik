@@ -1217,6 +1217,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>,
+            experiment_version_mapping AS (
+                SELECT
+                    ei.id AS experiment_item_id,
+                    ei.experiment_id,
+                    ei.dataset_item_id,
+                    COALESCE(nullIf(e.dataset_version_id, ''), :versionId) AS resolved_version_id
+                FROM experiment_items_scope ei
+                LEFT JOIN experiments e ON e.id = ei.experiment_id AND e.workspace_id = :workspace_id
+            ),
+            dataset_items_by_version AS (
+                SELECT
+                    div.id,
+                    div.dataset_item_id,
+                    evm.resolved_version_id
+                FROM dataset_item_versions div
+                INNER JOIN experiment_version_mapping evm ON evm.dataset_item_id = div.id
+                WHERE div.workspace_id = :workspace_id
+                AND div.dataset_id = :datasetId
+                AND div.dataset_version_id = evm.resolved_version_id
+                ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
+                LIMIT 1 BY div.id
+            ),
             experiment_items_filtered AS (
                 SELECT
                     ei.id,
@@ -1224,15 +1246,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     ei.dataset_item_id,
                     ei.trace_id
                 FROM experiment_items ei
+                INNER JOIN dataset_items_by_version dibv ON dibv.id = ei.dataset_item_id
                 WHERE ei.workspace_id = :workspace_id
-                AND ei.dataset_item_id IN (
-                    SELECT id FROM dataset_item_versions
-                    WHERE workspace_id = :workspace_id
-                    AND dataset_id = :datasetId
-                    AND dataset_version_id = :versionId
-                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
                 <if(experiment_ids)>
                 AND ei.experiment_id IN :experiment_ids
                 <endif>
