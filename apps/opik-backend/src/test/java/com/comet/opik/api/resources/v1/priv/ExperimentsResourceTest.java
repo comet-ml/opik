@@ -5767,15 +5767,7 @@ class ExperimentsResourceTest {
 
             // then
             var expectedExperiment = expectedTags != null ? experiment : experiment.toBuilder().tags(null).build();
-            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-
-            if (expectedTags != null) {
-                assertThat(retrievedExperiment.tags())
-                        .isNotNull()
-                        .containsExactlyInAnyOrderElementsOf(expectedTags);
-            } else {
-                assertThat(retrievedExperiment.tags()).isNullOrEmpty();
-            }
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         private static java.util.stream.Stream<Arguments> createExperimentTagsProvider() {
@@ -5807,11 +5799,7 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .tags(updatedTags)
                     .build();
-            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags())
-                    .isNotNull()
-                    .containsExactlyInAnyOrderElementsOf(updatedTags)
-                    .doesNotContainAnyElementsOf(initialTags);
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5835,8 +5823,7 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .tags(null)
                     .build();
-            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags()).isNullOrEmpty();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5862,10 +5849,7 @@ class ExperimentsResourceTest {
                     .name("Updated Name")
                     .tags(initialTags)
                     .build();
-            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags())
-                    .isNotNull()
-                    .containsExactlyInAnyOrderElementsOf(initialTags);
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5891,10 +5875,7 @@ class ExperimentsResourceTest {
                     .name("New Name")
                     .tags(initialTags)
                     .build();
-            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags())
-                    .isNotNull()
-                    .containsExactlyInAnyOrderElementsOf(initialTags);
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5932,13 +5913,7 @@ class ExperimentsResourceTest {
                     .type(ExperimentType.TRIAL)
                     .status(ExperimentStatus.RUNNING)
                     .build();
-            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedExperiment.tags())
-                    .isNotNull()
-                    .containsExactlyInAnyOrderElementsOf(updatedTags);
-            assertThat(retrievedExperiment.name()).isEqualTo("Updated Name");
-            assertThat(retrievedExperiment.type()).isEqualTo(ExperimentType.TRIAL);
-            assertThat(retrievedExperiment.status()).isEqualTo(ExperimentStatus.RUNNING);
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5965,13 +5940,9 @@ class ExperimentsResourceTest {
             var experimentId3 = experimentResourceClient.create(experiment3, API_KEY, TEST_WORKSPACE);
 
             // then - verify each experiment has its own tags
-            var retrieved1 = getAndAssert(experimentId1, experiment1, TEST_WORKSPACE, API_KEY);
-            var retrieved2 = getAndAssert(experimentId2, experiment2, TEST_WORKSPACE, API_KEY);
-            var retrieved3 = getAndAssert(experimentId3, experiment3, TEST_WORKSPACE, API_KEY);
-
-            assertThat(retrieved1.tags()).containsExactlyInAnyOrderElementsOf(tags1);
-            assertThat(retrieved2.tags()).containsExactlyInAnyOrderElementsOf(tags2);
-            assertThat(retrieved3.tags()).containsExactlyInAnyOrderElementsOf(tags3);
+            getAndAssert(experimentId1, experiment1, TEST_WORKSPACE, API_KEY);
+            getAndAssert(experimentId2, experiment2, TEST_WORKSPACE, API_KEY);
+            getAndAssert(experimentId3, experiment3, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -5992,8 +5963,9 @@ class ExperimentsResourceTest {
             experimentResourceClient.updateExperiment(experimentId, firstUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
-            // then - verify first update
-            var afterFirstUpdate = getAndAssert(experimentId, experiment.toBuilder().tags(firstUpdateTags).build(),
+            // then - verify the first update
+            var expectedExperiment = experiment.toBuilder().tags(firstUpdateTags).build();
+            var afterFirstUpdate = getAndAssert(experimentId, expectedExperiment,
                     TEST_WORKSPACE, API_KEY);
             assertThat(afterFirstUpdate.tags()).containsExactlyInAnyOrderElementsOf(firstUpdateTags);
 
@@ -6005,13 +5977,9 @@ class ExperimentsResourceTest {
             experimentResourceClient.updateExperiment(experimentId, secondUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
-            // then - verify second update (should replace first update tags)
-            var afterSecondUpdate = getAndAssert(experimentId, experiment.toBuilder().tags(secondUpdateTags).build(),
-                    TEST_WORKSPACE, API_KEY);
-            assertThat(afterSecondUpdate.tags())
-                    .containsExactlyInAnyOrderElementsOf(secondUpdateTags)
-                    .doesNotContainAnyElementsOf(firstUpdateTags)
-                    .doesNotContainAnyElementsOf(initialTags);
+            // then - verify the second update (should replace first update tags)
+            expectedExperiment = experiment.toBuilder().tags(secondUpdateTags).build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
     }
 }
