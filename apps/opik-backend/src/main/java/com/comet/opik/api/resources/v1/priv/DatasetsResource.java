@@ -16,7 +16,6 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
@@ -33,7 +32,6 @@ import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
-import com.comet.opik.domain.DatasetVersionMapper;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
@@ -429,13 +427,11 @@ public class DatasetsResource {
     @Path("/items")
     @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = "Create/update dataset items based on dataset item id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
-            @ApiResponse(responseCode = "200", description = "Dataset version summary", content = @Content(schema = @Schema(implementation = DatasetVersionSummary.class))),
     })
     @RateLimited
     public Response createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
-                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch,
-            @QueryParam("respond_with_latest_version") @DefaultValue("false") boolean respondWithLatestVersion) {
+                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch) {
 
         // Generate ids for items without ids before the retryable operation
         List<DatasetItem> items = batch.items().stream().map(item -> {
@@ -452,20 +448,13 @@ public class DatasetsResource {
 
         DatasetItemBatch batchWithIds = new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items);
 
-        DatasetVersion version = itemService.save(batchWithIds)
+        itemService.save(batchWithIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info("Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
                 batch.datasetId(), batch.datasetName(), batch.items().size(), workspaceId);
 
-        // If query parameter is set, versioning is enabled, and we have a version, return the summary
-        if (respondWithLatestVersion && featureFlags.isDatasetVersioningEnabled() && version != null) {
-            DatasetVersionSummary summary = DatasetVersionMapper.INSTANCE.toDatasetVersionSummary(version);
-            return Response.ok(summary).build();
-        }
-
-        // Default behavior: return 204 No Content
         return Response.noContent().build();
     }
 
