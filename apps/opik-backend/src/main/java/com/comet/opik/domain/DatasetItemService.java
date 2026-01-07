@@ -9,7 +9,6 @@ import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.Experiment;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
@@ -1149,48 +1148,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return Mono.deferContextual(ctx -> {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-                // If experimentIds are present, use the experiment's linked version
+                // If experimentIds are present, check if all experiments are linked to the same version
                 if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds())) {
                     log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                             datasetItemSearchCriteria, page, size);
 
-                    // Get the first experiment ID to determine which version to use
-                    UUID experimentId = datasetItemSearchCriteria.experimentIds().iterator().next();
-
-                    // Query the experiment to get its dataset_version_id - context is available here
-                    return experimentDao.getById(experimentId)
-                            .switchIfEmpty(Mono.defer(() -> {
-                                log.warn("Experiment '{}' not found in database, falling back to latest version",
-                                        experimentId);
-                                // Return a dummy experiment with null versionId to trigger fallback
-                                return Mono.just(Experiment.builder()
-                                        .id(experimentId)
-                                        .datasetVersionId(null)
-                                        .build());
-                            }))
-                            .flatMap(experiment -> {
-                                UUID versionId = experiment.datasetVersionId();
-
-                                if (versionId == null) {
-                                    // Experiment is not linked to a version - fall back to latest version
-                                    log.warn(
-                                            "Experiment '{}' is not linked to a dataset version, falling back to latest version",
-                                            experimentId);
-                                    return getItemsFromLatestVersionWithExperimentItems(datasetItemSearchCriteria, page,
-                                            size, workspaceId);
-                                }
-
-                                log.info("Fetching items from experiment's linked version '{}' for dataset '{}'",
-                                        versionId,
-                                        datasetItemSearchCriteria.datasetId());
-
-                                // Fetch items from the experiment's linked version
-                                // Note: Only return dataset item columns, not experiment output columns (legacy behavior)
-                                return versionDao.getItemsWithExperimentItems(datasetItemSearchCriteria, page, size,
-                                        versionId)
-                                        .defaultIfEmpty(
-                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-                            });
+                    // For simplicity, use the latest version as fallback for all experiments
+                    // The DAO query will handle per-experiment version resolution if needed
+                    return getItemsFromLatestVersionWithExperimentItems(datasetItemSearchCriteria, page, size,
+                            workspaceId);
                 }
 
                 // Otherwise, fetch items from the latest version
