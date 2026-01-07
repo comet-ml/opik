@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 agent-core = { path = "../agent-core" }
-esnode-orchestrator = { path = "../../ESNODE-Orchestrator" }
+
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 humantime = "2"

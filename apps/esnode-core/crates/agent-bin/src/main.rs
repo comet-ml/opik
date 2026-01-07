@@ -114,9 +114,7 @@ struct Cli {
     #[arg(long, env = "ESNODE_MANAGED_NODE_ID")]
     managed_node_id: Option<String>,
 
-    /// Enable ESNODE-Orchestrator (Autonomous features)
-    #[arg(long, env = "ESNODE_ENABLE_ORCHESTRATOR")]
-    pub enable_orchestrator: Option<bool>,
+
 
     /// Enable App/Model Awareness collector
     #[arg(long, env = "ESNODE_ENABLE_APP")]
@@ -298,15 +296,6 @@ fn load_config_file(path: &Path) -> Result<ConfigOverrides> {
 }
 
 fn cli_to_overrides(cli: &Cli) -> Result<ConfigOverrides> {
-    let orchestrator = if cli.enable_orchestrator.unwrap_or(false) {
-        Some(esnode_orchestrator::OrchestratorConfig {
-            enabled: true,
-            ..Default::default()
-        })
-    } else {
-        None
-    };
-
     Ok(ConfigOverrides {
         listen_address: cli.listen_address.clone(),
         scrape_interval: parse_duration(cli.scrape_interval.as_deref())?,
@@ -337,7 +326,7 @@ fn cli_to_overrides(cli: &Cli) -> Result<ConfigOverrides> {
         local_tsdb_retention_hours: cli.local_tsdb_retention_hours,
         local_tsdb_max_disk_mb: cli.local_tsdb_max_disk_mb,
         log_level: parse_log_level(cli.log_level.as_deref())?,
-        orchestrator,
+        orchestrator: None,
     })
 }
 
