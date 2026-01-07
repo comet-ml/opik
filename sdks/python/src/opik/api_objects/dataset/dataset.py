@@ -1,7 +1,17 @@
 import logging
 import functools
 import time
-from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING, Callable
+from typing import (
+    Optional,
+    Any,
+    List,
+    Dict,
+    Sequence,
+    Set,
+    TYPE_CHECKING,
+    Callable,
+    Iterator,
+)
 
 from opik.api_objects import rest_stream_parser
 from opik.rest_api import client as rest_api_client
@@ -342,6 +352,67 @@ class Dataset:
             )
 
         return results
+
+    @retry_decorator.opik_rest_retry
+    def __internal_api__stream_items_as_dataclasses__(
+        self,
+        nb_samples: Optional[int] = None,
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """
+        Stream dataset items as a generator instead of loading all at once.
+
+        This method yields dataset items one at a time, enabling evaluation to start
+        processing items before the entire dataset is downloaded. This is particularly
+        useful for large datasets with heavy payloads (images, videos, audio).
+
+        Args:
+            nb_samples: Maximum number of items to retrieve. If None, all items are streamed.
+
+        Yields:
+            DatasetItem objects one at a time
+
+        Note:
+            This method does not support filtering by dataset_item_ids. Use
+            __internal_api__get_items_as_dataclasses__() for that functionality.
+        """
+        last_retrieved_id: Optional[str] = None
+        should_retrieve_more_items = True
+        items_yielded = 0
+
+        while should_retrieve_more_items:
+            dataset_items = rest_stream_parser.read_and_parse_stream(
+                stream=self._rest_client.datasets.stream_dataset_items(
+                    dataset_name=self._name,
+                    last_retrieved_id=last_retrieved_id,
+                ),
+                item_class=dataset_item.DatasetItem,
+                nb_samples=nb_samples,
+            )
+
+            if len(dataset_items) == 0:
+                should_retrieve_more_items = False
+                break
+
+            for item in dataset_items:
+                last_retrieved_id = item.id
+
+                data_item_content = item.get_content().get("data", {})
+
+                reconstructed_item = dataset_item.DatasetItem(
+                    id=item.id,
+                    trace_id=item.trace_id,
+                    span_id=item.span_id,
+                    source=item.source,
+                    **data_item_content,
+                )
+
+                yield reconstructed_item
+                items_yielded += 1
+
+                # Stop retrieving if we have enough samples
+                if nb_samples is not None and items_yielded >= nb_samples:
+                    should_retrieve_more_items = False
+                    break
 
     def insert_from_json(
         self,

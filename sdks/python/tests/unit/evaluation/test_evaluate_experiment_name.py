@@ -30,15 +30,17 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
 ):
     """Test that experiment_name_prefix is correctly applied when creating an experiment."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-        ),
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+            ),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -87,15 +89,17 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
 ):
     """Test that when both experiment_name and experiment_name_prefix are provided, experiment_name takes precedence."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-        ),
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+            ),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -134,15 +138,17 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
 ):
     """Test that when only experiment_name_prefix is provided, a unique name is generated."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-        ),
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+            ),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -194,13 +200,15 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
 ):
     """Test that when neither experiment_name nor experiment_name_prefix is provided, None is passed to create_experiment."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1"),
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(id="dataset-item-id-1"),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -240,13 +248,13 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
 ):
     """Test that multiple calls with the same prefix generate different unique names."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1")
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [dataset_item.DatasetItem(id="dataset-item-id-1")]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -334,13 +342,13 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1")
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [dataset_item.DatasetItem(id="dataset-item-id-1")]
+    )
 
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock.Mock()
@@ -400,13 +408,13 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1")
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [dataset_item.DatasetItem(id="dataset-item-id-1")]
+    )
 
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock.Mock()
@@ -459,13 +467,13 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1")
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [dataset_item.DatasetItem(id="dataset-item-id-1")]
+    )
 
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock.Mock()
@@ -528,13 +536,13 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1")
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [dataset_item.DatasetItem(id="dataset-item-id-1")]
+    )
 
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock.Mock()
@@ -585,13 +593,13 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(id="dataset-item-id-1")
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [dataset_item.DatasetItem(id="dataset-item-id-1")]
+    )
 
     mock_create_experiment = mock.Mock()
     mock_get_experiment_url_by_id = mock.Mock()
