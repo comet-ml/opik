@@ -1528,6 +1528,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         }
     }
 
+    /**
+     * Helper method to bind search terms and filters to a statement.
+     * This encapsulates the repeated pattern of binding search and filter parameters.
+     *
+     * @param statement The R2DBC statement to bind parameters to
+     * @param criteria The search criteria containing search terms and filters
+     * @return The statement with all parameters bound
+     */
+    private Statement bindSearchAndFilters(@NonNull Statement statement, @NonNull DatasetItemSearchCriteria criteria) {
+        // Bind search terms if present
+        if (StringUtils.isNotBlank(criteria.search())) {
+            statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
+        }
+
+        // Bind filter parameters if present
+        if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
+            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+        }
+
+        return statement;
+    }
+
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull DatasetItemSearchCriteria criteria, int page, int size,
@@ -1624,19 +1649,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
                 }
 
-                // Bind search terms as array
-                if (StringUtils.isNotBlank(criteria.search())) {
-                    statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-                }
-
-                // Bind filter parameters if present
-                if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
-                    statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                }
+                // Bind search and filter parameters using helper method
+                statement = bindSearchAndFilters(statement, criteria);
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                         "select_dataset_item_versions_with_experiment_items");
@@ -1722,19 +1736,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
             }
 
-            // Bind search terms if present
-            if (StringUtils.isNotBlank(criteria.search())) {
-                statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-            }
-
-            // Bind filter parameters if present
-            if (criteria.filters() != null && !criteria.filters().isEmpty()) {
-                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
-                statement = FilterQueryBuilder.bind(statement, criteria.filters(),
-                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-            }
+            // Bind search and filter parameters using helper method
+            statement = bindSearchAndFilters(statement, criteria);
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                     "count_dataset_item_versions_with_experiment_filters");
