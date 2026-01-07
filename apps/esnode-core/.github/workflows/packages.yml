@@ -1,0 +1,34 @@
+name: packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-deb-rpm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-deb and cargo-rpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm rpm-build pkg-config libssl-dev
+          cargo install cargo-deb cargo-rpm
+      - name: Build release
+        run: cargo build -p agent-bin --release
+      - name: Build .deb
+        run: cargo deb -p agent-bin --no-build
+      - name: Build .rpm
+        run: cargo rpm build -p agent-bin
+      - name: Collect artifacts
+        run: |
+          mkdir -p public/distribution
+          cp target/debian/*.deb public/distribution/
+          cp target/release/rpmbuild/RPMS/x86_64/*.rpm public/distribution/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esnode-core-packages
+          path: public/distribution/*

@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "esnode-core.fullname" . }}
+  labels:
+    {{- include "esnode-core.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "esnode-core.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "esnode-core.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      hostPID: {{ .Values.hostPID }}
+      serviceAccountName: default
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: esnode-core
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--config"
+            - "/etc/esnode/esnode.toml"
+          securityContext:
+            privileged: {{ .Values.privileged }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: metrics
+              protocol: TCP
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/esnode
+            - name: tsdb
+              mountPath: {{ .Values.tsdb.mountPath }}
+            - name: devdir
+              mountPath: /dev
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "esnode-core.fullname" . }}-config
+        - name: tsdb
+          hostPath:
+            path: {{ .Values.tsdb.hostPath }}
+            type: DirectoryOrCreate
+        - name: devdir
+          hostPath:
+            path: /dev

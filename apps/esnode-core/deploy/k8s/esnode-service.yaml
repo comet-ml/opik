@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: esnode-core
+  namespace: default
+  labels:
+    app: esnode-core
+spec:
+  selector:
+    app: esnode-core
+  ports:
+  - port: 9100
+    targetPort: 9100
+    name: metrics
+  clusterIP: None # Headless service is often better for scraping individual pods via service discovery

@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  esnode-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${ESNODE_IMAGE:-your-dockerhub-username/esnode-core:0.1.0}
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+    privileged: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]

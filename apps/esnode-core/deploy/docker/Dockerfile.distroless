@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+
+# Stage 1: prepare a prebuilt binary (expected to be static/musl)
+FROM alpine:3.20 AS prep
+ARG ESNODE_BINARY=esnode-core
+WORKDIR /opt/esnode
+# Copy a prebuilt binary (or adjust to copy a tarball and extract)
+COPY ${ESNODE_BINARY} /opt/esnode/esnode-core
+RUN chmod +x /opt/esnode/esnode-core
+
+# Stage 2: tiny runtime image
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /esnode
+COPY --from=prep /opt/esnode/esnode-core /esnode/esnode-core
+EXPOSE 9100
+USER nonroot:nonroot
+ENTRYPOINT ["/esnode/esnode-core"]

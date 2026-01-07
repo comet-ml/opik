@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: esnode-config
+  namespace: default
+  labels:
+    app: esnode-core
+data:
+  esnode.toml: |
+    listen_address = "0.0.0.0:9100"
+    scrape_interval_seconds = 5
+
+    enable_cpu = true
+    enable_memory = true
+    enable_disk = true
+    enable_network = true
+    enable_gpu = true
+    enable_power = true
+    enable_gpu_mig = false
+    enable_gpu_events = false
+    enable_mcp = false
+    enable_app = false
+
+    # Local TSDB defaults to a writable path; override to host volume for persistence
+    enable_local_tsdb = true
+    local_tsdb_path = "/var/lib/esnode/tsdb"
+    local_tsdb_retention_hours = 48
+    local_tsdb_max_disk_mb = 2048
+
+    log_level = "info"
+
+    [orchestrator]
+    enabled = false
+    allow_public = false
+    token = ""

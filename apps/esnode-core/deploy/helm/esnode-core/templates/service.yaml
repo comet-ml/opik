@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "esnode-core.fullname" . }}
+  labels:
+    {{- include "esnode-core.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  clusterIP: {{ if eq .Values.service.type "ClusterIP" }}None{{ else }}{{- "" -}}{{ end }}
+  selector:
+    {{- include "esnode-core.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: metrics

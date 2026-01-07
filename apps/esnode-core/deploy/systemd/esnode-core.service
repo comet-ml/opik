@@ -1,0 +1,16 @@
+[Unit]
+# ESNODE | Source Available BUSL-1.1 | Copyright (c) 2024 Estimatedstocks AB
+Description=ESNODE-Core - GPU-aware host metrics
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/esnode-core daemon
+Environment=ESNODE_CONFIG=/etc/esnode/esnode.toml
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

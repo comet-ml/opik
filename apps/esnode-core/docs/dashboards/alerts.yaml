@@ -1,0 +1,35 @@
+groups:
+  - name: esnode-core-degradation
+    rules:
+      - alert: EsnodeDiskLatencyHigh
+        expr: esnode_disk_degradation_latency == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk latency degradation detected"
+          description: "Disk latency exceeded threshold on {{ $labels.device }} for 5m"
+      - alert: EsnodeNetworkRetransmissions
+        expr: esnode_network_degradation_retrans == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network retransmissions detected"
+          description: "Retransmissions observed on interface {{ $labels.iface }} (if available) for 5m"
+      - alert: EsnodeGpuThrottle
+        expr: esnode_gpu_degradation_throttle == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU throttling detected"
+          description: "Thermal or power throttling active on GPU {{ $labels.gpu }}"
+      - alert: EsnodeDegradationScoreHigh
+        expr: esnode_degradation_score >= 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple degradations detected"
+          description: "Aggregate degradation score is {{ $value }} across disk/network/swap"

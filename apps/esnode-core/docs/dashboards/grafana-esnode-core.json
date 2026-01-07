@@ -1,0 +1,66 @@
+{
+  "title": "ESNODE-Core Overview",
+  "schemaVersion": 36,
+  "version": 1,
+  "tags": ["esnode", "core"],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Load (1m)",
+      "targets": [
+        {
+          "expr": "esnode_load_avg_1m",
+          "legendFormat": "load_1m"
+        }
+      ],
+      "id": 1
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU Utilization",
+      "targets": [
+        {
+          "expr": "avg by (gpu) (esnode_gpu_utilization_percent)",
+          "legendFormat": "{{gpu}}"
+        }
+      ],
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk Latency (ms)",
+      "targets": [
+        {
+          "expr": "esnode_disk_io_avg_latency_ms",
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "Network Drops/ Retrans",
+      "targets": [
+        {
+          "expr": "esnode_network_drops_total",
+          "legendFormat": "drops"
+        },
+        {
+          "expr": "esnode_network_tcp_retrans_total",
+          "legendFormat": "retrans"
+        }
+      ],
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Degradation Score",
+      "targets": [
+        {
+          "expr": "esnode_degradation_score"
+        }
+      ],
+      "id": 5
+    }
+  ]
+}

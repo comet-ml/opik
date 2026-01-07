@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: esnode-core
+  namespace: default
+  labels:
+    app: esnode-core
+spec:
+  selector:
+    matchLabels:
+      app: esnode-core
+  template:
+    metadata:
+      labels:
+        app: esnode-core
+    spec:
+      hostNetwork: true
+      hostPID: true
+
+      serviceAccountName: default
+
+      containers:
+      - name: esnode-core
+        image: myregistry/esnode-core:0.1.0
+        imagePullPolicy: IfNotPresent
+
+        args:
+        - "--config"
+        - "/etc/esnode/esnode.toml"
+
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility,video"
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9100
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9100
+          initialDelaySeconds: 5
+          periodSeconds: 15
+
+        securityContext:
+          privileged: true # Needed for direct hardware access
+
+        ports:
+        - containerPort: 9100
+          name: metrics
+          protocol: TCP
+
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/esnode
+        - name: tsdb-storage
+          mountPath: /var/lib/esnode/tsdb
+        - name: dev-dir
+          mountPath: /dev
+
+      volumes:
+      - name: config-volume
+        configMap:
+          name: esnode-config
+      - name: tsdb-storage
+        hostPath:
+          path: /var/lib/esnode/tsdb
+          type: DirectoryOrCreate
+      - name: dev-dir
+        hostPath:
+          path: /dev

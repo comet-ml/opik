@@ -127,12 +127,7 @@ services:
     depends_on:
       - minio
     entrypoint: >
-      /bin/sh -c "
-      sleep 10s;
-      /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ;
-      /usr/bin/mc mb --ignore-existing s3/public;
-      /usr/bin/mc anonymous set download s3/public/;       
-      "
+      /bin/sh -c " sleep 10s; /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ; /usr/bin/mc mb --ignore-existing s3/public; /usr/bin/mc anonymous set download s3/public/;        "
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
@@ -305,11 +300,11 @@ services:
       dockerfile: Dockerfile
       args:
         OPIK_VERSION: ${OPIK_VERSION:-latest}
-    #   cache_from:
-    #     - alpine:latest
-    #     - nginx:1.29.3-alpine-otel
-    #     - node:20.19.5-alpine3.22
-    #     - type=local,src=./.cache
+      #   cache_from:
+      #     - alpine:latest
+      #     - nginx:1.29.3-alpine-otel
+      #     - node:20.19.5-alpine3.22
+      #     - type=local,src=./.cache
       # cache_to:
       #   - type=local,dest=./.cache
     hostname: frontend
@@ -339,8 +334,8 @@ services:
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
       # NGINX_EXTRA_ACCESS_LOG: access_log syslog:server=otel-collector:5140 logger-json;
       # NGINX_EXTRA_ERROR_LOG: error_log syslog:server=otel-collector:5140 error;
-      
-  # Jaeger - receives traces via OTLP
+
+      # Jaeger - receives traces via OTLP
   jaeger:
     image: jaegertracing/all-in-one:latest
     profiles:
@@ -348,8 +343,8 @@ services:
     hostname: jaeger
     ports:
       - "16686:16686" # UI
-      - "14317:4317"   # OTLP gRPC
-      - "14318:4318"   # OTLP HTTP
+      - "14317:4317" # OTLP gRPC
+      - "14318:4318" # OTLP HTTP
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     healthcheck:
@@ -363,7 +358,7 @@ services:
     profiles:
       - opik-otel
     hostname: otel-collector
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
       - ./otel_data:/otel_data
@@ -383,8 +378,54 @@ services:
       jaeger:
         condition: service_healthy
 
+  esnode-core:
+    image: esnode-core:latest
+    profiles:
+      - opik
+    build:
+      context: ../../apps/esnode-core
+      dockerfile: Dockerfile
+    hostname: esnode-core
+    privileged: true
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    environment:
+      - ESNODE_HOST_ROOT=/host/root
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles:
+      - opik-otel
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - esnode-core
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles:
+      - opik-otel
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 networks:
   default:
+
 
 volumes:
   clickhouse:

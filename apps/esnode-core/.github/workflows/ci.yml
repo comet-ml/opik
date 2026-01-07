@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [ main, test-builds ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Cargo test
+        run: cargo test --workspace --all-features
+
+  package-smoke:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install fpm deps
+        run: sudo apt-get update && sudo apt-get install -y rpm ruby ruby-dev rubygems build-essential && sudo gem install --no-document fpm
+      - name: Build release binary (host)
+        run: cargo build --release -p agent-bin
+      - name: Package (best-effort)
+        run: ESNODE_VERSION=${GITHUB_REF_NAME#v} scripts/dist/build-agent.sh || true

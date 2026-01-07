@@ -1,0 +1,193 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: build-and-package (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: esnode-core-linux-x86_64.tar.gz
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact: esnode-core-macos-aarch64.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: esnode-core-windows-x86_64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build (tests)
+        run: cargo test --workspace --locked --target ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package artifact (unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          tar czf artifacts/${{ matrix.artifact }} -C target/${{ matrix.target }}/release esnode-core LICENSE README.md
+
+      - name: Package artifact (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive -Path "target/${{ matrix.target }}/release/esnode-core.exe","LICENSE","README.md" -DestinationPath "artifacts/${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}
+
+  linux-packages:
+    name: linux-packages (tar/deb/rpm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cross toolchains (best-effort)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 || true
+      - name: Build release artifacts via script
+        env:
+          ESNODE_VERSION: ${{ github.ref_name }}
+        run: |
+          # Strip leading v if present
+          if [[ -n "${ESNODE_VERSION}" ]]; then
+            ESNODE_VERSION="${ESNODE_VERSION#v}"
+          fi
+          export ESNODE_VERSION
+          bash scripts/dist/esnode-core-release.sh
+      - name: Upload linux package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: public/distribution/releases/**
+
+  lint:
+    name: lint (fmt + clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+
+  release:
+    name: publish-release
+    needs:
+      - build
+      - linux-packages
+      - lint
+      - container-images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f -maxdepth 2 -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS.txt
+      - name: Create SBOM (CycloneDX)
+        run: |
+          cargo install cyclonedx-bom || true
+          # Generate SBOM for workspace (best-effort; ignore failure if tool unavailable)
+          if command -v cyclonedx-bom >/dev/null 2>&1; then
+            cyclonedx-bom -o artifacts/SBOM.json || true
+          fi
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*/*
+            artifacts/SHA256SUMS.txt
+            artifacts/SBOM.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container-images:
+    name: container-images (ghcr, dockerhub)
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME_GHCR: ghcr.io/esnode/esnode-core
+      IMAGE_NAME_DOCKERHUB: docker.io/esnode/esnode-core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare binaries for multi-arch context
+        run: |
+          set -euo pipefail
+          mkdir -p image-context
+          # Extract linux amd64 binary
+          tar -xzf artifacts/esnode-core-linux-x86_64.tar.gz -C image-context
+          mv image-context/esnode-core image-context/esnode-core-amd64
+          # Extract linux arm64 binary
+          tar -xzf artifacts/esnode-core-linux-arm64.tar.gz -C image-context
+          mv image-context/esnode-core image-context/esnode-core-arm64
+          # Copy Dockerfile
+          cp deploy/docker/Dockerfile.multi image-context/Dockerfile
+          ls -l image-context
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Login to Docker Hub (optional)
+        if: env.DOCKERHUB_TOKEN != ''
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+        run: |
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+      - name: Build and push multi-arch image to GHCR
+        run: |
+          TAG=${GITHUB_REF_NAME#refs/tags/}
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t "${IMAGE_NAME_GHCR}:${TAG}" \
+            -t "${IMAGE_NAME_GHCR}:latest" \
+            image-context \
+            --push
+      - name: Build and push multi-arch image to Docker Hub (optional)
+        if: env.DOCKERHUB_TOKEN != ''
+        run: |
+          TAG=${GITHUB_REF_NAME#refs/tags/}
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t "${IMAGE_NAME_DOCKERHUB}:${TAG}" \
+            -t "${IMAGE_NAME_DOCKERHUB}:latest" \
+            image-context \
+            --push

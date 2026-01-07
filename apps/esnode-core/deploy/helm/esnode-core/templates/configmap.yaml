@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "esnode-core.fullname" . }}-config
+  labels:
+    {{- include "esnode-core.labels" . | nindent 4 }}
+data:
+  esnode.toml: |
+    listen_address = "{{ .Values.config.listenAddress }}"
+    scrape_interval_seconds = {{ .Values.config.scrapeIntervalSeconds }}
+    enable_cpu = {{ .Values.config.enableCpu }}
+    enable_memory = {{ .Values.config.enableMemory }}
+    enable_disk = {{ .Values.config.enableDisk }}
+    enable_network = {{ .Values.config.enableNetwork }}
+    enable_gpu = {{ .Values.config.enableGpu }}
+    enable_power = {{ .Values.config.enablePower }}
+    enable_gpu_mig = {{ .Values.config.enableGpuMig }}
+    enable_gpu_events = {{ .Values.config.enableGpuEvents }}
+    enable_mcp = {{ .Values.config.enableMcp }}
+    enable_app = {{ .Values.config.enableApp }}
+    log_level = "{{ .Values.config.logLevel }}"
+    enable_local_tsdb = {{ .Values.tsdb.enabled }}
+    local_tsdb_path = "{{ .Values.tsdb.mountPath }}"
+    local_tsdb_retention_hours = {{ .Values.tsdb.retentionHours }}
+    local_tsdb_max_disk_mb = {{ .Values.tsdb.maxDiskMb }}
+
+    [orchestrator]
+    enabled = {{ .Values.config.orchestrator.enabled }}
+    allow_public = {{ .Values.config.orchestrator.allowPublic }}
+    token = "{{ .Values.config.orchestrator.token }}"

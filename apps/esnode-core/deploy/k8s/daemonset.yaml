@@ -1,0 +1,77 @@
+## ESNODE | Source Available BUSL-1.1 | Copyright (c) 2024 Estimatedstocks AB
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: esnode-core
+  namespace: monitoring
+  labels:
+    app: esnode-core
+spec:
+  selector:
+    matchLabels:
+      app: esnode-core
+  template:
+    metadata:
+      labels:
+        app: esnode-core
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      hostPID: true
+      containers:
+        - name: esnode-core
+          image: ghcr.io/your-org/esnode-core:v0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          ports:
+            - name: metrics
+              containerPort: 9100
+              hostPort: 9100
+          env:
+            - name: ESNODE_CONFIG
+              value: /etc/esnode/esnode.toml
+            - name: ESNODE_ENABLE_LOCAL_TSDB
+              value: "true"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility
+          volumeMounts:
+            - name: esnode-config
+              mountPath: /etc/esnode
+            - name: host-sys
+              mountPath: /sys
+              readOnly: true
+            - name: host-proc
+              mountPath: /proc
+              readOnly: true
+            - name: host-dev
+              mountPath: /dev
+            - name: nvidia-run
+              mountPath: /run/nvidia
+              readOnly: true
+            - name: nvidia-lib
+              mountPath: /usr/lib/nvidia
+              readOnly: true
+      volumes:
+        - name: esnode-config
+          configMap:
+            name: esnode-config
+        - name: host-sys
+          hostPath:
+            path: /sys
+        - name: host-proc
+          hostPath:
+            path: /proc
+        - name: host-dev
+          hostPath:
+            path: /dev
+        - name: nvidia-run
+          hostPath:
+            path: /run/nvidia
+        - name: nvidia-lib
+          hostPath:
+            path: /usr/lib/nvidia

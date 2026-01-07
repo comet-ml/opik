@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+
+# Minimal multi-arch runtime image.
+# Expects per-arch binaries in build context named:
+#   esnode-core-amd64
+#   esnode-core-arm64
+
+FROM gcr.io/distroless/static:nonroot
+ARG TARGETARCH
+WORKDIR /esnode
+COPY esnode-core-${TARGETARCH} /esnode/esnode-core
+EXPOSE 9100
+USER nonroot:nonroot
+ENTRYPOINT ["/esnode/esnode-core"]

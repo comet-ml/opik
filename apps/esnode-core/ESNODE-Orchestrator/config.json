@@ -1,0 +1,54 @@
+{
+  "devices": [
+    {
+      "id": "cpu0",
+      "kind": "cpu",
+      "peak_flops_tflops": 1.0,
+      "mem_gb": 32.0,
+      "power_watts_idle": 40.0,
+      "power_watts_max": 120.0,
+      "current_load": 0.2
+    },
+    {
+      "id": "gpu0",
+      "kind": "gpu",
+      "peak_flops_tflops": 80.0,
+      "mem_gb": 80.0,
+      "power_watts_idle": 60.0,
+      "power_watts_max": 350.0,
+      "current_load": 0.3
+    },
+    {
+      "id": "npu0",
+      "kind": "npu",
+      "peak_flops_tflops": 60.0,
+      "mem_gb": 32.0,
+      "power_watts_idle": 30.0,
+      "power_watts_max": 200.0,
+      "current_load": 0.1
+    }
+  ],
+  "tasks": [
+    {
+      "id": "embeddings_batch",
+      "est_flops": 5e13,
+      "est_bytes": 2e9,
+      "latency_class": "medium",
+      "preferred_kinds": ["gpu", "npu"]
+    },
+    {
+      "id": "realtime_scoring",
+      "est_flops": 1e12,
+      "est_bytes": 5e8,
+      "latency_class": "high",
+      "preferred_kinds": ["cpu", "gpu", "npu"]
+    },
+    {
+      "id": "offline_aggregation",
+      "est_flops": 1e14,
+      "est_bytes": 1e10,
+      "latency_class": "low",
+      "preferred_kinds": null
+    }
+  ]
+}

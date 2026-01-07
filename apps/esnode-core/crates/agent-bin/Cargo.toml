@@ -1,0 +1,43 @@
+# ESNODE | Source Available BUSL-1.1 | Copyright (c) 2024 Estimatedstocks AB
+[package]
+name = "agent-bin"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "esnode-core"
+path = "src/main.rs"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+esnode-orchestrator = { path = "../../ESNODE-Orchestrator" }
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+humantime = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+ratatui = { version = "0.26", default-features = false, features = ["crossterm"] }
+crossterm = "0.27"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+toml = "0.8"
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+
+[package.metadata.deb]
+name = "esnode-core"
+maintainer = "Estimatedstocks AB <support@estimatedstocks.com>"
+priority = "optional"
+section = "utils"
+revision = "1"
+depends = ["libssl3 | libssl", "adduser"]
+assets = [
+    ["target/release/esnode-core", "/usr/local/bin/esnode-core", "755"],
+    ["../../deploy/systemd/esnode-core.service", "/etc/systemd/system/esnode-core.service", "644"],
+]

@@ -1,0 +1,64 @@
+image:
+  repository: your-dockerhub-username/esnode-core
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  port: 9100
+  annotations: {}
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+hostNetwork: true
+hostPID: true
+privileged: true
+
+tsdb:
+  enabled: true
+  hostPath: /var/lib/esnode/tsdb
+  mountPath: /var/lib/esnode/tsdb
+  retentionHours: 48
+  maxDiskMb: 2048
+
+config:
+  listenAddress: "0.0.0.0:9100"
+  scrapeIntervalSeconds: 5
+  enableCpu: true
+  enableMemory: true
+  enableDisk: true
+  enableNetwork: true
+  enableGpu: true
+  enablePower: true
+  enableGpuMig: false
+  enableGpuEvents: false
+  enableMcp: false
+  enableApp: false
+  logLevel: info
+  orchestrator:
+    enabled: false
+    allowPublic: false
+    token: ""
+
+env:
+  - name: NVIDIA_VISIBLE_DEVICES
+    value: "all"
+  - name: NVIDIA_DRIVER_CAPABILITIES
+    value: "compute,utility,video"
+
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 15

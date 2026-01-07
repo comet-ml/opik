@@ -1,0 +1,13 @@
+target/
+public/
+deploy/k8s/
+deploy/systemd/
+external_sources/
+.git
+.github
+docs/
+scripts/
+*.tar.gz
+*.zip
+*.deb
+*.rpm

@@ -1,0 +1,19 @@
+[package]
+name = "esnode-orchestrator"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+sysinfo = "0.30"
+libc = "0.2"
+nix = { version = "0.27", features = ["signal"] }
+

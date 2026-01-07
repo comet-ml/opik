@@ -1,0 +1,48 @@
+# ESNODE | Source Available BUSL-1.1 | Copyright (c) 2024 Estimatedstocks AB
+[package]
+name = "agent-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "agent_core"
+path = "src/lib.rs"
+
+[features]
+default = ["gpu"]
+gpu = ["nvml-wrapper"]
+# Enable low-level NVML FFI (MIG/event helpers). Off by default to avoid link-time issues on hosts without NVML.
+gpu-nvml-ffi = ["nvml-wrapper-sys"]
+# Extended NVML FFI for NVSwitch/PCIe/event introspection (scaffolding only; guarded).
+gpu-nvml-ffi-ext = ["gpu-nvml-ffi"]
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.7"
+prometheus = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
+humantime-serde = "1"
+sysinfo = "0.29"
+thiserror = "1"
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread", "signal", "time", "fs", "io-util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+tokio-stream = "0.1"
+futures = "0.3"
+libc = "0.2"
+libloading = "0.8"
+
+[dependencies.nvml-wrapper]
+version = "0.10"
+optional = true
+
+[dependencies.nvml-wrapper-sys]
+version = "0.8"
+optional = true
+
+[dependencies.esnode-orchestrator]
+path = "../../ESNODE-Orchestrator"

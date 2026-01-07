@@ -1,0 +1,39 @@
+# ESNODE | Source Available BUSL-1.1 | Copyright (c) 2024 Estimatedstocks AB
+/docs/esnode.html
+/target
+**/*.rs.bk
+Cargo.lock
+.DS_Store
+
+# Release and distribution artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.deb
+*.rpm
+*.apk
+*.pkg
+*.dmg
+*.msi
+*.exe
+*.AppImage
+.env*
+
+# Installable bundles and local release dirs
+/dist/
+/release/
+/build/
+/artifacts/
+/bin/
+/public/distribution/
+/private/
+
+# Logs and temp outputs
+*.log
+/tmp/
+external_gpu_reference.md
+/external_sources

@@ -38,6 +38,10 @@ receivers:
         scrape_interval: 10s
         static_configs:
         - targets: ['0.0.0.0:8888']
+      - job_name: 'esnode-core'
+        scrape_interval: 10s
+        static_configs:
+        - targets: ['esnode-core:9100']
 
   jaeger:
     protocols:

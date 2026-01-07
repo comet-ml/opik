@@ -3,7 +3,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 INFRA_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-redis-1" "opik-minio-1" "opik-zookeeper-1")
 BACKEND_CONTAINERS=("opik-python-backend-1" "opik-backend-1")
-OPIK_CONTAINERS=("opik-frontend-1")
+OPIK_CONTAINERS=("opik-frontend-1" "opik-esnode-core-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 LOCAL_BE_CONTAINERS=("opik-python-backend-1" "opik-frontend-1")
 LOCAL_BE_FE_CONTAINERS=("opik-python-backend-1")

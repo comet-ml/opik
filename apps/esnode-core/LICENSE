@@ -1,0 +1,55 @@
+ESNODE Licensing Model — Business Source License 1.1 (BUSL-1.1)
+Version 1.0 — Approved by: Estimatedstocks AB
+
+Licensor: Estimatedstocks AB (“Licensor”)
+Licensed Work: ESNODE (including all source, binaries, and documentation in this repository)
+License Type: Business Source License 1.1, modified with ESNODE Additional Use Grant
+Change Date: 4 years after the date of your current copy of the Licensed Work
+Change License: Apache License 2.0 (applies automatically on the Change Date)
+
+1. License Rights
+   1.1 You may copy, modify, create derivative works of, and run the Licensed Work for your internal business purposes.
+   1.2 You may generate revenue using the Licensed Work on your own infrastructure (e.g., cost savings, internal services).
+   1.3 You may not offer the Licensed Work or derivative works as a hosted service, SaaS, or commercial product.
+   1.4 You may not sell, resell, rebrand, or redistribute official or modified binaries.
+   1.5 You may not distribute derivative works or forks that compete with ESNODE or use the ESNODE marks without written permission from the Licensor.
+   1.6 Only the Licensor may distribute official binaries or define commercial terms for ESNODE.
+
+2. Source Availability
+   2.1 The source code is available for review, learning, and internal use under this license.
+   2.2 Any redistribution of source or binaries must retain this license text and may not circumvent the commercial restrictions in Section 1.
+
+3. Trademarks
+   3.1 “ESNODE”, ESNODE logos/icons, and “Estimatedstocks AB” are protected marks. Use is governed by /docs/TRADEMARK_POLICY.md.
+   3.2 No trademark rights are granted by this license. Written permission is required for any use of the marks.
+
+4. Contributions
+   4.1 All contributors must agree to the Contributor License Agreement (/docs/CLA.md).
+   4.2 Contributors retain copyright in their contributions but grant Licensor an exclusive, irrevocable, worldwide license to use, modify, sublicense, and relicense contributions under any terms.
+
+5. Warranty Disclaimer
+   THE LICENSED WORK IS PROVIDED “AS IS” AND “AS AVAILABLE”, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED. USE IS AT YOUR OWN RISK.
+
+6. Limitation of Liability
+   TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR IS NOT LIABLE FOR ANY INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, OR GOODWILL.
+
+7. Termination
+   7.1 Any breach of this license (including commercial, distribution, or trademark violations) terminates your rights immediately.
+   7.2 Upon termination, you must stop using and distributing the Licensed Work and destroy or return copies as instructed by Licensor.
+
+8. Change License
+   On the Change Date, this Licensed Work will be made available under the Apache License 2.0. Until then, the terms above apply.
+
+9. Governing Law
+   This license is governed by the laws of Sweden, without regard to conflict-of-law principles.
+
+10. Contact
+    For commercial terms, trademark permissions, or exceptions, contact: legal@estimatedstocks.com
+
+-----------------------------------
+Summary (non-binding):
+- Source-available under BUSL-1.1 with ESNODE restrictions.
+- Internal use is allowed; selling/hosting/rebranding/redistributing is not.
+- Only Estimatedstocks AB may distribute official binaries and define commercial terms.
+- Trademarks are protected; see /docs/TRADEMARK_POLICY.md.
+- Contributions require /docs/CLA.md.
