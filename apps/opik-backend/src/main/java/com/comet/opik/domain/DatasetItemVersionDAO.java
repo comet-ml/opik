@@ -415,10 +415,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM experiment_items_final AS ei
             LEFT JOIN (
                 SELECT
-                    div.id,
-                    div.dataset_item_id,
-                    div.data,
-                    ei_inner.experiment_id
+                    div.id AS id,
+                    div.dataset_item_id AS dataset_item_id,
+                    div.data AS data
                 FROM dataset_item_versions div
                 INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
                 LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
@@ -752,18 +751,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM experiment_items_final AS ei
             LEFT JOIN (
                 SELECT
-                    div.id,
-                    div.dataset_item_id,
-                    div.data,
-                    div.trace_id,
-                    div.span_id,
-                    div.source,
-                    div.tags,
-                    div.item_created_at,
-                    div.item_last_updated_at,
-                    div.item_created_by,
-                    div.item_last_updated_by,
-                    ei_inner.experiment_id
+                    div.id AS id,
+                    div.dataset_item_id AS dataset_item_id,
+                    div.data AS data,
+                    div.trace_id AS trace_id,
+                    div.span_id AS span_id,
+                    div.source AS source,
+                    div.tags AS tags,
+                    div.item_created_at AS item_created_at,
+                    div.item_last_updated_at AS item_last_updated_at,
+                    div.item_created_by AS item_created_by,
+                    div.item_last_updated_by AS item_last_updated_by
                 FROM dataset_item_versions div
                 INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
                 LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
