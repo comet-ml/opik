@@ -403,7 +403,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(e.dataset_version_id, :versionId)
+                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                     AND <dataset_item_filters>
                     ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                     LIMIT 1 BY div.id
@@ -423,7 +423,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
                 WHERE div.workspace_id = :workspace_id
                 AND div.dataset_id = :datasetId
-                AND div.dataset_version_id = COALESCE(e.dataset_version_id, :versionId)
+                AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                 ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                 LIMIT 1 BY div.id
             ) AS di ON di.id = ei.dataset_item_id
@@ -559,7 +559,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(e.dataset_version_id, :versionId)
+                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                     AND <dataset_item_filters>
                     ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                     LIMIT 1 BY div.id
@@ -767,7 +767,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
                 WHERE div.workspace_id = :workspace_id
                 AND div.dataset_id = :datasetId
-                AND div.dataset_version_id = COALESCE(e.dataset_version_id, :versionId)
+                AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                 ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                 LIMIT 1 BY div.id
             ) AS di ON di.id = ei.dataset_item_id
@@ -1260,7 +1260,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(e.dataset_version_id, :versionId)
+                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                     AND <dataset_item_filters>
                     ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                     LIMIT 1 BY div.id
