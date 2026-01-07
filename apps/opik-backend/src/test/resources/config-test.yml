@@ -437,7 +437,7 @@ serviceToggles:
   dashboardsEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: "false"
+  datasetVersioningEnabled: "true"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
