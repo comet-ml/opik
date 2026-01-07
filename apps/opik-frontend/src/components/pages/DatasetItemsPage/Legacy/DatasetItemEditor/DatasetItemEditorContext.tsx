@@ -117,7 +117,7 @@ export const DatasetItemEditorProvider: React.FC<
 
   const handleSave = useCallback(
     (data: Record<string, unknown>) => {
-      const preparedData = prepareFormDataForSave(data);
+      const preparedData = prepareFormDataForSave(data, fields);
 
       if (mode === "create") {
         createDatasetItem(
@@ -165,6 +165,7 @@ export const DatasetItemEditorProvider: React.FC<
       mode,
       workspaceName,
       onClose,
+      fields,
     ],
   );
 

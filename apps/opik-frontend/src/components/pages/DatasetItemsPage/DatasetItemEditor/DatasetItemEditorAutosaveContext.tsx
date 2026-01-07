@@ -111,10 +111,10 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
   const handleFieldChange = useCallback(
     (data: Record<string, unknown>) => {
       if (!datasetItemId) return;
-      const preparedData = prepareFormDataForSave(data);
+      const preparedData = prepareFormDataForSave(data, fields);
       editItem(datasetItemId, { data: preparedData });
     },
-    [editItem, datasetItemId],
+    [editItem, datasetItemId, fields],
   );
 
   const handleDelete = useCallback(

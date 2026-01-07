@@ -90,14 +90,26 @@ export const createDynamicSchema = (fields: DatasetField[]) => {
  * Transforms form data before saving by parsing JSON strings back to objects/arrays.
  * This is necessary because COMPLEX fields are stringified for display in CodeMirror,
  * but need to be saved as proper JSON objects/arrays.
+ * Only parses fields explicitly marked as COMPLEX to avoid accidentally converting
+ * plain text strings that happen to be valid JSON.
  */
 export const prepareFormDataForSave = (
   formData: Record<string, unknown>,
+  fields: DatasetField[],
 ): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
 
+  // Create a map of field keys to their types for quick lookup
+  const fieldTypeMap = new Map<string, FIELD_TYPE>();
+  fields.forEach((field) => {
+    fieldTypeMap.set(field.key, field.type);
+  });
+
   for (const [key, value] of Object.entries(formData)) {
-    if (typeof value === "string") {
+    const fieldType = fieldTypeMap.get(key);
+
+    // Only parse JSON strings for fields explicitly marked as COMPLEX
+    if (fieldType === FIELD_TYPE.COMPLEX && typeof value === "string") {
       try {
         const parsed = JSON.parse(value);
         // Only use parsed value if it's an object or array
