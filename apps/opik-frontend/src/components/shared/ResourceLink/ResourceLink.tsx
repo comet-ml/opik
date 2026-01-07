@@ -2,11 +2,13 @@ import React from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
+  ChartLine,
   Database,
   FileTerminal,
   FlaskConical,
   LayoutGrid,
   ListTree,
+  MessagesSquare,
   SparklesIcon,
   UserPen,
 } from "lucide-react";
@@ -30,6 +32,7 @@ export enum RESOURCE_TYPE {
   annotationQueue,
   dashboard,
   traces,
+  threads,
 }
 
 export const RESOURCE_MAP = {
@@ -39,7 +42,7 @@ export const RESOURCE_MAP = {
     param: "projectId",
     deleted: "Deleted project",
     label: "project",
-    color: "var(--color-blue)",
+    color: "var(--color-green)",
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
@@ -63,7 +66,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted experiment",
     label: "experiment",
-    color: "var(--color-green)",
+    color: "var(--color-burgundy)",
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
@@ -71,7 +74,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "optimization run",
-    color: "var(--color-yellow)",
+    color: "var(--color-orange)",
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
@@ -79,7 +82,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "trial",
-    color: "var(--color-yellow)",
+    color: "var(--color-orange)",
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
@@ -91,7 +94,7 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.dashboard]: {
     url: "/$workspaceName/dashboards/$dashboardId",
-    icon: LayoutGrid,
+    icon: ChartLine,
     param: "dashboardId",
     deleted: "Deleted dashboard",
     label: "dashboard",
@@ -104,6 +107,14 @@ export const RESOURCE_MAP = {
     deleted: "Deleted traces",
     label: "traces",
     color: "var(--color-green)",
+  },
+  [RESOURCE_TYPE.threads]: {
+    url: "/$workspaceName/projects/$projectId/traces",
+    icon: MessagesSquare,
+    param: "projectId",
+    deleted: "Deleted threads",
+    label: "threads",
+    color: "var(--thread-icon-text)",
   },
 };
 

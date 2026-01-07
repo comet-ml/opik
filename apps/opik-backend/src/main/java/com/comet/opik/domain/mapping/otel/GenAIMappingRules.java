@@ -56,7 +56,10 @@ public final class GenAIMappingRules {
                     .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.operation.name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
-                    .build());
+                    .build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.conversation.id").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.THREAD_ID).build());
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;

@@ -80,7 +80,9 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model, temperature=temperature)
+            self._model = models_factory.get(
+                model_name=model, track=self.track, temperature=temperature
+            )
 
     def score(
         self,

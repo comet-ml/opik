@@ -116,6 +116,19 @@ export const generateExperimentIdFilter = (experimentId?: string) => {
   ];
 };
 
+export const generateAnnotationQueueIdFilter = (annotationQueueId?: string) => {
+  if (!annotationQueueId) return [];
+
+  return [
+    createFilter({
+      field: "annotation_queue_ids",
+      type: COLUMN_TYPE.list,
+      operator: "contains",
+      value: annotationQueueId,
+    }),
+  ];
+};
+
 const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
   switch (filter.operator) {
     case "=":

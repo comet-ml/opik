@@ -86,4 +86,6 @@ Most metrics accept `track` and `project_name` keyword arguments so you can deci
 metric = DialogueHelpfulnessJudge(track=False)
 ```
 
+When `track=False` is set on an LLM judge metric (such as `Hallucination`, `AnswerRelevance`, or `DialogueHelpfulnessJudge`), it disables tracing for both the metric's `score` method and the underlying LLM model calls used by the judge. This ensures consistent tracking behavior—if you disable tracking for a metric, all related LLM calls are also excluded from traces.
+
 Disable tracking when running quick, ad-hoc experiments locally, or set `project_name="llm-migration"` to group evaluations by initiative.

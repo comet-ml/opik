@@ -8,6 +8,7 @@ import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
+import { useFetchDataset } from "@/api/datasets/useDatasetById";
 import { Button } from "@/components/ui/button";
 import { Description } from "@/components/ui/description";
 import {
@@ -73,6 +74,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
+  const fetchDataset = useFetchDataset();
 
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
@@ -184,13 +186,27 @@ const AddEditDatasetDialog: React.FunctionComponent<
               })),
             },
             {
+              onSuccess: () => {
+                // Fetch dataset to get latest_version populated by backend
+                fetchDataset({ datasetId: newDataset.id })
+                  .then((enrichedDataset) => {
+                    if (onDatasetCreated) {
+                      onDatasetCreated(enrichedDataset);
+                    }
+                  })
+                  .catch((error) => {
+                    console.error(
+                      "Failed to fetch dataset after item creation:",
+                      error,
+                    );
+
+                    if (onDatasetCreated) {
+                      onDatasetCreated(newDataset);
+                    }
+                  });
+              },
               onError: () => {
                 setOpen(false);
-              },
-              onSettled: () => {
-                if (onDatasetCreated) {
-                  onDatasetCreated(newDataset);
-                }
               },
             },
           );
@@ -213,6 +229,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       onDatasetCreated,
       setOpen,
       toast,
+      fetchDataset,
     ],
   );
 

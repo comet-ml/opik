@@ -1231,6 +1231,138 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("Cancel running Studio optimization sets Redis signal")
+        void cancelRunningStudioOptimization__setsRedisSignal() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Update to RUNNING first (simulating the Python worker starting)
+            var runningUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+            optimizationResourceClient.update(id, runningUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify it's running
+            var runningOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(runningOptimization.status()).isEqualTo(OptimizationStatus.RUNNING);
+
+            // Cancel the optimization
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify status is CANCELLED
+            var cancelledOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(cancelledOptimization.status()).isEqualTo(OptimizationStatus.CANCELLED);
+
+            // Verify Redis cancellation signal was set
+            String cancelKey = "opik:cancel:" + id;
+            await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .pollInterval(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        Boolean exists = redisClient.getBucket(cancelKey).isExists().block();
+                        assertThat(exists).isTrue();
+                    });
+        }
+
+        @Test
+        @DisplayName("Cancel INITIALIZED Studio optimization sets Redis signal")
+        void cancelInitializedStudioOptimization__setsRedisSignal() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify it's INITIALIZED (forced by service layer for Studio optimizations)
+            var initialOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(initialOptimization.status()).isEqualTo(OptimizationStatus.INITIALIZED);
+
+            // Cancel the optimization directly from INITIALIZED
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify status is CANCELLED
+            var cancelledOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(cancelledOptimization.status()).isEqualTo(OptimizationStatus.CANCELLED);
+
+            // Verify Redis cancellation signal was set
+            String cancelKey = "opik:cancel:" + id;
+            await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .pollInterval(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        Boolean exists = redisClient.getBucket(cancelKey).isExists().block();
+                        assertThat(exists).isTrue();
+                    });
+        }
+
+        @Test
+        @DisplayName("Cancel COMPLETED Studio optimization returns error")
+        void cancelCompletedStudioOptimization__returnsError() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Update to COMPLETED
+            var completedUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            optimizationResourceClient.update(id, completedUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify it's COMPLETED
+            var completedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
+
+            // Try to cancel - should fail with 409 Conflict
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 409);
+
+            // Verify status is still COMPLETED
+            var stillCompletedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(stillCompletedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Cancel non-Studio optimization does not set Redis signal")
+        void cancelNonStudioOptimization__doesNotSetRedisSignal() {
+            // Create a regular (non-Studio) optimization
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Cancel the optimization
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify status is CANCELLED
+            var cancelledOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(cancelledOptimization.status()).isEqualTo(OptimizationStatus.CANCELLED);
+
+            // Verify Redis cancellation signal was NOT set (non-Studio optimization)
+            String cancelKey = "opik:cancel:" + id;
+            Boolean exists = redisClient.getBucket(cancelKey).isExists().block();
+            assertThat(exists).isFalse();
+        }
+
+        @Test
         @DisplayName("Filter by status returns correct results after status updates (eventual consistency test)")
         void filterByStatusAfterUpdates__eventualConsistency() {
             // This test verifies that filtering by status works correctly even after

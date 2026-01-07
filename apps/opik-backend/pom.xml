@@ -63,7 +63,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.9.1</version>
+                <version>1.10.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -119,7 +119,7 @@
         <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
-            <version>2.6.0</version>
+            <version>3.0.0</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard</groupId>
@@ -244,7 +244,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <version>5.5</version>
+            <version>5.6</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -291,7 +291,6 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-http-client-jdk</artifactId>
-            <version>1.9.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>

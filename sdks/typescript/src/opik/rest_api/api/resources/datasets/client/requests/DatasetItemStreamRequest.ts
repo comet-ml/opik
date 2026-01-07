@@ -6,4 +6,5 @@ export interface DatasetItemStreamRequest {
     datasetName: string;
     lastRetrievedId?: string;
     steamLimit?: number;
+    datasetVersion?: string;
 }

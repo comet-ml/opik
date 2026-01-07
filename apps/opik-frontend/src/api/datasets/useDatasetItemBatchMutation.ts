@@ -11,22 +11,30 @@ type UseDatasetItemBatchMutationParams = {
   workspaceName: string;
 };
 
+type MutationContext = {
+  queryKey: [string, { datasetId: string }];
+};
+
 const useDatasetItemBatchMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  return useMutation({
+  return useMutation<
+    void,
+    AxiosError,
+    UseDatasetItemBatchMutationParams,
+    MutationContext
+  >({
     mutationFn: async ({
       datasetId,
       datasetItems,
       workspaceName,
     }: UseDatasetItemBatchMutationParams) => {
-      const { data } = await api.put(`${DATASETS_REST_ENDPOINT}items`, {
+      await api.put(`${DATASETS_REST_ENDPOINT}items`, {
         dataset_id: datasetId,
         items: datasetItems,
         workspace_name: workspaceName,
       });
-      return data;
     },
     onMutate: async (params: UseDatasetItemBatchMutationParams) => {
       return {
