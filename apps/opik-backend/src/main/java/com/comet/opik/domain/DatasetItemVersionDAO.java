@@ -1477,7 +1477,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
         // Add filters if present
-        if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+        if (CollectionUtils.isNotEmpty(criteria.filters())) {
             var datasetItemFiltersOpt = FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
                     FilterStrategy.DATASET_ITEM);
             datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
@@ -1543,7 +1543,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         }
 
         // Bind filter parameters if present
-        if (criteria.filters() != null && !criteria.filters().isEmpty()) {
+        if (CollectionUtils.isNotEmpty(criteria.filters())) {
             statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
             statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
             statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
