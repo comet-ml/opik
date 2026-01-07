@@ -71,10 +71,15 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const overrideDefaults = widget?.config?.overrideDefaults;
 
   const { projectId, infoMessage, intervalStart, intervalEnd } = useMemo(() => {
     const { projectId: resolvedProjectId, infoMessage } =
-      resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
+      resolveProjectIdFromConfig(
+        widgetProjectId,
+        globalConfig.projectId,
+        overrideDefaults,
+      );
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
@@ -86,7 +91,12 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       intervalStart,
       intervalEnd,
     };
-  }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+  }, [
+    widgetProjectId,
+    globalConfig.projectId,
+    globalConfig.dateRange,
+    overrideDefaults,
+  ]);
 
   const source = widget?.config?.source as TRACE_DATA_TYPE | undefined;
   const metric = widget?.config?.metric as string | undefined;
@@ -226,7 +236,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}

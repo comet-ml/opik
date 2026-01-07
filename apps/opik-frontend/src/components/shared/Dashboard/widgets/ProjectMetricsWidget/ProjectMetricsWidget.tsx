@@ -59,11 +59,16 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const overrideDefaults = widget?.config?.overrideDefaults;
 
   const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
     useMemo(() => {
       const { projectId: resolvedProjectId, infoMessage } =
-        resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
+        resolveProjectIdFromConfig(
+          widgetProjectId,
+          globalConfig.projectId,
+          overrideDefaults,
+        );
 
       const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
         globalConfig.dateRange,
@@ -76,7 +81,12 @@ const ProjectMetricsWidget: React.FunctionComponent<
         intervalStart,
         intervalEnd,
       };
-    }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+    }, [
+      widgetProjectId,
+      globalConfig.projectId,
+      globalConfig.dateRange,
+      overrideDefaults,
+    ]);
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
@@ -189,7 +199,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
