@@ -22,8 +22,7 @@ import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/Ex
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
-import { createFilter } from "@/lib/filters";
-import { COLUMN_TYPE } from "@/types/shared";
+import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -61,6 +60,16 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
     annotationQueue?.feedback_scores,
     annotationQueue?.feedback_definition_names,
   ]);
+
+  const annotationQueueSearch = useMemo(
+    () => ({
+      type: `${annotationQueue?.scope}s`,
+      [`${annotationQueue?.scope}s_filters`]: generateAnnotationQueueIdFilter(
+        annotationQueue?.id,
+      ),
+    }),
+    [annotationQueue?.scope, annotationQueue?.id],
+  );
 
   return (
     <PageBodyScrollContainer>
@@ -113,17 +122,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
                   ? "Traces"
                   : "Threads"
               }
-              search={{
-                type: `${annotationQueue.scope}s`,
-                [`${annotationQueue.scope}s_filters`]: [
-                  createFilter({
-                    field: "annotation_queue_ids",
-                    type: COLUMN_TYPE.list,
-                    operator: "contains",
-                    value: annotationQueue.id,
-                  }),
-                ],
-              }}
+              search={annotationQueueSearch}
               tooltipContent={`View all ${annotationQueue.scope}s for this queue`}
             />
           )}
