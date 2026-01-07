@@ -63,7 +63,8 @@ class BaseRedisSubscriberTest {
         var redissonConfig = new Config();
         redissonConfig.useSingleServer()
                 .setAddress(redis.getRedisURI())
-                .setDatabase(0);
+                .setDatabase(0)
+                .setRetryAttempts(0); // Disable retries for faster test execution
         redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
         redissonClient = Redisson.create(redissonConfig).reactive();
 
