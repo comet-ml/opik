@@ -27,13 +27,13 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
   [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
-  // LLM Provider feature flags - default enabled
-  [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.GEMINI_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: true,
+  // LLM Provider feature flags - default false
+  [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.GEMINI_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
 };
 
