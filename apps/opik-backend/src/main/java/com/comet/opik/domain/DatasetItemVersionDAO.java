@@ -4,7 +4,9 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -65,9 +67,8 @@ public interface DatasetItemVersionDAO {
 
     Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
-    Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, UUID versionId,
-            Set<UUID> experimentIds,
-            List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters);
+    Mono<ProjectStats> getExperimentItemsStats(UUID datasetId, UUID versionId, Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters);
 
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
 
@@ -2257,11 +2258,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(
+    public Mono<ProjectStats> getExperimentItemsStats(
             @NonNull UUID datasetId,
             @NonNull UUID versionId,
             @NonNull Set<UUID> experimentIds,
-            List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters) {
+            List<ExperimentsComparisonFilter> filters) {
         log.info("Getting experiment items stats for dataset '{}', version '{}', experiments '{}' with filters '{}'",
                 datasetId, versionId, experimentIds, filters);
 
@@ -2289,8 +2290,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .doOnError(error -> log.error("Failed to get experiment items stats", error));
     }
 
-    private void applyFiltersToTemplate(ST template,
-            List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters) {
+    private void applyFiltersToTemplate(ST template, List<ExperimentsComparisonFilter> filters) {
         Optional.ofNullable(filters)
                 .ifPresent(filtersParam -> {
                     FilterQueryBuilder.toAnalyticsDbFilters(filtersParam,
@@ -2316,7 +2316,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     private void bindStatementParameters(Statement statement, UUID datasetId, UUID versionId, Set<UUID> experimentIds,
-            List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters) {
+            List<ExperimentsComparisonFilter> filters) {
         statement.bind("datasetId", datasetId);
         statement.bind("versionId", versionId.toString());
         if (!experimentIds.isEmpty()) {

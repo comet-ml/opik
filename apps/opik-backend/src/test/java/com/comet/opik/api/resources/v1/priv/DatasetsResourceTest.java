@@ -4158,13 +4158,6 @@ class DatasetsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchUpdateDatasetItems {
 
-        // TODO: These tests fail when dataset versioning is enabled because GET by ID returns stale data:
-        // - Batch update creates a new version with updated items (version 2 becomes 'latest')
-        // - GET by ID queries without filtering by version, so it returns items from old version 1
-        // - Tests expect updated tags but get old tags from the previous version
-        // This is a BUG that needs to be fixed: GET by ID should return items from the latest version
-        // by default, not from any arbitrary version. Users expect to see their latest changes.
-
         @Test
         @DisplayName("Success: batch add tags with merge")
         void batchUpdateDatasetItems__whenAddingTagsWithMerge__thenSucceed() {
@@ -4639,13 +4632,6 @@ class DatasetsResourceTest {
     @DisplayName("Delete items:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteDatasetItems {
-
-        // TODO: These tests fail when dataset versioning is enabled because the behavior changes:
-        // - With versioning OFF: DELETE removes items from the table, GET returns 404
-        // - With versioning ON: DELETE creates a new version without the items, but old versions still exist
-        //   GET by ID will find items in previous versions and return 200 (items are not truly deleted)
-        // These tests should be updated or removed once dataset versioning is enabled in production,
-        // as the current assertions (expecting 404 after delete) don't match the versioned behavior.
 
         @Test
         @DisplayName("Success: delete by IDs")
