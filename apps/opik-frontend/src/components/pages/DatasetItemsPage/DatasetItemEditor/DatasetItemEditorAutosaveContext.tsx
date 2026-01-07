@@ -6,6 +6,7 @@ import { useDatasetItemData } from "./hooks/useDatasetItemData";
 import { useDatasetItemFormState } from "./hooks/useDatasetItemFormState";
 import { useAutosave } from "./hooks/useAutosave";
 import { useEditItem, useDeleteItem } from "@/store/DatasetDraftStore";
+import { prepareFormDataForSave } from "./hooks/useDatasetItemFormHelpers";
 
 interface DatasetItemEditorAutosaveContextValue {
   // Data
@@ -110,9 +111,10 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
   const handleFieldChange = useCallback(
     (data: Record<string, unknown>) => {
       if (!datasetItemId) return;
-      editItem(datasetItemId, { data });
+      const preparedData = prepareFormDataForSave(data, fields);
+      editItem(datasetItemId, { data: preparedData });
     },
-    [editItem, datasetItemId],
+    [editItem, datasetItemId, fields],
   );
 
   const handleDelete = useCallback(
