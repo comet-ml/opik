@@ -85,3 +85,32 @@ export const createDynamicSchema = (fields: DatasetField[]) => {
 
   return z.object(schemaShape);
 };
+
+/**
+ * Transforms form data before saving by parsing JSON strings back to objects/arrays.
+ * This is necessary because COMPLEX fields are stringified for display in CodeMirror,
+ * but need to be saved as proper JSON objects/arrays.
+ */
+export const prepareFormDataForSave = (
+  formData: Record<string, unknown>,
+): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(formData)) {
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        // Only use parsed value if it's an object or array
+        if (typeof parsed === "object" && parsed !== null) {
+          result[key] = parsed;
+          continue;
+        }
+      } catch {
+        // Not valid JSON, keep as string
+      }
+    }
+    result[key] = value;
+  }
+
+  return result;
+};
