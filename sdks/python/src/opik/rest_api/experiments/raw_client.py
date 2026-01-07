@@ -146,6 +146,7 @@ class RawExperimentsClient:
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        dataset_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -172,6 +173,9 @@ class RawExperimentsClient:
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
+
+        dataset_version_id : typing.Optional[str]
+            ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -202,6 +206,7 @@ class RawExperimentsClient:
                 "prompt_versions": convert_and_respect_annotation_metadata(
                     object_=prompt_versions, annotation=typing.Sequence[PromptVersionLinkWrite], direction="write"
                 ),
+                "dataset_version_id": dataset_version_id,
             },
             headers={
                 "content-type": "application/json",
@@ -1062,6 +1067,7 @@ class AsyncRawExperimentsClient:
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        dataset_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1088,6 +1094,9 @@ class AsyncRawExperimentsClient:
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
+
+        dataset_version_id : typing.Optional[str]
+            ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1118,6 +1127,7 @@ class AsyncRawExperimentsClient:
                 "prompt_versions": convert_and_respect_annotation_metadata(
                     object_=prompt_versions, annotation=typing.Sequence[PromptVersionLinkWrite], direction="write"
                 ),
+                "dataset_version_id": dataset_version_id,
             },
             headers={
                 "content-type": "application/json",

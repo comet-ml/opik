@@ -18,6 +18,7 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.dataset_version_summary import DatasetVersionSummary
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -252,16 +253,19 @@ class DatasetsClient:
         self,
         *,
         items: typing.Sequence[DatasetItemWrite],
+        respond_with_latest_version: typing.Optional[bool] = None,
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
+    ) -> DatasetVersionSummary:
         """
         Create/update dataset items based on dataset item id
 
         Parameters
         ----------
         items : typing.Sequence[DatasetItemWrite]
+
+        respond_with_latest_version : typing.Optional[bool]
 
         dataset_name : typing.Optional[str]
             If null, dataset_id must be provided
@@ -274,7 +278,8 @@ class DatasetsClient:
 
         Returns
         -------
-        None
+        DatasetVersionSummary
+            Dataset version summary
 
         Examples
         --------
@@ -285,7 +290,11 @@ class DatasetsClient:
         }, )], )
         """
         _response = self._raw_client.create_or_update_dataset_items(
-            items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+            items=items,
+            respond_with_latest_version=respond_with_latest_version,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -954,6 +963,7 @@ class DatasetsClient:
         dataset_name: str,
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
+        dataset_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -967,6 +977,8 @@ class DatasetsClient:
 
         steam_limit : typing.Optional[int]
 
+        dataset_version : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -979,6 +991,7 @@ class DatasetsClient:
             dataset_name=dataset_name,
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
+            dataset_version=dataset_version,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1419,16 +1432,19 @@ class AsyncDatasetsClient:
         self,
         *,
         items: typing.Sequence[DatasetItemWrite],
+        respond_with_latest_version: typing.Optional[bool] = None,
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
+    ) -> DatasetVersionSummary:
         """
         Create/update dataset items based on dataset item id
 
         Parameters
         ----------
         items : typing.Sequence[DatasetItemWrite]
+
+        respond_with_latest_version : typing.Optional[bool]
 
         dataset_name : typing.Optional[str]
             If null, dataset_id must be provided
@@ -1441,7 +1457,8 @@ class AsyncDatasetsClient:
 
         Returns
         -------
-        None
+        DatasetVersionSummary
+            Dataset version summary
 
         Examples
         --------
@@ -1455,7 +1472,11 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_or_update_dataset_items(
-            items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+            items=items,
+            respond_with_latest_version=respond_with_latest_version,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2179,6 +2200,7 @@ class AsyncDatasetsClient:
         dataset_name: str,
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
+        dataset_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2192,6 +2214,8 @@ class AsyncDatasetsClient:
 
         steam_limit : typing.Optional[int]
 
+        dataset_version : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2204,6 +2228,7 @@ class AsyncDatasetsClient:
             dataset_name=dataset_name,
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
+            dataset_version=dataset_version,
             request_options=request_options,
         ) as r:
             async for data in r.data:

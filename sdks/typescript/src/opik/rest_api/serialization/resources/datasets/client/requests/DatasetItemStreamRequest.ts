@@ -13,6 +13,7 @@ export const DatasetItemStreamRequest: core.serialization.Schema<
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
     lastRetrievedId: core.serialization.property("last_retrieved_id", core.serialization.string().optional()),
     steamLimit: core.serialization.property("steam_limit", core.serialization.number().optional()),
+    datasetVersion: core.serialization.property("dataset_version", core.serialization.string().optional()),
 });
 
 export declare namespace DatasetItemStreamRequest {
@@ -20,5 +21,6 @@ export declare namespace DatasetItemStreamRequest {
         dataset_name: string;
         last_retrieved_id?: string | null;
         steam_limit?: number | null;
+        dataset_version?: string | null;
     }
 }

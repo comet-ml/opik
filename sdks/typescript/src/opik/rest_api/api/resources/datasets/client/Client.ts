@@ -466,14 +466,20 @@ export class Datasets {
     public createOrUpdateDatasetItems(
         request: OpikApi.DatasetItemBatchWrite,
         requestOptions?: Datasets.RequestOptions,
-    ): core.HttpResponsePromise<void> {
+    ): core.HttpResponsePromise<OpikApi.DatasetVersionSummary> {
         return core.HttpResponsePromise.fromPromise(this.__createOrUpdateDatasetItems(request, requestOptions));
     }
 
     private async __createOrUpdateDatasetItems(
         request: OpikApi.DatasetItemBatchWrite,
         requestOptions?: Datasets.RequestOptions,
-    ): Promise<core.WithRawResponse<void>> {
+    ): Promise<core.WithRawResponse<OpikApi.DatasetVersionSummary>> {
+        const { respondWithLatestVersion, ..._body } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (respondWithLatestVersion != null) {
+            _queryParams["respond_with_latest_version"] = respondWithLatestVersion.toString();
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -494,15 +500,24 @@ export class Datasets {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
-            body: serializers.DatasetItemBatchWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.DatasetItemBatchWrite.jsonOrThrow(_body, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return { data: undefined, rawResponse: _response.rawResponse };
+            return {
+                data: serializers.DatasetVersionSummary.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {

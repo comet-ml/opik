@@ -13,6 +13,7 @@ import { PercentageValuesPublic } from "./PercentageValuesPublic";
 import { ExperimentPublicStatus } from "./ExperimentPublicStatus";
 import { ExperimentScorePublic } from "./ExperimentScorePublic";
 import { PromptVersionLinkPublic } from "./PromptVersionLinkPublic";
+import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic";
 
 export const ExperimentPublic: core.serialization.ObjectSchema<
     serializers.ExperimentPublic.Raw,
@@ -53,6 +54,11 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
         "prompt_versions",
         core.serialization.list(PromptVersionLinkPublic).optional(),
     ),
+    datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
+    datasetVersionSummary: core.serialization.property(
+        "dataset_version_summary",
+        DatasetVersionSummaryPublic.optional(),
+    ),
 });
 
 export declare namespace ExperimentPublic {
@@ -80,5 +86,7 @@ export declare namespace ExperimentPublic {
         experiment_scores?: ExperimentScorePublic.Raw[] | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
+        dataset_version_id?: string | null;
+        dataset_version_summary?: DatasetVersionSummaryPublic.Raw | null;
     }
 }
