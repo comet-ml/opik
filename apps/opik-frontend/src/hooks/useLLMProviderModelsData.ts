@@ -1520,6 +1520,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.CUSTOM]: [
     // the list will be full filled base on provider config response
   ],
+
+  [PROVIDER_TYPE.BEDROCK]: [
+    // the list will be full filled base on provider config response
+  ],
 };
 
 const useLLMProviderModelsData = () => {

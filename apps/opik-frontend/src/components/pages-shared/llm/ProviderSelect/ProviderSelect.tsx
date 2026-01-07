@@ -29,6 +29,11 @@ export const ADD_CUSTOM_PROVIDER_VALUE = buildComposedProviderKey(
   "__add_custom_provider__",
 );
 
+export const ADD_BEDROCK_PROVIDER_VALUE = buildComposedProviderKey(
+  PROVIDER_TYPE.BEDROCK,
+  "__add_bedrock_provider__",
+);
+
 export interface ProviderOption {
   value: COMPOSED_PROVIDER_TYPE;
   label: string;
@@ -68,6 +73,9 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   const isVertexAIEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   );
+  const isBedrockEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
+  );
   const isCustomLLMEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
@@ -79,6 +87,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
       [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
       // OPIK_FREE is not included - it's handled separately in PromptModelSelect
     }),
@@ -88,6 +97,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       isGeminiEnabled,
       isOpenRouterEnabled,
       isVertexAIEnabled,
+      isBedrockEnabled,
       isCustomLLMEnabled,
     ],
   );
@@ -107,6 +117,11 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     });
 
     standardProviders.forEach((option) => {
+      // For Bedrock, we don't show a singleton - we show each configured instance
+      if (option.value === PROVIDER_TYPE.BEDROCK) {
+        return;
+      }
+
       const [id] =
         configuredProvidersList
           ?.filter((key) => key.provider === option.value)
@@ -117,6 +132,32 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         configuredId: id,
       });
     });
+
+    // Add Bedrock providers (each instance separately, like Custom)
+    if (isBedrockEnabled) {
+      // First add the "Bedrock" option for creating new instances (without configuredId)
+      providerOptions.push({
+        value: ADD_BEDROCK_PROVIDER_VALUE,
+        label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
+        icon: PROVIDERS[PROVIDER_TYPE.BEDROCK].icon,
+      });
+
+      // Then add configured Bedrock instances
+      const bedrockProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.BEDROCK,
+        ) || [];
+
+      bedrockProviders.forEach((bedrockProvider) => {
+        providerOptions.push({
+          value: bedrockProvider.ui_composed_provider,
+          label: getProviderDisplayName(bedrockProvider),
+          icon: PROVIDERS[PROVIDER_TYPE.BEDROCK].icon,
+          configuredId: bedrockProvider.id,
+          description: bedrockProvider.base_url,
+        });
+      });
+    }
 
     // Only add custom providers if custom LLM provider is enabled
     if (isCustomLLMEnabled) {
@@ -139,7 +180,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     }
 
     return providerOptions;
-  }, [configuredProvidersList, providerEnabledMap, isCustomLLMEnabled]);
+  }, [configuredProvidersList, providerEnabledMap, isCustomLLMEnabled, isBedrockEnabled]);
 
   const renderTrigger = useCallback(
     (value: string) => {
@@ -150,6 +191,18 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
             <div className="flex items-center gap-2">
               <Icon />
               Custom provider
+            </div>
+          </div>
+        );
+      }
+
+      if (value === ADD_BEDROCK_PROVIDER_VALUE) {
+        const Icon = PROVIDERS[PROVIDER_TYPE.BEDROCK].icon;
+        return (
+          <div className="flex w-full items-center justify-between text-foreground">
+            <div className="flex items-center gap-2">
+              <Icon />
+              Bedrock provider
             </div>
           </div>
         );

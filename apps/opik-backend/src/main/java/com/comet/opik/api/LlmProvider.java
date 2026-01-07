@@ -15,6 +15,7 @@ public enum LlmProvider {
     GEMINI("gemini"),
     OPEN_ROUTER("openrouter"),
     VERTEX_AI("vertex-ai"),
+    BEDROCK("bedrock"),
     CUSTOM_LLM("custom-llm"),
     OPIK_FREE("opik-free"),
     ;

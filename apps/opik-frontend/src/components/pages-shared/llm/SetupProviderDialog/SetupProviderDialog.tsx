@@ -18,6 +18,7 @@ import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/Prov
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import BedrockProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
 import {
   AIProviderFormSchema,
   AIProviderFormType,
@@ -53,6 +54,9 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   const isVertexAIEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   );
+  const isBedrockEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
+  );
   const isCustomLLMEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
@@ -64,6 +68,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
       [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
       // OPIK_FREE is not included - it's readonly and handled separately
     }),
@@ -73,6 +78,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       isGeminiEnabled,
       isOpenRouterEnabled,
       isVertexAIEnabled,
+      isBedrockEnabled,
       isCustomLLMEnabled,
     ],
   );
@@ -114,6 +120,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       url: "",
       models: "",
       providerName: "",
+      headers: [],
     } as AIProviderFormType,
   });
 
@@ -130,6 +137,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
       const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
+      const isBedrock = data.provider === PROVIDER_TYPE.BEDROCK;
       const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
 
       const providerKeyData: Partial<{
@@ -138,13 +146,14 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         apiKey: string;
         base_url: string;
         configuration: Record<string, string>;
+        headers: Record<string, string>;
       }> = {
         provider: data.provider as PROVIDER_TYPE,
         ...(data.apiKey && { apiKey: data.apiKey }),
       };
 
       if (
-        isCustom &&
+        (isCustom || isBedrock) &&
         "url" in data &&
         "models" in data &&
         "providerName" in data
@@ -158,6 +167,23 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             true,
           ),
         };
+
+        // Add headers if present
+        if ("headers" in data && data.headers && Array.isArray(data.headers)) {
+          const headersObj = data.headers.reduce<Record<string, string>>(
+            (acc, header) => {
+              const trimmedKey = header.key?.trim();
+              if (trimmedKey) {
+                acc[trimmedKey] = header.value;
+              }
+              return acc;
+            },
+            {},
+          );
+          if (Object.keys(headersObj).length > 0) {
+            providerKeyData.headers = headersObj;
+          }
+        }
       }
 
       if (isVertex && "location" in data) {
@@ -220,6 +246,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
               <>
                 {selectedProvider === PROVIDER_TYPE.CUSTOM ? (
                   <CustomProviderDetails form={form} />
+                ) : selectedProvider === PROVIDER_TYPE.BEDROCK ? (
+                  <BedrockProviderDetails form={form} />
                 ) : selectedProvider === PROVIDER_TYPE.VERTEX_AI ? (
                   <VertexAIProviderDetails form={form} />
                 ) : (

@@ -18,6 +18,7 @@ class CustomLlmServiceProvider implements LlmServiceProvider {
             @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator, LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
         factory.register(LlmProvider.CUSTOM_LLM, this);
+        factory.register(LlmProvider.BEDROCK, this);
     }
 
     @Override

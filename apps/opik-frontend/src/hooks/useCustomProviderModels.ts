@@ -19,7 +19,10 @@ const useCustomProviderModels = () => {
 
     if (data) {
       data.content
-        .filter((providerKey) => providerKey.provider === PROVIDER_TYPE.CUSTOM)
+        .filter((providerKey) => 
+          providerKey.provider === PROVIDER_TYPE.CUSTOM || 
+          providerKey.provider === PROVIDER_TYPE.BEDROCK
+        )
         .forEach((customProviderObject) => {
           if (customProviderObject.configuration?.models) {
             retval[customProviderObject.ui_composed_provider] =

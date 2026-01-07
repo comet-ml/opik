@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.api.LlmProvider.CUSTOM_LLM;
 import static com.comet.opik.infrastructure.FreeModelConfig.FREE_MODEL_PROVIDER_ID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -102,9 +101,11 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         UUID apiKeyId = idGenerator.generateId();
 
         // For non-custom providers, explicitly set providerName to null (ignore user input)
-        String providerName = providerApiKey.provider() == CUSTOM_LLM
-                ? providerApiKey.providerName()
-                : null;
+        // Custom and Bedrock providers keep their provider_name to allow multiple instances
+        String providerName = (providerApiKey.provider() == LlmProvider.CUSTOM_LLM
+                || providerApiKey.provider() == LlmProvider.BEDROCK)
+                        ? providerApiKey.providerName()
+                        : null;
 
         var newProviderApiKey = providerApiKey.toBuilder()
                 .id(apiKeyId)
