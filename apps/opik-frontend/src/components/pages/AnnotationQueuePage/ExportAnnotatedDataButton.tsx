@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
-import { createFilter } from "@/lib/filters";
+import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadsList from "@/api/traces/useThreadsList";
 import {
@@ -79,17 +79,10 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     [annotationQueue.feedback_definition_names],
   );
 
-  const annotationQueueFilter = useMemo(() => {
-    if (!annotationQueue?.id) return [];
-    return [
-      createFilter({
-        id: "annotation_queue_ids",
-        field: "annotation_queue_ids",
-        value: annotationQueue.id,
-        operator: "contains",
-      }),
-    ];
-  }, [annotationQueue?.id]);
+  const annotationQueueFilter = useMemo(
+    () => generateAnnotationQueueIdFilter(annotationQueue?.id),
+    [annotationQueue?.id],
+  );
 
   const { refetch: refetchTraces } = useTracesList(
     {

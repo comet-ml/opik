@@ -1108,6 +1108,20 @@ class ThreadDAOImpl implements ThreadDAO {
                         ) AS feedback_scores
                     FROM feedback_scores_final
                     GROUP BY workspace_id, project_id, entity_id
+                ), thread_annotation_queue_ids AS (
+                     SELECT thread_id,
+                            groupArray(id) AS annotation_queue_ids
+                     FROM (
+                        SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
+                        FROM annotation_queue_items aqi
+                        JOIN annotation_queues aq ON aq.id = aqi.queue_id
+                        WHERE aq.scope = 'thread'
+                          AND workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                     ) AS annotation_queue_ids_with_thread_id
+                     GROUP BY thread_id
                 )
                 <if(feedback_scores_empty_filters)>
                  , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1170,6 +1184,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+                <if(annotation_queue_filters)>
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -1193,6 +1210,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
             ;

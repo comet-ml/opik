@@ -72,7 +72,7 @@ import { formatDate, formatDuration } from "@/lib/date";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
-import { createFilter } from "@/lib/filters";
+import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import SelectBox, {
   SelectBoxProps,
@@ -324,15 +324,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   });
 
   const extendedFilters = useMemo(
-    () => [
-      ...filters,
-      createFilter({
-        id: "annotation_queue_ids",
-        field: "annotation_queue_ids",
-        value: annotationQueue.id,
-        operator: "contains",
-      }),
-    ],
+    () => [...filters, ...generateAnnotationQueueIdFilter(annotationQueue.id)],
     [annotationQueue.id, filters],
   );
 

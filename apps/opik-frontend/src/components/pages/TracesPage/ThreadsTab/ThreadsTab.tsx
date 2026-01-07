@@ -223,6 +223,11 @@ const FILTER_COLUMNS: ColumnData<Thread>[] = [
   },
   ...SHARED_COLUMNS,
   {
+    id: "annotation_queue_ids",
+    label: "Annotation queue ID",
+    type: COLUMN_TYPE.list,
+  },
+  {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
