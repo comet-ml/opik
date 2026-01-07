@@ -36,7 +36,7 @@ pub enum Screen {
     MetricsProfiles,
     AgentStatus,
     ConnectServer,
-    Orchestrator,
+
 }
 
 #[derive(Clone, Debug)]
@@ -63,7 +63,7 @@ enum ConnectField {
 struct AppState {
     screen: Screen,
     last_status: Option<StatusSnapshot>,
-    last_orch_metrics: Option<esnode_orchestrator::PubMetrics>,
+
     message: Option<String>,
     no_color: bool,
     should_exit: bool,
@@ -85,7 +85,7 @@ impl AppState {
         Self {
             screen: Screen::MainMenu,
             last_status: None,
-            last_orch_metrics: None,
+
             message: None,
             no_color,
             should_exit: false,
@@ -179,10 +179,7 @@ pub fn run_console(
                             state.set_screen(Screen::ConnectServer);
                             refresh_now = true;
                         }
-                        KeyCode::Char('8') if state.screen == Screen::MainMenu => {
-                            state.set_screen(Screen::Orchestrator);
-                            refresh_now = true;
-                        }
+
                         _ => {}
                     }
                     if refresh_now {
@@ -216,12 +213,7 @@ fn refresh_status(state: &mut AppState, client: &AgentClient) {
             state.set_status(None);
         }
     }
-    // Also fetch orchestrator metrics (best effort)
-    if let Ok(orch) = client.fetch_orchestrator_metrics() {
-        state.last_orch_metrics = Some(orch);
-    } else {
-        state.last_orch_metrics = None;
-    }
+
 }
 
 fn prepare_terminal() -> Result<Stdout> {
@@ -254,7 +246,7 @@ fn render(frame: &mut ratatui::Frame, state: &AppState) {
         Screen::MetricsProfiles => render_metric_profiles(frame, area, state),
         Screen::AgentStatus => render_agent_status(frame, area, state),
         Screen::ConnectServer => render_connect_server(frame, area, state),
-        Screen::Orchestrator => render_orchestrator(frame, area, state),
+
     }
 }
 
@@ -290,7 +282,7 @@ fn render_main_menu(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
         Line::from("     5. Metrics Profiles         (enable/disable metric sets)"),
         Line::from("     6. AgentStatus & Logs      (health, errors, config)"),
         Line::from("     7. Connect to ESNODE-Pulse (attach this ESNODE to a cluster)"),
-        Line::from("     8. ESNODE Orchestrator      (Autonomous features, tasks, devices)"),
+
         Line::from(""),
         Line::from("     Selection . . . . . . . . . . . . . . . . . .  __"),
         Line::from(""),
@@ -805,80 +797,7 @@ fn render_connect_server(frame: &mut ratatui::Frame, area: Rect, state: &AppStat
     frame.set_cursor(cursor_col, cursor_row);
 }
 
-fn render_orchestrator(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
-    if state.last_orch_metrics.is_none() {
-        render_placeholder(
-            frame,
-            area,
-            state,
-            "Orchestrator disabled or unreachable (Enable with --enable-orchestrator)",
-        );
-        return;
-    }
-    let metrics = state.last_orch_metrics.as_ref().unwrap();
-    let orch_cfg = state.config.orchestrator.as_ref();
-    let auth_line = orch_cfg.and_then(|c| c.token.as_ref()).map_or_else(
-        || "No token (local-only)".to_string(),
-        |_| "Bearer token REQUIRED".to_string(),
-    );
-    let exposure = if orch_cfg.is_some_and(|c| c.allow_public) {
-        "Public listener allowed (ensure token set)".to_string()
-    } else {
-        "Loopback-only (default safe mode)".to_string()
-    };
-    let mut lines = vec![
-        Line::from("                       ESNODE – ORCHESTRATOR STATUS                     N01"),
-        Line::from(""),
-        Line::from("   Status:"),
-        Line::from("     Active . . . . . . . . . . . . . . . . . . . . . :  YES"),
-        Line::from(format!(
-            "     Managed Devices  . . . . . . . . . . . . . . . . :  {}",
-            metrics.device_count
-        )),
-        Line::from(format!(
-            "     Pending Tasks  . . . . . . . . . . . . . . . . . :  {}",
-            metrics.pending_tasks
-        )),
-        Line::from(format!(
-            "     Auth / Exposure  . . . . . . . . . . . . . . . . :  {auth_line}"
-        )),
-        Line::from(format!(
-            "     Binding  . . . . . . . . . . . . . . . . . . . . :  {exposure}"
-        )),
-        Line::from(""),
-        Line::from("   Devices:"),
-    ];
 
-    if metrics.devices.is_empty() {
-        lines.push(Line::from("     (no devices registered)"));
-    } else {
-        for (i, dev) in metrics.devices.iter().enumerate() {
-            lines.push(Line::from(format!(
-                "     {}. {} (Mem: {:.1} GB, Load: {:.1}%)",
-                i + 1,
-                dev.id,
-                dev.mem_gb,
-                dev.current_load * 100.0
-            )));
-        }
-    }
-
-    lines.extend_from_slice(&[
-        Line::from(""),
-        Line::from(""),
-        Line::from(" F3=Exit   F5=Refresh   F12=Back"),
-    ]);
-
-    let mut block = Block::default().borders(Borders::ALL);
-    if !state.no_color {
-        block = block.border_style(primary_style(state));
-    }
-    let paragraph = Paragraph::new(lines)
-        .style(primary_style(state))
-        .block(block)
-        .wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, area);
-}
 
 fn handle_key(code: KeyCode, state: &mut AppState) -> bool {
     if let AgentMode::Managed(_) = state.mode {
@@ -1271,30 +1190,10 @@ mod tests {
             AgentMode::Standalone,
             std::path::PathBuf::from("/tmp/esnode.toml"),
             agent_core::AgentConfig {
-                orchestrator: Some(esnode_orchestrator::OrchestratorConfig {
-                    enabled: true,
-                    allow_public: false,
-                    token: Some("token".to_string()),
-                    ..Default::default()
-                }),
                 ..Default::default()
             },
         );
         state.set_status(Some(sample_status()));
-        state.last_orch_metrics = Some(esnode_orchestrator::PubMetrics {
-            device_count: 1,
-            pending_tasks: 0,
-            devices: vec![esnode_orchestrator::Device {
-                id: "dev1".to_string(),
-                kind: esnode_orchestrator::DeviceKind::Gpu,
-                peak_flops_tflops: 10.0,
-                mem_gb: 32.0,
-                power_watts_idle: 50.0,
-                power_watts_max: 300.0,
-                current_load: 0.2,
-                last_seen: 1234,
-            }],
-        });
         state
     }
 
@@ -1306,7 +1205,7 @@ mod tests {
             super::Screen::NodeOverview,
             super::Screen::NetworkDisk,
             super::Screen::AgentStatus,
-            super::Screen::Orchestrator,
+
         ] {
             state.screen = screen;
             let backend = TestBackend::new(120, 40);

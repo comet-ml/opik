@@ -78,7 +78,7 @@ pub struct AgentConfig {
     pub local_tsdb_max_disk_mb: u64,
     pub log_level: LogLevel,
     #[serde(default)]
-    pub orchestrator: Option<esnode_orchestrator::OrchestratorConfig>,
+
     #[serde(default)]
     pub app_metrics_url: String,
 }
@@ -114,7 +114,7 @@ impl Default for AgentConfig {
             local_tsdb_retention_hours: default_local_tsdb_retention_hours(),
             local_tsdb_max_disk_mb: default_local_tsdb_max_disk_mb(),
             log_level: LogLevel::Info,
-            orchestrator: None,
+
             app_metrics_url: "http://127.0.0.1:8000/metrics".to_string(),
         }
     }
@@ -170,7 +170,7 @@ pub struct ConfigOverrides {
     pub local_tsdb_max_disk_mb: Option<u64>,
     pub log_level: Option<LogLevel>,
     #[serde(default)]
-    pub orchestrator: Option<esnode_orchestrator::OrchestratorConfig>,
+
     pub app_metrics_url: Option<String>,
 }
 
@@ -179,9 +179,7 @@ impl AgentConfig {
         if let Some(listen_address) = overrides.listen_address {
             self.listen_address = listen_address;
         }
-        if let Some(orch) = overrides.orchestrator {
-            self.orchestrator = Some(orch);
-        }
+
         if let Some(scrape_interval) = overrides.scrape_interval {
             self.scrape_interval = scrape_interval;
         }

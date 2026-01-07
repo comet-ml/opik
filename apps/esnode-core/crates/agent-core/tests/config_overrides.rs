@@ -22,7 +22,7 @@ fn overrides_apply_all_booleans_and_scalars() {
         enable_mcp: Some(true),
         enable_app: Some(true),
         enable_rack_thermals: Some(true),
-        orchestrator: None,
+
         app_metrics_url: None,
         listen_address: Some("1.2.3.4:9999".to_string()),
         scrape_interval: Some(Duration::from_secs(10)),

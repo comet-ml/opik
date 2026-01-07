@@ -3,5 +3,5 @@ resolver = "2"
 members = [
     "crates/agent-core",
     "crates/agent-bin",
-    "ESNODE-Orchestrator",
+
 ]

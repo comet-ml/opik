@@ -44,5 +44,4 @@ optional = true
 version = "0.8"
 optional = true
 
-[dependencies.esnode-orchestrator]
-path = "../../ESNODE-Orchestrator"
+
