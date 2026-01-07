@@ -9,7 +9,7 @@ import { DatasetItemWrite } from "../../../../types/DatasetItemWrite";
 
 export const DatasetItemBatchWrite: core.serialization.Schema<
     serializers.DatasetItemBatchWrite.Raw,
-    OpikApi.DatasetItemBatchWrite
+    Omit<OpikApi.DatasetItemBatchWrite, "respondWithLatestVersion">
 > = core.serialization.object({
     datasetName: core.serialization.property("dataset_name", core.serialization.string().optional()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
