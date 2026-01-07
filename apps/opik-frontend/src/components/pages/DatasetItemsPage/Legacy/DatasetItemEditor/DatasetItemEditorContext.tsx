@@ -19,6 +19,7 @@ import useAppStore from "@/store/AppStore";
 import { DatasetField } from "./hooks/useDatasetItemData";
 import { useDatasetItemNavigation } from "./hooks/useDatasetItemNavigation";
 import { useDatasetItemData } from "./hooks/useDatasetItemData";
+import { prepareFormDataForSave } from "./hooks/useDatasetItemFormHelpers";
 
 interface DatasetItemEditorContextValue {
   // Data
@@ -116,13 +117,15 @@ export const DatasetItemEditorProvider: React.FC<
 
   const handleSave = useCallback(
     (data: Record<string, unknown>) => {
+      const preparedData = prepareFormDataForSave(data, fields);
+
       if (mode === "create") {
         createDatasetItem(
           {
             datasetId,
             datasetItems: [
               {
-                data,
+                data: preparedData,
                 source: DATASET_ITEM_SOURCE.manual,
               },
             ],
@@ -143,7 +146,7 @@ export const DatasetItemEditorProvider: React.FC<
           {
             datasetId,
             itemId: datasetItemId,
-            item: { data },
+            item: { data: preparedData },
           },
           {
             onSuccess: () => {
@@ -162,6 +165,7 @@ export const DatasetItemEditorProvider: React.FC<
       mode,
       workspaceName,
       onClose,
+      fields,
     ],
   );
 
