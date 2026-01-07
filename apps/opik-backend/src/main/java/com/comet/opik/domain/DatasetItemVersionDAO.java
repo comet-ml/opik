@@ -1283,6 +1283,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LIMIT 1 BY div.id
                 )
                 <endif>
+            ), trace_project_mapping AS (
+                SELECT DISTINCT
+                    id AS trace_id,
+                    project_id
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
             ), traces_with_cost_and_duration AS (
                 SELECT DISTINCT
                     eif.trace_id as trace_id,
@@ -1290,6 +1297,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     s.total_estimated_cost as total_estimated_cost,
                     s.usage as usage
                 FROM experiment_items_filtered eif
+                INNER JOIN trace_project_mapping tpm ON tpm.trace_id = eif.trace_id
                 LEFT JOIN (
                     SELECT
                         id,
@@ -1298,8 +1306,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) as duration
                     FROM traces final
+                    INNER JOIN trace_project_mapping tpm ON tpm.trace_id = traces.id
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
+                    AND project_id = tpm.project_id
                 ) AS t ON eif.trace_id = t.id
                 LEFT JOIN (
                     SELECT
@@ -1307,8 +1316,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         sum(total_estimated_cost) as total_estimated_cost,
                         sumMap(usage) as usage
                     FROM spans final
+                    INNER JOIN trace_project_mapping tpm ON tpm.trace_id = spans.trace_id
                     WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
+                    AND project_id = tpm.project_id
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
