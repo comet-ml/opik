@@ -1245,12 +1245,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     ei.experiment_id,
                     ei.dataset_item_id,
                     ei.trace_id
-                FROM experiment_items ei
+                FROM experiment_items_scope ei
                 INNER JOIN dataset_items_by_version dibv ON dibv.id = ei.dataset_item_id
-                WHERE ei.workspace_id = :workspace_id
-                <if(experiment_ids)>
-                AND ei.experiment_id IN :experiment_ids
-                <endif>
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
                     SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
@@ -1303,7 +1299,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             NULL) as duration
                     FROM traces final
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_filtered)
+                    AND id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
                 ) AS t ON eif.trace_id = t.id
                 LEFT JOIN (
                     SELECT
@@ -1312,7 +1308,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         sumMap(usage) as usage
                     FROM spans final
                     WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
+                    AND trace_id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
@@ -1323,14 +1319,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         groupArray(value)
                     ) AS feedback_scores
                 FROM feedback_scores_final
-                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                WHERE entity_id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
                 GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_percentiles AS (
                 SELECT
                     name,
                     quantiles(0.5, 0.9, 0.99)(toFloat64(value)) AS percentiles
                 FROM feedback_scores_final
-                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                WHERE entity_id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
                 GROUP BY name
             ), usage_total_tokens_data AS (
                 SELECT

@@ -1191,23 +1191,39 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
-    private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,
-            int page, int size, String workspaceId) {
-        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(), workspaceId);
+    /**
+     * Helper method to get the fallback version ID for a dataset.
+     * Returns the latest version ID if it exists, otherwise returns empty.
+     *
+     * @param datasetId The dataset ID
+     * @param workspaceId The workspace ID
+     * @return Optional containing the fallback version ID, or empty if no versions exist
+     */
+    private Optional<UUID> getFallbackVersionId(UUID datasetId, String workspaceId) {
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
 
         if (latestVersion.isEmpty()) {
-            // No versions exist yet - this shouldn't happen with versioning enabled
-            log.error("No versions found for dataset '{}' when versioning is enabled", criteria.datasetId());
+            log.error("No versions found for dataset '{}' when versioning is enabled", datasetId);
+            return Optional.empty();
+        }
+
+        return Optional.of(latestVersion.get().id());
+    }
+
+    private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,
+            int page, int size, String workspaceId) {
+        Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
+
+        if (fallbackVersionId.isEmpty()) {
             return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         }
 
-        UUID fallbackVersionId = latestVersion.get().id();
         log.info(
                 "Fetching items with experiment items for dataset '{}', using version '{}' as fallback for experiments without explicit version",
-                criteria.datasetId(), fallbackVersionId);
+                criteria.datasetId(), fallbackVersionId.get());
 
         // Fetch items using experiment-specific versions, falling back to fallbackVersionId for experiments without a version
-        return versionDao.getItemsWithExperimentItems(criteria, page, size, fallbackVersionId)
+        return versionDao.getItemsWithExperimentItems(criteria, page, size, fallbackVersionId.get())
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
@@ -1229,9 +1245,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Feature toggle ON - use versioned DAO with experiment-specific versions
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+            Optional<UUID> fallbackVersionId = getFallbackVersionId(datasetId, workspaceId);
 
-            if (latestVersion.isEmpty()) {
+            if (fallbackVersionId.isEmpty()) {
                 // No versions exist yet - fall back to legacy DAO
                 log.info("No versions found for dataset '{}', falling back to legacy DAO for stats", datasetId);
                 return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
@@ -1240,15 +1256,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 datasetId, stats.stats().size()));
             }
 
-            UUID fallbackVersionId = latestVersion.get().id();
             log.debug(
                     "Dataset versioning enabled, using version '{}' as fallback for experiments without explicit version",
-                    fallbackVersionId);
-            return versionDao.getExperimentItemsStats(datasetId, fallbackVersionId, experimentIds, filters)
+                    fallbackVersionId.get());
+            return versionDao.getExperimentItemsStats(datasetId, fallbackVersionId.get(), experimentIds, filters)
                     .switchIfEmpty(Mono.just(ProjectStats.empty()))
                     .doOnSuccess(stats -> log.info(
                             "Found experiment items stats for dataset '{}', count '{}' (using experiment-specific versions with fallback '{}')",
-                            datasetId, stats.stats().size(), fallbackVersionId));
+                            datasetId, stats.stats().size(), fallbackVersionId.get()));
         });
     }
 
