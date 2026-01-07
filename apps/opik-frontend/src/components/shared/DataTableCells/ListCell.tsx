@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import { cn } from "@/lib/utils";
@@ -10,6 +10,8 @@ import TagListTooltipContent from "@/components/shared/TagListTooltipContent/Tag
 import ChildrenWidthMeasurer from "@/components/shared/ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
 
+const LIST_CELL_CONFIG = { itemGap: 4 };
+
 const ListCell = (context: CellContext<unknown, unknown>) => {
   const items = context.getValue() as string[];
 
@@ -18,7 +20,10 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
     ROW_HEIGHT.small;
 
   const isEmpty = !Array.isArray(items) || items.length === 0;
-  const sortedList = isEmpty ? [] : [...items].sort();
+  const sortedList = useMemo(
+    () => (isEmpty ? [] : [...items].sort()),
+    [items, isEmpty],
+  );
 
   const {
     cellRef,
@@ -27,7 +32,7 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
     hasHiddenItems,
     remainingCount,
     onMeasure,
-  } = useVisibleItemsByWidth(sortedList, { itemGap: 4 });
+  } = useVisibleItemsByWidth(sortedList, LIST_CELL_CONFIG);
 
   if (isEmpty) {
     return null;

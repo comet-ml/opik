@@ -18,6 +18,8 @@ import {
 } from "@/types/shared";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
 
+const FEEDBACK_SCORE_LIST_CONFIG = { itemGap: 6 };
+
 type CustomMeta<TData> = {
   getHoverCardName: (row: TData) => string;
   areAggregatedScores?: boolean;
@@ -58,7 +60,7 @@ const FeedbackScoreListCell = <TData,>(
   const sortedList = scoreList.sort((c1, c2) => c1.name.localeCompare(c2.name));
 
   const { cellRef, visibleItems, hasHiddenItems, remainingCount, onMeasure } =
-    useVisibleItemsByWidth(sortedList, { itemGap: 6 });
+    useVisibleItemsByWidth(sortedList, FEEDBACK_SCORE_LIST_CONFIG);
 
   return (
     <CellWrapper

@@ -82,12 +82,12 @@ export function useVisibleItemsByWidth<T>(
   items: T[],
   config?: UseVisibleItemsByWidthConfig,
 ): UseVisibleItemsByWidthReturn<T> {
-  const itemGap = config?.itemGap ?? DEFAULT_ITEM_GAP;
-  const counterWidth = config?.counterWidth ?? DEFAULT_COUNTER_WIDTH;
-  const containerPadding =
-    config?.containerPadding ?? DEFAULT_CONTAINER_PADDING;
-  const minFirstItemWidth =
-    config?.minFirstItemWidth ?? DEFAULT_MIN_FIRST_ITEM_WIDTH;
+  const {
+    itemGap = DEFAULT_ITEM_GAP,
+    counterWidth = DEFAULT_COUNTER_WIDTH,
+    containerPadding = DEFAULT_CONTAINER_PADDING,
+    minFirstItemWidth = DEFAULT_MIN_FIRST_ITEM_WIDTH,
+  } = config ?? {};
 
   const [visibleCount, setVisibleCount] = useState(0);
   const widthListRef = useRef<number[]>([]);

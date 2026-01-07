@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo, ReactElement } from "react";
 import { map } from "lodash";
 import { cn } from "@/lib/utils";
 
@@ -15,17 +15,23 @@ const ChildrenWidthMeasurer: React.FC<ChildrenWidthMeasurerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hasMeasured, setHasMeasured] = useState(false);
-  const childrenCount = React.Children.count(children);
-  const prevChildrenCountRef = useRef(childrenCount);
+  const prevChildrenSignatureRef = useRef<string>("");
 
-  // reset measurement state when children count changes
+  // compute a stable signature based on children keys/content
+  const childrenSignature = useMemo(() => {
+    return React.Children.toArray(children)
+      .map((c) => (c as ReactElement)?.key ?? "")
+      .join("|");
+  }, [children]);
+
+  // reset measurement state when children signature changes
   useEffect(() => {
-    if (prevChildrenCountRef.current !== childrenCount) {
-      prevChildrenCountRef.current = childrenCount;
+    if (prevChildrenSignatureRef.current !== childrenSignature) {
+      prevChildrenSignatureRef.current = childrenSignature;
       setHasMeasured(false);
       containerRef.current = null;
     }
-  }, [childrenCount]);
+  }, [childrenSignature]);
 
   const onContainerRef = (node: HTMLDivElement | null) => {
     if (node && node !== containerRef.current) {
