@@ -51,6 +51,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -936,7 +937,7 @@ class ExperimentDAO {
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .tags(Optional.ofNullable(row.get("tags", String[].class))
                             .map(tags -> Arrays.stream(tags).collect(toSet()))
-                            .filter(set -> !set.isEmpty())
+                            .filter(CollectionUtils::isNotEmpty)
                             .orElse(null))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
@@ -1434,7 +1435,7 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        if (experimentUpdate.tags() != null) {
+        if (Objects.nonNull(experimentUpdate.tags())) {
             template.add("tags", true);
         }
 
@@ -1462,7 +1463,7 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        if (experimentUpdate.tags() != null) {
+        if (Objects.nonNull(experimentUpdate.tags())) {
             statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
         }
 
