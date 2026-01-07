@@ -16,6 +16,7 @@ import {
   SparklesIcon,
   UserPen,
   ChartLine,
+  Server,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -93,6 +94,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LayoutGrid,
         label: "Projects",
         count: "projects",
+      },
+      {
+        id: "infrastructure",
+        path: "/$workspaceName/infrastructure",
+        type: MENU_ITEM_TYPE.router,
+        icon: Server,
+        label: "Infrastructure",
       },
     ],
   },

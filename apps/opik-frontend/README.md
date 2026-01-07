@@ -20,6 +20,12 @@ The following environment variables can be used to configure the Nginx container
 | `NGINX_EXTRA_ACCESS_LOG` | _(empty)_ | Additional access log configuration. e.g. `access_log syslog:server=otel-collector:5140 logger-json;` |
 | `NGINX_EXTRA_ERROR_LOG` | _(empty)_ | Additional error log configuration. e.g. `error_log syslog:server=otel-collector:5140 error;` |
 
+### Client-side (Vite)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_GRAFANA_URL` | `http://localhost:3000` | URL for the embedded Grafana dashboard (Infrastructure page). |
+
 ### Backend (Build/Runtime)
 
 The following variables are defined in the backend Dockerfile (`apps/opik-backend/Dockerfile`):

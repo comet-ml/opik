@@ -44,6 +44,7 @@ import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import InfrastructurePage from "@/components/pages/InfrastructurePage/InfrastructurePage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -58,11 +59,11 @@ const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
     ? () => null // Render nothing in production
     : React.lazy(() =>
-        // Lazy load in development
-        import("@tanstack/router-devtools").then((res) => ({
-          default: res.TanStackRouterDevtools,
-        })),
-      );
+      // Lazy load in development
+      import("@tanstack/router-devtools").then((res) => ({
+        default: res.TanStackRouterDevtools,
+      })),
+    );
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -347,9 +348,21 @@ const promptRoute = createRoute({
   path: "/$promptId",
   getParentRoute: () => promptsRoute,
   component: PromptPage,
+
+
   staticData: {
     param: "promptId",
   },
+});
+
+// ----------- infrastructure
+const infrastructureRoute = createRoute({
+  path: "/infrastructure",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Infrastructure",
+  },
+  component: InfrastructurePage,
 });
 
 // ----------- redirect
@@ -522,6 +535,7 @@ const routeTree = rootRoute.addChildren([
         annotationQueuesListRoute,
         annotationQueueDetailsRoute,
       ]),
+      infrastructureRoute,
     ]),
   ]),
 ]);
