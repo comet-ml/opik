@@ -113,16 +113,18 @@ public interface DatasetItemService {
      *   <li>Resolves dataset ID from batch (creates dataset if needed)</li>
      *   <li>Creates a new version on top of the latest one</li>
      *   <li>If no versions exist, creates the first version</li>
+     *   <li>Returns the newly created DatasetVersion</li>
      * </ul>
      * When versioning is disabled (legacy mode):
      * <ul>
      *   <li>Saves items to the legacy dataset_items table</li>
+     *   <li>Returns empty Mono</li>
      * </ul>
      *
      * @param batch the batch of items to save (must include datasetId or datasetName)
-     * @return Mono completing when save operation finishes
+     * @return Mono emitting the newly created DatasetVersion when versioning is enabled, or empty when disabled
      */
-    Mono<Void> save(DatasetItemBatch batch);
+    Mono<DatasetVersion> save(DatasetItemBatch batch);
 }
 
 @Singleton
@@ -735,7 +737,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     // 2. If feature toggle is ON and no version specified, use latest version
                     // 3. Otherwise, use legacy table (existing behavior)
 
-                    String versionHashOrTag = request.version();
+                    String versionHashOrTag = request.datasetVersion();
 
                     // Case 1: Version explicitly specified
                     if (versionHashOrTag != null && !versionHashOrTag.isBlank()) {
@@ -1336,10 +1338,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .map(item -> {
                     // Generate new stable ID for new items
                     UUID id = idGenerator.generateId();
-                    // Use draftItemId as the stable ID field
+                    // Use id as the stable ID field
                     return item.toBuilder()
                             .id(id)
-                            .draftItemId(id)
+                            .datasetItemId(id)
                             .datasetId(datasetId)
                             .build();
                 })
@@ -1367,7 +1369,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return Mono.error(new ClientErrorException(
                     Response.status(Response.Status.BAD_REQUEST)
                             .entity(new ErrorMessage(
-                                    List.of("Edited items must have an id or draftItemId")))
+                                    List.of("Edited items must have an id or datasetItemId")))
                             .build()));
         }
 
@@ -1401,7 +1403,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 // Create map from dataset_item_id to existing item
                                 Map<UUID, DatasetItem> existingItemMap = existingItems.stream()
                                         .collect(Collectors.toMap(
-                                                DatasetItem::draftItemId,
+                                                DatasetItem::datasetItemId,
                                                 Function.identity()));
 
                                 // Merge partial changes with existing items
@@ -1443,7 +1445,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private DatasetItem mergeEditWithExisting(DatasetItem existingItem, DatasetItemEdit editItem,
             UUID datasetItemId, UUID datasetId) {
         return existingItem.toBuilder()
-                .draftItemId(datasetItemId) // Set stable ID
+                .datasetItemId(datasetItemId) // Set stable ID
                 .datasetId(datasetId)
                 .data(editItem.data() != null ? editItem.data() : existingItem.data())
                 // Source, traceId, spanId are always preserved from existing item
@@ -1484,7 +1486,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> save(@NonNull DatasetItemBatch batch) {
+    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -1494,13 +1496,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 log.info("Saving items with versioning for dataset '{}'", datasetId);
                 return saveItemsWithVersion(batch, datasetId)
                         .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
-                                .put(RequestContext.USER_NAME, userName))
-                        .then();
+                                .put(RequestContext.USER_NAME, userName));
             }
 
             // Legacy: save to legacy table
             log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
-            return verifyDatasetExistsAndSave(batch);
+            return verifyDatasetExistsAndSave(batch)
+                    .then(Mono.empty());
         });
     }
 
@@ -1553,12 +1555,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
         UUID newVersionId = idGenerator.generateId();
 
         // All items are "added" for the first version
-        // Set draftItemId as the stable ID for each item
+        // Set datasetItemId as the stable ID for each item
         List<DatasetItem> addedItems = items.stream()
                 .map(item -> {
                     UUID stableId = item.id() != null ? item.id() : idGenerator.generateId();
                     return item.toBuilder()
-                            .draftItemId(stableId)
+                            .datasetItemId(stableId)
                             .datasetId(datasetId)
                             .build();
                 })
@@ -1611,14 +1613,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         if (itemId != null && existingItemIds.contains(itemId)) {
                             // Existing item - treat as edit
                             editedItems.add(item.toBuilder()
-                                    .draftItemId(itemId)
+                                    .datasetItemId(itemId)
                                     .datasetId(datasetId)
                                     .build());
                         } else {
                             // New item - treat as add
                             UUID newItemId = itemId != null ? itemId : idGenerator.generateId();
                             addedItems.add(item.toBuilder()
-                                    .draftItemId(newItemId)
+                                    .datasetItemId(newItemId)
                                     .datasetId(datasetId)
                                     .build());
                         }

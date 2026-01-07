@@ -14,7 +14,7 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
     OpikApi.DatasetItemPublic
 > = core.serialization.object({
     id: core.serialization.string().optional(),
-    draftItemId: core.serialization.property("draft_item_id", core.serialization.string().optional()),
+    datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string().optional()),
     traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemPublicSource,
@@ -34,7 +34,7 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
 export declare namespace DatasetItemPublic {
     export interface Raw {
         id?: string | null;
-        draft_item_id?: string | null;
+        dataset_item_id?: string | null;
         trace_id?: string | null;
         span_id?: string | null;
         source: DatasetItemPublicSource.Raw;

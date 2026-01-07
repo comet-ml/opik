@@ -14,6 +14,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.Experiment;
@@ -730,7 +731,7 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
             var v1Items = v1ItemsPage.content();
             var v1ItemIds = v1Items.stream().map(DatasetItem::id).toList();
-            var v1DraftItemIds = v1Items.stream().map(DatasetItem::draftItemId).toList();
+            var v1DatasetItemIds = v1Items.stream().map(DatasetItem::datasetItemId).toList();
 
             // When - Add more items (creates version 2 on top of version 1)
             createDatasetItems(datasetId, 1);
@@ -745,7 +746,7 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
             var v2Items = v2ItemsPage.content();
             var v2ItemIds = v2Items.stream().map(DatasetItem::id).toList();
-            var v2DraftItemIds = v2Items.stream().map(DatasetItem::draftItemId).toList();
+            var v2DatasetItemIds = v2Items.stream().map(DatasetItem::datasetItemId).toList();
 
             // Then - Verify that:
             // 1. Each version has the expected number of items
@@ -756,9 +757,9 @@ class DatasetVersionResourceTest {
             assertThat(v1ItemIds).doesNotContainAnyElementsOf(v2ItemIds)
                     .as("Version 1 and version 2 should have different item IDs (unique per snapshot)");
 
-            // 3. The draftItemId field maintains the link between versions
-            assertThat(v2DraftItemIds).containsAll(v1DraftItemIds)
-                    .as("Version 2 should contain all draftItemIds from version 1 (plus new ones)");
+            // 3. The datasetItemId field maintains the link between versions
+            assertThat(v2DatasetItemIds).containsAll(v1DatasetItemIds)
+                    .as("Version 2 should contain all datasetItemIds from version 1 (plus new ones)");
         }
     }
 
@@ -936,7 +937,7 @@ class DatasetVersionResourceTest {
 
             // Verify the edited item has new data
             var editedInV2 = v2Items.stream()
-                    .filter(item -> item.draftItemId().equals(itemToEdit.draftItemId()))
+                    .filter(item -> item.datasetItemId().equals(itemToEdit.datasetItemId()))
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Edited item not found in v2"));
             assertThat(editedInV2.data().get("edited")).isNotNull();
@@ -944,13 +945,13 @@ class DatasetVersionResourceTest {
 
             // Verify the deleted item is not in v2
             var deletedInV2 = v2Items.stream()
-                    .filter(item -> item.draftItemId().equals(itemToDelete.draftItemId()))
+                    .filter(item -> item.datasetItemId().equals(itemToDelete.datasetItemId()))
                     .findFirst();
             assertThat(deletedInV2).isEmpty();
 
             // Verify the kept item is still in v2
             var keptInV2 = v2Items.stream()
-                    .filter(item -> item.draftItemId().equals(itemToKeep.draftItemId()))
+                    .filter(item -> item.datasetItemId().equals(itemToKeep.datasetItemId()))
                     .findFirst();
             assertThat(keptInV2).isPresent();
 
@@ -1125,8 +1126,8 @@ class DatasetVersionResourceTest {
             var v2Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(v2Items).hasSize(4);
-            assertThat(v2Items.stream().map(DatasetItem::draftItemId))
-                    .doesNotContain(itemToDelete.draftItemId());
+            assertThat(v2Items.stream().map(DatasetItem::datasetItemId))
+                    .doesNotContain(itemToDelete.datasetItemId());
         }
 
         @Test
@@ -1288,7 +1289,7 @@ class DatasetVersionResourceTest {
             // Then - Verify item is returned correctly
             assertThat(fetchedItem).isNotNull();
             assertThat(fetchedItem.id()).isEqualTo(rowId);
-            assertThat(fetchedItem.draftItemId()).isEqualTo(itemFromList.draftItemId());
+            assertThat(fetchedItem.datasetItemId()).isEqualTo(itemFromList.datasetItemId());
             assertThat(fetchedItem.datasetId()).isEqualTo(datasetId);
         }
 
@@ -1342,6 +1343,86 @@ class DatasetVersionResourceTest {
             var version2 = getLatestVersion(datasetId);
             assertThat(version2.itemsTotal()).isEqualTo(2);
         }
+
+        @Test
+        @DisplayName("Success: Filter versioned dataset items by data field")
+        void getItems__whenFilteringVersionedItems__thenReturnMatchingItems() {
+            // Given - Create dataset with items that have specific data fields
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create items with different descriptions
+            var item1 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "Name", JsonUtils.readTree("\"Cat\""),
+                            "Description", JsonUtils.readTree("\"Cat looking at camera\"")))
+                    .build();
+            var item2 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "Name", JsonUtils.readTree("\"Dog\""),
+                            "Description", JsonUtils.readTree("\"Dog at the garden\"")))
+                    .build();
+            var item3 = DatasetItem.builder()
+                    .id(UUID.randomUUID())
+                    .source(DatasetItemSource.MANUAL)
+                    .data(Map.of(
+                            "Name", JsonUtils.readTree("\"Bird\""),
+                            "Description", JsonUtils.readTree("\"Blue jay perched on a wooden fence\"")))
+                    .build();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(item1, item2, item3))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Ensure version is created
+            getLatestVersion(datasetId);
+
+            // When - Filter by Description field that does NOT contain "Dog"
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.NOT_CONTAINS, "Description", "Dog");
+            var filteredItems = datasetResourceClient.getDatasetItems(
+                    datasetId,
+                    Map.of("filters", TestUtils.toURLEncodedQueryParam(List.of(filter))),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then - Should return only items without "Dog" in Description (Cat and Bird)
+            assertThat(filteredItems.content()).hasSize(2);
+            assertThat(filteredItems.total()).isEqualTo(2);
+
+            // Verify all returned items have the expected structure and properties
+            filteredItems.content().forEach(item -> {
+                assertThat(item.id()).isNotNull();
+                assertThat(item.source()).isEqualTo(DatasetItemSource.MANUAL);
+                assertThat(item.data()).isNotNull();
+                assertThat(item.data()).containsKeys("Name", "Description");
+                assertThat(item.createdAt()).isNotNull();
+                assertThat(item.lastUpdatedAt()).isNotNull();
+            });
+
+            // Verify the returned items are Cat and Bird (filter worked correctly)
+            // Note: JsonNode toString() includes escaped quotes for string values
+            var names = filteredItems.content().stream()
+                    .map(item -> item.data().get("Name").toString())
+                    .toList();
+            assertThat(names).containsExactlyInAnyOrder("\"\\\"Cat\\\"\"", "\"\\\"Bird\\\"\"");
+
+            var descriptions = filteredItems.content().stream()
+                    .map(item -> item.data().get("Description").toString())
+                    .toList();
+            assertThat(descriptions)
+                    .containsExactlyInAnyOrder(
+                            "\"\\\"Cat looking at camera\\\"\"",
+                            "\"\\\"Blue jay perched on a wooden fence\\\"\"");
+
+            // Verify Dog item is not in the results
+            assertThat(names).doesNotContain("Dog");
+            assertThat(descriptions).noneMatch(desc -> desc.contains("Dog"));
+        }
     }
 
     @Nested
@@ -1391,7 +1472,7 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
             var originalItem = v1ItemsAfter.stream()
-                    .filter(i -> i.draftItemId().equals(itemToPatch.draftItemId()))
+                    .filter(i -> i.datasetItemId().equals(itemToPatch.datasetItemId()))
                     .findFirst().orElseThrow();
             assertThat(originalItem.data()).isEqualTo(itemToPatch.data());
 
@@ -1400,7 +1481,7 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(latestItems).hasSize(3);
             var patchedItem = latestItems.stream()
-                    .filter(i -> i.draftItemId().equals(itemToPatch.draftItemId()))
+                    .filter(i -> i.datasetItemId().equals(itemToPatch.datasetItemId()))
                     .findFirst().orElseThrow();
             assertThat(patchedItem.data()).isEqualTo(newData);
         }
@@ -1431,9 +1512,9 @@ class DatasetVersionResourceTest {
 
             // Keep track of stable IDs for verification
             var stableIdsToUpdate = Set.of(
-                    v1Items.get(0).draftItemId(),
-                    v1Items.get(1).draftItemId(),
-                    v1Items.get(2).draftItemId());
+                    v1Items.get(0).datasetItemId(),
+                    v1Items.get(1).datasetItemId(),
+                    v1Items.get(2).datasetItemId());
 
             // When - Batch update with new tags
             var newTags = Set.of("batch-updated", "test-tag");
@@ -1461,13 +1542,13 @@ class DatasetVersionResourceTest {
             }
 
             // Verify latest version has updated tags on the 3 items
-            // Note: Compare using draftItemId (stable ID) since row IDs change across versions
+            // Note: Compare using datasetItemId (stable ID) since row IDs change across versions
             var latestItems = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
 
             int updatedCount = 0;
             for (var item : latestItems) {
-                if (stableIdsToUpdate.contains(item.draftItemId())) {
+                if (stableIdsToUpdate.contains(item.datasetItemId())) {
                     assertThat(item.tags()).containsAll(newTags);
                     updatedCount++;
                 }
@@ -2165,6 +2246,182 @@ class DatasetVersionResourceTest {
                 experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, TEST_WORKSPACE);
             }
         }
+
+        @Test
+        @DisplayName("Success: PUT /items with respond_with_latest_version=true returns DatasetVersionSummary")
+        void putItems_whenRespondWithLatestVersionTrue_thenReturnsDatasetVersionSummary() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+
+            var items = IntStream.range(0, 3)
+                    .mapToObj(i -> {
+                        DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                        Map<String, JsonNode> data = Map.of(
+                                "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
+                                "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
+                        return item.toBuilder()
+                                .id(null)
+                                .source(DatasetItemSource.MANUAL)
+                                .traceId(null)
+                                .spanId(null)
+                                .data(data)
+                                .build();
+                    })
+                    .toList();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+
+            // when - PUT with respond_with_latest_version=true
+            try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+                    .path("items")
+                    .queryParam("respond_with_latest_version", "true")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(batch))) {
+
+                // then
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var versionSummary = actualResponse.readEntity(DatasetVersionSummary.class);
+                assertThat(versionSummary).isNotNull();
+                assertThat(versionSummary.id()).isNotNull();
+                assertThat(versionSummary.versionHash()).isNotNull();
+                assertThat(versionSummary.versionName()).isEqualTo("v1");
+                assertThat(versionSummary.tags()).contains("latest");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: PUT /items without query param returns 204 (backward compatibility)")
+        void putItems_whenRespondWithLatestVersionNotSet_thenReturnsNoContent() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+
+            var items = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                        Map<String, JsonNode> data = Map.of(
+                                "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
+                                "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
+                        return item.toBuilder()
+                                .id(null)
+                                .source(DatasetItemSource.MANUAL)
+                                .traceId(null)
+                                .spanId(null)
+                                .data(data)
+                                .build();
+                    })
+                    .toList();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+
+            // when - PUT without query param (default behavior)
+            try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+                    .path("items")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(batch))) {
+
+                // then - should return 204 No Content (backward compatible)
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+        }
+
+        @Test
+        @DisplayName("Success: PUT /items with respond_with_latest_version=true returns updated version on subsequent calls")
+        void putItems_whenRespondWithLatestVersionTrue_thenReturnsUpdatedVersionSummary() {
+            // given
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+
+            // Create first version
+            var items1 = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                        Map<String, JsonNode> data = Map.of(
+                                "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
+                                "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
+                        return item.toBuilder()
+                                .id(null)
+                                .source(DatasetItemSource.MANUAL)
+                                .traceId(null)
+                                .spanId(null)
+                                .data(data)
+                                .build();
+                    })
+                    .toList();
+
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items1)
+                    .build();
+
+            DatasetVersionSummary version1Summary;
+            try (var response1 = client.target("%s/v1/private/datasets".formatted(baseURI))
+                    .path("items")
+                    .queryParam("respond_with_latest_version", "true")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(batch1))) {
+
+                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(200);
+                version1Summary = response1.readEntity(DatasetVersionSummary.class);
+                assertThat(version1Summary.versionName()).isEqualTo("v1");
+            }
+
+            // when - Create second version
+            var items2 = IntStream.range(2, 4)
+                    .mapToObj(i -> {
+                        DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                        Map<String, JsonNode> data = Map.of(
+                                "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
+                                "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
+                        return item.toBuilder()
+                                .id(null)
+                                .source(DatasetItemSource.MANUAL)
+                                .traceId(null)
+                                .spanId(null)
+                                .data(data)
+                                .build();
+                    })
+                    .toList();
+
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items2)
+                    .build();
+
+            try (var response2 = client.target("%s/v1/private/datasets".formatted(baseURI))
+                    .path("items")
+                    .queryParam("respond_with_latest_version", "true")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(batch2))) {
+
+                // then
+                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var version2Summary = response2.readEntity(DatasetVersionSummary.class);
+                assertThat(version2Summary).isNotNull();
+                assertThat(version2Summary.id()).isNotEqualTo(version1Summary.id());
+                assertThat(version2Summary.versionHash()).isNotEqualTo(version1Summary.versionHash());
+                assertThat(version2Summary.versionName()).isEqualTo("v2");
+                assertThat(version2Summary.tags()).contains("latest");
+            }
+        }
     }
 
     @Nested
@@ -2225,7 +2482,7 @@ class DatasetVersionResourceTest {
             var streamRequestV1 = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .steamLimit(100)
-                    .version("v1")
+                    .datasetVersion("v1")
                     .build();
             var streamedItemsV1 = datasetResourceClient.streamDatasetItems(streamRequestV1, API_KEY, TEST_WORKSPACE);
 
@@ -2236,7 +2493,7 @@ class DatasetVersionResourceTest {
             var streamRequestV2 = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .steamLimit(100)
-                    .version(DatasetVersionService.LATEST_TAG)
+                    .datasetVersion(DatasetVersionService.LATEST_TAG)
                     .build();
             var streamedItemsV2 = datasetResourceClient.streamDatasetItems(streamRequestV2, API_KEY, TEST_WORKSPACE);
 

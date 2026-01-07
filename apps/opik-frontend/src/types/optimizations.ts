@@ -138,3 +138,8 @@ export interface Optimization {
   last_updated_at: string;
   last_updated_by: string;
 }
+
+export interface OptimizationUpdate {
+  name?: string;
+  status?: OPTIMIZATION_STATUS;
+}

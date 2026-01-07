@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -16,6 +17,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -95,7 +97,7 @@ public interface DatasetItemVersionDAO {
      * </ul>
      * <p>
      * For items passed to this method:
-     * - Use {@code draftItemId} field as the stable ID (maintained across versions)
+     * - Use {@code datasetItemId} field as the stable ID (maintained across versions)
      * - The {@code id} field is ignored (row IDs are generated internally)
      *
      * @param datasetId the dataset ID
@@ -132,7 +134,7 @@ public interface DatasetItemVersionDAO {
      * Inserts items directly into a new version without copying from any base version.
      * <p>
      * For items passed to this method:
-     * - Use {@code draftItemId} field as the stable ID (maintained across versions)
+     * - Use {@code datasetItemId} field as the stable ID (maintained across versions)
      * - The {@code id} field is ignored (row IDs are generated internally)
      *
      * @param datasetId the dataset ID
@@ -253,6 +255,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId<endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             <if(lastRetrievedId)>
             LIMIT :limit
@@ -267,6 +270,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
     /**
@@ -1187,25 +1191,55 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         }
     }
 
+    /**
+     * Adds dataset item filters to the StringTemplate if filters are present.
+     *
+     * @param template the StringTemplate to add filters to
+     * @param filters the list of filters to apply, may be null or empty
+     */
+    private void addDatasetItemFiltersToTemplate(ST template, List<? extends Filter> filters) {
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                            datasetItemFilters));
+        }
+    }
+
+    /**
+     * Binds dataset item filter parameters to the R2DBC statement.
+     *
+     * @param statement the R2DBC statement to bind parameters to
+     * @param filters the list of filters to bind, may be null or empty
+     */
+    private void bindDatasetItemFilters(Statement statement, List<? extends Filter> filters) {
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+        }
+    }
+
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull DatasetItemSearchCriteria criteria, int page, int size,
             @NonNull UUID versionId) {
         return Mono.zip(
-                getCount(criteria.datasetId(), versionId),
+                getCount(criteria, versionId),
                 getColumns(criteria.datasetId(), versionId)).flatMap(tuple -> {
                     Long total = tuple.getT1();
                     Set<Column> columns = tuple.getT2();
 
                     return asyncTemplate.nonTransaction(connection -> {
+                        // Build template with filters
                         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
-                        String query = template.render();
+                        addDatasetItemFiltersToTemplate(template, criteria.filters());
 
-                        var statement = connection.createStatement(query)
+                        var statement = connection.createStatement(template.render())
                                 .bind("datasetId", criteria.datasetId().toString())
                                 .bind("versionId", versionId.toString())
                                 .bind("limit", size)
                                 .bind("offset", (page - 1) * size);
+
+                        // Bind filter parameters
+                        bindDatasetItemFilters(statement, criteria.filters());
 
                         Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                                 "select_dataset_item_versions");
@@ -1376,11 +1410,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    private Mono<Long> getCount(UUID datasetId, UUID versionId) {
+    private Mono<Long> getCount(DatasetItemSearchCriteria criteria, UUID versionId) {
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(SELECT_DATASET_ITEM_VERSIONS_COUNT)
-                    .bind("datasetId", datasetId.toString())
+            // Build template with filters
+            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_COUNT);
+            addDatasetItemFiltersToTemplate(template, criteria.filters());
+
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", criteria.datasetId().toString())
                     .bind("versionId", versionId.toString());
+
+            // Bind filter parameters
+            bindDatasetItemFilters(statement, criteria.filters());
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_dataset_item_versions");
 
@@ -1462,7 +1503,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
-                .map(DatasetItem::draftItemId)
+                .map(DatasetItem::datasetItemId)
                 .collect(Collectors.toSet());
 
         // Combine deleted and edited IDs for exclusion when copying
@@ -1582,7 +1623,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
                     template.add("item_ids", true);
                 } else if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
-                    filterQueryBuilder.toAnalyticsDbFilters(batchUpdate.filters(), FilterStrategy.DATASET_ITEM)
+                    FilterQueryBuilder.toAnalyticsDbFilters(batchUpdate.filters(), FilterStrategy.DATASET_ITEM)
                             .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
                 }
 
@@ -1611,7 +1652,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 // Bind filter parameters if provided
                 if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
-                    filterQueryBuilder.bind(statement, batchUpdate.filters(), FilterStrategy.DATASET_ITEM);
+                    FilterQueryBuilder.bind(statement, batchUpdate.filters(), FilterStrategy.DATASET_ITEM);
                 }
 
                 // Bind optional update fields
@@ -1666,7 +1707,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             // Bind all item-specific parameters
             int i = 0;
             for (DatasetItem item : items) {
-                UUID stableItemId = item.draftItemId();
+                UUID stableItemId = item.datasetItemId();
                 Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
 
                 statement
@@ -1789,7 +1830,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         return DatasetItem.builder()
                 .id(UUID.fromString(row.get("id", String.class)))
-                .draftItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
+                .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
                 .source(Optional.ofNullable(row.get("source", String.class))

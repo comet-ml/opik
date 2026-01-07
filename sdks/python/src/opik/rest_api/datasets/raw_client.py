@@ -28,6 +28,7 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.dataset_version_summary import DatasetVersionSummary
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -345,16 +346,19 @@ class RawDatasetsClient:
         self,
         *,
         items: typing.Sequence[DatasetItemWrite],
+        respond_with_latest_version: typing.Optional[bool] = None,
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
+    ) -> HttpResponse[DatasetVersionSummary]:
         """
         Create/update dataset items based on dataset item id
 
         Parameters
         ----------
         items : typing.Sequence[DatasetItemWrite]
+
+        respond_with_latest_version : typing.Optional[bool]
 
         dataset_name : typing.Optional[str]
             If null, dataset_id must be provided
@@ -367,11 +371,15 @@ class RawDatasetsClient:
 
         Returns
         -------
-        HttpResponse[None]
+        HttpResponse[DatasetVersionSummary]
+            Dataset version summary
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/datasets/items",
             method="PUT",
+            params={
+                "respond_with_latest_version": respond_with_latest_version,
+            },
             json={
                 "dataset_name": dataset_name,
                 "dataset_id": dataset_id,
@@ -387,7 +395,14 @@ class RawDatasetsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
+                _data = typing.cast(
+                    DatasetVersionSummary,
+                    parse_obj_as(
+                        type_=DatasetVersionSummary,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1288,6 +1303,7 @@ class RawDatasetsClient:
         dataset_name: str,
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
+        dataset_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1300,6 +1316,8 @@ class RawDatasetsClient:
         last_retrieved_id : typing.Optional[str]
 
         steam_limit : typing.Optional[int]
+
+        dataset_version : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1316,6 +1334,7 @@ class RawDatasetsClient:
                 "dataset_name": dataset_name,
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
+                "dataset_version": dataset_version,
             },
             headers={
                 "content-type": "application/json",
@@ -2018,16 +2037,19 @@ class AsyncRawDatasetsClient:
         self,
         *,
         items: typing.Sequence[DatasetItemWrite],
+        respond_with_latest_version: typing.Optional[bool] = None,
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[None]:
+    ) -> AsyncHttpResponse[DatasetVersionSummary]:
         """
         Create/update dataset items based on dataset item id
 
         Parameters
         ----------
         items : typing.Sequence[DatasetItemWrite]
+
+        respond_with_latest_version : typing.Optional[bool]
 
         dataset_name : typing.Optional[str]
             If null, dataset_id must be provided
@@ -2040,11 +2062,15 @@ class AsyncRawDatasetsClient:
 
         Returns
         -------
-        AsyncHttpResponse[None]
+        AsyncHttpResponse[DatasetVersionSummary]
+            Dataset version summary
         """
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/datasets/items",
             method="PUT",
+            params={
+                "respond_with_latest_version": respond_with_latest_version,
+            },
             json={
                 "dataset_name": dataset_name,
                 "dataset_id": dataset_id,
@@ -2060,7 +2086,14 @@ class AsyncRawDatasetsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
+                _data = typing.cast(
+                    DatasetVersionSummary,
+                    parse_obj_as(
+                        type_=DatasetVersionSummary,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -2963,6 +2996,7 @@ class AsyncRawDatasetsClient:
         dataset_name: str,
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
+        dataset_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -2975,6 +3009,8 @@ class AsyncRawDatasetsClient:
         last_retrieved_id : typing.Optional[str]
 
         steam_limit : typing.Optional[int]
+
+        dataset_version : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2991,6 +3027,7 @@ class AsyncRawDatasetsClient:
                 "dataset_name": dataset_name,
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
+                "dataset_version": dataset_version,
             },
             headers={
                 "content-type": "application/json",
