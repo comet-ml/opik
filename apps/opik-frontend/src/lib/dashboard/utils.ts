@@ -17,48 +17,32 @@ import { areLayoutsEqual } from "@/lib/dashboard/layout";
 import { isLooseEqual } from "@/lib/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 
-export const DASHBOARD_VERSION = 1;
+export const DASHBOARD_VERSION = 2;
 const DEFAULT_SECTION_NAME = "New section";
 
 const TEMPLATE_ID_PREFIX = "template:";
 
-export const UNSET_PROJECT_OPTION = [
-  {
-    value: "",
-    label: "None",
-  },
-];
-
-export const UNSET_PROJECT_VALUE = "";
-
-export const GLOBAL_PROJECT_CONFIG_MESSAGE =
-  "Using the dashboard's default project settings";
-
-export const WIDGET_PROJECT_SELECTOR_DESCRIPTION =
-  "Widgets use the dashboard's project settings by default. You can override them here and select a different project.";
+export const CUSTOM_PROJECT_CONFIG_MESSAGE =
+  "This widget uses a custom project instead of the dashboard default.";
 
 export const resolveProjectIdFromConfig = (
   widgetProjectId: string | undefined,
   globalProjectId: string | undefined,
+  overrideDefaults?: boolean,
 ): {
   projectId: string | undefined;
-  isUsingGlobalProject: boolean;
   infoMessage: string | undefined;
 } => {
-  const isUsingGlobalProject =
-    isEmpty(widgetProjectId) && !isEmpty(globalProjectId);
+  // If overrideDefaults is true, use widget's own projectId
+  // Otherwise, always use global projectId
+  const projectId = overrideDefaults ? widgetProjectId : globalProjectId;
 
-  const projectId = !isEmpty(widgetProjectId)
-    ? widgetProjectId
-    : globalProjectId;
-
-  const infoMessage = isUsingGlobalProject
-    ? GLOBAL_PROJECT_CONFIG_MESSAGE
+  const infoMessage = overrideDefaults
+    ? CUSTOM_PROJECT_CONFIG_MESSAGE
     : undefined;
 
   return {
     projectId,
-    isUsingGlobalProject,
     infoMessage,
   };
 };

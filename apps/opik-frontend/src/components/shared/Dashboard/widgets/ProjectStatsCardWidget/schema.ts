@@ -8,6 +8,7 @@ export const ProjectStatsCardWidgetSchema = z.object({
   metric: z.string().min(1, "Metric is required"),
   traceFilters: FiltersArraySchema.optional(),
   spanFilters: FiltersArraySchema.optional(),
+  overrideDefaults: z.boolean().optional(),
 });
 
 export type ProjectStatsCardWidgetFormData = z.infer<
