@@ -16,6 +16,8 @@ import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { PROVIDERS } from "@/constants/providers";
+import { PROVIDER_TYPE } from "@/types/providers";
 
 type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -28,6 +30,9 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 }) => {
   return (
     <div className="flex flex-col gap-4 pb-4">
+      <p className="comet-body-s text-muted-slate">
+        {PROVIDERS[PROVIDER_TYPE.CUSTOM].description}
+      </p>
       {!isEdit && (
         <FormField
           control={form.control}

@@ -148,7 +148,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .filter(providerApiKey -> {
                     // For custom LLMs and Bedrock, match the model against configured models
                     // Both use the same "custom-llm/" prefix for models
-                    if (llmProvider == LlmProvider.CUSTOM_LLM) {
+                    if (llmProvider == LlmProvider.CUSTOM_LLM || llmProvider == LlmProvider.BEDROCK) {
                         // Match against both CUSTOM_LLM and BEDROCK providers since they share the model prefix
                         if (providerApiKey.provider() != LlmProvider.CUSTOM_LLM
                                 && providerApiKey.provider() != LlmProvider.BEDROCK) {
