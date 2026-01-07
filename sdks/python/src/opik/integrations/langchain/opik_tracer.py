@@ -84,7 +84,7 @@ def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
     Parse GraphInterrupt error traceback to extract the interrupt value as a string.
 
     The function extracts the value from the Interrupt object representation in the traceback.
-    It handles both string values (with quotes) and non-string values.
+    It handles both string values (with quotes) and non-string values, including nested structures.
 
     Args:
         error_traceback: The error traceback string containing GraphInterrupt information.
@@ -92,21 +92,71 @@ def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
     Returns:
         The interrupt value as a string if found, None otherwise.
     """
-    if not error_traceback.startswith("GraphInterrupt("):
+    # Search for GraphInterrupt( anywhere in the traceback
+    match = re.search(
+        r"GraphInterrupt\(.*?Interrupt\(value=",
+        error_traceback,
+        re.DOTALL,
+    )
+    if not match:
         return None
 
-    # Try to match any values: Interrupt(value=<something>)
-    # This captures everything between value= and the next comma or closing paren
-    match = re.search(
-        r"Interrupt\(value=([^,)]+)",
-        error_traceback,
-    )
-    if match:
-        value = match.group(1).strip().strip("'").strip('"')
-        # Convert the value to string representation
-        return str(value)
+    # Start parsing from after "value="
+    start_pos = match.end()
+    value_str = error_traceback[start_pos:]
 
-    return None
+    # Extract the value, handling nested parentheses and brackets
+    paren_depth = 0
+    bracket_depth = 0
+    brace_depth = 0
+    in_string = False
+    string_char = None
+    i = 0
+
+    for i, char in enumerate(value_str):
+        # Handle string boundaries
+        if char in ('"', "'") and (i == 0 or value_str[i - 1] != "\\"):
+            if not in_string:
+                in_string = True
+                string_char = char
+            elif char == string_char:
+                in_string = False
+                string_char = None
+
+        # Skip counting brackets/parens inside strings
+        if in_string:
+            continue
+
+        # Track nesting depth
+        if char == "(":
+            paren_depth += 1
+        elif char == ")":
+            if paren_depth > 0:
+                paren_depth -= 1
+            else:
+                # Found the closing paren of Interrupt(...), stop here
+                break
+        elif char == "[":
+            bracket_depth += 1
+        elif char == "]":
+            bracket_depth -= 1
+        elif char == "{":
+            brace_depth += 1
+        elif char == "}":
+            brace_depth -= 1
+        elif (
+            char == "," and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0
+        ):
+            # Found a comma at the top level, stop here
+            break
+
+    # Extract and clean the value
+    value = value_str[:i].strip()
+    # Remove surrounding quotes if present
+    if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
+        value = value[1:-1]
+
+    return value
 
 
 def _extract_resume_value_from_command(obj: Any) -> Optional[str]:
