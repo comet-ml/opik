@@ -5,13 +5,24 @@ import type { LanguageModel } from "ai";
 
 // Mock the AI SDK
 vi.mock("ai", () => ({
-  generateText: vi.fn().mockResolvedValue({
-    text: "Generated text response",
-    usage: { promptTokens: 10, completionTokens: 20 },
+  generateText: vi.fn().mockImplementation((params) => {
+    // Return structured output when output is specified
+    if (params.output) {
+      return Promise.resolve({
+        text: "",
+        output: { score: true, reason: ["test reason"] },
+        usage: { inputTokens: 10, outputTokens: 20 },
+      });
+    }
+    // Return text response by default
+    return Promise.resolve({
+      text: "Generated text response",
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
   }),
-  generateObject: vi.fn().mockResolvedValue({
-    object: { score: true, reason: ["test reason"] },
-  }),
+  Output: {
+    object: vi.fn().mockImplementation(({ schema }) => ({ schema })),
+  },
 }));
 
 describe("VercelAIChatModel", () => {

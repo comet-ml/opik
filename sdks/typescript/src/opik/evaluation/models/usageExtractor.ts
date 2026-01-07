@@ -2,7 +2,6 @@ import type {
   LanguageModelUsage,
   LanguageModelResponseMetadata,
   GenerateTextResult,
-  GenerateObjectResult,
 } from "ai";
 import type { Span } from "@/rest_api/api";
 
@@ -18,8 +17,6 @@ const TOKEN_FIELD_MAPPINGS = {
   inputTokens: "prompt_tokens",
   outputTokens: "completion_tokens",
   totalTokens: "total_tokens",
-  reasoningTokens: "reasoning_tokens",
-  cachedInputTokens: "cached_input_tokens",
 } as const;
 
 /**
@@ -32,13 +29,11 @@ export type UsageInfo = Pick<
 >;
 
 /**
- * Union type for Vercel AI SDK response types
+ * Vercel AI SDK response type
  * GenerateTextResult requires TOOLS and OUTPUT type parameters
- * GenerateObjectResult requires OBJECT type parameter
+ * In AI SDK v6, structured outputs use GenerateTextResult with Output.object()
  */
-type VercelAIResponse =
-  | GenerateTextResult<never, unknown>
-  | GenerateObjectResult<unknown>;
+type VercelAIResponse = GenerateTextResult<never, unknown>;
 
 /**
  * Type guard to check if a value is a valid Vercel AI SDK response
@@ -121,6 +116,7 @@ function extractModelId(
 
 /**
  * Extract token usage from LanguageModelUsage and map to Opik format
+ * In AI SDK v6, cached and reasoning tokens are nested in tokenDetails objects
  */
 function extractTokenUsage(
   usage: LanguageModelUsage | undefined
@@ -135,9 +131,20 @@ function extractTokenUsage(
   for (const [vercelField, opikField] of Object.entries(TOKEN_FIELD_MAPPINGS)) {
     const tokenCount = usage[vercelField as keyof LanguageModelUsage];
 
-    if (tokenCount !== undefined) {
+    if (typeof tokenCount === 'number') {
       opikUsage[opikField] = tokenCount;
     }
+  }
+
+  // Extract nested token details (AI SDK v6 change)
+  const inputDetails = usage.inputTokenDetails as { cacheReadTokens?: number } | undefined;
+  if (inputDetails?.cacheReadTokens !== undefined) {
+    opikUsage.cached_input_tokens = inputDetails.cacheReadTokens;
+  }
+
+  const outputDetails = usage.outputTokenDetails as { reasoningTokens?: number } | undefined;
+  if (outputDetails?.reasoningTokens !== undefined) {
+    opikUsage.reasoning_tokens = outputDetails.reasoningTokens;
   }
 
   return Object.keys(opikUsage).length > 0 ? opikUsage : undefined;
