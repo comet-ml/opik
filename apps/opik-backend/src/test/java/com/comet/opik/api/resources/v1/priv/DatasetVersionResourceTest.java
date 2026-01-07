@@ -1997,8 +1997,6 @@ class DatasetVersionResourceTest {
             assertThat(returnedExperimentItem.experimentId()).isEqualTo(experimentId);
             assertThat(returnedExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
 
-            // Verify columns include only dataset item data fields (not experiment output fields)
-            // Note: The legacy implementation only returns columns from dataset item 'data' fields
             var columnNames = datasetItemsWithExperiments.columns().stream()
                     .map(Column::name)
                     .collect(Collectors.toSet());

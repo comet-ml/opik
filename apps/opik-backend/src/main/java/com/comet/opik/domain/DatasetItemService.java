@@ -1153,8 +1153,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                             datasetItemSearchCriteria, page, size);
 
-                    // For simplicity, use the latest version as fallback for all experiments
-                    // The DAO query will handle per-experiment version resolution if needed
                     return getItemsFromLatestVersionWithExperimentItems(datasetItemSearchCriteria, page, size,
                             workspaceId);
                 }
@@ -1165,7 +1163,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 return getItemsFromLatestVersion(datasetItemSearchCriteria, page, size, workspaceId);
             });
         } else {
-            // Versioning toggle is OFF: fetch draft (current) items from dataset_items table
+            // Versioning toggle is OFF: fetch items from dataset_items table
             log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
                     datasetItemSearchCriteria, page, size);
 
@@ -1179,8 +1177,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(), workspaceId);
 
         if (latestVersion.isEmpty()) {
-            // No versions exist yet - fall back to draft items
-            // This allows users to work with draft items until the first version is committed
+            // No versions exist yet - fall back to legacy items
             log.info("No versions found for dataset '{}', falling back to draft items", criteria.datasetId());
             return dao.getItems(criteria, page, size)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
@@ -1208,7 +1205,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 criteria.datasetId());
 
         // Fetch items from the latest version
-        // Note: Only return dataset item columns, not experiment output columns (legacy behavior)
         return versionDao.getItemsWithExperimentItems(criteria, page, size, versionId)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }

@@ -1449,7 +1449,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @param criteria The search criteria containing filters and search terms
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
-        // Add filters if present - need to add all filter strategies
+        // Add filters if present
         if (criteria.filters() != null && !criteria.filters().isEmpty()) {
             var datasetItemFiltersOpt = FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
                     FilterStrategy.DATASET_ITEM);
