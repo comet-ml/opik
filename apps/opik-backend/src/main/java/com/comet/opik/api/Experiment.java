@@ -31,9 +31,8 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) String name,
         @Schema(implementation = JsonListString.class) @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) JsonNode metadata,
-        @Valid
-        @Size(max=50, message="Cannot have more than 50 tags")
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) Set<@NotBlank(message="Tag must not be blank") @Size(max=100, message="Tag cannot exceed 100 characters") String> tags,
+        @Valid @Size(max = 50, message = "Cannot have more than 50 tags") @JsonView({Experiment.View.Public.class,
+                Experiment.View.Write.class}) Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tags,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentType type,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) UUID optimizationId,
         @JsonView({
