@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Column;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -40,7 +39,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1186,31 +1184,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         versionId,
                                         datasetItemSearchCriteria.datasetId());
 
-                                // Fetch experiment items output columns and merge with dataset item columns
-                                return Mono.zip(
-                                        versionDao.getItemsWithExperimentItems(datasetItemSearchCriteria, page, size,
-                                                versionId),
-                                        versionDao
-                                                .getExperimentItemsOutputColumns(datasetItemSearchCriteria.datasetId(),
-                                                        datasetItemSearchCriteria.experimentIds())
-                                                .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID,
-                                                        workspaceId)))
-                                        .map(tuple -> {
-                                            DatasetItemPage itemPage = tuple.getT1();
-                                            List<Column> experimentColumns = tuple.getT2();
-
-                                            // Merge dataset columns with experiment columns
-                                            Set<Column> allColumns = new HashSet<>(itemPage.columns());
-                                            allColumns.addAll(experimentColumns);
-
-                                            return new DatasetItemPage(
-                                                    itemPage.content(),
-                                                    itemPage.page(),
-                                                    itemPage.size(),
-                                                    itemPage.total(),
-                                                    allColumns,
-                                                    itemPage.sortableBy());
-                                        })
+                                // Fetch items from the experiment's linked version
+                                // Note: Only return dataset item columns, not experiment output columns (legacy behavior)
+                                return versionDao.getItemsWithExperimentItems(datasetItemSearchCriteria, page, size,
+                                        versionId)
                                         .defaultIfEmpty(
                                                 DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
                             });
@@ -1264,27 +1241,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
         log.info("Fetching items with experiment items from latest version '{}' for dataset '{}'", versionId,
                 criteria.datasetId());
 
-        // Fetch experiment items output columns and merge with dataset item columns
-        return Mono.zip(
-                versionDao.getItemsWithExperimentItems(criteria, page, size, versionId),
-                versionDao.getExperimentItemsOutputColumns(criteria.datasetId(), criteria.experimentIds())
-                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)))
-                .map(tuple -> {
-                    DatasetItemPage itemPage = tuple.getT1();
-                    List<Column> experimentColumns = tuple.getT2();
-
-                    // Merge dataset columns with experiment columns
-                    Set<Column> allColumns = new HashSet<>(itemPage.columns());
-                    allColumns.addAll(experimentColumns);
-
-                    return new DatasetItemPage(
-                            itemPage.content(),
-                            itemPage.page(),
-                            itemPage.size(),
-                            itemPage.total(),
-                            allColumns,
-                            itemPage.sortableBy());
-                })
+        // Fetch items from the latest version
+        // Note: Only return dataset item columns, not experiment output columns (legacy behavior)
+        return versionDao.getItemsWithExperimentItems(criteria, page, size, versionId)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 

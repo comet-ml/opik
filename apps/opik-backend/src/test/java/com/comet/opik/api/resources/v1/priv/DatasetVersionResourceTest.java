@@ -1168,19 +1168,19 @@ class DatasetVersionResourceTest {
 
             // Create items with different data values to enable filtering
             var item1 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
                             "status", factory.manufacturePojo(JsonNode.class)))
                     .build();
             var item2 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
                             "status", factory.manufacturePojo(JsonNode.class)))
                     .build();
             var item3 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
                             "status", factory.manufacturePojo(JsonNode.class)))
@@ -1231,7 +1231,7 @@ class DatasetVersionResourceTest {
 
             // Create items with known data fields to test columns extraction
             var item1 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "input", JsonUtils.readTree("{\"query\": \"test query\"}"),
@@ -1239,7 +1239,7 @@ class DatasetVersionResourceTest {
                             "score", JsonUtils.readTree("0.95")))
                     .build();
             var item2 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "input", JsonUtils.readTree("{\"query\": \"another query\"}"),
@@ -1351,21 +1351,21 @@ class DatasetVersionResourceTest {
 
             // Create items with different descriptions
             var item1 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "Name", JsonUtils.readTree("\"Cat\""),
                             "Description", JsonUtils.readTree("\"Cat looking at camera\"")))
                     .build();
             var item2 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "Name", JsonUtils.readTree("\"Dog\""),
                             "Description", JsonUtils.readTree("\"Dog at the garden\"")))
                     .build();
             var item3 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "Name", JsonUtils.readTree("\"Bird\""),
@@ -1997,13 +1997,14 @@ class DatasetVersionResourceTest {
             assertThat(returnedExperimentItem.experimentId()).isEqualTo(experimentId);
             assertThat(returnedExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
 
-            // Verify columns include input and output from trace data (for experiment items view)
+            // Verify columns include only dataset item data fields (not experiment output fields)
+            // Note: The legacy implementation only returns columns from dataset item 'data' fields
             var columnNames = datasetItemsWithExperiments.columns().stream()
                     .map(Column::name)
                     .collect(Collectors.toSet());
             assertThat(columnNames)
-                    .as("Columns should include 'input' and 'output' from trace data for experiment items")
-                    .contains("input", "output");
+                    .as("Columns should include dataset item data fields (job_title, salary)")
+                    .contains("job_title", "salary");
         }
 
         @Test

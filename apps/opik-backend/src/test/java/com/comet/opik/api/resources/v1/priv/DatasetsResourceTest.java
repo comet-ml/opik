@@ -5875,6 +5875,8 @@ class DatasetsResourceTest {
 
             var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .promptVersion(null)
                     .promptVersions(null)
                     .build();
