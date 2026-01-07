@@ -7,6 +7,7 @@ import {
   FlaskConical,
   LayoutGrid,
   ListTree,
+  MessagesSquare,
   SparklesIcon,
   UserPen,
 } from "lucide-react";
@@ -30,6 +31,7 @@ export enum RESOURCE_TYPE {
   annotationQueue,
   dashboard,
   traces,
+  threads,
 }
 
 export const RESOURCE_MAP = {
@@ -104,6 +106,14 @@ export const RESOURCE_MAP = {
     deleted: "Deleted traces",
     label: "traces",
     color: "var(--color-green)",
+  },
+  [RESOURCE_TYPE.threads]: {
+    url: "/$workspaceName/projects/$projectId/traces",
+    icon: MessagesSquare,
+    param: "projectId",
+    deleted: "Deleted threads",
+    label: "threads",
+    color: "var(--thread-icon-text)",
   },
 };
 

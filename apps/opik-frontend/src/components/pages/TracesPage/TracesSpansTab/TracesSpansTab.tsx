@@ -830,6 +830,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
+              id: "annotation_queue_ids",
+              label: "Annotation queue IDs",
+              type: COLUMN_TYPE.list,
+            },
+            {
               id: "llm_span_count",
               label: "LLM calls count",
               type: COLUMN_TYPE.number,
