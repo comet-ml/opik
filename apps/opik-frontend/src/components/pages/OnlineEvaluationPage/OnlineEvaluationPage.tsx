@@ -146,6 +146,14 @@ export const OnlineEvaluationPage: React.FC = () => {
     updateType: "replaceIn",
   });
 
+  const [cloneRuleId, setCloneRuleId] = useQueryParam(
+    "cloneRule",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [filters = [], setFilters] = useQueryParam(`filters`, JsonParam, {
     updateType: "replaceIn",
   });
@@ -199,7 +207,9 @@ export const OnlineEvaluationPage: React.FC = () => {
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
   const editingRule = rows.find((r) => r.id === editRuleId);
+  const cloningRule = rows.find((r) => r.id === cloneRuleId);
   const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
+  const isCloneDialogOpen = Boolean(cloningRule);
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -233,6 +243,14 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId],
   );
 
+  const handleOpenCloneDialog = useCallback(
+    (ruleId: string) => {
+      setCloneRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setCloneRuleId],
+  );
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
@@ -264,11 +282,18 @@ export const OnlineEvaluationPage: React.FC = () => {
           <RuleRowActionsCell
             {...props}
             openEditDialog={handleOpenEditDialog}
+            openCloneDialog={handleOpenCloneDialog}
           />
         ),
       }),
     ];
-  }, [columnsOrder, selectedColumns, sortableBy, handleOpenEditDialog]);
+  }, [
+    columnsOrder,
+    selectedColumns,
+    sortableBy,
+    handleOpenEditDialog,
+    handleOpenCloneDialog,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -304,6 +329,15 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId],
   );
 
+  const handleCloseCloneDialog = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setCloneRuleId(undefined);
+      }
+    },
+    [setCloneRuleId],
+  );
+
   // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "projects" from filter options
   // Note: projects filtering is not supported by backend (see OPIK-3446)
   const filterableColumns = useMemo(
@@ -331,6 +365,13 @@ export const OnlineEvaluationPage: React.FC = () => {
           open={isDialogOpen}
           setOpen={handleCloseDialog}
           rule={editingRule}
+        />
+        <AddEditRuleDialog
+          key={`clone-${resetDialogKeyRef.current}`}
+          open={isCloneDialogOpen}
+          setOpen={handleCloseCloneDialog}
+          rule={cloningRule}
+          mode="clone"
         />
       </>
     );
@@ -404,6 +445,13 @@ export const OnlineEvaluationPage: React.FC = () => {
         open={isDialogOpen}
         setOpen={handleCloseDialog}
         rule={editingRule}
+      />
+      <AddEditRuleDialog
+        key={`clone-${resetDialogKeyRef.current}`}
+        open={isCloneDialogOpen}
+        setOpen={handleCloseCloneDialog}
+        rule={cloningRule}
+        mode="clone"
       />
     </div>
   );
