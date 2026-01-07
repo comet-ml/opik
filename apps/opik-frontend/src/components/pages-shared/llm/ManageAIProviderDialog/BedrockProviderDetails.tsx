@@ -73,7 +73,7 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
               <FormControl>
                 <Input
                   id="url"
-                  placeholder="https://bedrock-runtime.us-east-1.amazonaws.com/"
+                  placeholder="https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1"
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
