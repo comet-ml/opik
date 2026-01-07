@@ -6,7 +6,7 @@ import {
   PROVIDER_TYPE,
   ProviderModelsMap,
 } from "@/types/providers";
-import useCustomProviderModels from "@/hooks/useCustomProviderModels";
+import useOpenAICompatibleModels from "@/hooks/useOpenAICompatibleModels";
 import { parseComposedProviderType } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 import first from "lodash/first";
@@ -1527,11 +1527,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 };
 
 const useLLMProviderModelsData = () => {
-  const customProviderModels = useCustomProviderModels();
+  const openAICompatibleModels = useOpenAICompatibleModels();
 
   const getProviderModels = useCallback(() => {
-    return { ...PROVIDER_MODELS, ...customProviderModels } as ProviderModelsMap;
-  }, [customProviderModels]);
+    return {
+      ...PROVIDER_MODELS,
+      ...openAICompatibleModels,
+    } as ProviderModelsMap;
+  }, [openAICompatibleModels]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
     (modelName) => {

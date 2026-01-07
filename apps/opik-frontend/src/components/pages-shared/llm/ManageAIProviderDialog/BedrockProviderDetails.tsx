@@ -10,7 +10,7 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
@@ -52,9 +52,8 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
                 </FormControl>
                 <FormMessage />
                 <Description>
-                  {
-                    'A unique identifier for this provider instance (e.g., "Bedrock us-east-1").'
-                  }
+                  A unique identifier for this provider instance (e.g.,
+                  &quot;Bedrock us-east-1&quot;).
                 </Description>
               </FormItem>
             );
@@ -280,4 +279,3 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
 };
 
 export default BedrockProviderDetails;
-

@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MessageCircleWarning } from "lucide-react";
-import get from "lodash/get";
 import isFunction from "lodash/isFunction";
 import { v4 as uuidv4 } from "uuid";
 
@@ -16,14 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
-import { Label } from "@/components/ui/label";
+import { Form } from "@/components/ui/form";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_TYPE,
@@ -33,7 +25,7 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
-import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/ProviderSelect";
+import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import {
@@ -48,7 +40,6 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import {
   convertCustomProviderModels,
-  parseComposedProviderType,
   buildComposedProviderKey,
 } from "@/lib/provider";
 
@@ -111,14 +102,21 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [selectedProviderId, setSelectedProviderId] = useState<
     string | undefined
-  >(undefined);
+  >(providerKey?.id);
+  const [selectedComposedProvider, setSelectedComposedProvider] = useState<
+    COMPOSED_PROVIDER_TYPE | ""
+  >(providerKey?.ui_composed_provider ?? "");
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
 
   const existingProviderNames = useMemo(() => {
     return configuredProvidersList
-      ?.filter((p) => p.provider === PROVIDER_TYPE.CUSTOM || p.provider === PROVIDER_TYPE.BEDROCK)
+      ?.filter(
+        (p) =>
+          p.provider === PROVIDER_TYPE.CUSTOM ||
+          p.provider === PROVIDER_TYPE.BEDROCK,
+      )
       .map((p) => p.provider_name)
       .filter(Boolean) as string[];
   }, [configuredProvidersList]);
@@ -165,6 +163,49 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       ? "Update configuration"
       : "Add configuration"
     : "Done";
+
+  const handleProviderSelect = useCallback(
+    (
+      composedProviderType: COMPOSED_PROVIDER_TYPE,
+      providerType: PROVIDER_TYPE,
+      configuredId?: string,
+    ) => {
+      setSelectedProviderId(configuredId);
+      setSelectedComposedProvider(composedProviderType);
+
+      const providerData = configuredProvidersList?.find(
+        (c) => composedProviderType === c.ui_composed_provider,
+      );
+
+      form.setValue("id", providerData?.id);
+      form.setValue("url", providerData?.base_url ?? "");
+      form.setValue("providerName", providerData?.provider_name ?? "");
+      form.setValue(
+        "models",
+        convertCustomProviderModels(
+          providerData?.configuration?.models ?? "",
+          providerData?.provider_name,
+        ),
+      );
+      form.setValue("location", providerData?.configuration?.location ?? "");
+      form.setValue(
+        "headers",
+        providerData?.headers && Object.keys(providerData.headers).length > 0
+          ? Object.entries(providerData.headers).map(([key, value]) => ({
+              key,
+              value,
+              id: uuidv4(),
+            }))
+          : [],
+      );
+
+      form.setValue("provider", providerType);
+      form.setValue("composedProviderType", composedProviderType);
+      form.setValue("apiKey", "");
+      form.clearErrors();
+    },
+    [form, configuredProvidersList],
+  );
 
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
@@ -289,11 +330,11 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+      <DialogContent className="max-w-lg sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <DialogAutoScrollBody className="max-h-[60vh]">
+        <DialogAutoScrollBody className="max-h-[60vh] pr-6">
           <ExplainerDescription
             className="mb-4"
             {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
@@ -303,76 +344,14 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               className="flex flex-col gap-4 pb-4"
               onSubmit={form.handleSubmit(cloudConfigHandler)}
             >
-              <FormField
-                control={form.control}
-                name="composedProviderType"
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, ["provider"]);
-
-                  return (
-                    <FormItem>
-                      <Label>Provider</Label>
-                      <FormControl>
-                        <ProviderSelect
-                          disabled={Boolean(providerKey)}
-                          value={field.value}
-                          onChange={(
-                            p: COMPOSED_PROVIDER_TYPE,
-                            id?: string,
-                          ) => {
-                            setSelectedProviderId(id);
-                            const providerData = configuredProvidersList?.find(
-                              (c) => p === c.ui_composed_provider,
-                            );
-
-                            form.setValue("id", providerData?.id);
-                            form.setValue("url", providerData?.base_url ?? "");
-                            form.setValue(
-                              "providerName",
-                              providerData?.provider_name ?? "",
-                            );
-                            form.setValue(
-                              "models",
-                              convertCustomProviderModels(
-                                providerData?.configuration?.models ?? "",
-                                providerData?.provider_name,
-                              ),
-                            );
-                            form.setValue(
-                              "location",
-                              providerData?.configuration?.location ?? "",
-                            );
-                            form.setValue(
-                              "headers",
-                              providerData?.headers &&
-                                Object.keys(providerData.headers).length > 0
-                                ? Object.entries(providerData.headers).map(
-                                    ([key, value]) => ({
-                                      key,
-                                      value,
-                                      id: uuidv4(),
-                                    }),
-                                  )
-                                : [],
-                            );
-
-                            form.setValue(
-                              "provider",
-                              parseComposedProviderType(p),
-                            );
-                            field.onChange(p);
-                          }}
-                          configuredProvidersList={
-                            configuredProvidersList ??
-                            (providerKey ? [providerKey] : undefined)
-                          }
-                          hasError={Boolean(validationErrors?.message)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+              <ProviderGrid
+                selectedProvider={selectedComposedProvider}
+                onSelectProvider={handleProviderSelect}
+                configuredProvidersList={
+                  configuredProvidersList ??
+                  (providerKey ? [providerKey] : undefined)
+                }
+                disabled={Boolean(providerKey)}
               />
               {(isConfiguredProvider || providerKey) && (
                 <ExplainerCallout
