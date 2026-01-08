@@ -1286,30 +1286,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ), trace_project_mapping AS (
                 SELECT DISTINCT
                     id AS trace_id,
-                    project_id
+                    project_id,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                        NULL) as duration
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
             ), traces_with_cost_and_duration AS (
                 SELECT DISTINCT
                     eif.trace_id as trace_id,
-                    t.duration as duration,
+                    tpm.duration as duration,
                     s.total_estimated_cost as total_estimated_cost,
                     s.usage as usage
                 FROM experiment_items_filtered eif
                 INNER JOIN trace_project_mapping tpm ON tpm.trace_id = eif.trace_id
-                LEFT JOIN (
-                    SELECT
-                        id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) as duration
-                    FROM traces final
-                    INNER JOIN trace_project_mapping tpm ON tpm.trace_id = traces.id
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = tpm.project_id
-                ) AS t ON eif.trace_id = t.id
                 LEFT JOIN (
                     SELECT
                         trace_id,
