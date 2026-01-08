@@ -71,7 +71,9 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
-  const overrideDefaults = widget?.config?.overrideDefaults;
+  const overrideDefaults = widget?.config?.overrideDefaults as
+    | boolean
+    | undefined;
 
   const { projectId, infoMessage, intervalStart, intervalEnd } = useMemo(() => {
     const { projectId: resolvedProjectId, infoMessage } =
