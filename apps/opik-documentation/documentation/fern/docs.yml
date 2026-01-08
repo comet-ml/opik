@@ -16,7 +16,7 @@ metadata:
   twitter:site: "@CometML"
 
 announcement:
-  message: "🎉 Join our Global AI Hackathon with <a href=\"https://luma.com/commit_to_change_hackathon?ref=opik-docs\" target=\"_blank\">$30,000 in cash prizes</a> starting 13th Jan."
+  message: "🎉 Join our Global AI Hackathon with <a href=\"https://luma.com/commit_to_change_hackathon?utm_source=opik-docs\" target=\"_blank\">$30,000 in cash prizes</a> starting 13th Jan."
 
 title: Opik Documentation
 favicon: img/logo.svg
