@@ -285,4 +285,418 @@ describe("migrateDashboardConfig", () => {
       expect(result.sections[1].title).toBe("Section 2");
     });
   });
+
+  describe("migration from v1 to v2", () => {
+    it("should set overrideDefaults to true for PROJECT_METRICS widgets with custom projectId", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: {
+                  projectId: "project-1",
+                  metricType: "trace_count",
+                  chartType: "line",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 3, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+    });
+
+    it("should set overrideDefaults to false for PROJECT_METRICS widgets without custom projectId", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: {
+                  metricType: "trace_count",
+                  chartType: "line",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 3, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+    });
+
+    it("should set overrideDefaults to true for PROJECT_STATS_CARD widgets with custom projectId", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_STATS_CARD,
+                title: "Stats",
+                config: {
+                  projectId: "project-1",
+                  source: "traces",
+                  metric: "count",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 2, h: 3 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+    });
+
+    it("should set overrideDefaults to false for PROJECT_STATS_CARD widgets without custom projectId", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_STATS_CARD,
+                title: "Stats",
+                config: {
+                  source: "traces",
+                  metric: "count",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 2, h: 3 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+    });
+
+    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with custom experimentIds", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  experimentIds: ["exp-1"],
+                  chartType: "line",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+    });
+
+    it("should set overrideDefaults to false for EXPERIMENTS_FEEDBACK_SCORES widgets without custom experimentIds", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+    });
+
+    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with filters in FILTER_AND_GROUP mode", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  dataSource: "filter-and-group",
+                  chartType: "line",
+                  filters: [
+                    {
+                      field: "status",
+                      operator: "=",
+                      value: "success",
+                      type: "string",
+                    },
+                  ],
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+    });
+
+    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with groups in FILTER_AND_GROUP mode", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  dataSource: "filter-and-group",
+                  chartType: "line",
+                  groups: [
+                    {
+                      id: "group-1",
+                      field: "model",
+                      direction: "asc",
+                      type: "string",
+                    },
+                  ],
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+    });
+
+    it("should set overrideDefaults to false for EXPERIMENTS_FEEDBACK_SCORES widgets in FILTER_AND_GROUP mode without filters or groups", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  dataSource: "filter-and-group",
+                  chartType: "line",
+                  filters: [],
+                  groups: [],
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+    });
+
+    it("should not modify TEXT_MARKDOWN widgets", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.TEXT_MARKDOWN,
+                title: "Text",
+                config: { content: "test" } as never,
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 2, h: 2 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config).toEqual({
+        content: "test",
+      });
+    });
+
+    it("should handle multiple widgets of different types", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: { projectId: "project-1", metricType: "trace_count" },
+              },
+              {
+                id: "widget-2",
+                type: WIDGET_TYPE.TEXT_MARKDOWN,
+                title: "Text",
+                config: { content: "test" } as never,
+              },
+              {
+                id: "widget-3",
+                type: WIDGET_TYPE.PROJECT_STATS_CARD,
+                title: "Stats",
+                config: { source: "traces" },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(2);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+      expect(result.sections[0].widgets[1].config.overrideDefaults).toBeUndefined();
+      expect(result.sections[0].widgets[2].config.overrideDefaults).toBe(false);
+    });
+
+    it("should preserve existing widget config properties", () => {
+      const v1Dashboard: DashboardState = {
+        version: 1,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: {
+                  projectId: "project-1",
+                  metricType: "trace_count",
+                  chartType: "line",
+                  traceFilters: [
+                    {
+                      field: "status",
+                      operator: "=",
+                      value: "success",
+                      type: "string",
+                    },
+                  ],
+                  feedbackScores: ["score-1"],
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.sections[0].widgets[0].config).toEqual({
+        projectId: "project-1",
+        metricType: "trace_count",
+        chartType: "line",
+        traceFilters: [
+          {
+            field: "status",
+            operator: "=",
+            value: "success",
+            type: "string",
+          },
+        ],
+        feedbackScores: ["score-1"],
+        overrideDefaults: true,
+      });
+    });
+  });
 });

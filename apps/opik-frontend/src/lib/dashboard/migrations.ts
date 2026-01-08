@@ -1,13 +1,61 @@
-import { DashboardState } from "@/types/dashboard";
+import {
+  DashboardState,
+  WIDGET_TYPE,
+  EXPERIMENT_DATA_SOURCE,
+} from "@/types/dashboard";
 import {
   generateEmptyDashboard,
   DASHBOARD_VERSION,
 } from "@/lib/dashboard/utils";
 import isObject from "lodash/isObject";
+import isEmpty from "lodash/isEmpty";
 
 type MigrationFunction = (dashboard: DashboardState) => DashboardState;
 
-const migrations: Record<number, MigrationFunction> = {};
+const migrateDashboardV1toV2 = (dashboard: DashboardState): DashboardState => {
+  return {
+    ...dashboard,
+    version: 2,
+    sections: dashboard.sections.map((section) => ({
+      ...section,
+      widgets: section.widgets.map((widget) => {
+        if (
+          widget.type === WIDGET_TYPE.PROJECT_METRICS ||
+          widget.type === WIDGET_TYPE.PROJECT_STATS_CARD
+        ) {
+          const hasCustomProject = !isEmpty(widget.config.projectId);
+          return {
+            ...widget,
+            config: {
+              ...widget.config,
+              overrideDefaults: hasCustomProject,
+            },
+          };
+        }
+
+        if (widget.type === WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES) {
+          const hasCustomConfig =
+            !isEmpty(widget.config.experimentIds) ||
+            widget.config.dataSource !== EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+
+          return {
+            ...widget,
+            config: {
+              ...widget.config,
+              overrideDefaults: hasCustomConfig,
+            },
+          };
+        }
+
+        return widget;
+      }),
+    })),
+  };
+};
+
+const migrations: Record<number, MigrationFunction> = {
+  2: migrateDashboardV1toV2,
+};
 
 export const migrateDashboardConfig = (
   config: DashboardState,
