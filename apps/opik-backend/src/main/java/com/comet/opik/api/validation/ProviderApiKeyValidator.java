@@ -1,6 +1,5 @@
 package com.comet.opik.api.validation;
 
-import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import jakarta.validation.ConstraintValidator;
@@ -27,9 +26,9 @@ public class ProviderApiKeyValidator
         var provider = providerApiKey.provider();
         var providerName = providerApiKey.providerName();
 
-        if (provider == LlmProvider.CUSTOM_LLM || provider == LlmProvider.BEDROCK) {
+        if (provider.supportsProviderName()) {
             if (isBlank(providerName)) {
-                // For custom and Bedrock providers, provider_name is required and must not be blank
+                // For providers that support naming, provider_name is required and must not be blank
                 context.buildConstraintViolationWithTemplate(
                         "provider_name is required for custom LLM and Bedrock providers")
                         .addPropertyNode("providerName")
@@ -37,7 +36,7 @@ public class ProviderApiKeyValidator
                 return false;
             }
 
-            // If custom or Bedrock provider, no need to validate api key
+            // If provider supports naming, no need to validate api key
             return true;
         }
 

@@ -59,8 +59,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
-        // For custom LLM providers (including Bedrock), add provider_name to configuration if present
-        if ((providerConfig.provider() == LlmProvider.CUSTOM_LLM || providerConfig.provider() == LlmProvider.BEDROCK)
+        // For providers that support naming, add provider_name to configuration if present
+        if (providerConfig.provider().supportsProviderName()
                 && StringUtils.isNotBlank(providerConfig.providerName())) {
             configuration = new HashMap<>(configuration);
             configuration.put("provider_name", providerConfig.providerName());
@@ -146,12 +146,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
         return llmProviderApiKeyService.find(workspaceId).content().stream()
                 .filter(providerApiKey -> {
-                    // For custom LLMs and Bedrock, match the model against configured models
-                    // Both use the same "custom-llm/" prefix for models
-                    if (llmProvider == LlmProvider.CUSTOM_LLM || llmProvider == LlmProvider.BEDROCK) {
-                        // Match against both CUSTOM_LLM and BEDROCK providers since they share the model prefix
-                        if (providerApiKey.provider() != LlmProvider.CUSTOM_LLM
-                                && providerApiKey.provider() != LlmProvider.BEDROCK) {
+                    // For providers that support naming, match the model against configured models
+                    // Both CUSTOM_LLM and BEDROCK use the same "custom-llm/" prefix for models
+                    if (llmProvider.supportsProviderName()) {
+                        // Match against providers that support naming since they share the model prefix
+                        if (!providerApiKey.provider().supportsProviderName()) {
                             return false;
                         }
                         return isModelConfiguredForProvider(model, providerApiKey);

@@ -30,4 +30,14 @@ public enum LlmProvider {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown llm provider '%s'".formatted(value)));
     }
+
+    /**
+     * Checks if this provider supports custom naming (multiple instances with different names).
+     * Providers that support naming can have multiple configurations distinguished by provider_name.
+     *
+     * @return true if this provider supports custom naming (CUSTOM_LLM, BEDROCK), false otherwise
+     */
+    public boolean supportsProviderName() {
+        return this == CUSTOM_LLM || this == BEDROCK;
+    }
 }
