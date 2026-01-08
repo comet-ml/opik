@@ -5,7 +5,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Copy, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { EvaluatorsRule } from "@/types/automations";
 import { CellContext } from "@tanstack/react-table";
@@ -15,11 +15,12 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 interface RuleRowActionsCellProps {
   openEditDialog: (ruleId: string) => void;
+  openCloneDialog: (ruleId: string) => void;
 }
 
 const RuleRowActionsCell: React.FC<
   RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>
-> = ({ openEditDialog, row, column, table }) => {
+> = ({ openEditDialog, openCloneDialog, row, column, table }) => {
   const resetKeyRef = useRef(0);
   const rule = row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -62,6 +63,10 @@ Tip: To pause scoring without deleting, disable the rule.`}
           <DropdownMenuItem onClick={() => openEditDialog(rule.id)}>
             <Pencil className="mr-2 size-4" />
             Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openCloneDialog(rule.id)}>
+            <Copy className="mr-2 size-4" />
+            Clone
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
