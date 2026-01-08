@@ -27,6 +27,9 @@ public class RedisConfig {
     @Valid @JsonProperty
     private AwsIamAuthConfig awsIamAuth = new AwsIamAuthConfig();
 
+    @Valid @JsonProperty
+    private Integer retryAttempts;
+
     public Config build() {
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
         var redisUrl = RedisUrl.parse(singleNodeUrl);
@@ -34,6 +37,9 @@ public class RedisConfig {
         var singleServerConfig = config.useSingleServer()
                 .setAddress(redisUrl.address())
                 .setDatabase(redisUrl.database());
+        if (retryAttempts != null) {
+            singleServerConfig.setRetryAttempts(retryAttempts);
+        }
         if (awsIamAuth.isEnabled()) {
             // Configure Redis with AWS IAM authentication using DefaultCredentialsProvider
             // This will read from environment variables, system properties, IAM roles, etc.
