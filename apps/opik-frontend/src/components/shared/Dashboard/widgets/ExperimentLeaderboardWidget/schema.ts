@@ -17,4 +17,3 @@ export const ExperimentLeaderboardWidgetSchema = z.object({
 export type ExperimentLeaderboardWidgetFormData = z.infer<
   typeof ExperimentLeaderboardWidgetSchema
 >;
-

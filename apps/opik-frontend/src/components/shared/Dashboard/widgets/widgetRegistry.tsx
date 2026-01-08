@@ -1,4 +1,10 @@
-import { NotebookText, ChartLine, Hash, FlaskConical, Trophy } from "lucide-react";
+import {
+  NotebookText,
+  ChartLine,
+  Hash,
+  FlaskConical,
+  Trophy,
+} from "lucide-react";
 import {
   WidgetResolver,
   WidgetComponents,

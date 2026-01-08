@@ -19,9 +19,7 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.89 },
       { name: "helpfulness", value: 0.91 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.90 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.9 }],
     duration: {
       p50: 125000, // 125 seconds
       p90: 150000,
@@ -53,9 +51,7 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.93 },
       { name: "helpfulness", value: 0.89 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.93 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.93 }],
     duration: {
       p50: 118000,
       p90: 140000,
@@ -87,9 +83,7 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.91 },
       { name: "helpfulness", value: 0.93 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.91 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.91 }],
     duration: {
       p50: 95000,
       p90: 110000,
@@ -121,9 +115,7 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.86 },
       { name: "helpfulness", value: 0.87 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.86 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.86 }],
     duration: {
       p50: 82000,
       p90: 100000,
@@ -153,11 +145,9 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "accuracy", value: 0.78 },
       { name: "hallucination_rate", value: 0.22 },
       { name: "relevance", value: 0.81 },
-      { name: "helpfulness", value: 0.80 },
+      { name: "helpfulness", value: 0.8 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.80 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.8 }],
     duration: {
       p50: 65000,
       p90: 80000,
@@ -189,15 +179,13 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.88 },
       { name: "helpfulness", value: 0.85 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.87 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.87 }],
     duration: {
       p50: 145000,
       p90: 170000,
       p99: 220000,
     },
-    total_estimated_cost: 3.20,
+    total_estimated_cost: 3.2,
     trace_count: 150,
     created_at: "2026-01-06T09:00:00Z",
     last_updated_at: "2026-01-06T11:25:00Z",
@@ -224,9 +212,7 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.95 },
       { name: "helpfulness", value: 0.94 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.96 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.96 }],
     duration: {
       p50: 185000,
       p90: 220000,
@@ -259,9 +245,7 @@ export const mockLeaderboardExperiments: Experiment[] = [
       { name: "relevance", value: 0.84 },
       { name: "helpfulness", value: 0.82 },
     ],
-    experiment_scores: [
-      { name: "mean_score", value: 0.83 },
-    ],
+    experiment_scores: [{ name: "mean_score", value: 0.83 }],
     duration: {
       p50: 72000,
       p90: 90000,
@@ -324,4 +308,3 @@ export const defaultSortDirections: Record<string, boolean> = {
   cost: true, // Lower is better
   trace_count: false,
 };
-

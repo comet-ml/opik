@@ -107,7 +107,9 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
   const [sortDirection, setSortDirection] = useState<SortDirection>(
     configSortOrder as SortDirection,
   );
-  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+  const [density, setDensity] = useState<"comfortable" | "compact">(
+    "comfortable",
+  );
 
   // MOCK: Simulate loading
   const isPending = false;
@@ -155,7 +157,10 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
 
   // Get metric icon
   const getMetricIcon = useCallback((metricName: string) => {
-    const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+    const iconMap: Record<
+      string,
+      React.ComponentType<{ className?: string }>
+    > = {
       accuracy: Target,
       hallucination_rate: AlertTriangle,
       relevance: TrendingUp,
@@ -169,14 +174,23 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
   }, []);
 
   // Determine metric category for grouping
-  const getMetricCategory = useCallback((metricName: string): "quality" | "efficiency" | "other" => {
-    const qualityMetrics = ["accuracy", "hallucination_rate", "relevance", "helpfulness", "mean_score"];
-    const efficiencyMetrics = ["duration", "cost", "trace_count"];
-    
-    if (qualityMetrics.includes(metricName)) return "quality";
-    if (efficiencyMetrics.includes(metricName)) return "efficiency";
-    return "other";
-  }, []);
+  const getMetricCategory = useCallback(
+    (metricName: string): "quality" | "efficiency" | "other" => {
+      const qualityMetrics = [
+        "accuracy",
+        "hallucination_rate",
+        "relevance",
+        "helpfulness",
+        "mean_score",
+      ];
+      const efficiencyMetrics = ["duration", "cost", "trace_count"];
+
+      if (qualityMetrics.includes(metricName)) return "quality";
+      if (efficiencyMetrics.includes(metricName)) return "efficiency";
+      return "other";
+    },
+    [],
+  );
 
   // Check if metric is inverted (lower is better)
   const isMetricInverted = useCallback((metricName: string): boolean => {
@@ -234,7 +248,10 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     });
 
     // System metric columns (if not already in metricsToDisplay)
-    if (displayColumns.includes("duration") && !metricsToDisplay.includes("duration")) {
+    if (
+      displayColumns.includes("duration") &&
+      !metricsToDisplay.includes("duration")
+    ) {
       columns.push({
         id: "duration",
         label: "Duration",
@@ -248,7 +265,10 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
         type: COLUMN_TYPE.number,
       });
     }
-    if (displayColumns.includes("trace_count") && !metricsToDisplay.includes("trace_count")) {
+    if (
+      displayColumns.includes("trace_count") &&
+      !metricsToDisplay.includes("trace_count")
+    ) {
       columns.push({
         id: "trace_count",
         label: "Traces",
@@ -333,7 +353,9 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       if (!experiment.metadata || typeof experiment.metadata !== "object") {
         return null;
       }
-      const value = (experiment.metadata as Record<string, unknown>)[metadataKey];
+      const value = (experiment.metadata as Record<string, unknown>)[
+        metadataKey
+      ];
       if (value === null || value === undefined) {
         return null;
       }
@@ -356,21 +378,23 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
         maxMap[metricName] = Math.max(...values, 1);
       }
     });
-    
+
     // Add system metrics
     const durationValues = experiments
       .map((exp) => (exp.duration ? exp.duration.p50 / 1000 : 0))
       .filter((v) => v > 0);
-    if (durationValues.length > 0) maxMap.duration = Math.max(...durationValues, 1);
-    
+    if (durationValues.length > 0)
+      maxMap.duration = Math.max(...durationValues, 1);
+
     const costValues = experiments
       .map((exp) => exp.total_estimated_cost ?? 0)
       .filter((v) => v > 0);
     if (costValues.length > 0) maxMap.cost = Math.max(...costValues, 1);
-    
+
     const traceValues = experiments.map((exp) => exp.trace_count);
-    if (traceValues.length > 0) maxMap.trace_count = Math.max(...traceValues, 1);
-    
+    if (traceValues.length > 0)
+      maxMap.trace_count = Math.max(...traceValues, 1);
+
     return maxMap;
   }, [experiments, metricsToDisplay, getMetricValue]);
 
@@ -490,7 +514,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
             ? ArrowUp
             : ArrowUpDown
         : ArrowUpDown;
-      
+
       return (
         <IconComponent
           className={cn(
@@ -536,7 +560,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
         efficiency: ColumnData<unknown>[];
         other: ColumnData<unknown>[];
       } = { quality: [], efficiency: [], other: [] };
-      
+
       orderedColumns.forEach((col) => {
         if (col.id === "rank" || col.id === "name" || col.id === "dataset") {
           groups.other.push(col);
@@ -550,16 +574,20 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
           groups.other.push(col);
         }
       });
-      
+
       return groups;
     }, [orderedColumns, getMetricCategory]);
 
     // Helper to render table header cell with improved styling
-    const renderHeaderCell = (column: ColumnData<unknown>, group?: "quality" | "efficiency") => {
+    const renderHeaderCell = (
+      column: ColumnData<unknown>,
+      group?: "quality" | "efficiency",
+    ) => {
       const columnId = column.id;
-      const isSortable = columnId.startsWith("metric_") || 
-                        ["duration", "cost", "trace_count"].includes(columnId);
-      const sortKey = columnId.startsWith("metric_") 
+      const isSortable =
+        columnId.startsWith("metric_") ||
+        ["duration", "cost", "trace_count"].includes(columnId);
+      const sortKey = columnId.startsWith("metric_")
         ? columnId.replace("metric_", "")
         : columnId;
       const isActive = sortColumn === sortKey;
@@ -584,11 +612,13 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
               {MetricIcon && (
                 <MetricIcon className="size-3.5 text-muted-foreground opacity-60" />
               )}
-              <span className={cn(
-                "font-medium",
-                isActive && "text-foreground",
-                !isActive && "text-muted-foreground",
-              )}>
+              <span
+                className={cn(
+                  "font-medium",
+                  isActive && "text-foreground",
+                  !isActive && "text-muted-foreground",
+                )}
+              >
                 {column.label}
               </span>
               {renderSortIcon(sortKey)}
@@ -618,8 +648,8 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
             key={columnId}
             className={cn(
               "sticky z-10 bg-background font-semibold",
-              density === "comfortable" 
-                ? "left-20 min-w-56 px-4 py-3" 
+              density === "comfortable"
+                ? "left-20 min-w-56 px-4 py-3"
                 : "left-16 min-w-48 px-3 py-2",
             )}
           >
@@ -648,9 +678,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       isInverted: boolean,
     ) => {
       if (value === null || value === undefined) {
-        return (
-          <span className="tabular-nums text-muted-foreground">—</span>
-        );
+        return <span className="tabular-nums text-muted-foreground">—</span>;
       }
 
       const maxValue = metricMaxValues[metricName] || 1;
@@ -664,15 +692,13 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
             <div
               className={cn(
                 "h-full rounded-full transition-all",
-                isInverted
-                  ? "bg-orange-500/40"
-                  : "bg-primary/30",
+                isInverted ? "bg-orange-500/40" : "bg-primary/30",
               )}
               style={{ width: `${displayPercentage}%` }}
             />
           </div>
           {/* Value with tabular numerals */}
-          <span className="relative tabular-nums font-medium">
+          <span className="relative font-medium tabular-nums">
             {formatMetricValue(value, metricName)}
           </span>
         </div>
@@ -680,13 +706,24 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     };
 
     // Helper to render table body cell with improved styling
-    const renderBodyCell = (column: ColumnData<unknown>, row: LeaderboardRow, group?: "quality" | "efficiency") => {
+    const renderBodyCell = (
+      column: ColumnData<unknown>,
+      row: LeaderboardRow,
+      group?: "quality" | "efficiency",
+    ) => {
       const columnId = column.id;
       const isTopThree = row.rank <= 3;
       const isFirst = row.rank === 1;
 
       if (columnId === "rank") {
-        const RankIcon = row.rank === 1 ? Trophy : row.rank === 2 ? Medal : row.rank === 3 ? Award : null;
+        const RankIcon =
+          row.rank === 1
+            ? Trophy
+            : row.rank === 2
+              ? Medal
+              : row.rank === 3
+                ? Award
+                : null;
         return (
           <TableCell
             key={columnId}
@@ -700,16 +737,19 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
                 <div
                   className={cn(
                     "flex items-center gap-1.5 rounded-md px-2 py-1",
-                    row.rank === 1 && "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
-                    row.rank === 2 && "bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400",
-                    row.rank === 3 && "bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400",
+                    row.rank === 1 &&
+                      "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
+                    row.rank === 2 &&
+                      "bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400",
+                    row.rank === 3 &&
+                      "bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400",
                   )}
                 >
                   <RankIcon className="size-3.5" />
-                  <span className="tabular-nums font-semibold">{row.rank}</span>
+                  <span className="font-semibold tabular-nums">{row.rank}</span>
                 </div>
               ) : (
-                <span className="tabular-nums font-medium text-muted-foreground">
+                <span className="font-medium tabular-nums text-muted-foreground">
                   {row.rank}
                 </span>
               )}
@@ -724,25 +764,32 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
             key={columnId}
             className={cn(
               "sticky z-10 bg-background",
-              density === "comfortable" 
-                ? "left-20 px-4 py-4" 
+              density === "comfortable"
+                ? "left-20 px-4 py-4"
                 : "left-16 px-3 py-3",
               isTopThree && "border-l-2",
-              row.rank === 1 && "border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/10",
-              row.rank === 2 && "border-l-slate-400 bg-slate-50/30 dark:bg-slate-900/20",
-              row.rank === 3 && "border-l-orange-500 bg-orange-50/30 dark:bg-orange-950/10",
+              row.rank === 1 &&
+                "border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/10",
+              row.rank === 2 &&
+                "border-l-slate-400 bg-slate-50/30 dark:bg-slate-900/20",
+              row.rank === 3 &&
+                "border-l-orange-500 bg-orange-50/30 dark:bg-orange-950/10",
             )}
           >
             <div className="flex flex-col gap-0.5">
-              <span className={cn(
-                "line-clamp-1 font-medium transition-colors",
-                isFirst ? "text-foreground" : "text-primary",
-                "hover:underline",
-              )}>
+              <span
+                className={cn(
+                  "line-clamp-1 font-medium transition-colors",
+                  isFirst ? "text-foreground" : "text-primary",
+                  "hover:underline",
+                )}
+              >
                 {row.experiment.name}
               </span>
               {isFirst && (
-                <span className="text-xs text-muted-foreground">Best overall</span>
+                <span className="text-xs text-muted-foreground">
+                  Best overall
+                </span>
               )}
             </div>
           </TableCell>
@@ -867,9 +914,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       return (
         <TableCell
           key={columnId}
-          className={cn(
-            density === "comfortable" ? "px-4 py-4" : "px-3 py-3",
-          )}
+          className={cn(density === "comfortable" ? "px-4 py-4" : "px-3 py-3")}
         >
           <span className="text-muted-foreground">—</span>
         </TableCell>
@@ -877,13 +922,17 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     };
 
     return (
-      <div className="size-full flex flex-col">
+      <div className="flex size-full flex-col">
         {/* Density toggle - subtle control */}
         <div className="flex items-center justify-end gap-2 px-2 pb-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
-            onClick={() => setDensity(density === "comfortable" ? "compact" : "comfortable")}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label={`Switch to ${density === "comfortable" ? "compact" : "comfortable"} density`}
+            onClick={() =>
+              setDensity(density === "comfortable" ? "compact" : "comfortable")
+            }
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={`Switch to ${
+              density === "comfortable" ? "compact" : "comfortable"
+            } density`}
           >
             {density === "comfortable" ? (
               <>
@@ -900,7 +949,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
         </div>
 
         {/* Table with improved styling */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto">
+        <div className="flex-1 overflow-auto">
           <Table>
             <TableHeader className="sticky top-0 z-20 bg-background">
               <TableRow className="border-b-2">
@@ -908,33 +957,41 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
                 {groupedColumns.other
                   .filter((col) => col.id === "rank" || col.id === "name")
                   .map((column) => renderHeaderCell(column))}
-                
+
                 {/* Dataset and metadata */}
                 {groupedColumns.other
-                  .filter((col) => col.id === "dataset" || col.id.startsWith("metadata_"))
+                  .filter(
+                    (col) =>
+                      col.id === "dataset" || col.id.startsWith("metadata_"),
+                  )
                   .map((column) => renderHeaderCell(column))}
-                
+
                 {/* Quality metrics group */}
                 {groupedColumns.quality.length > 0 && (
                   <>
-                    {groupedColumns.quality.map((column) => renderHeaderCell(column, "quality"))}
+                    {groupedColumns.quality.map((column) =>
+                      renderHeaderCell(column, "quality"),
+                    )}
                   </>
                 )}
-                
+
                 {/* Efficiency metrics group */}
                 {groupedColumns.efficiency.length > 0 && (
                   <>
-                    {groupedColumns.efficiency.map((column) => renderHeaderCell(column, "efficiency"))}
+                    {groupedColumns.efficiency.map((column) =>
+                      renderHeaderCell(column, "efficiency"),
+                    )}
                   </>
                 )}
-                
+
                 {/* Other columns */}
                 {groupedColumns.other
-                  .filter((col) => 
-                    col.id !== "rank" && 
-                    col.id !== "name" && 
-                    col.id !== "dataset" && 
-                    !col.id.startsWith("metadata_")
+                  .filter(
+                    (col) =>
+                      col.id !== "rank" &&
+                      col.id !== "name" &&
+                      col.id !== "dataset" &&
+                      !col.id.startsWith("metadata_"),
                   )
                   .map((column) => renderHeaderCell(column))}
               </TableRow>
@@ -961,7 +1018,10 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        handleRowClick(row.experiment.id, row.experiment.dataset_id);
+                        handleRowClick(
+                          row.experiment.id,
+                          row.experiment.dataset_id,
+                        );
                       }
                     }}
                     tabIndex={0}
@@ -972,25 +1032,34 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
                     {groupedColumns.other
                       .filter((col) => col.id === "rank" || col.id === "name")
                       .map((column) => renderBodyCell(column, row))}
-                    
+
                     {/* Dataset and metadata */}
                     {groupedColumns.other
-                      .filter((col) => col.id === "dataset" || col.id.startsWith("metadata_"))
+                      .filter(
+                        (col) =>
+                          col.id === "dataset" ||
+                          col.id.startsWith("metadata_"),
+                      )
                       .map((column) => renderBodyCell(column, row))}
-                    
+
                     {/* Quality metrics group */}
-                    {groupedColumns.quality.map((column) => renderBodyCell(column, row, "quality"))}
-                    
+                    {groupedColumns.quality.map((column) =>
+                      renderBodyCell(column, row, "quality"),
+                    )}
+
                     {/* Efficiency metrics group */}
-                    {groupedColumns.efficiency.map((column) => renderBodyCell(column, row, "efficiency"))}
-                    
+                    {groupedColumns.efficiency.map((column) =>
+                      renderBodyCell(column, row, "efficiency"),
+                    )}
+
                     {/* Other columns */}
                     {groupedColumns.other
-                      .filter((col) => 
-                        col.id !== "rank" && 
-                        col.id !== "name" && 
-                        col.id !== "dataset" && 
-                        !col.id.startsWith("metadata_")
+                      .filter(
+                        (col) =>
+                          col.id !== "rank" &&
+                          col.id !== "name" &&
+                          col.id !== "dataset" &&
+                          !col.id.startsWith("metadata_"),
                       )
                       .map((column) => renderBodyCell(column, row))}
                   </TableRow>
@@ -1045,4 +1114,3 @@ const arePropsEqual = (
 };
 
 export default memo(ExperimentLeaderboardWidget, arePropsEqual);
-

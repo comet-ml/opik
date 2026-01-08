@@ -65,15 +65,43 @@ const SORT_ORDER_OPTIONS = [
 ];
 
 const STANDARD_COLUMNS = [
-  { id: "name", label: "Experiment name", category: "standard", alwaysVisible: true },
-  { id: "dataset", label: "Dataset", category: "standard", alwaysVisible: false },
-  { id: "duration", label: "Duration", category: "efficiency", alwaysVisible: false },
+  {
+    id: "name",
+    label: "Experiment name",
+    category: "standard",
+    alwaysVisible: true,
+  },
+  {
+    id: "dataset",
+    label: "Dataset",
+    category: "standard",
+    alwaysVisible: false,
+  },
+  {
+    id: "duration",
+    label: "Duration",
+    category: "efficiency",
+    alwaysVisible: false,
+  },
   { id: "cost", label: "Cost", category: "efficiency", alwaysVisible: false },
-  { id: "trace_count", label: "Trace count", category: "efficiency", alwaysVisible: false },
-  { id: "created_at", label: "Created at", category: "standard", alwaysVisible: false },
+  {
+    id: "trace_count",
+    label: "Trace count",
+    category: "efficiency",
+    alwaysVisible: false,
+  },
+  {
+    id: "created_at",
+    label: "Created at",
+    category: "standard",
+    alwaysVisible: false,
+  },
 ];
 
-const EXPERIMENT_DATA_COLUMNS: ColumnData<{ id: string; dataset_id?: string }>[] = [
+const EXPERIMENT_DATA_COLUMNS: ColumnData<{
+  id: string;
+  dataset_id?: string;
+}>[] = [
   {
     id: COLUMN_DATASET_ID,
     label: "Dataset",
@@ -108,7 +136,14 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
     const showRank = config.showRank !== false;
     const maxRows = config.maxRows || 20;
     const displayColumns = useMemo(
-      () => config.displayColumns || ["name", "dataset", "duration", "cost", "trace_count"],
+      () =>
+        config.displayColumns || [
+          "name",
+          "dataset",
+          "duration",
+          "cost",
+          "trace_count",
+        ],
       [config.displayColumns],
     );
     const metadataColumns = useMemo(
@@ -190,9 +225,17 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
       });
 
       // Metric columns (quality metrics)
-      const qualityMetrics = ["accuracy", "hallucination_rate", "relevance", "helpfulness", "mean_score"];
+      const qualityMetrics = [
+        "accuracy",
+        "hallucination_rate",
+        "relevance",
+        "helpfulness",
+        "mean_score",
+      ];
       availableMetrics.forEach((metricName: string) => {
-        const category = qualityMetrics.includes(metricName) ? "quality" : "efficiency";
+        const category = qualityMetrics.includes(metricName)
+          ? "quality"
+          : "efficiency";
         columns.push({
           id: `metric_${metricName}`,
           label: formatMetricName(metricName),
@@ -257,9 +300,10 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
     }));
 
     const handleFiltersChange: OnChangeFn<Filters> = (updaterOrValue) => {
-      const newFilters = typeof updaterOrValue === "function" 
-        ? updaterOrValue(filters) 
-        : updaterOrValue;
+      const newFilters =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(filters)
+          : updaterOrValue;
       form.setValue("filters", newFilters);
       updatePreviewWidget({
         config: {
@@ -397,11 +441,12 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                 config={{
                   rowsMap: {
                     [COLUMN_DATASET_ID]: {
-                      keyComponent: DatasetSelectBox as React.FunctionComponent<unknown> & {
-                        placeholder: string;
-                        value: string;
-                        onValueChange: (value: string) => void;
-                      },
+                      keyComponent:
+                        DatasetSelectBox as React.FunctionComponent<unknown> & {
+                          placeholder: string;
+                          value: string;
+                          onValueChange: (value: string) => void;
+                        },
                       keyComponentProps: {
                         className: "w-full min-w-72",
                       },
@@ -491,9 +536,15 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                     name="selectedMetrics"
                     render={({ field: metricsField }) => {
                       // Helper to check if a column is selected
-                      const isColumnSelected = (column: typeof allAvailableColumns[0]): boolean => {
+                      const isColumnSelected = (
+                        column: (typeof allAvailableColumns)[0],
+                      ): boolean => {
                         if (column.type === "column") {
-                          return displayColumns.includes(column.id) || column.alwaysVisible || false;
+                          return (
+                            displayColumns.includes(column.id) ||
+                            column.alwaysVisible ||
+                            false
+                          );
                         }
                         if (column.type === "metric") {
                           const metricName = column.id.replace("metric_", "");
@@ -502,7 +553,10 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                           return selectedMetrics.includes(metricName);
                         }
                         if (column.type === "metadata") {
-                          const metadataKey = column.id.replace("metadata_", "");
+                          const metadataKey = column.id.replace(
+                            "metadata_",
+                            "",
+                          );
                           return metadataColumns.includes(metadataKey);
                         }
                         return false;
@@ -510,7 +564,7 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
                       // Helper to toggle column selection
                       const handleColumnToggle = (
-                        column: typeof allAvailableColumns[0],
+                        column: (typeof allAvailableColumns)[0],
                         checked: boolean,
                       ) => {
                         if (column.alwaysVisible) return; // Can't toggle always-visible columns
@@ -526,13 +580,15 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                           const metricName = column.id.replace("metric_", "");
                           const currentMetrics = selectedMetrics || [];
                           let newMetrics: string[];
-                          
+
                           if (checked) {
                             // Add metric
                             newMetrics = [...currentMetrics, metricName];
                           } else {
                             // Remove metric - if this would empty the array, we need special handling
-                            newMetrics = currentMetrics.filter((m) => m !== metricName);
+                            newMetrics = currentMetrics.filter(
+                              (m) => m !== metricName,
+                            );
                             // If we're removing the last metric, we should keep at least one
                             // Actually, empty array means "show all", so this is fine
                           }
@@ -544,7 +600,10 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
                       // Group columns by category
                       const groupedColumns = useMemo(() => {
-                        const groups: Record<string, typeof allAvailableColumns> = {
+                        const groups: Record<
+                          string,
+                          typeof allAvailableColumns
+                        > = {
                           standard: [],
                           quality: [],
                           efficiency: [],
@@ -557,14 +616,21 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                       }, [allAvailableColumns]);
 
                       // Check if all columns in a category are selected
-                      const areAllInCategorySelected = (category: string): boolean => {
+                      const areAllInCategorySelected = (
+                        category: string,
+                      ): boolean => {
                         const cols = groupedColumns[category] || [];
                         if (cols.length === 0) return false;
-                        return cols.every((col) => isColumnSelected(col) || col.alwaysVisible);
+                        return cols.every(
+                          (col) => isColumnSelected(col) || col.alwaysVisible,
+                        );
                       };
 
                       // Toggle all columns in a category
-                      const handleCategoryToggle = (category: string, checked: boolean) => {
+                      const handleCategoryToggle = (
+                        category: string,
+                        checked: boolean,
+                      ) => {
                         const cols = groupedColumns[category] || [];
                         cols.forEach((col) => {
                           if (!col.alwaysVisible) {
@@ -582,7 +648,9 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               {groupedColumns.standard.length > 0 && (
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-medium">Standard Columns</h4>
+                                    <h4 className="text-sm font-medium">
+                                      Standard Columns
+                                    </h4>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -600,7 +668,8 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                   </div>
                                   <div className="space-y-2 pl-2">
                                     {groupedColumns.standard.map((column) => {
-                                      const isChecked = isColumnSelected(column);
+                                      const isChecked =
+                                        isColumnSelected(column);
                                       const isDisabled = column.alwaysVisible;
                                       return (
                                         <div
@@ -612,14 +681,18 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                             checked={isChecked || isDisabled}
                                             disabled={isDisabled}
                                             onCheckedChange={(checked) =>
-                                              handleColumnToggle(column, checked as boolean)
+                                              handleColumnToggle(
+                                                column,
+                                                checked as boolean,
+                                              )
                                             }
                                           />
                                           <label
                                             htmlFor={`column-${column.id}`}
                                             className={cn(
                                               "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
-                                              isDisabled && "text-muted-foreground",
+                                              isDisabled &&
+                                                "text-muted-foreground",
                                             )}
                                           >
                                             {column.label}
@@ -636,7 +709,9 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               {groupedColumns.quality.length > 0 && (
                                 <div className="space-y-2 border-t pt-4">
                                   <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-medium">Quality Metrics</h4>
+                                    <h4 className="text-sm font-medium">
+                                      Quality Metrics
+                                    </h4>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -654,7 +729,8 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                   </div>
                                   <div className="space-y-2 pl-2">
                                     {groupedColumns.quality.map((column) => {
-                                      const isChecked = isColumnSelected(column);
+                                      const isChecked =
+                                        isColumnSelected(column);
                                       return (
                                         <div
                                           key={column.id}
@@ -664,7 +740,10 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                             id={`column-${column.id}`}
                                             checked={isChecked}
                                             onCheckedChange={(checked) =>
-                                              handleColumnToggle(column, checked as boolean)
+                                              handleColumnToggle(
+                                                column,
+                                                checked as boolean,
+                                              )
                                             }
                                           />
                                           <label
@@ -684,13 +763,17 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               {groupedColumns.efficiency.length > 0 && (
                                 <div className="space-y-2 border-t pt-4">
                                   <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-medium">Efficiency Metrics</h4>
+                                    <h4 className="text-sm font-medium">
+                                      Efficiency Metrics
+                                    </h4>
                                     <button
                                       type="button"
                                       onClick={() =>
                                         handleCategoryToggle(
                                           "efficiency",
-                                          !areAllInCategorySelected("efficiency"),
+                                          !areAllInCategorySelected(
+                                            "efficiency",
+                                          ),
                                         )
                                       }
                                       className="text-xs text-primary hover:underline"
@@ -702,7 +785,8 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                   </div>
                                   <div className="space-y-2 pl-2">
                                     {groupedColumns.efficiency.map((column) => {
-                                      const isChecked = isColumnSelected(column);
+                                      const isChecked =
+                                        isColumnSelected(column);
                                       return (
                                         <div
                                           key={column.id}
@@ -712,7 +796,10 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                             id={`column-${column.id}`}
                                             checked={isChecked}
                                             onCheckedChange={(checked) =>
-                                              handleColumnToggle(column, checked as boolean)
+                                              handleColumnToggle(
+                                                column,
+                                                checked as boolean,
+                                              )
                                             }
                                           />
                                           <label
@@ -731,14 +818,18 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               {/* Metadata Columns */}
                               <div className="space-y-2 border-t pt-4">
                                 <div className="flex items-center justify-between">
-                                  <h4 className="text-sm font-medium">Configuration Columns</h4>
+                                  <h4 className="text-sm font-medium">
+                                    Configuration Columns
+                                  </h4>
                                 </div>
                                 <div className="space-y-2 pl-2">
                                   <div className="flex gap-2">
                                     <Input
                                       placeholder="e.g., provider, model_name"
                                       value={metadataInput}
-                                      onChange={(e) => setMetadataInput(e.target.value)}
+                                      onChange={(e) =>
+                                        setMetadataInput(e.target.value)
+                                      }
                                       onKeyDown={handleMetadataInputKeyDown}
                                       className="flex-1"
                                     />
@@ -756,10 +847,12 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                     <div className="space-y-2">
                                       {metadataColumns.map((metadataKey) => {
                                         const column = allAvailableColumns.find(
-                                          (c) => c.id === `metadata_${metadataKey}`,
+                                          (c) =>
+                                            c.id === `metadata_${metadataKey}`,
                                         );
                                         if (!column) return null;
-                                        const isChecked = isColumnSelected(column);
+                                        const isChecked =
+                                          isColumnSelected(column);
                                         return (
                                           <div
                                             key={metadataKey}
@@ -770,7 +863,9 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                               checked={isChecked}
                                               onCheckedChange={(checked) => {
                                                 if (!checked) {
-                                                  handleRemoveMetadataColumn(metadataKey);
+                                                  handleRemoveMetadataColumn(
+                                                    metadataKey,
+                                                  );
                                                 }
                                               }}
                                             />
@@ -783,7 +878,9 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                                             <button
                                               type="button"
                                               onClick={() =>
-                                                handleRemoveMetadataColumn(metadataKey)
+                                                handleRemoveMetadataColumn(
+                                                  metadataKey,
+                                                )
                                               }
                                               className="ml-auto rounded-sm p-1 hover:bg-muted"
                                             >
@@ -799,7 +896,8 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                             </div>
                           </FormControl>
                           <Description>
-                            Select which columns to display. By default, all available metrics will be shown.
+                            Select which columns to display. By default, all
+                            available metrics will be shown.
                           </Description>
                           <FormMessage />
                         </FormItem>
@@ -921,4 +1019,3 @@ ExperimentLeaderboardWidgetEditor.displayName =
   "ExperimentLeaderboardWidgetEditor";
 
 export default ExperimentLeaderboardWidgetEditor;
-
