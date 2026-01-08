@@ -13,7 +13,6 @@ import opik
 from deap import base, tools
 from deap import creator as _creator
 from opik.api_objects import optimization
-from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
@@ -24,11 +23,8 @@ from opik_optimizer.agents import OptimizableAgent, LiteLLMAgent
 from . import reporting
 from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
 from . import helpers
-from . import prompts as evo_prompts
 
 logger = logging.getLogger(__name__)
-tqdm = get_tqdm_for_current_environment()
-
 creator = cast(Any, _creator)  # type: ignore[assignment]
 
 DEFAULT_DIVERSITY_THRESHOLD = 0.7
@@ -147,7 +143,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
-        self._current_generation = 0
         self._best_fitness_history: list[float] = []
         self._generations_without_improvement = 0
         self._current_population: list[Any] = []
@@ -496,7 +491,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         trials_used = [0]  # Use list for closure mutability
         self._history: list[OptimizationRound] = []
-        self._current_generation = 0
         self._best_fitness_history = []
         self._generations_without_improvement = 0
         self._current_population = []
@@ -771,7 +765,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
 
                 # ---------- run one generation --------------------------------
-                deap_population, invalid_count = self._run_generation(
+                deap_population, _ = self._run_generation(
                     generation_idx,
                     deap_population,
                     optimizable_prompts,
@@ -1025,13 +1019,3 @@ class EvolutionaryOptimizer(BaseOptimizer):
             dataset_id=dataset.id,
             optimization_id=self.current_optimization_id,
         )
-
-    # Override prompt builders to centralize strings in prompts.py
-    def _get_reasoning_system_prompt_for_variation(self) -> str:
-        return evo_prompts.variation_system_prompt(self.output_style_guidance)
-
-    def _get_llm_crossover_system_prompt(self) -> str:
-        return evo_prompts.llm_crossover_system_prompt(self.output_style_guidance)
-
-    def _get_radical_innovation_system_prompt(self) -> str:
-        return evo_prompts.radical_innovation_system_prompt(self.output_style_guidance)
