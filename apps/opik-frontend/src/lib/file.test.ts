@@ -33,6 +33,17 @@ describe("validateCsvFile", () => {
     });
   });
 
+  it("should accept .csv file with empty MIME type (Windows behavior)", async () => {
+    // On Windows, browsers often return empty string for file.type on CSV files
+    const mockFile = new File(["col1,col2\nval1,val2"], "test.csv", {
+      type: "",
+    });
+    const mockData = [{ col1: "val1", col2: "val2" }];
+    vi.mocked(csv2json).mockResolvedValue(mockData);
+    const result = await validateCsvFile(mockFile, maxSize, maxItems);
+    expect(result).toEqual({ data: mockData });
+  });
+
   it("should return an error if CSV parsing fails", async () => {
     const mockFile = new File(["content"], "test.csv", { type: "text/csv" });
     vi.mocked(csv2json).mockRejectedValue(new Error("Parsing error"));
