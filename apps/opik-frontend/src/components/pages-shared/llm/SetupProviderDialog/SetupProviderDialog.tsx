@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -14,9 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
-import ProviderGrid, {
-  ProviderGridOption,
-} from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
+import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
@@ -25,15 +23,8 @@ import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
-import {
-  buildComposedProviderKey,
-  convertCustomProviderModels,
-} from "@/lib/provider";
-import {
-  useProviderOptions,
-  useProviderEnabledMap,
-} from "@/hooks/useProviderOptions";
-import { PROVIDERS } from "@/constants/providers";
+import { convertCustomProviderModels } from "@/lib/provider";
+import { useProviderOptions } from "@/hooks/useProviderOptions";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -46,34 +37,10 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   setOpen,
   onProviderAdded,
 }) => {
-  // Get base provider options (standard providers only, no sentinels)
-  const baseProviderOptions = useProviderOptions();
-  const providerEnabledMap = useProviderEnabledMap();
-
-  // Append creation options for Bedrock and Custom providers (dialog-specific UI concern)
-  const providerOptions = useMemo(() => {
-    const options: ProviderGridOption[] = [...baseProviderOptions];
-
-    // Add Bedrock creation option if enabled
-    if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
-      options.push({
-        value: buildComposedProviderKey(PROVIDER_TYPE.BEDROCK),
-        label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
-        providerType: PROVIDER_TYPE.BEDROCK,
-      });
-    }
-
-    // Add Custom LLM creation option if enabled
-    if (providerEnabledMap[PROVIDER_TYPE.CUSTOM]) {
-      options.push({
-        value: buildComposedProviderKey(PROVIDER_TYPE.CUSTOM),
-        label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
-        providerType: PROVIDER_TYPE.CUSTOM,
-      });
-    }
-
-    return options;
-  }, [baseProviderOptions, providerEnabledMap]);
+  // Get provider options with "Add new" options for Bedrock and Custom
+  const providerOptions = useProviderOptions({
+    includeAddNewOptions: true,
+  });
 
   const [selectedComposedProvider, setSelectedComposedProvider] = useState<
     COMPOSED_PROVIDER_TYPE | ""

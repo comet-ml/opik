@@ -2,16 +2,38 @@ import { useMemo } from "react";
 import { PROVIDER_TYPE, ProviderObject } from "@/types/providers";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { PROVIDERS_OPTIONS } from "@/constants/providers";
+import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
 import {
   buildComposedProviderKey,
   getProviderDisplayName,
 } from "@/lib/provider";
 import { ProviderGridOption } from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 
+/**
+ * Function type for generating custom labels for provider options.
+ * @param providerType - The provider type
+ * @param defaultLabel - The default label from PROVIDERS
+ * @returns Custom label string
+ */
+export type ProviderLabelGenerator = (
+  providerType: PROVIDER_TYPE,
+  defaultLabel: string,
+) => string;
+
 interface UseProviderOptionsParams {
   configuredProvidersList?: ProviderObject[];
   includeConfiguredStatus?: boolean;
+  /**
+   * Whether to include "Add new" options for Bedrock and Custom providers.
+   * When true, adds options for creating new Bedrock/Custom provider instances.
+   */
+  includeAddNewOptions?: boolean;
+  /**
+   * Optional function to customize labels for "Add new" provider options.
+   * Receives the provider type and default label, returns custom label.
+   * Example: (type, label) => `Add ${label}` for "Add Bedrock" style labels.
+   */
+  addNewLabelGenerator?: ProviderLabelGenerator;
 }
 
 export interface ProviderEnabledMap {
@@ -75,17 +97,20 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
 
 /**
  * Hook to build provider options based on feature toggles.
- * Returns only real provider options (standard providers + configured instances).
- * Does NOT include sentinel "add new provider" options - those should be added
- * by the consuming UI component if needed.
+ * Returns provider options filtered by feature toggles, optionally including
+ * configured instances and "add new" options for Bedrock/Custom providers.
  *
  * @param configuredProvidersList - Optional list of already configured providers
  * @param includeConfiguredStatus - Whether to include isConfigured status and configured instances
+ * @param includeAddNewOptions - Whether to include "Add new" options for Bedrock and Custom
+ * @param addNewLabelGenerator - Optional function to customize labels for "Add new" options
  * @returns Array of provider options filtered by feature toggles
  */
 export function useProviderOptions({
   configuredProvidersList,
   includeConfiguredStatus = false,
+  includeAddNewOptions = false,
+  addNewLabelGenerator,
 }: UseProviderOptionsParams = {}): ProviderGridOption[] {
   const providerEnabledMap = useProviderEnabledMap();
 
@@ -154,6 +179,37 @@ export function useProviderOptions({
       });
     }
 
+    // Add "Add new" options for Bedrock and Custom if requested
+    if (includeAddNewOptions) {
+      if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
+        const defaultLabel = PROVIDERS[PROVIDER_TYPE.BEDROCK].label;
+        options.push({
+          value: buildComposedProviderKey(PROVIDER_TYPE.BEDROCK),
+          label: addNewLabelGenerator
+            ? addNewLabelGenerator(PROVIDER_TYPE.BEDROCK, defaultLabel)
+            : defaultLabel,
+          providerType: PROVIDER_TYPE.BEDROCK,
+        });
+      }
+
+      if (providerEnabledMap[PROVIDER_TYPE.CUSTOM]) {
+        const defaultLabel = PROVIDERS[PROVIDER_TYPE.CUSTOM].label;
+        options.push({
+          value: buildComposedProviderKey(PROVIDER_TYPE.CUSTOM),
+          label: addNewLabelGenerator
+            ? addNewLabelGenerator(PROVIDER_TYPE.CUSTOM, defaultLabel)
+            : defaultLabel,
+          providerType: PROVIDER_TYPE.CUSTOM,
+        });
+      }
+    }
+
     return options;
-  }, [configuredProvidersList, providerEnabledMap, includeConfiguredStatus]);
+  }, [
+    configuredProvidersList,
+    providerEnabledMap,
+    includeConfiguredStatus,
+    includeAddNewOptions,
+    addNewLabelGenerator,
+  ]);
 }

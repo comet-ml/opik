@@ -11,6 +11,7 @@ export interface ProviderGridOption {
   providerType: PROVIDER_TYPE;
   configuredId?: string;
   isConfigured?: boolean;
+  description?: string;
 }
 
 interface ProviderGridProps {
