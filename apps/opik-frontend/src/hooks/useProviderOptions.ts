@@ -12,12 +12,12 @@ import { ProviderGridOption } from "@/components/pages-shared/llm/SetupProviderD
 /**
  * Function type for generating custom labels for provider options.
  * @param providerType - The provider type
- * @param defaultLabel - The default label from PROVIDERS
+ * @param defaultLabel - The default label from PROVIDERS (optional, for convenience)
  * @returns Custom label string
  */
 export type ProviderLabelGenerator = (
   providerType: PROVIDER_TYPE,
-  defaultLabel: string,
+  defaultLabel?: string,
 ) => string;
 
 interface UseProviderOptionsParams {

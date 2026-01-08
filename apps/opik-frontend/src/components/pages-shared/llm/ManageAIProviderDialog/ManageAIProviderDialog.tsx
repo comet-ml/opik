@@ -92,9 +92,16 @@ type ManageAIProviderDialogProps = {
   configuredProvidersList?: ProviderObject[];
 };
 
-// Label generator for "Add new" options - prefixes with "Add "
-const addNewLabelGenerator = (_: PROVIDER_TYPE, defaultLabel: string) =>
-  `Add ${defaultLabel}`;
+// Label generator for "Add new" options
+const addNewLabelGenerator = (providerType: PROVIDER_TYPE) => {
+  if (providerType === PROVIDER_TYPE.BEDROCK) {
+    return "Add Bedrock provider";
+  }
+  if (providerType === PROVIDER_TYPE.CUSTOM) {
+    return "Add vLLM / Custom provider";
+  }
+  return "Add provider";
+};
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   providerKey,
