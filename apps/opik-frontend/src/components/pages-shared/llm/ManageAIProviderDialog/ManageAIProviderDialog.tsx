@@ -25,7 +25,9 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
-import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
+import ProviderGrid, {
+  ProviderGridOption,
+} from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import {
@@ -42,7 +44,11 @@ import {
   convertCustomProviderModels,
   buildComposedProviderKey,
 } from "@/lib/provider";
-import { useProviderOptions } from "@/hooks/useProviderOptions";
+import {
+  useProviderOptions,
+  useProviderEnabledMap,
+} from "@/hooks/useProviderOptions";
+import { PROVIDERS } from "@/constants/providers";
 
 /**
  * Converts header array from form state to API-compatible object format
@@ -100,11 +106,37 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
 }) => {
-  // Use shared hook for provider options with feature toggles
-  const providerOptions = useProviderOptions({
+  // Get base provider options (includes configured instances with status)
+  const baseProviderOptions = useProviderOptions({
     configuredProvidersList,
     includeConfiguredStatus: true,
   });
+  const providerEnabledMap = useProviderEnabledMap();
+
+  // Append creation options for Bedrock and Custom providers (dialog-specific UI concern)
+  const providerOptions = useMemo(() => {
+    const options: ProviderGridOption[] = [...baseProviderOptions];
+
+    // Add Bedrock creation option if enabled (for adding new Bedrock instances)
+    if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
+      options.push({
+        value: buildComposedProviderKey(PROVIDER_TYPE.BEDROCK),
+        label: `Add ${PROVIDERS[PROVIDER_TYPE.BEDROCK].label}`,
+        providerType: PROVIDER_TYPE.BEDROCK,
+      });
+    }
+
+    // Add Custom LLM creation option if enabled (for adding new Custom instances)
+    if (providerEnabledMap[PROVIDER_TYPE.CUSTOM]) {
+      options.push({
+        value: buildComposedProviderKey(PROVIDER_TYPE.CUSTOM),
+        label: `Add ${PROVIDERS[PROVIDER_TYPE.CUSTOM].label}`,
+        providerType: PROVIDER_TYPE.CUSTOM,
+      });
+    }
+
+    return options;
+  }, [baseProviderOptions, providerEnabledMap]);
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [selectedProviderId, setSelectedProviderId] = useState<
