@@ -177,7 +177,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const cloningRule = rows.find((r) => r.id === cloneRuleId);
   const isDialogOpen =
     Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
-  
+
   // Determine which rule to pass and what mode to use
   const dialogRule = editingRule || cloningRule;
   const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";

@@ -291,7 +291,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       };
       form.reset(cloneFormData as EvaluationRuleFormType);
     }
-  }, [open, defaultRule, projectId, defaultScope, mode, form]);
+  }, [
+    open,
+    defaultRule,
+    projectId,
+    defaultScope,
+    mode,
+    formScope,
+    formUIRuleType,
+  ]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
