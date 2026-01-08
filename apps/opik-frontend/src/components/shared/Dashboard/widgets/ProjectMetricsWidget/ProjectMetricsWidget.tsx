@@ -59,7 +59,9 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
-  const overrideDefaults = widget?.config?.overrideDefaults;
+  const overrideDefaults = widget?.config?.overrideDefaults as
+    | boolean
+    | undefined;
 
   const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
     useMemo(() => {
