@@ -23,6 +23,7 @@ export class PromptVersion {
   public readonly type: PromptType;
   public readonly metadata?: OpikApi.JsonNode;
   public readonly changeDescription?: string;
+  public readonly tags?: string[];
   public readonly createdAt?: Date;
   public readonly createdBy?: string;
 
@@ -34,6 +35,7 @@ export class PromptVersion {
     this.type = data.type;
     this.metadata = data.metadata;
     this.changeDescription = data.changeDescription;
+    this.tags = data.tags;
     this.createdAt = data.createdAt;
     this.createdBy = data.createdBy;
   }
@@ -157,6 +159,7 @@ export class PromptVersion {
       type: apiResponse.type ?? PromptType.MUSTACHE,
       metadata: apiResponse.metadata,
       changeDescription: apiResponse.changeDescription,
+      tags: apiResponse.tags,
       createdAt: apiResponse.createdAt
         ? new Date(apiResponse.createdAt)
         : undefined,

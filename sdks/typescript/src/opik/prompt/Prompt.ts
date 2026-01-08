@@ -243,21 +243,36 @@ export class Prompt {
    * Fetches and returns complete version history, sorted by creation date (newest first).
    * Automatically handles pagination to fetch all versions.
    *
+   * @param options - Optional filtering, sorting, and search parameters
+   * @param options.search - Search text to find in template or change description fields
+   * @param options.sorting - Sorting specification (e.g., JSON array of sort criteria)
+   * @param options.filters - Filter specification (e.g., JSON array of filter criteria)
    * @returns Promise resolving to array of all PromptVersion instances for this prompt
    * @throws OpikApiError if REST API call fails
    *
    * @example
    * ```typescript
    * const prompt = await client.getPrompt({ name: "my-prompt" });
-   * const versions = await prompt.getVersions();
+   * 
+   * // Get all versions
+   * const allVersions = await prompt.getVersions();
    *
-   * console.log(`Found ${versions.length} versions`);
-   * versions.forEach(v => {
-   *   console.log(`Commit: ${v.commit}, Age: ${v.getVersionAge()}`);
+   * // Get versions with tags filter
+   * const prodVersions = await prompt.getVersions({
+   *   filters: JSON.stringify([{ field: "tags", operator: "contains", value: "production" }])
+   * });
+   *
+   * // Search in templates
+   * const searchResults = await prompt.getVersions({
+   *   search: "greeting"
    * });
    * ```
    */
-  async getVersions(): Promise<PromptVersion[]> {
+  async getVersions(options?: {
+    search?: string;
+    sorting?: string;
+    filters?: string;
+  }): Promise<PromptVersion[]> {
     logger.debug("Getting versions for prompt", {
       promptId: this.id,
       name: this.name,
@@ -272,7 +287,13 @@ export class Prompt {
       while (true) {
         const versionsResponse = await this.opik.api.prompts.getPromptVersions(
           this.id,
-          { page, size: pageSize },
+          {
+            page,
+            size: pageSize,
+            search: options?.search,
+            sorting: options?.sorting,
+            filters: options?.filters,
+          },
           this.opik.api.requestOptions
         );
 
