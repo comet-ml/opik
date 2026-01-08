@@ -1,0 +1,101 @@
+Here are the most relevant improvements we've made since the last release:
+
+## 🚀 Optimization Studio Enhancements
+
+We've significantly improved the Optimization Studio experience with better performance, visibility, and control over your optimization workflows.
+
+**What's new:**
+
+- **Parallel job processing** - Optimization jobs now run in parallel, dramatically reducing wait times for large optimization tasks
+- **Cancel execution** - Added the ability to cancel running optimization jobs directly from the UI, giving you full control over long-running processes
+- **Log viewer** - New log viewer provides real-time visibility into optimization job execution, making it easier to debug and monitor progress
+- **Enhanced log streaming** - Optimization logs now stream to Redis and sync to S3, ensuring you never lose important execution details
+
+These improvements make the Optimization Studio more reliable and easier to use for complex optimization workflows.
+
+## 🏷️ Annotation Queue Improvements
+
+We've made annotation workflows smoother and more efficient with better navigation and feedback management.
+
+**Key enhancements:**
+
+- **Navigation tags** - Added navigation tags that let you jump directly from annotation queues to related traces and threads, making it easier to review context
+- **Select all feedback scores** - New "Select all" option for feedback scores in annotation queues, speeding up bulk annotation tasks
+
+These updates streamline the annotation process, helping teams annotate data faster and more accurately.
+
+## 📊 Dataset Versioning & Management
+
+We've enhanced dataset versioning capabilities to give you better control over your data lifecycle and experiment tracking.
+
+**What's improved:**
+
+- **Dataset version selection** - Easily select and manage dataset versions directly in the UI, with support for linking versions to experiments
+- **Experiment-dataset linking** - Dataset versions can now be linked to experiments, providing clear traceability from data to results
+- **Draft state support** - Frontend now supports draft states for dataset versions, allowing you to work on versions before publishing
+- **User-friendly versioning** - Improved UI makes it easier to understand and manage dataset versions
+
+These changes make it simpler to track which data was used in which experiments, improving reproducibility and data governance.
+
+## 🎨 Prompt Management Enhancements
+
+We've added several improvements to make prompt editing and management more powerful and intuitive.
+
+**New capabilities:**
+
+- **Model selector for OpikAI features** - The Prompt Generator and Prompt Improver now include a model selector, giving you more flexibility in how prompts are generated and improved
+- **Pretty & raw views** - Text prompt pages now support both pretty and raw views, making it easier to read formatted prompts or see the exact raw content
+- **Visual prompt validation** - Chat prompts now show visual indicators when they're invalid, helping you catch errors before running prompts
+
+These enhancements make the prompt management experience more polished and user-friendly.
+
+## 🔍 Traces & Spans Navigation
+
+We've improved navigation between trace views to make it faster to explore your trace data.
+
+- **Trace tree to spans table shortcut** - New navigation shortcut lets you jump directly from the trace tree view to the spans table, streamlining your workflow when analyzing trace hierarchies
+
+## 🎮 Playground Improvements
+
+The Playground now provides more visibility into evaluation results.
+
+- **Metric results in output cell** - Metric evaluation results now appear directly in the playground output cell, giving you immediate feedback on prompt performance without leaving the playground
+
+## 🧪 Experiment Enhancements
+
+We've added more filtering capabilities for experiments.
+
+- **Experiment and project filtering** - Experiments now support filtering by experiment ID and project ID, making it easier to find and organize your experiments
+
+## 🎨 UI/UX Improvements
+
+We've made several UI refinements to improve consistency and usability.
+
+- **Colored tags mapping** - Updated the colored tags mapping for resources to provide better visual organization
+- **Model defaults** - Updated model defaults across the platform for better consistency
+
+## 📦 SDK Updates
+
+We've made several improvements to the Python SDK to make it more reliable and easier to use.
+
+**What's improved:**
+
+- **LLM metrics tracking** - Fixed inconsistent track parameter handling for LLM metrics, ensuring more accurate tracking
+- **Feedback score methods** - Enhanced `log_*_feedback_scores` methods with better API design and error handling
+- **Harbor integration** - Fixed issue where Harbor integration was showing hardcoded task names instead of actual task names in trace Name columns
+
+## 🔌 Integration Updates
+
+- **OpenAI default selection** - Improved logic for default model selection, avoiding OpenAI selection when fine-tuning is disabled
+
+## 📈 Evaluation & Metrics
+
+We've improved how metrics are displayed and calculated.
+
+- **Unique timestamp metrics** - Metrics now show results based on unique timestamps rather than just the first line, providing more accurate metric calculations
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/1.9.56...HEAD)
+
+_Releases_: `1.9.57`, `1.9.58`, `1.9.59`, `1.9.60`, `1.9.61`, `1.9.62`, `1.9.63`, `1.9.64`, `1.9.65`, `1.9.66`, `1.9.67`, `1.9.68`, `1.9.69`, `1.9.70`, `1.9.71`, `1.9.72`, `1.9.73`
