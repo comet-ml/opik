@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { migrateDashboardConfig } from "./migrations";
-import { DashboardState, WIDGET_TYPE } from "@/types/dashboard";
+import {
+  DashboardState,
+  WIDGET_TYPE,
+  EXPERIMENT_DATA_SOURCE,
+} from "@/types/dashboard";
 import { DASHBOARD_VERSION } from "./utils";
 
 describe("migrateDashboardConfig", () => {
@@ -409,7 +413,7 @@ describe("migrateDashboardConfig", () => {
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
     });
 
-    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with custom experimentIds", () => {
+    it("should set overrideDefaults to true when experimentIds exist", () => {
       const v1Dashboard: DashboardState = {
         version: 1,
         sections: [
@@ -439,36 +443,55 @@ describe("migrateDashboardConfig", () => {
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
-    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets without custom experimentIds when dataSource is not SELECT_EXPERIMENTS", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
-                title: "Experiments",
-                config: {
-                  chartType: "line",
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+    it("should set overrideDefaults to true when dataSource is not SELECT_EXPERIMENTS", () => {
+      const testCases = [
+        {
+          name: "undefined dataSource",
+          config: { chartType: "line" },
+        },
+        {
+          name: "FILTER_AND_GROUP dataSource",
+          config: {
+            dataSource: "filter-and-group",
+            chartType: "line",
+            filters: [],
+            groups: [],
           },
-        ],
-        lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
-      };
+        },
+      ];
 
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+      testCases.forEach(({ name, config }) => {
+        const v1Dashboard: DashboardState = {
+          version: 1,
+          sections: [
+            {
+              id: "section-1",
+              title: "Section",
+              widgets: [
+                {
+                  id: "widget-1",
+                  type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                  title: "Experiments",
+                  config,
+                },
+              ],
+              layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+            },
+          ],
+          lastModified: Date.now(),
+          config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        };
+
+        const result = migrateDashboardConfig(v1Dashboard);
+        expect(result.version).toBe(2);
+        expect(
+          result.sections[0].widgets[0].config.overrideDefaults,
+          `Failed for ${name}`,
+        ).toBe(true);
+      });
     });
 
-    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with filters in FILTER_AND_GROUP mode", () => {
+    it("should set overrideDefaults to false when dataSource is SELECT_EXPERIMENTS and no experimentIds", () => {
       const v1Dashboard: DashboardState = {
         version: 1,
         sections: [
@@ -481,16 +504,8 @@ describe("migrateDashboardConfig", () => {
                 type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
                 title: "Experiments",
                 config: {
-                  dataSource: "filter-and-group",
+                  dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
                   chartType: "line",
-                  filters: [
-                    {
-                      field: "status",
-                      operator: "=",
-                      value: "success",
-                      type: "string",
-                    },
-                  ],
                 },
               },
             ],
@@ -503,77 +518,7 @@ describe("migrateDashboardConfig", () => {
 
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(2);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-    });
-
-    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with groups in FILTER_AND_GROUP mode", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
-                title: "Experiments",
-                config: {
-                  dataSource: "filter-and-group",
-                  chartType: "line",
-                  groups: [
-                    {
-                      id: "group-1",
-                      field: "model",
-                      direction: "asc",
-                      type: "string",
-                    },
-                  ],
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
-          },
-        ],
-        lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-    });
-
-    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets in FILTER_AND_GROUP mode without filters or groups", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
-                title: "Experiments",
-                config: {
-                  dataSource: "filter-and-group",
-                  chartType: "line",
-                  filters: [],
-                  groups: [],
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
-          },
-        ],
-        lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
     });
 
     it("should not modify TEXT_MARKDOWN widgets", () => {
