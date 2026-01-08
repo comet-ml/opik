@@ -755,7 +755,10 @@ def _show_root_span_not_created_warning_if_needed(
     if not tracing_active:
         return
 
-    if not should_process_span_data and start_span_parameters.type in ["llm", "tool"]:
+    user_provided_span_type_will_be_lost = (
+        not should_process_span_data and start_span_parameters.type in ["llm", "tool"]
+    )
+    if user_provided_span_type_will_be_lost:
         LOGGER.warning(
             "The root span '%s' of type '%s' will not be created because "
             "its creation was explicitly disabled along with the root trace.",
