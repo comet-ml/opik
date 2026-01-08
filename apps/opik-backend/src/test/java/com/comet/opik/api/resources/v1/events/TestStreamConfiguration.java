@@ -33,7 +33,7 @@ public class TestStreamConfiguration implements StreamConfiguration {
     private Duration poolingInterval = Duration.milliseconds(100);
 
     @Builder.Default
-    private Duration longPollingDuration = Duration.seconds(1);
+    private Duration longPollingDuration = Duration.milliseconds(100);
 
     @Builder.Default
     private int claimIntervalRatio = 10;
