@@ -131,11 +131,9 @@ def StreamingExecutor(
         An instance of the appropriate streaming executor.
     """
     if workers == 1:
-        return SingleWorkerStreamingExecutor[T](verbose=verbose, desc=desc)
+        return SingleWorkerStreamingExecutor(verbose=verbose, desc=desc)
     else:
-        return MultiWorkerStreamingExecutor[T](
-            workers=workers, verbose=verbose, desc=desc
-        )
+        return MultiWorkerStreamingExecutor(workers=workers, verbose=verbose, desc=desc)
 
 
 def execute(
