@@ -189,7 +189,7 @@ install_requires=[
 - **JDBI3**: Works with Java 21 and modern database drivers
 
 #### Python Compatibility
-- **Python 3.8-3.12**: Main SDK supports this range
+- **Python 3.9-3.14**: Main SDK supports this range
 - **Python 3.9-3.12**: Optimizer SDK requires newer Python
 - **Pydantic 2.x**: All Python services use Pydantic 2.x
 

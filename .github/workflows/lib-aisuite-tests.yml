@@ -27,6 +27,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        # 3.14 is not supported by aisuite's docstring_parser dependency
+        # https://github.com/andrewyng/aisuite/issues/265
         python_version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
