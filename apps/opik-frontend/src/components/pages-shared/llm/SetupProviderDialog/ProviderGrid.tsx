@@ -1,10 +1,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Tag } from "@/components/ui/tag";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  PROVIDER_TYPE,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { cn } from "@/lib/utils";
 
