@@ -32,11 +32,11 @@ export const buildComposedProviderKey = (
   providerType: PROVIDER_TYPE,
   providerName?: string,
 ): COMPOSED_PROVIDER_TYPE => {
-  if (providerType === PROVIDER_TYPE.CUSTOM && providerName) {
-    return `${PROVIDER_TYPE.CUSTOM}:${providerName}`;
-  }
-  if (providerType === PROVIDER_TYPE.BEDROCK && providerName) {
-    return `${PROVIDER_TYPE.BEDROCK}:${providerName}`;
+  if (
+    providerName &&
+    [PROVIDER_TYPE.CUSTOM, PROVIDER_TYPE.BEDROCK].includes(providerType)
+  ) {
+    return `${providerType}:${providerName}`;
   }
   return providerType;
 };
