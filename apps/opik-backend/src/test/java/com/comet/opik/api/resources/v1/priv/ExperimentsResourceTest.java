@@ -239,7 +239,7 @@ class ExperimentsResourceTest {
         APP = newTestDropwizardAppExtension(contextConfig);
     }
 
-    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+    private static final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
     private ClientSupport client;
@@ -5766,13 +5766,14 @@ class ExperimentsResourceTest {
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
             // then
-            var expectedExperiment = expectedTags != null ? experiment : experiment.toBuilder().tags(null).build();
+            var expectedExperiment = experiment.toBuilder().tags(expectedTags).build();
             getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
         private static java.util.stream.Stream<Arguments> createExperimentTagsProvider() {
+            var testRandomTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
             return java.util.stream.Stream.of(
-                    Arguments.of(Set.of("tag1", "tag2", "tag3"), Set.of("tag1", "tag2", "tag3")),
+                    Arguments.of(testRandomTags, testRandomTags),
                     Arguments.of(Set.of(), null),
                     Arguments.of(null, null));
         }
@@ -5806,7 +5807,7 @@ class ExperimentsResourceTest {
         @DisplayName("when updating experiment to remove tags, then tags are cleared correctly")
         void updateExperimentToRemoveTags_thenTagsClearedCorrectly() {
             // given - create experiment with tags
-            Set<String> initialTags = Set.of("tag1", "tag2", "tag3");
+            var initialTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
             var experiment = experimentResourceClient.createPartialExperiment()
                     .tags(initialTags)
                     .build();
@@ -5830,7 +5831,7 @@ class ExperimentsResourceTest {
         @DisplayName("when updating experiment with null tags, then existing tags are preserved")
         void updateExperimentWithNullTags_thenExistingTagsPreserved() {
             // given - create experiment with tags
-            Set<String> initialTags = Set.of("tag1", "tag2");
+            var initialTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
             var experiment = experimentResourceClient.createPartialExperiment()
                     .tags(initialTags)
                     .build();

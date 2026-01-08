@@ -829,7 +829,7 @@ class ExperimentDAO {
                         .map(UUID::toString)
                         .orElse(""));
 
-        if (experiment.tags() != null) {
+        if (CollectionUtils.isNotEmpty(experiment.tags())) {
             statement.bind("tags", experiment.tags().toArray(String[]::new));
         } else {
             statement.bind("tags", new String[]{});
@@ -1435,7 +1435,9 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        if (Objects.nonNull(experimentUpdate.tags())) {
+        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
+        // because an EMPTY set is a valid value here, and it is used to remove tags
+        if (experimentUpdate.tags() != null) {
             template.add("tags", true);
         }
 
@@ -1463,7 +1465,9 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        if (Objects.nonNull(experimentUpdate.tags())) {
+        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
+        // because an EMPTY set is a valid value here, and it is used to remove tags
+        if (experimentUpdate.tags() != null) {
             statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
         }
 
