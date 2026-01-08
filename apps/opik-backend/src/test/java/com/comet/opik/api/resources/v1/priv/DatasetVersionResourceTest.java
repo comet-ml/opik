@@ -1168,19 +1168,19 @@ class DatasetVersionResourceTest {
 
             // Create items with different data values to enable filtering
             var item1 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
                             "status", factory.manufacturePojo(JsonNode.class)))
                     .build();
             var item2 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
                             "status", factory.manufacturePojo(JsonNode.class)))
                     .build();
             var item3 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of("category", factory.manufacturePojo(JsonNode.class),
                             "status", factory.manufacturePojo(JsonNode.class)))
@@ -1231,7 +1231,7 @@ class DatasetVersionResourceTest {
 
             // Create items with known data fields to test columns extraction
             var item1 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "input", JsonUtils.readTree("{\"query\": \"test query\"}"),
@@ -1239,7 +1239,7 @@ class DatasetVersionResourceTest {
                             "score", JsonUtils.readTree("0.95")))
                     .build();
             var item2 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "input", JsonUtils.readTree("{\"query\": \"another query\"}"),
@@ -1351,21 +1351,21 @@ class DatasetVersionResourceTest {
 
             // Create items with different descriptions
             var item1 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "Name", JsonUtils.readTree("\"Cat\""),
                             "Description", JsonUtils.readTree("\"Cat looking at camera\"")))
                     .build();
             var item2 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "Name", JsonUtils.readTree("\"Dog\""),
                             "Description", JsonUtils.readTree("\"Dog at the garden\"")))
                     .build();
             var item3 = DatasetItem.builder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .data(Map.of(
                             "Name", JsonUtils.readTree("\"Bird\""),
@@ -1997,13 +1997,12 @@ class DatasetVersionResourceTest {
             assertThat(returnedExperimentItem.experimentId()).isEqualTo(experimentId);
             assertThat(returnedExperimentItem.datasetItemId()).isEqualTo(datasetItem.id());
 
-            // Verify columns include input and output from trace data (for experiment items view)
             var columnNames = datasetItemsWithExperiments.columns().stream()
                     .map(Column::name)
                     .collect(Collectors.toSet());
             assertThat(columnNames)
-                    .as("Columns should include 'input' and 'output' from trace data for experiment items")
-                    .contains("input", "output");
+                    .as("Columns should include dataset item data fields (job_title, salary)")
+                    .contains("job_title", "salary");
         }
 
         @Test
@@ -2097,7 +2096,7 @@ class DatasetVersionResourceTest {
 
         @Test
         @DisplayName("Error: Create experiment with non-existent version ID")
-        void createExperiment_whenInvalidVersionId_thenNotFound() {
+        void createExperiment_whenInvalidVersionId_thenConflict() {
             // given
             var datasetName = UUID.randomUUID().toString();
             var datasetId = createDataset(datasetName);
@@ -2111,15 +2110,15 @@ class DatasetVersionResourceTest {
                     .datasetVersionId(nonExistentVersionId)
                     .build();
 
-            // then - should fail with 404
+            // then - should fail with 409 (aligned with legacy behavior)
             try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
             }
         }
 
         @Test
         @DisplayName("Error: Create experiment with version ID from different dataset")
-        void createExperiment_whenVersionFromDifferentDataset_thenNotFound() {
+        void createExperiment_whenVersionFromDifferentDataset_thenConflict() {
             // given - create two datasets with versions
             var dataset1Name = UUID.randomUUID().toString();
             var dataset1Id = createDataset(dataset1Name);
@@ -2135,9 +2134,9 @@ class DatasetVersionResourceTest {
                     .datasetVersionId(version1.id())
                     .build();
 
-            // then - should fail with 404 (version doesn't belong to dataset2)
+            // then - should fail with 409 (aligned with legacy behavior - version doesn't belong to dataset2)
             try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
             }
         }
 

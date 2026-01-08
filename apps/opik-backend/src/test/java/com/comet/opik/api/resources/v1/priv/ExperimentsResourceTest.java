@@ -3515,6 +3515,8 @@ class ExperimentsResourceTest {
         void createWithInvalidPromptVersionId() {
             var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, "Prompt version not found");
