@@ -129,6 +129,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
+  # Default: 3
+  # Description: Number of retry attempts for Redis operations
+  retryAttempts: ${REDIS_RETRY_ATTEMPTS:-3}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
