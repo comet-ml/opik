@@ -2,7 +2,6 @@ import uniqid from "uniqid";
 import cloneDeep from "lodash/cloneDeep";
 import map from "lodash/map";
 import get from "lodash/get";
-import isEmpty from "lodash/isEmpty";
 import {
   BaseDashboardConfig,
   DashboardSection,

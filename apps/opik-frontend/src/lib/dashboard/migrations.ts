@@ -36,7 +36,8 @@ const migrateDashboardV1toV2 = (dashboard: DashboardState): DashboardState => {
         if (widget.type === WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES) {
           const hasCustomConfig =
             !isEmpty(widget.config.experimentIds) ||
-            widget.config.dataSource !== EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+            widget.config.dataSource !==
+              EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
 
           return {
             ...widget,

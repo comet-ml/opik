@@ -182,7 +182,9 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
           >
             {displayValue}
           </span>
-          {rightIcon && <div className="flex shrink-0 items-center">{rightIcon}</div>}
+          {rightIcon && (
+            <div className="flex shrink-0 items-center">{rightIcon}</div>
+          )}
         </div>
         <div className="ml-auto hidden h-full items-center pr-2 group-hover/inline-edit:flex">
           <div className="flex size-7 items-center justify-center rounded">
