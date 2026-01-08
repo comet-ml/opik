@@ -25,7 +25,9 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
-import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
+import ProviderGrid, {
+  ProviderGridOption,
+} from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import {
@@ -41,7 +43,11 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import {
   convertCustomProviderModels,
   buildComposedProviderKey,
+  getProviderDisplayName,
 } from "@/lib/provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
 
 /**
  * Converts header array from form state to API-compatible object format
@@ -99,6 +105,144 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
 }) => {
+  // Feature toggle hooks - all provider toggles live here in the parent
+  const isOpenAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
+  );
+  const isAnthropicEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  );
+  const isGeminiEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  );
+  const isOpenRouterEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  );
+  const isVertexAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  );
+  const isBedrockEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
+  );
+  const isCustomLLMEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  );
+
+  const providerEnabledMap = useMemo(
+    () => ({
+      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
+      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
+      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
+      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
+      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
+      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
+    }),
+    [
+      isOpenAIEnabled,
+      isAnthropicEnabled,
+      isGeminiEnabled,
+      isOpenRouterEnabled,
+      isVertexAIEnabled,
+      isBedrockEnabled,
+      isCustomLLMEnabled,
+    ],
+  );
+
+  // Build provider options - this logic was moved from ProviderGrid
+  const providerOptions = useMemo(() => {
+    const options: ProviderGridOption[] = [];
+
+    // Filter standard providers based on feature flags
+    const standardProviders = PROVIDERS_OPTIONS.filter((option) => {
+      if (
+        option.value === PROVIDER_TYPE.CUSTOM ||
+        option.value === PROVIDER_TYPE.OPIK_FREE ||
+        option.value === PROVIDER_TYPE.BEDROCK
+      ) {
+        return false;
+      }
+      return providerEnabledMap[option.value];
+    });
+
+    standardProviders.forEach((option) => {
+      const configuredProvider = configuredProvidersList?.find(
+        (key) => key.provider === option.value,
+      );
+
+      options.push({
+        value: buildComposedProviderKey(option.value),
+        label: option.label,
+        providerType: option.value,
+        configuredId: configuredProvider?.id,
+        isConfigured: Boolean(configuredProvider),
+      });
+    });
+
+    // Add Bedrock provider option for creating new instances
+    if (isBedrockEnabled) {
+      options.push({
+        value: buildComposedProviderKey(
+          PROVIDER_TYPE.BEDROCK,
+          "__add_bedrock_provider__",
+        ),
+        label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
+        providerType: PROVIDER_TYPE.BEDROCK,
+      });
+
+      // Add configured Bedrock instances
+      const bedrockProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.BEDROCK,
+        ) || [];
+
+      bedrockProviders.forEach((bedrockProvider) => {
+        options.push({
+          value: bedrockProvider.ui_composed_provider,
+          label: getProviderDisplayName(bedrockProvider),
+          providerType: PROVIDER_TYPE.BEDROCK,
+          configuredId: bedrockProvider.id,
+          isConfigured: true,
+        });
+      });
+    }
+
+    // Add custom provider option for creating new instances
+    if (isCustomLLMEnabled) {
+      options.push({
+        value: buildComposedProviderKey(
+          PROVIDER_TYPE.CUSTOM,
+          "__add_custom_provider__",
+        ),
+        label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
+        providerType: PROVIDER_TYPE.CUSTOM,
+      });
+
+      // Add configured custom provider instances
+      const customProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.CUSTOM,
+        ) || [];
+
+      customProviders.forEach((customProvider) => {
+        options.push({
+          value: customProvider.ui_composed_provider,
+          label: getProviderDisplayName(customProvider),
+          providerType: PROVIDER_TYPE.CUSTOM,
+          configuredId: customProvider.id,
+          isConfigured: true,
+        });
+      });
+    }
+
+    return options;
+  }, [
+    configuredProvidersList,
+    providerEnabledMap,
+    isCustomLLMEnabled,
+    isBedrockEnabled,
+  ]);
+
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [selectedProviderId, setSelectedProviderId] = useState<
     string | undefined
@@ -345,12 +489,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               onSubmit={form.handleSubmit(cloudConfigHandler)}
             >
               <ProviderGrid
+                options={providerOptions}
                 selectedProvider={selectedComposedProvider}
                 onSelectProvider={handleProviderSelect}
-                configuredProvidersList={
-                  configuredProvidersList ??
-                  (providerKey ? [providerKey] : undefined)
-                }
                 disabled={Boolean(providerKey)}
               />
               {(isConfiguredProvider || providerKey) && (
@@ -392,7 +533,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         setOpen={setConfirmOpen}
         onConfirm={deleteProviderKeyHandler}
         title="Delete configuration"
-        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
+        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can't be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
         confirmButtonVariant="destructive"
       />
