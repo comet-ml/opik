@@ -299,6 +299,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     mode,
     formScope,
     formUIRuleType,
+    form,
   ]);
 
   const handleScopeChange = useCallback(
