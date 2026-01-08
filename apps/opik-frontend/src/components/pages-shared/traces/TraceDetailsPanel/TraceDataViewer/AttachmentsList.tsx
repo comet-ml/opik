@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import uniqBy from "lodash/uniqBy";
 import { Span, Trace } from "@/types/traces";
 import useAttachmentsList from "@/api/attachments/useAttachmentsList";
 import { isObjectSpan } from "@/lib/traces";
@@ -64,7 +65,7 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, media }) => {
   );
 
   const previewDataArray = useMemo(() => {
-    return [
+    const combined = [
       ...attachments.map((attachment) => ({
         name: attachment.file_name,
         url: attachment.link,
@@ -76,6 +77,11 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, media }) => {
         type: media.type,
       })),
     ];
+
+    // Deduplicate by URL to prevent showing the same media twice
+    // This can happen when a video URL is passed as an image in the playground
+    // and gets detected both by backend attachments and frontend media detection
+    return uniqBy(combined, "url");
   }, [attachments, media]);
 
   const hasAttachments = previewDataArray.length > 0;
