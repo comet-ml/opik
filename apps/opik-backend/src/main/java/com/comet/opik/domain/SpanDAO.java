@@ -56,9 +56,8 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
-import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -97,7 +96,9 @@ class SpanDAO {
                 created_by,
                 last_updated_by,
                 truncation_threshold
-            ) VALUES
+            )
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values
                 <items:{item |
                     (
                         :id<item.index>,
@@ -280,6 +281,7 @@ class SpanDAO {
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -342,6 +344,7 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -494,6 +497,7 @@ class SpanDAO {
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -594,7 +598,7 @@ class SpanDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '<no reason>', x), reasons), ', ')) AS reason,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
@@ -664,6 +668,7 @@ class SpanDAO {
             ) AS fs ON s.id = fs.entity_id
             GROUP BY
                 s.*
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -680,6 +685,7 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -691,6 +697,7 @@ class SpanDAO {
             AND id = :id
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -706,6 +713,7 @@ class SpanDAO {
             AND trace_id IN :trace_ids
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -961,6 +969,7 @@ class SpanDAO {
             <else>
             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
             <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1075,6 +1084,7 @@ class SpanDAO {
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS latest_rows
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1083,6 +1093,7 @@ class SpanDAO {
             WHERE trace_id IN :trace_ids
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1091,6 +1102,7 @@ class SpanDAO {
                 DISTINCT id, workspace_id
             FROM spans
             WHERE id IN :spanIds
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1100,6 +1112,8 @@ class SpanDAO {
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String SELECT_SPANS_STATS = """
@@ -1309,6 +1323,7 @@ class SpanDAO {
             FROM spans_final s
             LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             GROUP BY project_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1318,6 +1333,8 @@ class SpanDAO {
             FROM spans
             WHERE trace_id IN :trace_ids
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String SPAN_COUNT_BY_WORKSPACE_ID = """
@@ -1332,6 +1349,7 @@ class SpanDAO {
             )
             <endif>
              GROUP BY workspace_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1348,6 +1366,7 @@ class SpanDAO {
             )
             <endif>
             GROUP BY workspace_id, created_by
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1384,7 +1403,7 @@ class SpanDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = TemplateUtils.newST(BULK_INSERT)
+            var template = getSTWithLogComment(BULK_INSERT, "batch_insert_spans", workspaceId, spans.size())
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -1457,70 +1476,74 @@ class SpanDAO {
     }
 
     private Publisher<? extends Result> insert(Span span, Connection connection) {
-        var template = newInsertTemplate(span);
-        var statement = connection.createStatement(template.render())
-                .bind("id", span.id())
-                .bind("project_id", span.projectId())
-                .bind("trace_id", span.traceId())
-                .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
-                .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
-                .bind("start_time", span.startTime().toString())
-                .bind("input", Objects.toString(span.input(), ""))
-                .bind("output", Objects.toString(span.output(), ""))
-                .bind("metadata", Objects.toString(span.metadata(), ""))
-                .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
-                .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
-        if (span.parentSpanId() != null) {
-            statement.bind("parent_span_id", span.parentSpanId());
-        } else {
-            statement.bind("parent_span_id", "");
-        }
-        if (span.endTime() != null) {
-            statement.bind("end_time", span.endTime().toString());
-        }
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = newInsertTemplate(span, workspaceId);
+            var statement = connection.createStatement(template.render())
+                    .bind("id", span.id())
+                    .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
+                    .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
+                    .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
+                    .bind("start_time", span.startTime().toString())
+                    .bind("input", Objects.toString(span.input(), ""))
+                    .bind("output", Objects.toString(span.output(), ""))
+                    .bind("metadata", Objects.toString(span.metadata(), ""))
+                    .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
+                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
+            if (span.parentSpanId() != null) {
+                statement.bind("parent_span_id", span.parentSpanId());
+            } else {
+                statement.bind("parent_span_id", "");
+            }
+            if (span.endTime() != null) {
+                statement.bind("end_time", span.endTime().toString());
+            }
 
-        if (span.tags() != null) {
-            statement.bind("tags", span.tags().toArray(String[]::new));
-        } else {
-            statement.bind("tags", new String[]{});
-        }
-        if (span.usage() != null) {
+            if (span.tags() != null) {
+                statement.bind("tags", span.tags().toArray(String[]::new));
+            } else {
+                statement.bind("tags", new String[]{});
+            }
+            if (span.usage() != null) {
 
-            Stream.Builder<String> keys = Stream.builder();
-            Stream.Builder<Integer> values = Stream.builder();
+                Stream.Builder<String> keys = Stream.builder();
+                Stream.Builder<Integer> values = Stream.builder();
 
-            span.usage().forEach((key, value) -> {
-                if (Objects.nonNull(value)) {
-                    keys.add(key);
-                    values.add(value);
-                }
-            });
+                span.usage().forEach((key, value) -> {
+                    if (Objects.nonNull(value)) {
+                        keys.add(key);
+                        values.add(value);
+                    }
+                });
 
-            statement.bind("usage_keys", keys.build().toArray(String[]::new));
-            statement.bind("usage_values", values.build().toArray(Integer[]::new));
-        } else {
-            statement.bind("usage_keys", new String[]{});
-            statement.bind("usage_values", new Integer[]{});
-        }
+                statement.bind("usage_keys", keys.build().toArray(String[]::new));
+                statement.bind("usage_values", values.build().toArray(Integer[]::new));
+            } else {
+                statement.bind("usage_keys", new String[]{});
+                statement.bind("usage_values", new Integer[]{});
+            }
 
-        if (span.errorInfo() != null) {
-            statement.bind("error_info", JsonUtils.readTree(span.errorInfo()).toString());
-        } else {
-            statement.bind("error_info", "");
-        }
+            if (span.errorInfo() != null) {
+                statement.bind("error_info", JsonUtils.readTree(span.errorInfo()).toString());
+            } else {
+                statement.bind("error_info", "");
+            }
 
-        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+            TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
-        bindCost(span, statement, "");
+            bindCost(span, statement, "");
 
-        Segment segment = startSegment("spans", "Clickhouse", "insert");
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
 
-        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                .doFinally(signalType -> endSegment(segment));
+            Segment segment = startSegment("spans", "Clickhouse", "insert");
+
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
-    private ST newInsertTemplate(Span span) {
-        var template = TemplateUtils.newST(INSERT);
+    private ST newInsertTemplate(Span span, String workspaceId) {
+        var template = getSTWithLogComment(INSERT, "insert_span", workspaceId, "");
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
@@ -1538,8 +1561,9 @@ class SpanDAO {
     @WithSpan
     public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false, "partial_insert_span",
+                            workspaceId);
 
                     var statement = connection.createStatement(template.render());
 
@@ -1555,35 +1579,42 @@ class SpanDAO {
 
                     bindUpdateParams(spanUpdate, statement, false);
 
+                    bindUserNameAndWorkspace(statement, userName, workspaceId);
+
                     Segment segment = startSegment("spans", "Clickhouse", "partial_insert");
 
-                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                    return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
-                })
+                }))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
 
     private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection,
             Span existingSpan) {
-        if (spanUpdate.model() != null || spanUpdate.usage() != null || spanUpdate.provider() != null) {
-            spanUpdate = spanUpdate.toBuilder()
-                    .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())
-                    .provider(spanUpdate.provider() != null ? spanUpdate.provider() : existingSpan.provider())
-                    .usage(spanUpdate.usage() != null ? spanUpdate.usage() : existingSpan.usage())
-                    .build();
-        }
+        var finalUpdate = spanUpdate.model() != null || spanUpdate.usage() != null || spanUpdate.provider() != null
+                ? spanUpdate.toBuilder()
+                        .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())
+                        .provider(spanUpdate.provider() != null ? spanUpdate.provider() : existingSpan.provider())
+                        .usage(spanUpdate.usage() != null ? spanUpdate.usage() : existingSpan.usage())
+                        .build()
+                : spanUpdate;
 
-        var template = newUpdateTemplate(spanUpdate, UPDATE, isManualCost(existingSpan));
-        var statement = connection.createStatement(template.render());
-        statement.bind("id", id);
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = newUpdateTemplate(finalUpdate, UPDATE, isManualCost(existingSpan), "update_span",
+                    workspaceId);
+            var statement = connection.createStatement(template.render());
+            statement.bind("id", id);
 
-        bindUpdateParams(spanUpdate, statement, isManualCost(existingSpan));
+            bindUpdateParams(finalUpdate, statement, isManualCost(existingSpan));
 
-        Segment segment = startSegment("spans", "Clickhouse", "update");
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
 
-        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                .doFinally(signalType -> endSegment(segment));
+            Segment segment = startSegment("spans", "Clickhouse", "update");
+
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement, boolean isManualCostExist) {
@@ -1639,8 +1670,9 @@ class SpanDAO {
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
-    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
-        var template = TemplateUtils.newST(sql);
+    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
+            String workspaceId) {
+        var template = getSTWithLogComment(sql, queryName, workspaceId, "");
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -1687,16 +1719,18 @@ class SpanDAO {
     public Mono<Span> getOnlySpanDataById(@NonNull UUID id, @NonNull UUID projectId) {
         log.info("Getting span by id '{}'", id);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_ONLY_SPAN_BY_ID)
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_ONLY_SPAN_BY_ID, "get_only_span_by_id", workspaceId, "");
+                    var statement = connection.createStatement(template.render())
                             .bind("id", id)
-                            .bind("project_id", projectId);
+                            .bind("project_id", projectId)
+                            .bind("workspace_id", workspaceId);
 
                     Segment segment = startSegment("spans", "Clickhouse", "select_only_span_by_id");
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
-                })
+                }))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
     }
@@ -1711,10 +1745,15 @@ class SpanDAO {
     }
 
     private Publisher<? extends Result> getPartialById(UUID id, Connection connection) {
-        var statement = connection.createStatement(SELECT_PARTIAL_BY_ID).bind("id", id);
-        var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> endSegment(segment));
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_span_by_id", workspaceId, "");
+            var statement = connection.createStatement(template.render())
+                    .bind("id", id)
+                    .bind("workspace_id", workspaceId);
+            var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     @WithSpan
@@ -1726,15 +1765,18 @@ class SpanDAO {
         log.info("Getting spans for '{}' traces", traceIds.size());
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_BY_TRACE_IDS)
-                            .bind("trace_ids", traceIds.toArray(new UUID[0]));
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_BY_TRACE_IDS, "get_spans_by_trace_ids", workspaceId,
+                            traceIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("trace_ids", traceIds.toArray(new UUID[0]))
+                            .bind("workspace_id", workspaceId);
 
                     Segment segment = startSegment("spans", "Clickhouse", "get_by_trace_ids");
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
-                })
+                }))
                 .flatMap(this::mapToDto);
     }
 
@@ -1747,15 +1789,17 @@ class SpanDAO {
         log.info("Getting '{}' spans by IDs", ids.size());
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_BY_IDS)
-                            .bind("ids", ids.toArray(new UUID[0]));
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_BY_IDS, "get_spans_by_ids", workspaceId, ids.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", ids.toArray(new UUID[0]))
+                            .bind("workspace_id", workspaceId);
 
                     Segment segment = startSegment("spans", "Clickhouse", "get_by_ids");
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
-                })
+                }))
                 .flatMap(this::mapToDto);
     }
 
@@ -1767,20 +1811,22 @@ class SpanDAO {
         var segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = TemplateUtils.newST(DELETE_BY_TRACE_IDS);
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(DELETE_BY_TRACE_IDS, "delete_spans_by_trace_ids", workspaceId,
+                            traceIds.size());
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
 
                     var statement = connection.createStatement(template.render())
-                            .bind("trace_ids", traceIds.toArray(UUID[]::new));
+                            .bind("trace_ids", traceIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
 
                     if (projectId != null) {
                         statement.bind("project_id", projectId);
                     }
 
-                    return makeMonoContextAware(bindWorkspaceIdToMono(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum)
                 .doFinally(signalType -> endSegment(segment));
@@ -1921,66 +1967,73 @@ class SpanDAO {
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
         log.info("Searching spans by '{}'", criteria);
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId);
 
-        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
-        template = template.add("stream", true);
+            template = template.add("stream", true);
 
-        var statement = connection.createStatement(template.render())
-                .bind("project_id", criteria.projectId())
-                .bind("limit", limit);
-        bindSearchCriteria(statement, criteria);
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", criteria.projectId())
+                    .bind("workspace_id", workspaceId)
+                    .bind("limit", limit);
+            bindSearchCriteria(statement, criteria);
 
-        Segment segment = startSegment("spans", "Clickhouse", "findSpanStream");
+            Segment segment = startSegment("spans", "Clickhouse", "findSpanStream");
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> {
-                    log.info("Closing span search stream");
-                    endSegment(segment);
-                });
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> {
+                        log.info("Closing span search stream");
+                        endSegment(segment);
+                    });
+        });
     }
 
     private Publisher<? extends Result> find(Integer page, int size, SpanSearchCriteria spanSearchCriteria,
             Connection connection) {
 
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
-        template.add("offset", (page - 1) * size);
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria, "find_spans_by_project_id",
+                    workspaceId);
+            template.add("offset", (page - 1) * size);
 
-        template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
-        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
+            template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
+            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
-        bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
+            bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
 
-        var finalTemplate = template;
-        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
-                .ifPresent(sortFields -> {
+            var finalTemplate = template;
+            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
+                    .ifPresent(sortFields -> {
 
-                    if (sortFields.contains("feedback_scores")) {
-                        finalTemplate.add("sort_has_feedback_scores", true);
-                    }
+                        if (sortFields.contains("feedback_scores")) {
+                            finalTemplate.add("sort_has_feedback_scores", true);
+                        }
 
-                    finalTemplate.add("sort_fields", sortFields);
-                });
+                        finalTemplate.add("sort_fields", sortFields);
+                    });
 
-        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
+            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
 
-        var statement = connection.createStatement(template.render())
-                .bind("project_id", spanSearchCriteria.projectId())
-                .bind("limit", size)
-                .bind("offset", (page - 1) * size);
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", spanSearchCriteria.projectId())
+                    .bind("workspace_id", workspaceId)
+                    .bind("limit", size)
+                    .bind("offset", (page - 1) * size);
 
-        if (hasDynamicKeys) {
-            statement = sortingQueryBuilder.bindDynamicKeys(statement, spanSearchCriteria.sortingFields());
-        }
+            if (hasDynamicKeys) {
+                statement = sortingQueryBuilder.bindDynamicKeys(statement, spanSearchCriteria.sortingFields());
+            }
 
-        bindSearchCriteria(statement, spanSearchCriteria);
+            bindSearchCriteria(statement, spanSearchCriteria);
 
-        Segment segment = startSegment("spans", "Clickhouse", "stats");
+            Segment segment = startSegment("spans", "Clickhouse", "stats");
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> endSegment(segment));
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private void bindTemplateExcludeFieldVariables(SpanSearchCriteria spanSearchCriteria, ST template) {
@@ -2030,20 +2083,25 @@ class SpanDAO {
     }
 
     private Publisher<? extends Result> countTotal(SpanSearchCriteria spanSearchCriteria, Connection connection) {
-        var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria);
-        var statement = connection.createStatement(template.render())
-                .bind("project_id", spanSearchCriteria.projectId());
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
+                    workspaceId);
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", spanSearchCriteria.projectId())
+                    .bind("workspace_id", workspaceId);
 
-        bindSearchCriteria(statement, spanSearchCriteria);
+            bindSearchCriteria(statement, spanSearchCriteria);
 
-        Segment segment = startSegment("spans", "Clickhouse", "count_total");
+            Segment segment = startSegment("spans", "Clickhouse", "count_total");
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> endSegment(segment));
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
-    private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria) {
-        var template = TemplateUtils.newST(query);
+    private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria, String queryName,
+            String workspaceId) {
+        var template = getSTWithLogComment(query, queryName, workspaceId, "");
         Optional.ofNullable(spanSearchCriteria.traceId())
                 .ifPresent(traceId -> template.add("trace_id", traceId));
         Optional.ofNullable(spanSearchCriteria.type())
@@ -2096,10 +2154,12 @@ class SpanDAO {
             return Mono.just(List.of());
         }
 
+        var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", spanIds.size());
+
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
 
-                    var statement = connection.createStatement(SELECT_SPAN_ID_AND_WORKSPACE)
+                    var statement = connection.createStatement(template.render())
                             .bind("spanIds", spanIds.toArray(UUID[]::new));
 
                     return Mono.from(statement.execute());
@@ -2114,13 +2174,16 @@ class SpanDAO {
     public Mono<UUID> getProjectIdFromSpan(@NonNull UUID spanId) {
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
 
-                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPAN)
-                            .bind("id", spanId);
+                    var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_SPAN, "get_project_id_from_span",
+                            workspaceId, "");
+                    var statement = connection.createStatement(template.render())
+                            .bind("id", spanId)
+                            .bind("workspace_id", workspaceId);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                 .singleOrEmpty();
     }
@@ -2129,19 +2192,20 @@ class SpanDAO {
     public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria searchCriteria) {
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria);
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria, "get_span_stats", workspaceId);
 
                     var statement = connection.createStatement(template.render())
-                            .bind("project_id", searchCriteria.projectId());
+                            .bind("project_id", searchCriteria.projectId())
+                            .bind("workspace_id", workspaceId);
 
                     bindSearchCriteria(statement, searchCriteria);
 
                     Segment segment = startSegment("spans", "Clickhouse", "stats");
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
-                })
+                }))
                 .flatMap(result -> result.map(((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "span_count"))))
                 .singleOrEmpty();
     }
@@ -2153,12 +2217,15 @@ class SpanDAO {
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_SPAN_IDS_BY_TRACE_ID)
-                            .bind("trace_ids", traceIds);
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_SPAN_IDS_BY_TRACE_ID, "get_span_ids_by_trace_ids",
+                            workspaceId, traceIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("trace_ids", traceIds)
+                            .bind("workspace_id", workspaceId);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
                 .collect(Collectors.toSet());
     }
@@ -2169,7 +2236,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var template = TemplateUtils.newST(SPAN_COUNT_BY_WORKSPACE_ID);
+        var template = getSTWithLogComment(SPAN_COUNT_BY_WORKSPACE_ID, "count_spans_per_workspace", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2205,7 +2272,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var template = TemplateUtils.newST(SPAN_DAILY_BI_INFORMATION);
+        var template = getSTWithLogComment(SPAN_DAILY_BI_INFORMATION, "get_span_bi_information", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2312,7 +2379,9 @@ class SpanDAO {
             FROM spans s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
             ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
-            LIMIT 1 BY s.id;
+            LIMIT 1 BY s.id
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     @WithSpan
@@ -2320,28 +2389,29 @@ class SpanDAO {
         Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
         log.info("Bulk updating '{}' spans", ids.size());
 
-        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
-        var query = template.render();
-
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId);
+                    var query = template.render();
+
                     var statement = connection.createStatement(query)
                             .bind("ids", ids);
 
+                    bindUserNameAndWorkspace(statement, userName, workspaceId);
                     bindBulkUpdateParams(update, statement);
                     TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
                     Segment segment = startSegment("spans", "Clickhouse", "bulk_update");
 
-                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                    return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
-                })
+                }))
                 .then()
                 .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", ids.size()));
     }
 
-    private ST newBulkUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean mergeTags) {
-        var template = TemplateUtils.newST(sql);
+    private ST newBulkUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean mergeTags, String workspaceId) {
+        var template = getSTWithLogComment(sql, "bulk_update_spans", workspaceId, "");
 
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
