@@ -3,7 +3,7 @@ import api, { QueryConfig } from "../api";
 
 interface UseUsernameAutocompleteParams {
   query: string;
-  organizationId?: string;
+  organizationId: string;
   excludedWorkspaceId?: string;
 }
 
