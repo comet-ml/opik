@@ -65,6 +65,7 @@ def start_as_current_span(
         opik_distributed_trace_headers=distributed_headers,
         opik_args_data=None,
         tracing_active=True,
+        create_duplicate_root_span=True,
     )
 
     end_arguments = arguments_helpers.EndSpanParameters(

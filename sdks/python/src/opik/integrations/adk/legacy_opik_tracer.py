@@ -158,15 +158,13 @@ class LegacyOpikTracer:
                     input=user_input,
                     type="general",
                 )
-                _, opik_span_data = (
-                    span_creation_handler.create_span_respecting_context(
-                        start_span_arguments=start_span_arguments,
-                        distributed_trace_headers=None,
-                        opik_context_storage=self._context_storage,
-                    )
+                result = span_creation_handler.create_span_respecting_context(
+                    start_span_arguments=start_span_arguments,
+                    distributed_trace_headers=None,
+                    opik_context_storage=self._context_storage,
                 )
 
-                self._start_span(span_data=opik_span_data)
+                self._start_span(span_data=result.span_data)
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -212,7 +210,7 @@ class LegacyOpikTracer:
             if provider is None:
                 provider = adk_helpers.get_adk_provider()
 
-            _, span_data = span_creation_handler.create_span_respecting_context(
+            result = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
                     name=llm_request.model,
                     project_name=self.project_name,
@@ -226,7 +224,7 @@ class LegacyOpikTracer:
                 opik_context_storage=self._context_storage,
             )
 
-            self._start_span(span_data=span_data)
+            self._start_span(span_data=result.span_data)
 
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
@@ -300,7 +298,7 @@ class LegacyOpikTracer:
                 **self.metadata,
             }
 
-            _, span_data = span_creation_handler.create_span_respecting_context(
+            result = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
                     name=tool.name,
                     project_name=self.project_name,
@@ -312,7 +310,7 @@ class LegacyOpikTracer:
                 opik_context_storage=self._context_storage,
             )
 
-            self._start_span(span_data=span_data)
+            self._start_span(span_data=result.span_data)
 
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
