@@ -90,6 +90,7 @@ def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
 
     The function extracts the value from the Interrupt object representation in the traceback.
     It handles both string values (with quotes) and non-string values, including nested structures.
+    For string values, escape sequences are decoded (e.g., \\n becomes a newline character).
 
     Args:
         error_traceback: The error traceback string containing GraphInterrupt information.
@@ -157,9 +158,20 @@ def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
 
     # Extract and clean the value
     value = value_str[:i].strip()
-    # Remove surrounding quotes if present
+
+    # Check if the value was originally a quoted string
+    was_quoted_string = False
     if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
+        was_quoted_string = True
         value = value[1:-1]
+
+    # Decode escape sequences for string values
+    if was_quoted_string:
+        try:
+            value = value.encode("utf-8").decode("unicode_escape")
+        except (UnicodeDecodeError, AttributeError):
+            # If decoding fails, return the original value
+            pass
 
     return value
 

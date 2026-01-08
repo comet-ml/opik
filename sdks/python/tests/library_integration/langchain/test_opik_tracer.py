@@ -95,7 +95,7 @@ def test_opik_tracer__init_validation():
         # String with special characters
         (
             'GraphInterrupt(Interrupt(value="hello\\nworld"))',
-            "hello\\nworld",
+            "hello\nworld",
         ),
         (
             'GraphInterrupt(Interrupt(value="path/to/file"))',
@@ -104,11 +104,11 @@ def test_opik_tracer__init_validation():
         # String with escaped quotes
         (
             'GraphInterrupt(Interrupt(value="test\\"value"))',
-            'test\\"value',
+            'test"value',
         ),
         (
             "GraphInterrupt(Interrupt(value='test\\'value'))",
-            "test\\'value",
+            "test'value",
         ),
         # List values
         (
@@ -199,12 +199,12 @@ def test_opik_tracer__init_validation():
         # Value with newlines in string
         (
             'GraphInterrupt(Interrupt(value="line1\\nline2"))',
-            "line1\\nline2",
+            "line1\nline2",
         ),
         # Value with tabs
         (
             'GraphInterrupt(Interrupt(value="hello\\tworld"))',
-            "hello\\tworld",
+            "hello\tworld",
         ),
         # Tuple value
         (
@@ -224,6 +224,56 @@ def test_opik_tracer__init_validation():
         (
             "GraphInterrupt(Interrupt(value='He said \"hello\"'))",
             'He said "hello"',
+        ),
+        # Value with carriage return
+        (
+            'GraphInterrupt(Interrupt(value="line1\\rline2"))',
+            "line1\rline2",
+        ),
+        # Value with backslash
+        (
+            'GraphInterrupt(Interrupt(value="path\\\\to\\\\file"))',
+            "path\\to\\file",
+        ),
+        # Value with multiple escape sequences
+        (
+            'GraphInterrupt(Interrupt(value="line1\\nline2\\tindented\\rcarriage"))',
+            "line1\nline2\tindented\rcarriage",
+        ),
+        # Value with unicode escape (\u0020 -> space)
+        (
+            'GraphInterrupt(Interrupt(value="hello\\u0020world"))',
+            "hello world",
+        ),
+        # Value with hex escape (\x20 -> space)
+        (
+            'GraphInterrupt(Interrupt(value="test\\x20value"))',
+            "test value",
+        ),
+        # Value with bell character
+        (
+            'GraphInterrupt(Interrupt(value="alert\\a"))',
+            "alert\a",
+        ),
+        # Value with form feed
+        (
+            'GraphInterrupt(Interrupt(value="page\\fbreak"))',
+            "page\fbreak",
+        ),
+        # Value with vertical tab
+        (
+            'GraphInterrupt(Interrupt(value="vertical\\vtab"))',
+            "vertical\vtab",
+        ),
+        # Value with backspace
+        (
+            'GraphInterrupt(Interrupt(value="back\\bspace"))',
+            "back\bspace",
+        ),
+        # Mixed escape sequences and regular text
+        (
+            'GraphInterrupt(Interrupt(value="Start\\n\\tIndented line\\n\\tAnother indented\\nEnd"))',
+            "Start\n\tIndented line\n\tAnother indented\nEnd",
         ),
     ],
 )
