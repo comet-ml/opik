@@ -1,5 +1,5 @@
-import time
-from typing import Dict, Any
+import threading
+from typing import Dict, Any, List
 from unittest import mock
 
 import opik
@@ -48,9 +48,9 @@ def test_streaming_starts_evaluation_before_complete_download(
     dataset = opik_client.create_dataset(dataset_name)
     dataset.insert(DATASET_ITEMS)
 
-    # Track timing of item yields and task executions
-    item_yield_times = []
-    task_start_times = []
+    # Track the sequence of events: 'yield' or 'task'
+    events: List[str] = []
+    events_lock = threading.Lock()
 
     # Store original streaming method
     original_stream_method = (
@@ -60,14 +60,14 @@ def test_streaming_starts_evaluation_before_complete_download(
     def tracked_streaming_generator(self, nb_samples=None):
         """Wrapper that tracks when items are yielded."""
         for item in original_stream_method(self, nb_samples):
-            item_yield_times.append(time.time())
-            # Add small delay to simulate network latency
-            time.sleep(0.05)
+            with events_lock:
+                events.append("yield")
             yield item
 
     def tracked_task(item: Dict[str, Any]) -> Dict[str, Any]:
         """Wrapper that tracks when tasks start executing."""
-        task_start_times.append(time.time())
+        with events_lock:
+            events.append("task")
         return simple_task(item)
 
     # Patch the streaming method to track yields
@@ -89,18 +89,26 @@ def test_streaming_starts_evaluation_before_complete_download(
 
     # Verify evaluation completed successfully
     assert evaluation_result.dataset_id == dataset.id
-    assert len(item_yield_times) == len(DATASET_ITEMS)
-    assert len(task_start_times) == len(DATASET_ITEMS)
+    assert len(events) == len(DATASET_ITEMS) * 2  # Each item has yield + task
 
-    # Critical assertion: First task should start before last item is yielded
-    # This proves that evaluation is streaming and not waiting for all items
-    first_task_start = min(task_start_times)
-    last_item_yield = max(item_yield_times)
+    # Count yields and tasks
+    yield_count = events.count("yield")
+    task_count = events.count("task")
+    assert yield_count == len(DATASET_ITEMS)
+    assert task_count == len(DATASET_ITEMS)
 
-    assert first_task_start < last_item_yield, (
-        f"Streaming not working! First task started at {first_task_start}, "
-        f"but last item was yielded at {last_item_yield}. "
-        f"Tasks should start before all items are downloaded."
+    # Critical assertion: Tasks should be interleaved with yields
+    # This proves streaming is working - we don't wait for all yields before starting tasks
+    # Find the index of the last yield
+    last_yield_index = len(events) - 1 - events[::-1].index("yield")
+    # Find the index of the first task
+    first_task_index = events.index("task")
+
+    assert first_task_index < last_yield_index, (
+        f"Streaming not working! First task appeared at index {first_task_index}, "
+        f"but last yield appeared at index {last_yield_index}. "
+        f"Tasks should start before all items are yielded. "
+        f"Event sequence: {events}"
     )
 
     # Verify experiment was created correctly
