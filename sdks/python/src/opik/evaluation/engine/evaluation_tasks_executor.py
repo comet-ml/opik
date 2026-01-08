@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from concurrent import futures
 from typing import Any, List, TypeVar, Generic
 
@@ -10,85 +9,23 @@ _tqdm = get_tqdm_for_current_environment()
 T = TypeVar("T")
 
 
-class BaseStreamingExecutor(ABC, Generic[T]):
+class StreamingExecutor(Generic[T]):
     """
-    Base class for executors that accept tasks incrementally and process them as they arrive.
-    Useful for streaming scenarios where tasks are generated on-the-fly.
-    """
+    Executor that accepts and processes evaluation tasks incrementally using a thread pool.
 
-    def __init__(self, verbose: int, desc: str = "Evaluation"):
-        self.verbose = verbose
-        self.desc = desc
-        self.task_count = 0
-
-    @abstractmethod
-    def __enter__(self) -> "BaseStreamingExecutor[T]":
-        """Enter the context manager."""
-        pass
-
-    @abstractmethod
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Exit the context manager."""
-        pass
-
-    @abstractmethod
-    def submit(self, task: EvaluationTask[T]) -> None:
-        """Submit a task for execution."""
-        pass
-
-    @abstractmethod
-    def get_results(self) -> List[T]:
-        """Collect all results from submitted tasks."""
-        pass
-
-
-class SingleWorkerStreamingExecutor(BaseStreamingExecutor[T]):
-    """
-    Executor for single-worker (synchronous) execution.
-    Tasks are stored and executed sequentially when results are collected.
-    """
-
-    def __init__(self, verbose: int, desc: str = "Evaluation"):
-        super().__init__(verbose, desc)
-        self.submitted_tasks: List[EvaluationTask[T]] = []
-
-    def __enter__(self) -> "SingleWorkerStreamingExecutor[T]":
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        pass
-
-    def submit(self, task: EvaluationTask[T]) -> None:
-        """Submit a task for execution."""
-        self.task_count += 1
-        self.submitted_tasks.append(task)
-
-    def get_results(self) -> List[T]:
-        """Execute tasks synchronously with progress bar and collect results."""
-        results: List[T] = []
-        for task in _tqdm(
-            self.submitted_tasks,
-            disable=(self.verbose < 1),
-            desc=self.desc,
-            total=self.task_count,
-        ):
-            results.append(task())
-        return results
-
-
-class MultiWorkerStreamingExecutor(BaseStreamingExecutor[T]):
-    """
-    Executor for multi-worker (parallel) execution.
-    Tasks are submitted to a thread pool and executed concurrently.
+    Tasks can be submitted one at a time and will begin executing immediately, allowing
+    for streaming behavior regardless of the number of workers configured.
     """
 
     def __init__(self, workers: int, verbose: int, desc: str = "Evaluation"):
-        super().__init__(verbose, desc)
         self.workers = workers
+        self.verbose = verbose
+        self.desc = desc
+        self.task_count = 0
         self.pool: futures.ThreadPoolExecutor
         self.submitted_futures: List[futures.Future[T]] = []
 
-    def __enter__(self) -> "MultiWorkerStreamingExecutor[T]":
+    def __enter__(self) -> "StreamingExecutor[T]":
         self.pool = futures.ThreadPoolExecutor(max_workers=self.workers)
         self.pool.__enter__()
         return self
@@ -113,27 +50,6 @@ class MultiWorkerStreamingExecutor(BaseStreamingExecutor[T]):
         ):
             results.append(future.result())
         return results
-
-
-def StreamingExecutor(
-    workers: int, verbose: int, desc: str = "Evaluation"
-) -> BaseStreamingExecutor[T]:
-    """
-    Factory function that returns the appropriate streaming executor based on worker count.
-
-    Args:
-        workers: Number of worker threads. If 1, returns SingleWorkerStreamingExecutor.
-                 If > 1, returns MultiWorkerStreamingExecutor.
-        verbose: Verbosity level for progress bars.
-        desc: Description for progress bars.
-
-    Returns:
-        An instance of the appropriate streaming executor.
-    """
-    if workers == 1:
-        return SingleWorkerStreamingExecutor(verbose=verbose, desc=desc)
-    else:
-        return MultiWorkerStreamingExecutor(workers=workers, verbose=verbose, desc=desc)
 
 
 def execute(
