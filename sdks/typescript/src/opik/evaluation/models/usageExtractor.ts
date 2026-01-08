@@ -137,19 +137,15 @@ function extractTokenUsage(
     }
   }
 
-  // Extract nested token details (AI SDK v6 change)
-  const inputDetails = usage.inputTokenDetails as
-    | { cacheReadTokens?: number }
-    | undefined;
-  if (inputDetails?.cacheReadTokens !== undefined) {
-    opikUsage.cached_input_tokens = inputDetails.cacheReadTokens;
+  // Extract nested token details
+  const cacheReadTokens = (usage.inputTokenDetails as { cacheReadTokens?: number } | undefined)?.cacheReadTokens;
+  if (cacheReadTokens !== undefined) {
+    opikUsage.cached_input_tokens = cacheReadTokens;
   }
 
-  const outputDetails = usage.outputTokenDetails as
-    | { reasoningTokens?: number }
-    | undefined;
-  if (outputDetails?.reasoningTokens !== undefined) {
-    opikUsage.reasoning_tokens = outputDetails.reasoningTokens;
+  const reasoningTokens = (usage.outputTokenDetails as { reasoningTokens?: number } | undefined)?.reasoningTokens;
+  if (reasoningTokens !== undefined) {
+    opikUsage.reasoning_tokens = reasoningTokens;
   }
 
   return Object.keys(opikUsage).length > 0 ? opikUsage : undefined;
