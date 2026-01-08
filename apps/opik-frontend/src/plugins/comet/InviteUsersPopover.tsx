@@ -49,6 +49,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   const { data: users = [], isLoading } = useUsernameAutocomplete(
     {
       query: searchQuery,
+      organizationId,
     },
     {
       enabled:
