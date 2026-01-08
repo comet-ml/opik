@@ -101,11 +101,10 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         UUID apiKeyId = idGenerator.generateId();
 
         // For non-custom providers, explicitly set providerName to null (ignore user input)
-        // Custom and Bedrock providers keep their provider_name to allow multiple instances
-        String providerName = (providerApiKey.provider() == LlmProvider.CUSTOM_LLM
-                || providerApiKey.provider() == LlmProvider.BEDROCK)
-                        ? providerApiKey.providerName()
-                        : null;
+        // Providers that support naming keep their provider_name to allow multiple instances
+        String providerName = providerApiKey.provider().supportsProviderName()
+                ? providerApiKey.providerName()
+                : null;
 
         var newProviderApiKey = providerApiKey.toBuilder()
                 .id(apiKeyId)
