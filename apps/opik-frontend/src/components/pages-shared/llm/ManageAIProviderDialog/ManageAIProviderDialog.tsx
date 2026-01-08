@@ -111,9 +111,16 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
 }) => {
+  // Ensure providerKey is included in the list for proper grid highlighting
+  const effectiveConfiguredProvidersList = useMemo(() => {
+    if (configuredProvidersList) return configuredProvidersList;
+    if (providerKey) return [providerKey];
+    return undefined;
+  }, [configuredProvidersList, providerKey]);
+
   // Get provider options with configured status and "Add new" options
   const providerOptions = useProviderOptions({
-    configuredProvidersList,
+    configuredProvidersList: effectiveConfiguredProvidersList,
     includeConfiguredStatus: true,
     includeAddNewOptions: true,
     addNewLabelGenerator,
@@ -131,7 +138,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
 
   const existingProviderNames = useMemo(() => {
-    return configuredProvidersList
+    return effectiveConfiguredProvidersList
       ?.filter(
         (p) =>
           p.provider === PROVIDER_TYPE.CUSTOM ||
@@ -139,7 +146,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       )
       .map((p) => p.provider_name)
       .filter(Boolean) as string[];
-  }, [configuredProvidersList]);
+  }, [effectiveConfiguredProvidersList]);
 
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
     resolver: zodResolver(createAIProviderFormSchema(existingProviderNames)),
@@ -169,8 +176,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const provider = form.watch("provider") as PROVIDER_TYPE | undefined;
 
   const calculatedProviderKey = useMemo(() => {
-    return configuredProvidersList?.find((p) => selectedProviderId === p.id);
-  }, [configuredProvidersList, selectedProviderId]);
+    return effectiveConfiguredProvidersList?.find(
+      (p) => selectedProviderId === p.id,
+    );
+  }, [effectiveConfiguredProvidersList, selectedProviderId]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
@@ -193,7 +202,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       setSelectedProviderId(configuredId);
       setSelectedComposedProvider(composedProviderType);
 
-      const providerData = configuredProvidersList?.find(
+      const providerData = effectiveConfiguredProvidersList?.find(
         (c) => composedProviderType === c.ui_composed_provider,
       );
 
@@ -224,7 +233,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       form.setValue("apiKey", "");
       form.clearErrors();
     },
-    [form, configuredProvidersList],
+    [form, effectiveConfiguredProvidersList],
   );
 
   const cloudConfigHandler = useCallback(() => {
