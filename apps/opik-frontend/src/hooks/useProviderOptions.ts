@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { PROVIDER_TYPE, ProviderObject } from "@/types/providers";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
+import { PROVIDERS_OPTIONS } from "@/constants/providers";
 import {
   buildComposedProviderKey,
   getProviderDisplayName,
@@ -14,19 +14,21 @@ interface UseProviderOptionsParams {
   includeConfiguredStatus?: boolean;
 }
 
+export interface ProviderEnabledMap {
+  [PROVIDER_TYPE.OPEN_AI]: boolean;
+  [PROVIDER_TYPE.ANTHROPIC]: boolean;
+  [PROVIDER_TYPE.GEMINI]: boolean;
+  [PROVIDER_TYPE.OPEN_ROUTER]: boolean;
+  [PROVIDER_TYPE.VERTEX_AI]: boolean;
+  [PROVIDER_TYPE.BEDROCK]: boolean;
+  [PROVIDER_TYPE.CUSTOM]: boolean;
+}
+
 /**
- * Hook to build provider options based on feature toggles.
- * Centralizes the feature toggle logic and provider filtering.
- *
- * @param configuredProvidersList - Optional list of already configured providers
- * @param includeConfiguredStatus - Whether to include isConfigured status and configured instances
- * @returns Array of provider options filtered by feature toggles
+ * Hook to get feature toggle enabled states for all providers.
+ * Returns a memoized map of provider type to enabled state.
  */
-export function useProviderOptions({
-  configuredProvidersList,
-  includeConfiguredStatus = false,
-}: UseProviderOptionsParams = {}): ProviderGridOption[] {
-  // Feature toggle hooks for all providers
+export function useProviderEnabledMap(): ProviderEnabledMap {
   const isOpenAIEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
   );
@@ -49,7 +51,7 @@ export function useProviderOptions({
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
 
-  const providerEnabledMap = useMemo(
+  return useMemo(
     () => ({
       [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
       [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
@@ -69,11 +71,28 @@ export function useProviderOptions({
       isCustomLLMEnabled,
     ],
   );
+}
+
+/**
+ * Hook to build provider options based on feature toggles.
+ * Returns only real provider options (standard providers + configured instances).
+ * Does NOT include sentinel "add new provider" options - those should be added
+ * by the consuming UI component if needed.
+ *
+ * @param configuredProvidersList - Optional list of already configured providers
+ * @param includeConfiguredStatus - Whether to include isConfigured status and configured instances
+ * @returns Array of provider options filtered by feature toggles
+ */
+export function useProviderOptions({
+  configuredProvidersList,
+  includeConfiguredStatus = false,
+}: UseProviderOptionsParams = {}): ProviderGridOption[] {
+  const providerEnabledMap = useProviderEnabledMap();
 
   return useMemo(() => {
     const options: ProviderGridOption[] = [];
 
-    // Filter standard providers based on feature flags
+    // Filter standard providers based on feature flags (excludes Custom, Bedrock, Opik Free)
     const standardProviders = PROVIDERS_OPTIONS.filter((option) => {
       if (
         option.value === PROVIDER_TYPE.CUSTOM ||
@@ -99,73 +118,42 @@ export function useProviderOptions({
       });
     });
 
-    // Add Bedrock provider option for creating new instances
-    if (isBedrockEnabled) {
-      options.push({
-        value: buildComposedProviderKey(
-          PROVIDER_TYPE.BEDROCK,
-          "__add_bedrock_provider__",
-        ),
-        label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
-        providerType: PROVIDER_TYPE.BEDROCK,
-      });
+    // Add configured Bedrock instances if requested and enabled
+    if (providerEnabledMap[PROVIDER_TYPE.BEDROCK] && includeConfiguredStatus) {
+      const bedrockProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.BEDROCK,
+        ) || [];
 
-      // Add configured Bedrock instances if requested
-      if (includeConfiguredStatus) {
-        const bedrockProviders =
-          configuredProvidersList?.filter(
-            (key) => key.provider === PROVIDER_TYPE.BEDROCK,
-          ) || [];
-
-        bedrockProviders.forEach((bedrockProvider) => {
-          options.push({
-            value: bedrockProvider.ui_composed_provider,
-            label: getProviderDisplayName(bedrockProvider),
-            providerType: PROVIDER_TYPE.BEDROCK,
-            configuredId: bedrockProvider.id,
-            isConfigured: true,
-          });
+      bedrockProviders.forEach((bedrockProvider) => {
+        options.push({
+          value: bedrockProvider.ui_composed_provider,
+          label: getProviderDisplayName(bedrockProvider),
+          providerType: PROVIDER_TYPE.BEDROCK,
+          configuredId: bedrockProvider.id,
+          isConfigured: true,
         });
-      }
+      });
     }
 
-    // Add custom provider option for creating new instances
-    if (isCustomLLMEnabled) {
-      options.push({
-        value: buildComposedProviderKey(
-          PROVIDER_TYPE.CUSTOM,
-          "__add_custom_provider__",
-        ),
-        label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
-        providerType: PROVIDER_TYPE.CUSTOM,
-      });
+    // Add configured Custom provider instances if requested and enabled
+    if (providerEnabledMap[PROVIDER_TYPE.CUSTOM] && includeConfiguredStatus) {
+      const customProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.CUSTOM,
+        ) || [];
 
-      // Add configured custom provider instances if requested
-      if (includeConfiguredStatus) {
-        const customProviders =
-          configuredProvidersList?.filter(
-            (key) => key.provider === PROVIDER_TYPE.CUSTOM,
-          ) || [];
-
-        customProviders.forEach((customProvider) => {
-          options.push({
-            value: customProvider.ui_composed_provider,
-            label: getProviderDisplayName(customProvider),
-            providerType: PROVIDER_TYPE.CUSTOM,
-            configuredId: customProvider.id,
-            isConfigured: true,
-          });
+      customProviders.forEach((customProvider) => {
+        options.push({
+          value: customProvider.ui_composed_provider,
+          label: getProviderDisplayName(customProvider),
+          providerType: PROVIDER_TYPE.CUSTOM,
+          configuredId: customProvider.id,
+          isConfigured: true,
         });
-      }
+      });
     }
 
     return options;
-  }, [
-    configuredProvidersList,
-    providerEnabledMap,
-    isCustomLLMEnabled,
-    isBedrockEnabled,
-    includeConfiguredStatus,
-  ]);
+  }, [configuredProvidersList, providerEnabledMap, includeConfiguredStatus]);
 }
-
