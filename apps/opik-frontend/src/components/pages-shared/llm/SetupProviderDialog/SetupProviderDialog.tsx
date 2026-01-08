@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -14,9 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
-import ProviderGrid, {
-  ProviderGridOption,
-} from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
+import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
@@ -25,13 +23,8 @@ import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
-import {
-  buildComposedProviderKey,
-  convertCustomProviderModels,
-} from "@/lib/provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
+import { convertCustomProviderModels } from "@/lib/provider";
+import { useProviderOptions } from "@/hooks/useProviderOptions";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -44,100 +37,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   setOpen,
   onProviderAdded,
 }) => {
-  // Feature toggle hooks - all provider toggles live here in the parent
-  const isOpenAIEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
-  );
-  const isAnthropicEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
-  );
-  const isGeminiEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
-  );
-  const isOpenRouterEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
-  );
-  const isVertexAIEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
-  );
-  const isBedrockEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
-  );
-  const isCustomLLMEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
-  );
-
-  const providerEnabledMap = useMemo(
-    () => ({
-      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
-      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
-      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
-      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
-      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
-      [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
-      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
-    }),
-    [
-      isOpenAIEnabled,
-      isAnthropicEnabled,
-      isGeminiEnabled,
-      isOpenRouterEnabled,
-      isVertexAIEnabled,
-      isBedrockEnabled,
-      isCustomLLMEnabled,
-    ],
-  );
-
-  // Build provider options - this logic was moved from ProviderGrid
-  const providerOptions = useMemo(() => {
-    const options: ProviderGridOption[] = [];
-
-    // Filter standard providers based on feature flags
-    const standardProviders = PROVIDERS_OPTIONS.filter((option) => {
-      if (
-        option.value === PROVIDER_TYPE.CUSTOM ||
-        option.value === PROVIDER_TYPE.OPIK_FREE ||
-        option.value === PROVIDER_TYPE.BEDROCK
-      ) {
-        return false;
-      }
-      return providerEnabledMap[option.value];
-    });
-
-    standardProviders.forEach((option) => {
-      options.push({
-        value: buildComposedProviderKey(option.value),
-        label: option.label,
-        providerType: option.value,
-      });
-    });
-
-    // Add Bedrock provider option for creating new instances
-    if (isBedrockEnabled) {
-      options.push({
-        value: buildComposedProviderKey(
-          PROVIDER_TYPE.BEDROCK,
-          "__add_bedrock_provider__",
-        ),
-        label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
-        providerType: PROVIDER_TYPE.BEDROCK,
-      });
-    }
-
-    // Add custom provider option for creating new instances
-    if (isCustomLLMEnabled) {
-      options.push({
-        value: buildComposedProviderKey(
-          PROVIDER_TYPE.CUSTOM,
-          "__add_custom_provider__",
-        ),
-        label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
-        providerType: PROVIDER_TYPE.CUSTOM,
-      });
-    }
-
-    return options;
-  }, [providerEnabledMap, isCustomLLMEnabled, isBedrockEnabled]);
+  // Use shared hook for provider options with feature toggles
+  const providerOptions = useProviderOptions();
 
   const [selectedComposedProvider, setSelectedComposedProvider] = useState<
     COMPOSED_PROVIDER_TYPE | ""
