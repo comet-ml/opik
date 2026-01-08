@@ -34,6 +34,11 @@ public class AsyncContextUtils {
         };
     }
 
+    public static void bindUserNameAndWorkspace(Statement statement, String userName, String workspaceId) {
+        statement.bind("user_name", userName);
+        statement.bind("workspace_id", workspaceId);
+    }
+
     static ContextAwareStream<Result> bindUserNameAndWorkspaceContextToStream(
             Statement statement) {
         return (userName, workspaceId) -> {
