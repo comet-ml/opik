@@ -13,6 +13,7 @@ import { PercentageValues } from "./PercentageValues";
 import { ExperimentStatus } from "./ExperimentStatus";
 import { ExperimentScore } from "./ExperimentScore";
 import { PromptVersionLink } from "./PromptVersionLink";
+import { DatasetVersionSummary } from "./DatasetVersionSummary";
 
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
     core.serialization.object({
@@ -51,6 +52,8 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
             "prompt_versions",
             core.serialization.list(PromptVersionLink).optional(),
         ),
+        datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
+        datasetVersionSummary: core.serialization.property("dataset_version_summary", DatasetVersionSummary.optional()),
     });
 
 export declare namespace Experiment {
@@ -78,5 +81,7 @@ export declare namespace Experiment {
         experiment_scores?: ExperimentScore.Raw[] | null;
         prompt_version?: PromptVersionLink.Raw | null;
         prompt_versions?: PromptVersionLink.Raw[] | null;
+        dataset_version_id?: string | null;
+        dataset_version_summary?: DatasetVersionSummary.Raw | null;
     }
 }

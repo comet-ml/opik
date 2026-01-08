@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -23,6 +23,9 @@ import {
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import { convertCustomProviderModels } from "@/lib/provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { PROVIDERS_OPTIONS } from "@/constants/providers";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -35,9 +38,70 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   setOpen,
   onProviderAdded,
 }) => {
-  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
-    PROVIDER_TYPE.OPEN_AI,
+  const isOpenAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
   );
+  const isAnthropicEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  );
+  const isGeminiEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  );
+  const isOpenRouterEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  );
+  const isVertexAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  );
+  const isCustomLLMEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  );
+
+  const providerEnabledMap = useMemo(
+    () => ({
+      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
+      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
+      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
+      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
+      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
+      // OPIK_FREE is not included - it's readonly and handled separately
+    }),
+    [
+      isOpenAIEnabled,
+      isAnthropicEnabled,
+      isGeminiEnabled,
+      isOpenRouterEnabled,
+      isVertexAIEnabled,
+      isCustomLLMEnabled,
+    ],
+  );
+
+  // Filter out OPIK_FREE (handled separately) and disable providers based on feature toggles
+  const configurableProviders = useMemo(
+    () =>
+      PROVIDERS_OPTIONS.filter((provider) => {
+        if (provider.value === PROVIDER_TYPE.OPIK_FREE) {
+          return false;
+        }
+        return providerEnabledMap[provider.value];
+      }),
+    [providerEnabledMap],
+  );
+
+  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
+    "",
+  );
+
+  useEffect(() => {
+    setSelectedProvider((current) => {
+      if (!current && configurableProviders.length > 0) {
+        return configurableProviders[0].value;
+      }
+      return current;
+    });
+  }, [configurableProviders]);
+
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
@@ -126,44 +190,61 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     setSelectedProvider("");
   }, [setOpen, form]);
 
+  const renderContent = () => {
+    if (configurableProviders.length === 0) {
+      return (
+        <div className="comet-body-s text-muted-foreground">
+          No providers available for this environment
+        </div>
+      );
+    }
+
+    return (
+      <DialogAutoScrollBody className="flex flex-col">
+        <p className="comet-body-s mb-4 text-muted-foreground">
+          To use the Playground, select an AI provider and enter your API key
+        </p>
+
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="flex flex-col gap-4"
+          >
+            <ProviderGrid
+              providers={configurableProviders}
+              selectedProvider={selectedProvider}
+              onSelectProvider={handleProviderSelect}
+            />
+
+            {selectedProvider && (
+              <>
+                {selectedProvider === PROVIDER_TYPE.CUSTOM ? (
+                  <CustomProviderDetails form={form} />
+                ) : selectedProvider === PROVIDER_TYPE.VERTEX_AI ? (
+                  <VertexAIProviderDetails form={form} />
+                ) : (
+                  <CloudAIProviderDetails
+                    provider={selectedProvider}
+                    form={form}
+                  />
+                )}
+              </>
+            )}
+          </form>
+        </Form>
+      </DialogAutoScrollBody>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
-        <DialogAutoScrollBody className="flex flex-col">
-          <p className="comet-body-s mb-4 text-muted-foreground">
-            To use the Playground, select an AI provider and enter your API key
-          </p>
 
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleSubmit)}
-              className="flex flex-col gap-4"
-            >
-              <ProviderGrid
-                selectedProvider={selectedProvider}
-                onSelectProvider={handleProviderSelect}
-              />
+        {renderContent()}
 
-              {selectedProvider && (
-                <>
-                  {selectedProvider === PROVIDER_TYPE.CUSTOM ? (
-                    <CustomProviderDetails form={form} />
-                  ) : selectedProvider === PROVIDER_TYPE.VERTEX_AI ? (
-                    <VertexAIProviderDetails form={form} />
-                  ) : (
-                    <CloudAIProviderDetails
-                      provider={selectedProvider}
-                      form={form}
-                    />
-                  )}
-                </>
-              )}
-            </form>
-          </Form>
-        </DialogAutoScrollBody>
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel} type="button">
             Cancel
