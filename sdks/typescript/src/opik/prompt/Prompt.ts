@@ -276,7 +276,6 @@ export class Prompt {
     logger.debug("Getting versions for prompt", {
       promptId: this.id,
       name: this.name,
-      options,
     });
 
     try {
