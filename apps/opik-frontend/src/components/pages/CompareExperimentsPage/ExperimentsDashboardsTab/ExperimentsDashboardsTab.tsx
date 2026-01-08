@@ -8,6 +8,7 @@ import DashboardSaveActions from "@/components/pages-shared/dashboards/Dashboard
 import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardSelectBox from "@/components/pages-shared/dashboards/DashboardSelectBox/DashboardSelectBox";
 import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
+import DashboardProjectSettingsButton from "@/components/pages-shared/dashboards/DashboardProjectSettingsButton/DashboardProjectSettingsButton";
 import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -143,6 +144,7 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
               isTemplate={isTemplate}
               navigateOnCreate={false}
               onDashboardCreated={handleDashboardCreated}
+              defaultProjectId={config?.projectIds?.[0]}
               defaultExperimentIds={experimentsIds}
             />
           )}
@@ -155,6 +157,7 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ShareDashboardButton />
+          <DashboardProjectSettingsButton disableExperimentsSelector />
         </div>
       </PageBodyStickyContainer>
 

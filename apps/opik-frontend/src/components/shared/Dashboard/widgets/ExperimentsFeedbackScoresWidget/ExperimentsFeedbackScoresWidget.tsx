@@ -214,6 +214,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
   const feedbackScores = widgetConfig?.feedbackScores;
+  const overrideDefaults = widgetConfig?.overrideDefaults;
 
   const validFilters = useMemo(() => {
     const filters = (widgetConfig?.filters || []) as Filters;
@@ -226,26 +227,26 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   }, [widgetConfig?.groups]);
 
   const experimentIds = useMemo(() => {
-    const localExperimentIds = widgetConfig?.experimentIds;
-    if (localExperimentIds && localExperimentIds.length > 0) {
-      return localExperimentIds;
+    // If overrideDefaults is true, use widget's own experimentIds
+    // Otherwise, always use global experimentIds
+    if (overrideDefaults) {
+      return widgetConfig?.experimentIds || [];
     }
     return globalConfig.experimentIds || [];
-  }, [globalConfig.experimentIds, widgetConfig?.experimentIds]);
-
-  const isUsingGlobalExperiments =
-    isEmpty(widgetConfig?.experimentIds) &&
-    !isEmpty(globalConfig.experimentIds);
+  }, [
+    globalConfig.experimentIds,
+    widgetConfig?.experimentIds,
+    overrideDefaults,
+  ]);
 
   const hasGroups = validGroups.length > 0;
 
   const isSelectExperimentsMode =
     dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
 
-  const infoMessage =
-    isUsingGlobalExperiments && isSelectExperimentsMode
-      ? "Using the dashboard's default experiment settings"
-      : undefined;
+  const infoMessage = overrideDefaults
+    ? "This widget uses custom experiments instead of the dashboard default."
+    : undefined;
 
   // Limit to first 10 experiments
   const limitedExperimentIds = useMemo(
@@ -405,6 +406,17 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   }
 
   const renderChartContent = () => {
+    if (isSelectExperimentsMode && experimentIds.length === 0) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Experiments not configured"
+          message="This widget requires experiments to be selected. Configure it in the widget settings or set default experiments for the dashboard."
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
     if (isPending) {
       return (
         <div className="flex size-full min-h-32 items-center justify-center">
@@ -476,7 +488,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}

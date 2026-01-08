@@ -13,6 +13,7 @@ export const ProjectMetricsWidgetSchema = z.object({
   traceFilters: FiltersArraySchema.optional(),
   threadFilters: FiltersArraySchema.optional(),
   feedbackScores: z.array(z.string()).optional(),
+  overrideDefaults: z.boolean().optional(),
 });
 
 export type ProjectMetricsWidgetFormData = z.infer<
