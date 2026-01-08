@@ -16,7 +16,17 @@ import {
   selectSetConfig,
 } from "@/store/DashboardStore";
 
-const DashboardProjectSettingsButton: React.FC = () => {
+interface DashboardProjectSettingsButtonProps {
+  disableProjectSelector?: boolean;
+  disableExperimentsSelector?: boolean;
+}
+
+const DashboardProjectSettingsButton: React.FC<
+  DashboardProjectSettingsButtonProps
+> = ({
+  disableProjectSelector = false,
+  disableExperimentsSelector = false,
+}) => {
   const config = useDashboardStore(selectConfig);
   const setConfig = useDashboardStore(selectSetConfig);
 
@@ -41,6 +51,53 @@ const DashboardProjectSettingsButton: React.FC = () => {
     [config, setConfig],
   );
 
+  const renderProjectSelector = () => {
+    const selectBox = (
+      <ProjectsSelectBox
+        value={selectedProjectValue}
+        onValueChange={handleProjectChange}
+        minWidth={280}
+        disabled={disableProjectSelector}
+        className="flex-1"
+        showClearButton
+      />
+    );
+
+    if (disableProjectSelector) {
+      return (
+        <TooltipWrapper content="Project is inherited from the traces page">
+          <div>{selectBox}</div>
+        </TooltipWrapper>
+      );
+    }
+
+    return selectBox;
+  };
+
+  const renderExperimentsSelector = () => {
+    const selectBox = (
+      <ExperimentsSelectBox
+        value={selectedExperimentIds}
+        onValueChange={handleExperimentsChange}
+        multiselect
+        minWidth={280}
+        disabled={disableExperimentsSelector}
+        className="flex-1"
+        showClearButton
+      />
+    );
+
+    if (disableExperimentsSelector) {
+      return (
+        <TooltipWrapper content="Experiments are inherited from the compare page">
+          <div>{selectBox}</div>
+        </TooltipWrapper>
+      );
+    }
+
+    return selectBox;
+  };
+
   return (
     <Popover>
       <TooltipWrapper content="Dashboard defaults">
@@ -55,26 +112,24 @@ const DashboardProjectSettingsButton: React.FC = () => {
           <div>
             <h3 className="comet-title-s mb-2">Dashboard defaults</h3>
             <Description>
-              Set the default project and experiments for all widgets.
+              Select a default project to visualize data for this dashboard.
               Individual widgets can override these settings if needed.
             </Description>
           </div>
           <div>
-            <h4 className="comet-body-s-accented mb-2">Project</h4>
-            <ProjectsSelectBox
-              value={selectedProjectValue}
-              onValueChange={handleProjectChange}
-              minWidth={280}
-            />
+            <h4 className="comet-body-s-accented mb-2">Default project</h4>
+            {renderProjectSelector()}
+            <Description className="mt-1">
+              Choose the project this dashboard visualizes data from by default.
+            </Description>
           </div>
           <div>
-            <h4 className="comet-body-s-accented mb-2">Experiments</h4>
-            <ExperimentsSelectBox
-              value={selectedExperimentIds}
-              onValueChange={handleExperimentsChange}
-              multiselect
-              minWidth={280}
-            />
+            <h4 className="comet-body-s-accented mb-2">Default experiments</h4>
+            {renderExperimentsSelector()}
+            <Description className="mt-1">
+              Select which experiments are shown by default in widgets that use
+              experiment data.
+            </Description>
           </div>
         </div>
       </PopoverContent>
