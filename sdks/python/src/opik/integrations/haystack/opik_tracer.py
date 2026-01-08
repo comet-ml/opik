@@ -91,12 +91,12 @@ class OpikTracer(tracing.Tracer):
             project_name=self._project_name,
         )
 
-        trace_data, span_data = span_creation_handler.create_span_respecting_context(
+        result = span_creation_handler.create_span_respecting_context(
             start_span_arguments=start_span_parameters,
             distributed_trace_headers=None,
         )
         final_span_or_trace_data: Union[opik_span.SpanData, opik_trace.TraceData] = (
-            trace_data if trace_data is not None else span_data
+            result.trace_data if result.trace_data is not None else result.span_data
         )
 
         return opik_span_bridge.OpikSpanBridge(final_span_or_trace_data)
