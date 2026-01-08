@@ -291,16 +291,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       };
       form.reset(cloneFormData as EvaluationRuleFormType);
     }
-  }, [
-    open,
-    defaultRule,
-    projectId,
-    defaultScope,
-    mode,
-    form,
-    formScope,
-    formUIRuleType,
-  ]);
+  }, [open, defaultRule, projectId, defaultScope, mode, form]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -340,7 +331,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const { mutate: createMutate } = useRuleCreateMutation();
   const { mutate: updateMutate } = useRuleUpdateMutation();
 
-  const isEdit = mode === "edit" || (Boolean(defaultRule) && mode !== "clone");
+  const isEdit = mode === "edit";
   const isClone = mode === "clone";
   const title = isEdit
     ? "Edit rule"
@@ -469,8 +460,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   }, [updateMutate, defaultRule, getRule, onRuleCreatedEdited, setOpen]);
 
   const onSubmit = useCallback(
-    () => (isEdit && !isClone ? editPrompt() : createPrompt()),
-    [isEdit, isClone, editPrompt, createPrompt],
+    () => (isEdit ? editPrompt() : createPrompt()),
+    [isEdit, editPrompt, createPrompt],
   );
 
   return (

@@ -208,8 +208,12 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const editingRule = rows.find((r) => r.id === editRuleId);
   const cloningRule = rows.find((r) => r.id === cloneRuleId);
-  const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
-  const isCloneDialogOpen = Boolean(cloningRule);
+  const isDialogOpen =
+    Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
+  
+  // Determine which rule to pass and what mode to use
+  const dialogRule = editingRule || cloningRule;
+  const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -324,18 +328,10 @@ export const OnlineEvaluationPage: React.FC = () => {
       setOpenDialogForCreate(open);
       if (!open) {
         setEditRuleId(undefined);
-      }
-    },
-    [setEditRuleId],
-  );
-
-  const handleCloseCloneDialog = useCallback(
-    (open: boolean) => {
-      if (!open) {
         setCloneRuleId(undefined);
       }
     },
-    [setCloneRuleId],
+    [setEditRuleId, setCloneRuleId],
   );
 
   // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "projects" from filter options
@@ -364,14 +360,8 @@ export const OnlineEvaluationPage: React.FC = () => {
           key={resetDialogKeyRef.current}
           open={isDialogOpen}
           setOpen={handleCloseDialog}
-          rule={editingRule}
-        />
-        <AddEditRuleDialog
-          key={`clone-${resetDialogKeyRef.current}`}
-          open={isCloneDialogOpen}
-          setOpen={handleCloseCloneDialog}
-          rule={cloningRule}
-          mode="clone"
+          rule={dialogRule}
+          mode={dialogMode}
         />
       </>
     );
@@ -444,14 +434,8 @@ export const OnlineEvaluationPage: React.FC = () => {
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
         setOpen={handleCloseDialog}
-        rule={editingRule}
-      />
-      <AddEditRuleDialog
-        key={`clone-${resetDialogKeyRef.current}`}
-        open={isCloneDialogOpen}
-        setOpen={handleCloseCloneDialog}
-        rule={cloningRule}
-        mode="clone"
+        rule={dialogRule}
+        mode={dialogMode}
       />
     </div>
   );
