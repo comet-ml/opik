@@ -215,9 +215,9 @@ const EXPECTED_JSON_SCHEMA = {
     entities: {
       type: "object",
       properties: {
-        person_name: { type: "string" },
-        product: { type: "string" },
-        issue_type: { type: "string" },
+        person_name: { type: ["string", "null"] },
+        product: { type: ["string", "null"] },
+        issue_type: { type: ["string", "null"] },
       },
     },
     action: {
