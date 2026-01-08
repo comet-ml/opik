@@ -4,6 +4,7 @@ from unittest import mock
 
 import opik
 from opik.evaluation.metrics import score_result
+from opik.types import FeedbackScoreDict
 
 
 # Simple dataset items for testing
@@ -117,3 +118,24 @@ def test_streaming_starts_evaluation_before_complete_download(
     )
     experiment_items = retrieved_experiment.get_items()
     assert len(experiment_items) == len(DATASET_ITEMS)
+
+    # Verify scoring output: each item should have a score with name "simple_score" and value 1.0
+    for item in experiment_items:
+        # Check that feedback_scores exists and is not empty
+        assert (
+            item.feedback_scores is not None and len(item.feedback_scores) == 1
+        ), f"Experiment item {item.id} should have exactly 1 feedback score, got {len(item.feedback_scores) if item.feedback_scores else 0}"
+
+        # Verify the score matches expected structure
+        expected_score = FeedbackScoreDict(
+            category_name=None,
+            name="simple_score",
+            reason="Test score",
+            value=1.0,
+        )
+
+        actual_score = item.feedback_scores[0]
+        assert actual_score == expected_score, (
+            f"Experiment item {item.id} has incorrect feedback score. "
+            f"Expected: {expected_score}, Got: {actual_score}"
+        )
