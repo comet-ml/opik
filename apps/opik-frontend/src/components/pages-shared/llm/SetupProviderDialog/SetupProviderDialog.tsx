@@ -12,20 +12,28 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
-import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
+import ProviderGrid, {
+  ProviderGridOption,
+} from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import BedrockProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
 import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
-import { convertCustomProviderModels } from "@/lib/provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { PROVIDERS_OPTIONS } from "@/constants/providers";
+import {
+  buildComposedProviderKey,
+  convertCustomProviderModels,
+} from "@/lib/provider";
+import {
+  useProviderOptions,
+  useProviderEnabledMap,
+} from "@/hooks/useProviderOptions";
+import { PROVIDERS } from "@/constants/providers";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -38,69 +46,41 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   setOpen,
   onProviderAdded,
 }) => {
-  const isOpenAIEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
-  );
-  const isAnthropicEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
-  );
-  const isGeminiEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
-  );
-  const isOpenRouterEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
-  );
-  const isVertexAIEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
-  );
-  const isCustomLLMEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
-  );
+  // Get base provider options (standard providers only, no sentinels)
+  const baseProviderOptions = useProviderOptions();
+  const providerEnabledMap = useProviderEnabledMap();
 
-  const providerEnabledMap = useMemo(
-    () => ({
-      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
-      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
-      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
-      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
-      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
-      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
-      // OPIK_FREE is not included - it's readonly and handled separately
-    }),
-    [
-      isOpenAIEnabled,
-      isAnthropicEnabled,
-      isGeminiEnabled,
-      isOpenRouterEnabled,
-      isVertexAIEnabled,
-      isCustomLLMEnabled,
-    ],
-  );
+  // Append creation options for Bedrock and Custom providers (dialog-specific UI concern)
+  const providerOptions = useMemo(() => {
+    const options: ProviderGridOption[] = [...baseProviderOptions];
 
-  // Filter out OPIK_FREE (handled separately) and disable providers based on feature toggles
-  const configurableProviders = useMemo(
-    () =>
-      PROVIDERS_OPTIONS.filter((provider) => {
-        if (provider.value === PROVIDER_TYPE.OPIK_FREE) {
-          return false;
-        }
-        return providerEnabledMap[provider.value];
-      }),
-    [providerEnabledMap],
-  );
+    // Add Bedrock creation option if enabled
+    if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
+      options.push({
+        value: buildComposedProviderKey(PROVIDER_TYPE.BEDROCK),
+        label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
+        providerType: PROVIDER_TYPE.BEDROCK,
+      });
+    }
 
-  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
-    "",
-  );
+    // Add Custom LLM creation option if enabled
+    if (providerEnabledMap[PROVIDER_TYPE.CUSTOM]) {
+      options.push({
+        value: buildComposedProviderKey(PROVIDER_TYPE.CUSTOM),
+        label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
+        providerType: PROVIDER_TYPE.CUSTOM,
+      });
+    }
 
-  useEffect(() => {
-    setSelectedProvider((current) => {
-      if (!current && configurableProviders.length > 0) {
-        return configurableProviders[0].value;
-      }
-      return current;
-    });
-  }, [configurableProviders]);
+    return options;
+  }, [baseProviderOptions, providerEnabledMap]);
+
+  const [selectedComposedProvider, setSelectedComposedProvider] = useState<
+    COMPOSED_PROVIDER_TYPE | ""
+  >("");
+  const [selectedProviderType, setSelectedProviderType] = useState<
+    PROVIDER_TYPE | ""
+  >("");
 
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
@@ -114,13 +94,30 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       url: "",
       models: "",
       providerName: "",
+      headers: [],
     } as AIProviderFormType,
   });
 
+  // Auto-select first available provider when options change
+  useEffect(() => {
+    if (!selectedComposedProvider && providerOptions.length > 0) {
+      const firstOption = providerOptions[0];
+      setSelectedComposedProvider(firstOption.value);
+      setSelectedProviderType(firstOption.providerType);
+      form.setValue("provider", firstOption.providerType);
+      form.setValue("composedProviderType", firstOption.value);
+    }
+  }, [providerOptions, selectedComposedProvider, form]);
+
   const handleProviderSelect = useCallback(
-    (provider: PROVIDER_TYPE) => {
-      setSelectedProvider(provider);
-      form.setValue("provider", provider);
+    (
+      composedProviderType: COMPOSED_PROVIDER_TYPE,
+      providerType: PROVIDER_TYPE,
+    ) => {
+      setSelectedComposedProvider(composedProviderType);
+      setSelectedProviderType(providerType);
+      form.setValue("provider", providerType);
+      form.setValue("composedProviderType", composedProviderType);
       form.setValue("apiKey", "");
       form.clearErrors();
     },
@@ -130,6 +127,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
       const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
+      const isBedrock = data.provider === PROVIDER_TYPE.BEDROCK;
       const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
 
       const providerKeyData: Partial<{
@@ -138,13 +136,14 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         apiKey: string;
         base_url: string;
         configuration: Record<string, string>;
+        headers: Record<string, string>;
       }> = {
         provider: data.provider as PROVIDER_TYPE,
         ...(data.apiKey && { apiKey: data.apiKey }),
       };
 
       if (
-        isCustom &&
+        (isCustom || isBedrock) &&
         "url" in data &&
         "models" in data &&
         "providerName" in data
@@ -158,6 +157,23 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             true,
           ),
         };
+
+        // Add headers if present
+        if ("headers" in data && data.headers && Array.isArray(data.headers)) {
+          const headersObj = data.headers.reduce<Record<string, string>>(
+            (acc, header) => {
+              const trimmedKey = header.key?.trim();
+              if (trimmedKey) {
+                acc[trimmedKey] = header.value;
+              }
+              return acc;
+            },
+            {},
+          );
+          if (Object.keys(headersObj).length > 0) {
+            providerKeyData.headers = headersObj;
+          }
+        }
       }
 
       if (isVertex && "location" in data) {
@@ -174,7 +190,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
           onSuccess: () => {
             setOpen(false);
             form.reset();
-            setSelectedProvider("");
+            setSelectedComposedProvider("");
+            setSelectedProviderType("");
 
             onProviderAdded?.();
           },
@@ -187,11 +204,12 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   const handleCancel = useCallback(() => {
     setOpen(false);
     form.reset();
-    setSelectedProvider("");
+    setSelectedComposedProvider("");
+    setSelectedProviderType("");
   }, [setOpen, form]);
 
   const renderContent = () => {
-    if (configurableProviders.length === 0) {
+    if (providerOptions.length === 0) {
       return (
         <div className="comet-body-s text-muted-foreground">
           No providers available for this environment
@@ -200,7 +218,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     }
 
     return (
-      <DialogAutoScrollBody className="flex flex-col">
+      <DialogAutoScrollBody className="flex flex-col pr-6">
         <p className="comet-body-s mb-4 text-muted-foreground">
           To use the Playground, select an AI provider and enter your API key
         </p>
@@ -211,20 +229,22 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             className="flex flex-col gap-4"
           >
             <ProviderGrid
-              providers={configurableProviders}
-              selectedProvider={selectedProvider}
+              options={providerOptions}
+              selectedProvider={selectedComposedProvider}
               onSelectProvider={handleProviderSelect}
             />
 
-            {selectedProvider && (
+            {selectedProviderType && (
               <>
-                {selectedProvider === PROVIDER_TYPE.CUSTOM ? (
+                {selectedProviderType === PROVIDER_TYPE.CUSTOM ? (
                   <CustomProviderDetails form={form} />
-                ) : selectedProvider === PROVIDER_TYPE.VERTEX_AI ? (
+                ) : selectedProviderType === PROVIDER_TYPE.BEDROCK ? (
+                  <BedrockProviderDetails form={form} />
+                ) : selectedProviderType === PROVIDER_TYPE.VERTEX_AI ? (
                   <VertexAIProviderDetails form={form} />
                 ) : (
                   <CloudAIProviderDetails
-                    provider={selectedProvider}
+                    provider={selectedProviderType}
                     form={form}
                   />
                 )}
@@ -238,7 +258,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+      <DialogContent className="max-w-lg sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
@@ -251,7 +271,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
           </Button>
           <Button
             type="submit"
-            disabled={!selectedProvider}
+            disabled={!selectedProviderType}
             onClick={form.handleSubmit(handleSubmit)}
           >
             Done

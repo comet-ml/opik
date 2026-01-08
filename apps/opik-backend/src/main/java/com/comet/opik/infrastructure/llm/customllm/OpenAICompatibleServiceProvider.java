@@ -10,14 +10,20 @@ import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Named;
 import lombok.NonNull;
 
-class CustomLlmServiceProvider implements LlmServiceProvider {
+/**
+ * Service provider for OpenAI-compatible LLM providers.
+ * This includes both Custom LLM and Bedrock providers, which share the same
+ * OpenAI-compatible API format and client implementation.
+ */
+class OpenAICompatibleServiceProvider implements LlmServiceProvider {
 
     private final CustomLlmClientGenerator clientGenerator;
 
-    CustomLlmServiceProvider(
+    OpenAICompatibleServiceProvider(
             @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator, LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
         factory.register(LlmProvider.CUSTOM_LLM, this);
+        factory.register(LlmProvider.BEDROCK, this);
     }
 
     @Override
