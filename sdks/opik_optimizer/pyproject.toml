@@ -71,7 +71,8 @@ ignore_missing_imports = false
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
-mypy_path = "sdks/opik_optimizer"
+mypy_path = ["sdks/opik_optimizer/typings", "sdks/opik_optimizer"]
+exclude = "(^|.*/)scripts/benchmarks/"
 
 [[tool.mypy.overrides]]
 module = [
@@ -85,12 +86,21 @@ module = [
     "rapidfuzz.*",
     "PIL.*",
     "datasets.*",
+    "pyarrow.*",
     "gepa.*",
     "mcp.*",
     "bm25s.*",
     "Stemmer.*",
     "dsp.*",
     "huggingface_hub.*",
+    "pydantic_ai.*",
+    "crewai.*",
+    "langgraph.*",
+    "agent_framework.*",
+    "langchain_openai.*",
+    "google.adk.*",
+    "google.genai.*",
+    "opik_optimizer.mcp_utils.*",
 ]
 ignore_missing_imports = true
 
@@ -129,4 +139,31 @@ combine-as-imports = true
 [tool.vulture]
 min_confidence = 60
 paths = ["src", "tests", "scripts", "benchmarks"]
-ignore_names = ["return_value", "side_effect"]
+ignore_names = [
+  "__getattr__",
+  "_coerce_aliases",
+  "_normalize",
+  "DATASET_CONFIG",
+  "HF_CACHE_HOME",
+  "HF_DATASETS_CACHE",
+  "OPTIMIZER_CONFIGS",
+  "additionalProperties",
+  "by_alias",
+  "by_name",
+  "detail",
+  "drop_params",
+  "from_attributes",
+  "get_optimized_model",
+  "get_optimized_model_kwargs",
+  "get_optimized_parameters",
+  "input_text",
+  "is_jupyter",
+  "llm_calls",
+  "llm_calls_tools",
+  "make_reflective_dataset",
+  "model_config",
+  "pytestmark",
+  "return_value",
+  "side_effect",
+  "strict",
+]
