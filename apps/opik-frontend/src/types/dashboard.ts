@@ -9,6 +9,7 @@ export enum WIDGET_TYPE {
   PROJECT_STATS_CARD = "project_stats_card",
   TEXT_MARKDOWN = "text_markdown",
   EXPERIMENTS_FEEDBACK_SCORES = "experiments_feedback_scores",
+  EXPERIMENT_LEADERBOARD = "experiment_leaderboard",
 }
 
 export enum EXPERIMENT_DATA_SOURCE {
@@ -75,11 +76,27 @@ export interface ExperimentsFeedbackScoresWidgetType {
   } & Record<string, unknown>;
 }
 
+export interface ExperimentLeaderboardWidgetType {
+  type: WIDGET_TYPE.EXPERIMENT_LEADERBOARD;
+  config: {
+    filters?: Filters;
+    selectedMetrics?: string[];
+    primaryMetric?: string;
+    sortOrder?: "asc" | "desc";
+    showRank?: boolean;
+    maxRows?: number;
+    displayColumns?: string[];
+    metadataColumns?: string[];
+    columnsOrder?: string[];
+  } & Record<string, unknown>;
+}
+
 type WidgetConfigUnion =
   | ProjectMetricsWidget
   | TextMarkdownWidget
   | ProjectStatsCardWidget
   | ExperimentsFeedbackScoresWidgetType
+  | ExperimentLeaderboardWidgetType
   | {
       type: string;
       config: Record<string, unknown>;
