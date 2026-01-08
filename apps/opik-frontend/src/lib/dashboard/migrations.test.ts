@@ -439,7 +439,7 @@ describe("migrateDashboardConfig", () => {
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
-    it("should set overrideDefaults to false for EXPERIMENTS_FEEDBACK_SCORES widgets without custom experimentIds", () => {
+    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets without custom experimentIds when dataSource is not SELECT_EXPERIMENTS", () => {
       const v1Dashboard: DashboardState = {
         version: 1,
         sections: [
@@ -465,7 +465,7 @@ describe("migrateDashboardConfig", () => {
 
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(2);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
     it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets with filters in FILTER_AND_GROUP mode", () => {
@@ -544,7 +544,7 @@ describe("migrateDashboardConfig", () => {
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
-    it("should set overrideDefaults to false for EXPERIMENTS_FEEDBACK_SCORES widgets in FILTER_AND_GROUP mode without filters or groups", () => {
+    it("should set overrideDefaults to true for EXPERIMENTS_FEEDBACK_SCORES widgets in FILTER_AND_GROUP mode without filters or groups", () => {
       const v1Dashboard: DashboardState = {
         version: 1,
         sections: [
@@ -573,7 +573,7 @@ describe("migrateDashboardConfig", () => {
 
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(2);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
     it("should not modify TEXT_MARKDOWN widgets", () => {
@@ -642,7 +642,9 @@ describe("migrateDashboardConfig", () => {
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(2);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-      expect(result.sections[0].widgets[1].config.overrideDefaults).toBeUndefined();
+      expect(
+        result.sections[0].widgets[1].config.overrideDefaults,
+      ).toBeUndefined();
       expect(result.sections[0].widgets[2].config.overrideDefaults).toBe(false);
     });
 
