@@ -148,6 +148,7 @@ type AddEditRuleDialogProps = {
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
   defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
+  mode?: "create" | "edit" | "clone"; // Optional: dialog mode
 };
 
 const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
@@ -159,6 +160,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   datasetColumnNames,
   hideScopeSelector = false,
   defaultScope,
+  mode,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -182,12 +184,19 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     ? getUIRuleScope(defaultRule.type)
     : EVALUATORS_RULE_SCOPE.trace;
 
+  const getInitialRuleName = () => {
+    if (mode === "clone" && defaultRule) {
+      return `${defaultRule.name} (Copy)`;
+    }
+    return defaultRule?.name || "";
+  };
+
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
   >({
     resolver: zodResolver(EvaluationRuleFormSchema),
     defaultValues: {
-      ruleName: defaultRule?.name || "",
+      ruleName: getInitialRuleName(),
       projectIds:
         defaultRule?.projects?.map((p) => p.project_id) ||
         (projectId ? [projectId] : []),
@@ -249,8 +258,49 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         filters: [],
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[initialScope]),
       });
+    } else if (open && defaultRule && mode === "clone") {
+      // For clone mode, reset the form with cloned rule data and append " (Copy)" to name
+      const cloneFormData = {
+        ruleName: `${defaultRule.name} (Copy)`,
+        projectIds:
+          defaultRule.projects?.map((p) => p.project_id) ||
+          (projectId ? [projectId] : []),
+        samplingRate: defaultRule.sampling_rate ?? 1,
+        uiType: formUIRuleType,
+        scope: formScope,
+        type: getBackendRuleType(formScope, formUIRuleType),
+        enabled: defaultRule.enabled ?? true,
+        filters: normalizeFilters(
+          defaultRule.filters ?? [],
+          (formScope === EVALUATORS_RULE_SCOPE.thread
+            ? THREAD_FILTER_COLUMNS
+            : formScope === EVALUATORS_RULE_SCOPE.span
+              ? SPAN_FILTER_COLUMNS
+              : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
+        ) as Filter[],
+        pythonCodeDetails:
+          defaultRule && isPythonCodeRule(defaultRule)
+            ? (defaultRule.code as PythonCodeObject)
+            : cloneDeep(DEFAULT_PYTHON_CODE_DATA[formScope]),
+        llmJudgeDetails:
+          defaultRule && isLLMJudgeRule(defaultRule)
+            ? convertLLMJudgeObjectToLLMJudgeData(
+                defaultRule.code as LLMJudgeObject,
+              )
+            : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
+      };
+      form.reset(cloneFormData as EvaluationRuleFormType);
     }
-  }, [open, defaultRule, projectId, defaultScope, form]);
+  }, [
+    open,
+    defaultRule,
+    projectId,
+    defaultScope,
+    mode,
+    formScope,
+    formUIRuleType,
+    form,
+  ]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -290,8 +340,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const { mutate: createMutate } = useRuleCreateMutation();
   const { mutate: updateMutate } = useRuleUpdateMutation();
 
-  const isEdit = Boolean(defaultRule);
-  const title = isEdit ? "Edit rule" : "Create a new rule";
+  const isEdit = mode === "edit";
+  const isClone = mode === "clone";
+  const title = isEdit
+    ? "Edit rule"
+    : isClone
+      ? "Clone evaluation rule"
+      : "Create a new rule";
   const submitText = isEdit ? "Update rule" : "Create rule";
 
   const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
