@@ -55,7 +55,7 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
           onClick={handleStop}
           disabled={isStoppingOptimization}
         >
-          <X className="size-4" />
+          <X className="mr-2 size-4" />
           Stop Execution
         </Button>
       )}
