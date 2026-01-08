@@ -1,5 +1,6 @@
 import logging
 import datetime
+import re
 from typing import (
     Any,
     Dict,
@@ -54,6 +55,11 @@ SkipErrorCallback = Callable[[str], bool]
 # due to a handled/ignored error during execution.
 ERROR_SKIPPED_OUTPUTS = {"warning": "Error output skipped by skip_error_callback."}
 
+# Constants for LangGraph interrupt/resume functionality
+LANGGRAPH_INTERRUPT_OUTPUT_KEY = "__interrupt__"
+LANGGRAPH_RESUME_INPUT_KEY = "__resume__"
+LANGGRAPH_INTERRUPT_METADATA_KEY = "_langgraph_interrupt"
+
 
 class TrackRootRunResult(NamedTuple):
     new_trace_data: Optional[trace.TraceData]
@@ -76,6 +82,117 @@ def _is_root_run(run_dict: Dict[str, Any]) -> bool:
 
 def _get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     return run_dict["extra"].get("metadata", {})
+
+
+def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
+    """
+    Parse GraphInterrupt error traceback to extract the interrupt value as a string.
+
+    The function extracts the value from the Interrupt object representation in the traceback.
+    It handles both string values (with quotes) and non-string values, including nested structures.
+    For string values, escape sequences are decoded (e.g., \\n becomes a newline character).
+
+    Args:
+        error_traceback: The error traceback string containing GraphInterrupt information.
+
+    Returns:
+        The interrupt value as a string if found, None otherwise.
+    """
+    # Search for GraphInterrupt( anywhere in the traceback
+    match = re.search(
+        r"GraphInterrupt\(.*?Interrupt\(value=",
+        error_traceback,
+        re.DOTALL,
+    )
+    if not match:
+        return None
+
+    # Start parsing from after "value="
+    start_pos = match.end()
+    value_str = error_traceback[start_pos:]
+
+    # Extract the value, handling nested parentheses and brackets
+    paren_depth = 0
+    bracket_depth = 0
+    brace_depth = 0
+    in_string = False
+    string_char = None
+    i = 0
+
+    for i, char in enumerate(value_str):
+        # Handle string boundaries
+        if char in ('"', "'") and (i == 0 or value_str[i - 1] != "\\"):
+            if not in_string:
+                in_string = True
+                string_char = char
+            elif char == string_char:
+                in_string = False
+                string_char = None
+
+        # Skip counting brackets/parens inside strings
+        if in_string:
+            continue
+
+        # Track nesting depth
+        if char == "(":
+            paren_depth += 1
+        elif char == ")":
+            if paren_depth > 0:
+                paren_depth -= 1
+            else:
+                # Found the closing paren of Interrupt(...), stop here
+                break
+        elif char == "[":
+            bracket_depth += 1
+        elif char == "]":
+            bracket_depth -= 1
+        elif char == "{":
+            brace_depth += 1
+        elif char == "}":
+            brace_depth -= 1
+        elif (
+            char == "," and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0
+        ):
+            # Found a comma at the top level, stop here
+            break
+
+    # Extract and clean the value
+    value = value_str[:i].strip()
+
+    # Check if the value was originally a quoted string
+    was_quoted_string = False
+    if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
+        was_quoted_string = True
+        value = value[1:-1]
+
+    # Decode escape sequences for string values
+    if was_quoted_string:
+        try:
+            value = value.encode("utf-8").decode("unicode_escape")
+        except (UnicodeDecodeError, AttributeError):
+            # If decoding fails, return the original value
+            pass
+
+    return value
+
+
+def _extract_resume_value_from_command(obj: Any) -> Optional[str]:
+    """
+    Extract the resume value from a LangGraph Command object or serialized Command dict.
+
+    Args:
+        obj: A Command object or dict representing a serialized Command object (from run.dict()).
+
+    Returns:
+        The resume value as a string if found, None otherwise.
+    """
+    # Check if it's a Command object (has a resume attribute)
+    if hasattr(obj, "resume") and obj.resume is not None:
+        return str(obj.resume)
+    # Check if it's a serialized Command dict
+    if obj is not None and isinstance(obj, dict) and "resume" in obj:
+        return str(obj["resume"])
+    return None
 
 
 class OpikTracer(BaseTracer):
@@ -201,11 +318,16 @@ class OpikTracer(BaseTracer):
         trace_additional_metadata: Dict[str, Any] = {}
 
         error_str = run_dict.get("error")
-        outputs = None
+        outputs: Optional[Dict[str, Any]] = None
         error_info = None
 
         if error_str is not None:
-            if not self._should_skip_error(error_str):
+            # GraphInterrupt is not an error - it's a normal control flow for LangGraph
+            if interrupt_value := _parse_graph_interrupt_value(error_str):
+                outputs = {LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value}
+                trace_additional_metadata[LANGGRAPH_INTERRUPT_METADATA_KEY] = True
+                # Don't set error_info - this is not an error
+            elif not self._should_skip_error(error_str):
                 error_info = ErrorInfoDict(
                     exception_type="Exception",
                     traceback=error_str,
@@ -251,6 +373,25 @@ class OpikTracer(BaseTracer):
         # workaround for `.astream()` method usage
         if trace_data.input == {"input": ""}:
             trace_data.input = run_dict["inputs"]
+        elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
+            input_value = trace_data.input.get("input")
+            if resume_value := _extract_resume_value_from_command(input_value):
+                trace_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
+
+        # Check if any child span has a GraphInterrupt output and use it for trace output
+        for _, span_data in self._span_data_map.items():
+            if (
+                span_data.trace_id == trace_data.id
+                and span_data.metadata is not None
+                and span_data.metadata.get(LANGGRAPH_INTERRUPT_METADATA_KEY) is True
+            ):
+                # Use the interrupt output from the child span
+                outputs = span_data.output
+                # Also propagate the interrupt metadata to trace
+                if trace_additional_metadata is None:
+                    trace_additional_metadata = {}
+                trace_additional_metadata[LANGGRAPH_INTERRUPT_METADATA_KEY] = True
+                break
 
         if trace_additional_metadata:
             trace_data.update(metadata=trace_additional_metadata)
@@ -587,8 +728,12 @@ class OpikTracer(BaseTracer):
                 usage_info = llm_usage.LLMUsageInfo()
 
             # workaround for `.astream()` method usage
-            if span_data.input == {"input": ""}:
+            if span_data.input == {"input": ""} or span_data.input == {"input": {}}:
                 span_data.input = run_dict["inputs"]
+            elif isinstance(span_data.input, dict):
+                input_value = span_data.input.get("input")
+                if resume_value := _extract_resume_value_from_command(input_value):
+                    span_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
             filtered_output, additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
@@ -642,7 +787,14 @@ class OpikTracer(BaseTracer):
             span_data = self._span_data_map[run.id]
             error_str = run_dict["error"]
 
-            if self._should_skip_error(error_str):
+            # GraphInterrupt is not an error - it's a normal control flow for LangGraph
+            if interrupt_value := _parse_graph_interrupt_value(error_str):
+                span_data.init_end_time().update(
+                    metadata={LANGGRAPH_INTERRUPT_METADATA_KEY: True},
+                    output={LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value},
+                )
+            # Don't set error_info - this is not an error
+            elif self._should_skip_error(error_str):
                 span_data.init_end_time().update(output=ERROR_SKIPPED_OUTPUTS)
             else:
                 error_info = ErrorInfoDict(
