@@ -121,276 +121,245 @@ export type OptimizationTemplate = Partial<Optimization> & {
 // Chatbot training dataset items - mix of Opik questions (should answer) and off-topic (should decline)
 const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
   {
-    question: "How do I install the Opik Python SDK?",
-    expected_behavior: "answer",
-    answer:
-      "You can install the Opik Python SDK using pip: `pip install opik`. After installation, configure it with `opik.configure()` to connect to your Opik backend.",
+    message: "Is it normal for the app to crash 5 times a day? Just curious.",
+    expected_intent: "complaint",
+    expected_urgency: "high",
   },
   {
-    question: "What is the @track decorator used for in Opik?",
-    expected_behavior: "answer",
-    answer:
-      "The @track decorator automatically logs traces for your functions. It captures inputs, outputs, and timing information, making it easy to monitor LLM calls and debug your AI applications.",
+    message: "Love the product! Would be even better with dark mode though.",
+    expected_intent: "request",
+    expected_urgency: "low",
   },
   {
-    question: "How can I evaluate my LLM outputs using Opik?",
-    expected_behavior: "answer",
-    answer:
-      "Opik provides the `evaluate()` function to run evaluations over datasets. You can use built-in metrics like Hallucination, AnswerRelevance, or create custom metrics to assess your LLM outputs.",
+    message:
+      "Thanks for the 'update' that broke everything. Really appreciate it.",
+    expected_intent: "complaint",
+    expected_urgency: "high",
   },
   {
-    question: "What metrics does Opik support for evaluation?",
-    expected_behavior: "answer",
-    answer:
-      "Opik supports various metrics including Hallucination detection, AnswerRelevance, ContextPrecision, ContextRecall, Contains, Equals, LevenshteinRatio, and custom LLM-as-judge metrics via GEval.",
+    message:
+      "Anyone else having issues? Our whole team can't access anything and we have a client demo in 2 hours.",
+    expected_intent: "complaint",
+    expected_urgency: "critical",
   },
   {
-    question: "How do I create a dataset in Opik?",
-    expected_behavior: "answer",
-    answer:
-      "You can create a dataset using the Opik client: `client = opik.Opik()` then `dataset = client.create_dataset(name='my_dataset')`. Add items with `dataset.insert(items)` where items is a list of dictionaries.",
+    message:
+      "The new pricing seems expensive compared to competitors. What do I get for the extra cost?",
+    expected_intent: "question",
+    expected_urgency: "medium",
   },
   {
-    question: "Can Opik integrate with LangChain?",
-    expected_behavior: "answer",
-    answer:
-      "Yes, Opik integrates with LangChain. You can use `OpikTracer` as a callback to automatically trace all LangChain operations. Install with `pip install opik[langchain]`.",
+    message:
+      "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
+    expected_intent: "complaint",
+    expected_urgency: "high",
   },
   {
-    question: "What is Opik's Optimization Studio?",
-    expected_behavior: "answer",
-    answer:
-      "Optimization Studio is Opik's feature for automated prompt optimization. It uses algorithms like MIPRO and evolutionary optimization to improve your prompts based on evaluation metrics and datasets.",
+    message:
+      "Can someone please help me recover my data? I lost everything after your last update and I'm panicking.",
+    expected_intent: "request",
+    expected_urgency: "critical",
   },
   {
-    question: "How do I view traces in the Opik UI?",
-    expected_behavior: "answer",
-    answer:
-      "After logging traces with the SDK, open the Opik UI and navigate to the Traces section. You'll see all logged traces with their inputs, outputs, timing, and any feedback scores.",
+    message: "Interesting approach with the new UI. Different.",
+    expected_intent: "feedback",
+    expected_urgency: "low",
   },
   {
-    question: "Does Opik support OpenAI integration?",
-    expected_behavior: "answer",
-    answer:
-      "Yes, Opik integrates with OpenAI. You can use `track_openai()` to automatically trace all OpenAI API calls, capturing prompts, completions, token usage, and costs.",
+    message: "Why did you remove the export feature? I used it every day.",
+    expected_intent: "complaint",
+    expected_urgency: "medium",
   },
   {
-    question: "How do I add feedback scores to traces in Opik?",
-    expected_behavior: "answer",
-    answer:
-      "You can add feedback scores programmatically using `client.log_traces_feedback_scores()` or through the Opik UI by clicking on a trace and adding a score manually.",
+    message:
+      "Hey, quick thing - need to add 50 users to our enterprise account before tomorrow's onboarding. How do I do that?",
+    expected_intent: "request",
+    expected_urgency: "critical",
   },
   {
-    question: "What's the weather like in San Francisco today?",
-    expected_behavior: "decline",
-    answer:
-      "I'm an Opik assistant, specialized in helping with Opik SDK, tracing, evaluation, and prompt optimization. I can't provide weather information. Is there anything about Opik I can help you with?",
+    message:
+      "Wow, only 10 minutes to load a simple report. Impressive performance optimization!",
+    expected_intent: "complaint",
+    expected_urgency: "high",
   },
   {
-    question: "Can you write me a poem about the ocean?",
-    expected_behavior: "decline",
-    answer:
-      "I appreciate the creative request, but I'm focused on helping with Opik-related questions about LLM tracing, evaluation, and optimization. Would you like to know how Opik can help with your AI projects instead?",
-  },
-  {
-    question: "What's the best recipe for chocolate cake?",
-    expected_behavior: "decline",
-    answer:
-      "I'm an Opik assistant and can't help with recipes. I specialize in Opik's features for LLM observability and evaluation. Is there something about Opik I can assist you with?",
-  },
-  {
-    question: "Who won the World Cup in 2022?",
-    expected_behavior: "decline",
-    answer:
-      "I'm not able to answer sports questions. I'm here to help with Opik - the LLM observability and evaluation platform. Do you have any questions about tracing, metrics, or prompt optimization?",
-  },
-  {
-    question: "Can you help me debug my React application?",
-    expected_behavior: "decline",
-    answer:
-      "I specialize in Opik, not general web development. However, if you're building an AI-powered React app and want to trace your LLM calls with Opik, I'd be happy to help with that!",
-  },
-  {
-    question: "What's the capital of France?",
-    expected_behavior: "decline",
-    answer:
-      "I'm focused on Opik-related topics and can't answer general knowledge questions. If you're curious about how to use Opik for your projects, I'm here to help!",
-  },
-  {
-    question: "Tell me a joke",
-    expected_behavior: "decline",
-    answer:
-      "While I appreciate the request for humor, I'm an Opik-focused assistant. I'm best at helping you with LLM tracing, evaluation metrics, and prompt optimization. Any Opik questions I can help with?",
-  },
-  {
-    question: "How do I invest in stocks?",
-    expected_behavior: "decline",
-    answer:
-      "Financial advice isn't my area of expertise. I'm here to help with Opik - for tracing LLM applications, running evaluations, and optimizing prompts. What would you like to know about Opik?",
-  },
-  {
-    question: "What's the meaning of life?",
-    expected_behavior: "decline",
-    answer:
-      "That's a profound philosophical question beyond my scope. I'm specialized in Opik for LLM observability. If you're building AI applications and need help with tracing or evaluation, I'm your assistant!",
-  },
-  {
-    question: "Can you summarize the news today?",
-    expected_behavior: "decline",
-    answer:
-      "I don't have access to current news and focus specifically on Opik-related assistance. I can help you with LLM tracing, evaluation, datasets, and prompt optimization. What Opik topic interests you?",
+    message:
+      "Just checking - what's the process for exporting all my data? Asking for future reference.",
+    expected_intent: "request",
+    expected_urgency: "medium",
   },
 ];
 
-// JSON output dataset items - tasks to generate structured JSON data
-const JSON_OUTPUT_DATASET_ITEMS: DemoDatasetItem[] = [
-  {
-    input_description: "Create a person object with name 'John Doe' and age 30",
-    json_schema: {
+const EXPECTED_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    intent: {
       type: "object",
       properties: {
-        name: { type: "string" },
-        age: { type: "integer" },
+        primary: {
+          type: "string",
+          enum: ["question", "complaint", "request", "feedback", "other"],
+        },
+        confidence: { type: "number" },
       },
-      required: ["name", "age"],
+      required: ["primary", "confidence"],
     },
-  },
-  {
-    input_description:
-      "Generate a product with name 'Laptop', price 999.99, and in_stock true",
-    json_schema: {
+    urgency: {
+      type: "string",
+      enum: ["critical", "high", "medium", "low"],
+    },
+    sentiment: {
+      type: "string",
+      enum: ["positive", "neutral", "negative"],
+    },
+    entities: {
       type: "object",
       properties: {
-        name: { type: "string" },
-        price: { type: "number" },
-        in_stock: { type: "boolean" },
+        person_name: { type: "string" },
+        product: { type: "string" },
+        issue_type: { type: "string" },
       },
-      required: ["name", "price", "in_stock"],
     },
-  },
-  {
-    input_description:
-      "Create an address with street '123 Main St', city 'New York', and zip '10001'",
-    json_schema: {
+    action: {
       type: "object",
       properties: {
-        street: { type: "string" },
-        city: { type: "string" },
-        zip: { type: "string" },
+        type: {
+          type: "string",
+          enum: ["escalate", "respond", "investigate", "close"],
+        },
+        team: {
+          type: "string",
+          enum: ["support", "engineering", "billing", "sales"],
+        },
+        notes: { type: "string" },
       },
-      required: ["street", "city", "zip"],
+      required: ["type", "team"],
     },
-  },
-  {
-    input_description: "Generate an array of 3 colors: red, green, and blue",
-    json_schema: {
-      type: "array",
-      items: { type: "string" },
-      minItems: 3,
-      maxItems: 3,
-    },
-  },
-  {
-    input_description:
-      "Create a book object with title 'The Great Gatsby', author 'F. Scott Fitzgerald', year 1925, and genres array containing 'fiction' and 'classic'",
-    json_schema: {
+    response: {
       type: "object",
       properties: {
-        title: { type: "string" },
-        author: { type: "string" },
-        year: { type: "integer" },
-        genres: {
+        tone: {
+          type: "string",
+          enum: ["empathetic", "professional", "apologetic"],
+        },
+        key_points: {
           type: "array",
           items: { type: "string" },
         },
       },
-      required: ["title", "author", "year", "genres"],
+      required: ["tone", "key_points"],
     },
   },
+  required: ["intent", "urgency", "sentiment", "action", "response"],
+};
+
+// JSON output dataset items - tasks to generate structured JSON data
+const JSON_OUTPUT_DATASET_ITEMS: DemoDatasetItem[] = [
   {
-    input_description:
-      "Generate a user profile with username 'alice123', email 'alice@example.com', and active status true",
-    json_schema: {
-      type: "object",
-      properties: {
-        username: { type: "string" },
-        email: { type: "string", format: "email" },
-        active: { type: "boolean" },
-      },
-      required: ["username", "email", "active"],
-    },
+    message: "Is it normal for the app to crash 5 times a day? Just curious.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "complaint",
+    expected_urgency: "high",
   },
   {
-    input_description:
-      "Create an event with name 'Tech Conference', date '2024-06-15', and attendees count of 500",
-    json_schema: {
-      type: "object",
-      properties: {
-        name: { type: "string" },
-        date: { type: "string" },
-        attendees: { type: "integer" },
-      },
-      required: ["name", "date", "attendees"],
-    },
+    message: "Love the product! Would be even better with dark mode though.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "request",
+    expected_urgency: "low",
   },
   {
-    input_description:
-      "Generate a simple API response with status 'success', code 200, and message 'Data retrieved successfully'",
-    json_schema: {
-      type: "object",
-      properties: {
-        status: { type: "string" },
-        code: { type: "integer" },
-        message: { type: "string" },
-      },
-      required: ["status", "code", "message"],
-    },
+    message:
+      "Thanks for the 'update' that broke everything. Really appreciate it.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "complaint",
+    expected_urgency: "high",
   },
   {
-    input_description:
-      "Create a coordinate point with x value 10.5 and y value -20.3",
-    json_schema: {
-      type: "object",
-      properties: {
-        x: { type: "number" },
-        y: { type: "number" },
-      },
-      required: ["x", "y"],
-    },
+    message:
+      "Anyone else having issues? Our whole team can't access anything and we have a client demo in 2 hours.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "complaint",
+    expected_urgency: "critical",
   },
   {
-    input_description:
-      "Generate a task object with id 1, title 'Complete report', completed false, and priority 'high'",
-    json_schema: {
-      type: "object",
-      properties: {
-        id: { type: "integer" },
-        title: { type: "string" },
-        completed: { type: "boolean" },
-        priority: { type: "string", enum: ["low", "medium", "high"] },
-      },
-      required: ["id", "title", "completed", "priority"],
-    },
+    message:
+      "The new pricing seems expensive compared to competitors. What do I get for the extra cost?",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "question",
+    expected_urgency: "medium",
+  },
+  {
+    message:
+      "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "complaint",
+    expected_urgency: "high",
+  },
+  {
+    message:
+      "Can someone please help me recover my data? I lost everything after your last update and I'm panicking.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "request",
+    expected_urgency: "critical",
+  },
+  {
+    message: "Interesting approach with the new UI. Different.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "feedback",
+    expected_urgency: "low",
+  },
+  {
+    message: "Why did you remove the export feature? I used it every day.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "complaint",
+    expected_urgency: "medium",
+  },
+  {
+    message:
+      "Hey, quick thing - need to add 50 users to our enterprise account before tomorrow's onboarding. How do I do that?",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "request",
+    expected_urgency: "critical",
+  },
+  {
+    message:
+      "Wow, only 10 minutes to load a simple report. Impressive performance optimization!",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "complaint",
+    expected_urgency: "high",
+  },
+  {
+    message:
+      "Just checking - what's the process for exporting all my data? Asking for future reference.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_intent: "request",
+    expected_urgency: "medium",
   },
 ];
 
 export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   {
     id: "opik-chatbot",
-    title: "Demo template - Opik Chatbot",
-    description:
-      "Train a chatbot to answer Opik questions and decline off-topic ones",
+    title: "Demo template - Message Classifier",
+    description: "Classify messages by intent and urgency for support routing",
+    name: "Message classifier optimization",
     dataset_id: "",
     dataset_items: CHATBOT_DATASET_ITEMS,
     studio_config: {
-      dataset_name: "Demo - Opik Chatbot",
+      dataset_name: "Demo - Customer Message Classifier",
       prompt: {
         messages: [
           {
             role: LLM_MESSAGE_ROLE.system,
-            content: "You are an Opik assistant.",
+            content: `Classify customer messages. Output JSON with:
+{
+  "intent": {"primary": "question|complaint|request|feedback|other", "confidence": 0.0-1.0},
+  "urgency": "critical|high|medium|low"
+}
+
+Output valid JSON only.`,
           },
-          { role: LLM_MESSAGE_ROLE.user, content: "{{question}}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "{{message}}" },
         ],
       },
       llm_model: {
@@ -403,9 +372,9 @@ export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
             type: METRIC_TYPE.G_EVAL,
             parameters: {
               task_introduction:
-                "Evaluate if the chatbot correctly handles Opik-related vs off-topic questions. The dataset contains a field 'expected_behavior' which is either 'answer' (for Opik questions) or 'decline' (for off-topic questions).",
+                "You are evaluating a customer support message classifier. The system analyzes incoming customer messages and outputs a JSON object with 'intent' (containing 'primary' category and 'confidence' score) and 'urgency' level. The dataset provides 'expected_intent' and 'expected_urgency' as ground truth labels for each message.",
               evaluation_criteria:
-                "1. For Opik-related questions (expected_behavior='answer'): Response should be helpful, accurate, and informative about Opik features. 2. For off-topic questions (expected_behavior='decline'): Response should politely decline and redirect the user to Opik-related topics. 3. The chatbot should never make up information about non-Opik topics.",
+                "Score based on: 1) Intent accuracy - the 'intent.primary' field should match 'expected_intent' from the dataset (question, complaint, request, feedback, or other). Pay attention to sarcasm and indirect phrasing. 2) Urgency accuracy - the 'urgency' field should match 'expected_urgency' (critical for time-sensitive blockers, high for significant issues, medium for moderate concerns, low for minor feedback). 3) Confidence calibration - confidence scores should be lower for ambiguous messages. 4) Valid JSON output format.",
             },
           },
         ],
@@ -423,21 +392,44 @@ export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   },
   {
     id: "json-output",
-    title: "Demo template - Ensure JSON output",
-    description:
-      "Generate valid JSON without markdown formatting based on descriptions",
+    title: "Demo template - JSON Formatter",
+    description: "Ensure LLM outputs valid JSON matching a defined schema",
+    name: "JSON formatter optimization",
     dataset_id: "",
     dataset_items: JSON_OUTPUT_DATASET_ITEMS,
     studio_config: {
-      dataset_name: "Demo - JSON Output",
+      dataset_name: "Demo - JSON Formatter",
       prompt: {
         messages: [
           {
             role: LLM_MESSAGE_ROLE.system,
-            content:
-              "You are a JSON generator. Generate valid JSON based on the user's description.",
+            content: `Analyze customer messages and output JSON with this EXACT structure:
+{
+  "intent": {
+    "primary": <"question"|"complaint"|"request"|"feedback"|"other">,
+    "confidence": <0.0-1.0>
+  },
+  "urgency": <"critical"|"high"|"medium"|"low">,
+  "sentiment": <"positive"|"neutral"|"negative">,
+  "entities": {
+    "person_name": <string or null>,
+    "product": <string or null>,
+    "issue_type": <string or null>
+  },
+  "action": {
+    "type": <"escalate"|"respond"|"investigate"|"close">,
+    "team": <"support"|"engineering"|"billing"|"sales">,
+    "notes": <string>
+  },
+  "response": {
+    "tone": <"empathetic"|"professional"|"apologetic">,
+    "key_points": [<array of strings>]
+  }
+}
+
+IMPORTANT: Use EXACT field names and enum values shown above (lowercase). Output ONLY valid JSON.`,
           },
-          { role: LLM_MESSAGE_ROLE.user, content: "{{input_description}}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "{{message}}" },
         ],
       },
       llm_model: {
