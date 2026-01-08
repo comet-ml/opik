@@ -5749,4 +5749,240 @@ class ExperimentsResourceTest {
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
         }
     }
+
+    @Nested
+    @DisplayName("Experiment Tags:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentTags {
+
+        @ParameterizedTest
+        @MethodSource("createExperimentTagsProvider")
+        @DisplayName("when creating experiment with various tag inputs, then tags are handled correctly")
+        void createExperimentWithVariousTags_thenTagsHandledCorrectly(Set<String> inputTags, Set<String> expectedTags) {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(inputTags)
+                    .build();
+
+            // when
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // then
+            var expectedExperiment = experiment.toBuilder().tags(expectedTags).build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        private Stream<Arguments> createExperimentTagsProvider() {
+            var testRandomTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
+            return Stream.of(
+                    Arguments.of(testRandomTags, testRandomTags),
+                    Arguments.of(Set.of(), null),
+                    Arguments.of(null, null));
+        }
+
+        @Test
+        @DisplayName("when updating experiment tags, then tags are replaced correctly")
+        void updateExperimentTags_thenTagsReplacedCorrectly() {
+            // given - create experiment with initial tags
+            Set<String> initialTags = Set.of("initial1", "initial2");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update with new tags
+            Set<String> updatedTags = Set.of("updated1", "updated2", "updated3");
+            var updateRequest = ExperimentUpdate.builder()
+                    .tags(updatedTags)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify tags are replaced
+            var expectedExperiment = experiment.toBuilder()
+                    .tags(updatedTags)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment to remove tags, then tags are cleared correctly")
+        void updateExperimentToRemoveTags_thenTagsClearedCorrectly() {
+            // given - create experiment with tags
+            var initialTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update with empty tags
+            var updateRequest = ExperimentUpdate.builder()
+                    .tags(Set.of())
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify tags are cleared (backend returns null for empty tags)
+            var expectedExperiment = experiment.toBuilder()
+                    .tags(null)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with null tags, then existing tags are preserved")
+        void updateExperimentWithNullTags_thenExistingTagsPreserved() {
+            // given - create experiment with tags
+            var initialTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update with null tags (should preserve existing tags)
+            var updateRequest = ExperimentUpdate.builder()
+                    .name("Updated Name")
+                    .tags(null)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify existing tags are preserved
+            var expectedExperiment = experiment.toBuilder()
+                    .name("Updated Name")
+                    .tags(initialTags)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating only experiment name, then tags are preserved")
+        void updateExperimentName_thenTagsPreserved() {
+            // given - create experiment with tags
+            Set<String> initialTags = Set.of("preserve1", "preserve2");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update only the name
+            var updateRequest = ExperimentUpdate.builder()
+                    .name("New Name")
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify tags are preserved
+            var expectedExperiment = experiment.toBuilder()
+                    .name("New Name")
+                    .tags(initialTags)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with multiple fields including tags, then all fields are updated correctly")
+        void updateExperimentWithMultipleFieldsIncludingTags_thenAllFieldsUpdatedCorrectly() {
+            // given
+            var originalMetadata = JsonUtils.getJsonNodeFromString("{\"original\": \"value\"}");
+            Set<String> initialTags = Set.of("initial");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .metadata(originalMetadata)
+                    .tags(initialTags)
+                    .type(ExperimentType.REGULAR)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update multiple fields including tags
+            var updatedMetadata = JsonUtils.getJsonNodeFromString("{\"updated\": \"value\"}");
+            Set<String> updatedTags = Set.of("updated1", "updated2");
+            var updateRequest = ExperimentUpdate.builder()
+                    .name("Updated Name")
+                    .metadata(updatedMetadata)
+                    .tags(updatedTags)
+                    .type(ExperimentType.TRIAL)
+                    .status(ExperimentStatus.RUNNING)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify all fields are updated
+            var expectedExperiment = experiment.toBuilder()
+                    .name("Updated Name")
+                    .metadata(updatedMetadata)
+                    .tags(updatedTags)
+                    .type(ExperimentType.TRIAL)
+                    .status(ExperimentStatus.RUNNING)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when creating multiple experiments with different tags, then each experiment has correct tags")
+        void createMultipleExperimentsWithDifferentTags_thenEachHasCorrectTags() {
+            // given
+            Set<String> tags1 = Set.of("experiment1", "common");
+            Set<String> tags2 = Set.of("experiment2", "common");
+            Set<String> tags3 = Set.of("experiment3");
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .tags(tags1)
+                    .build();
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .tags(tags2)
+                    .build();
+            var experiment3 = experimentResourceClient.createPartialExperiment()
+                    .tags(tags3)
+                    .build();
+
+            // when
+            var experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+            var experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+            var experimentId3 = experimentResourceClient.create(experiment3, API_KEY, TEST_WORKSPACE);
+
+            // then - verify each experiment has its own tags
+            getAndAssert(experimentId1, experiment1, TEST_WORKSPACE, API_KEY);
+            getAndAssert(experimentId2, experiment2, TEST_WORKSPACE, API_KEY);
+            getAndAssert(experimentId3, experiment3, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when sequentially updating tags multiple times, then latest tags are applied")
+        void sequentiallyUpdateTags_thenLatestTagsApplied() {
+            // given - create experiment with initial tags
+            Set<String> initialTags = Set.of("initial");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - first update
+            Set<String> firstUpdateTags = Set.of("first", "first_update");
+            var firstUpdate = ExperimentUpdate.builder()
+                    .tags(firstUpdateTags)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, firstUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify the first update
+            var expectedExperiment = experiment.toBuilder().tags(firstUpdateTags).build();
+            var afterFirstUpdate = getAndAssert(experimentId, expectedExperiment,
+                    TEST_WORKSPACE, API_KEY);
+            assertThat(afterFirstUpdate.tags()).containsExactlyInAnyOrderElementsOf(firstUpdateTags);
+
+            // when - second update
+            Set<String> secondUpdateTags = Set.of("second", "second_update", "tags");
+            var secondUpdate = ExperimentUpdate.builder()
+                    .tags(secondUpdateTags)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, secondUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify the second update (should replace first update tags)
+            expectedExperiment = experiment.toBuilder().tags(secondUpdateTags).build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+    }
 }

@@ -21,6 +21,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -100,6 +101,7 @@ class ExperimentServiceTest {
                     .metadata(metadata)
                     .type(ExperimentType.TRIAL)
                     .status(ExperimentStatus.RUNNING)
+                    .tags(Set.of("tag1", "tag2"))
                     .build();
 
             var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
