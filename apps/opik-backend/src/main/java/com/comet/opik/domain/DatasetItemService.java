@@ -1210,6 +1210,24 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Optional.of(latestVersion.get().id());
     }
 
+    /**
+     * Helper method to get experiment items stats using the legacy DAO.
+     * This is used as a fallback when versioning is disabled or no versions exist yet.
+     *
+     * @param datasetId The dataset ID
+     * @param experimentIds The experiment IDs
+     * @param filters The filters to apply
+     * @return Mono containing the project stats
+     */
+    private Mono<ProjectStats> getExperimentItemsStatsFromLegacyDao(UUID datasetId,
+            Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters) {
+        return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
+                .switchIfEmpty(Mono.just(ProjectStats.empty()))
+                .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'",
+                        datasetId, stats.stats().size()));
+    }
+
     private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,
             int page, int size, String workspaceId) {
         Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
@@ -1236,10 +1254,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         if (!featureFlags.isDatasetVersioningEnabled()) {
             // Feature toggle OFF - use legacy DAO
             log.debug("Dataset versioning disabled, using legacy DAO for stats");
-            return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
-                    .switchIfEmpty(Mono.just(ProjectStats.empty()))
-                    .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'",
-                            datasetId, stats.stats().size()));
+            return getExperimentItemsStatsFromLegacyDao(datasetId, experimentIds, filters);
         }
 
         // Feature toggle ON - use versioned DAO with experiment-specific versions
@@ -1250,10 +1265,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             if (fallbackVersionId.isEmpty()) {
                 // No versions exist yet - fall back to legacy DAO
                 log.info("No versions found for dataset '{}', falling back to legacy DAO for stats", datasetId);
-                return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
-                        .switchIfEmpty(Mono.just(ProjectStats.empty()))
-                        .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'",
-                                datasetId, stats.stats().size()));
+                return getExperimentItemsStatsFromLegacyDao(datasetId, experimentIds, filters);
             }
 
             log.debug(
