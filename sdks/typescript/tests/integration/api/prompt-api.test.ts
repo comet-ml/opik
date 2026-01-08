@@ -851,11 +851,11 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
 
       const newTags = ["tag5", "tag6"];
       await client.updatePromptVersionTags(
-          [version1.versionId, version2.versionId],
-          {
-            tags: newTags,
-            mergeTags: false,
-          },
+        [version1.versionId, version2.versionId],
+        {
+          tags: newTags,
+          mergeTags: false,
+        },
       );
 
       const updated = await client.getPrompt({ name: promptName });
@@ -881,7 +881,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       });
       const version2 = await client.createPrompt({
         name: promptName,
-          prompt: "Test default replace template v2",
+        prompt: "Test default replace template v2",
       });
       createdPromptIds.push(version2.id);
       await client.updatePromptVersionTags([version2.versionId], {
@@ -907,7 +907,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
     }, 30000);
 
     it("should clear all tags when empty array in default (replace) mode", async () => {
-      const promptName = `test-tags-clear-empty-array${Date.now()}`;
+      const promptName = `test-tags-clear-empty-array-${Date.now()}`;
 
       const version1 = await client.createPrompt({
         name: promptName,
@@ -924,9 +924,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
 
       // Verify version-level tags were cleared (backend may return undefined or [])
       const versions = await version1.getVersions();
-      const currentVersion = versions.find(
-        (v) => v.id === version1.versionId,
-      );
+      const currentVersion = versions.find((v) => v.id === version1.versionId);
       expect(currentVersion?.tags ?? []).toEqual([]);
     }, 30000);
 
@@ -944,12 +942,11 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       });
 
       await client.updatePromptVersionTags([version1.versionId], {
-            mergeTags: false,
+        mergeTags: false,
       });
 
       const versions = await version1.getVersions();
-      const updatedVersion1 = versions.find(
-          (v) => v.id === version1.versionId);
+      const updatedVersion1 = versions.find((v) => v.id === version1.versionId);
       expect(updatedVersion1?.tags).toEqual(expect.arrayContaining(tags1));
       expect(updatedVersion1?.tags?.length).toBe(tags1.length);
     }, 30000);
@@ -979,23 +976,23 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
 
       const additionalTags = ["tag5", "tag6"];
       await client.updatePromptVersionTags(
-          [version1.versionId, version2.versionId],
-          {
-            tags: additionalTags,
-            mergeTags: true,
-          },
+        [version1.versionId, version2.versionId],
+        {
+          tags: additionalTags,
+          mergeTags: true,
+        },
       );
 
       // Verify version-specific tags were merged (check via version history)
       const updated = await client.getPrompt({ name: promptName });
       const versions = await updated!.getVersions();
       const updatedVersion1 = versions.find((v) => v.id === version1.versionId);
-      expect.arrayContaining([...tags1, ...additionalTags]);
+      expect(updatedVersion1?.tags).toEqual(expect.arrayContaining([...tags1, ...additionalTags]));
       expect(updatedVersion1?.tags?.length).toBe(tags1.length + additionalTags.length);
 
       const updatedVersion2 = versions.find((v) => v.id === version2.versionId);
-      expect.arrayContaining([...tags2, ...additionalTags]);
-      expect(updatedVersion2?.tags?.length).toBe(tags2.length + additionalTags.length,);
+      expect(updatedVersion2?.tags).toEqual(expect.arrayContaining([...tags2, ...additionalTags]));
+      expect(updatedVersion2?.tags?.length).toBe(tags2.length + additionalTags.length);
     }, 30000);
   });
 });
