@@ -33,7 +33,7 @@ export async function validateCsvFile(
     return { error: `File exceeds maximum size (${maxSize}MB).` };
   }
 
-  if (!file.type || !file.type.includes("text/csv")) {
+  if (!file.name.toLowerCase().endsWith(".csv")) {
     return { error: "File must be in .csv format" };
   }
 
