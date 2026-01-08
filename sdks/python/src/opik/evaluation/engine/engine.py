@@ -172,11 +172,14 @@ class EvaluationEngine:
             desc = f"{description} trial {trial_id}" if trial_count > 1 else description
 
             # Use streaming executor to submit tasks as items arrive
-            with evaluation_tasks_executor.StreamingExecutor(
+            executor: evaluation_tasks_executor.BaseStreamingExecutor[
+                test_result.TestResult
+            ] = evaluation_tasks_executor.StreamingExecutor(
                 workers=self._workers,
                 verbose=self._verbose,
                 desc=desc,
-            ) as executor:
+            )
+            with executor:
                 # For first trial, consume from iterator and cache items
                 if trial_id == 0:
                     for item in dataset_items:
