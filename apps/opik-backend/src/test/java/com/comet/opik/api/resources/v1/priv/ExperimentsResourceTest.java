@@ -239,7 +239,7 @@ class ExperimentsResourceTest {
         APP = newTestDropwizardAppExtension(contextConfig);
     }
 
-    private static final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
     private ClientSupport client;
@@ -5770,9 +5770,9 @@ class ExperimentsResourceTest {
             getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
-        private static java.util.stream.Stream<Arguments> createExperimentTagsProvider() {
+        private Stream<Arguments> createExperimentTagsProvider() {
             var testRandomTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
-            return java.util.stream.Stream.of(
+            return Stream.of(
                     Arguments.of(testRandomTags, testRandomTags),
                     Arguments.of(Set.of(), null),
                     Arguments.of(null, null));
