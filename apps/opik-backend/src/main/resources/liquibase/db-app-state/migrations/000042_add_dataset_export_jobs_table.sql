@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS dataset_export_jobs (
     workspace_id VARCHAR(150) NOT NULL,
     dataset_id CHAR(36) NOT NULL,
     status ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED') NOT NULL,
-    file_path VARCHAR(500),
+    file_path TEXT,
     error_message VARCHAR(255),
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at TIMESTAMP(6),
