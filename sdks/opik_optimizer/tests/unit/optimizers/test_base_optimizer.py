@@ -193,9 +193,7 @@ class TestSkipAndResultHelpers:
             optimizer._should_skip_optimization(0.99, skip_perfect_score=False) is False
         )
 
-    def test_select_result_prompts_single(
-        self, optimizer, simple_chat_prompt
-    ) -> None:
+    def test_select_result_prompts_single(self, optimizer, simple_chat_prompt) -> None:
         best_prompts = {"main": simple_chat_prompt}
         initial_prompts = {"main": simple_chat_prompt}
         result_prompt, result_initial = optimizer._select_result_prompts(
@@ -217,9 +215,7 @@ class TestSkipAndResultHelpers:
         assert result_prompt == best_prompts
         assert result_initial == initial_prompts
 
-    def test_build_early_result_defaults(
-        self, optimizer, simple_chat_prompt
-    ) -> None:
+    def test_build_early_result_defaults(self, optimizer, simple_chat_prompt) -> None:
         result = optimizer._build_early_result(
             optimizer_name="ConcreteOptimizer",
             prompt=simple_chat_prompt,
