@@ -353,7 +353,6 @@ class Dataset:
 
         return results
 
-    @retry_decorator.opik_rest_retry
     def __internal_api__stream_items_as_dataclasses__(
         self,
         nb_samples: Optional[int] = None,
@@ -380,14 +379,19 @@ class Dataset:
         items_yielded = 0
 
         while should_retrieve_more_items:
-            dataset_items = rest_stream_parser.read_and_parse_stream(
-                stream=self._rest_client.datasets.stream_dataset_items(
-                    dataset_name=self._name,
-                    last_retrieved_id=last_retrieved_id,
-                ),
-                item_class=dataset_item.DatasetItem,
-                nb_samples=nb_samples,
-            )
+            # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
+            @retry_decorator.opik_rest_retry
+            def _fetch_batch() -> List[dataset_item.DatasetItem]:
+                return rest_stream_parser.read_and_parse_stream(
+                    stream=self._rest_client.datasets.stream_dataset_items(
+                        dataset_name=self._name,
+                        last_retrieved_id=last_retrieved_id,
+                    ),
+                    item_class=dataset_item.DatasetItem,
+                    nb_samples=nb_samples,
+                )
+
+            dataset_items = _fetch_batch()
 
             if len(dataset_items) == 0:
                 should_retrieve_more_items = False
