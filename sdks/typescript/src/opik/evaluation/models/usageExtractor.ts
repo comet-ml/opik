@@ -136,15 +136,13 @@ function extractTokenUsage(
       opikUsage[opikField] = tokenCount;
     }
   }
-
-  // Extract nested token details
-  const cacheReadTokens = (usage.inputTokenDetails as { cacheReadTokens?: number } | undefined)?.cacheReadTokens;
-  if (cacheReadTokens !== undefined) {
+  const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens;
+  if (typeof cacheReadTokens === "number") {
     opikUsage.cached_input_tokens = cacheReadTokens;
   }
 
-  const reasoningTokens = (usage.outputTokenDetails as { reasoningTokens?: number } | undefined)?.reasoningTokens;
-  if (reasoningTokens !== undefined) {
+  const reasoningTokens = usage.outputTokenDetails?.reasoningTokens;
+  if (typeof reasoningTokens === "number") {
     opikUsage.reasoning_tokens = reasoningTokens;
   }
 
