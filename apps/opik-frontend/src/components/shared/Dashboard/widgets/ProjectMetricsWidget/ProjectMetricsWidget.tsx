@@ -7,7 +7,10 @@ import {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
-import { DashboardWidgetComponentProps } from "@/types/dashboard";
+import {
+  DashboardWidgetComponentProps,
+  BreakdownConfig,
+} from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
@@ -23,6 +26,7 @@ import {
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
+import { BREAKDOWN_FIELD } from "@/constants/breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -131,6 +135,13 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
     const spanFilters = widget.config?.spanFilters as Filter[] | undefined;
+    const breakdown = widget.config?.breakdown as BreakdownConfig | undefined;
+
+    // Only pass breakdown if it's enabled (field is not NONE)
+    const effectiveBreakdown =
+      breakdown && breakdown.field !== BREAKDOWN_FIELD.NONE
+        ? breakdown
+        : undefined;
 
     if (!projectId) {
       return (
@@ -183,6 +194,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           threadFilters={validThreadFilters}
           spanFilters={validSpanFilters}
           filterLineCallback={filterLineCallback}
+          breakdown={effectiveBreakdown}
           renderValue={
             isCostMetric
               ? renderCostTooltipValue
