@@ -3,6 +3,7 @@ import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
 import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
 import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
+import BedrockIcon from "@/icons/integrations/bedrock.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
 import OpikIcon from "@/icons/integrations/opik.svg?react";
 
@@ -76,6 +77,13 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "VERTEX_API_KEY",
     defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
   },
+  [PROVIDER_TYPE.BEDROCK]: {
+    label: "Bedrock",
+    value: PROVIDER_TYPE.BEDROCK,
+    icon: BedrockIcon,
+    apiKeyName: "BEDROCK_API_KEY",
+    defaultModel: "",
+  },
   [PROVIDER_TYPE.CUSTOM]: {
     label: "vLLM / Custom provider",
     value: PROVIDER_TYPE.CUSTOM,
@@ -102,6 +110,7 @@ export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
   [PROVIDER_TYPE.GEMINI]: FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
   [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.BEDROCK]: FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
   [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
 };
 

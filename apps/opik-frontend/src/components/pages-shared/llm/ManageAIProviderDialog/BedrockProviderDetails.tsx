@@ -10,29 +10,24 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import { PROVIDERS } from "@/constants/providers";
-import { PROVIDER_TYPE } from "@/types/providers";
 
-type CustomProviderDetailsProps = {
+type BedrockProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
   isEdit?: boolean;
 };
 
-const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
+const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
   form,
   isEdit = false,
 }) => {
   return (
     <div className="flex flex-col gap-4 pb-4">
-      <p className="comet-body-s text-muted-slate">
-        {PROVIDERS[PROVIDER_TYPE.CUSTOM].description}
-      </p>
       {!isEdit && (
         <FormField
           control={form.control}
@@ -46,7 +41,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                 <FormControl>
                   <Input
                     id="providerName"
-                    placeholder="ollama"
+                    placeholder="Bedrock us-east-1"
                     value={field.value}
                     onChange={(e) => field.onChange(e.target.value)}
                     disabled={isEdit}
@@ -57,9 +52,8 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                 </FormControl>
                 <FormMessage />
                 <Description>
-                  {
-                    'A unique identifier for this provider instance (e.g., "ollama", "vLLM", "LM-Studio").'
-                  }
+                  A unique identifier for this provider instance (e.g.,
+                  &quot;Bedrock us-east-1&quot;).
                 </Description>
               </FormItem>
             );
@@ -78,7 +72,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormControl>
                 <Input
                   id="url"
-                  placeholder={"https://vllm.example.com/v1"}
+                  placeholder="https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1"
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -114,8 +108,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Custom providers may not require an API key, depending on your
-                server setup. Learn more in the{" "}
+                Click{" "}
                 <Button
                   variant="link"
                   size="sm"
@@ -123,14 +116,15 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                   className="inline px-0"
                 >
                   <a
-                    href={buildDocsUrl("/playground")}
+                    href="https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    documentation
+                    here
                   </a>
-                </Button>
-                .
+                </Button>{" "}
+                for instructions on how to create a service account and assign
+                the correct permissions.
               </Description>
             </FormItem>
           );
@@ -159,7 +153,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormMessage />
               <Description>
                 Comma separated list of available models. Example:
-                {`"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B"`}
+                {`"openai.gpt-oss-20b-1:0,mistral.ministral-3-3b-instruct"`}
               </Description>
             </FormItem>
           );
@@ -284,4 +278,4 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   );
 };
 
-export default CustomProviderDetails;
+export default BedrockProviderDetails;

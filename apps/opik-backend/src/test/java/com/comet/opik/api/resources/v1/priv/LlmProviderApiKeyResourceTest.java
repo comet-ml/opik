@@ -561,7 +561,7 @@ class LlmProviderApiKeyResourceTest {
                 JsonUtils.writeValueAsString(customProvider), apiKey, workspaceName, 422)) {
             var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
             assertThat(actualError.errors())
-                    .contains("providerName provider_name is required for custom LLM providers");
+                    .contains("providerName provider_name is required for custom LLM and Bedrock providers");
         }
     }
 

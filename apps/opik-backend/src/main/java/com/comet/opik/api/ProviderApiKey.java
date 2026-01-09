@@ -32,9 +32,9 @@ public record ProviderApiKey(
                 View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
         @JsonView({View.Public.class,
-                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). "
+                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - required for custom LLM and Bedrock providers to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1'). "
                         +
-                        "Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). "
+                        "Must not be blank for custom and Bedrock providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). "
                         +
                         "This requirement is conditional and validation is enforced programmatically.", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> headers,

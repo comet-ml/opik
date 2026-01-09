@@ -45,6 +45,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean vertexaiProviderEnabled;
     @JsonProperty
+    @NotNull boolean bedrockProviderEnabled;
+    @JsonProperty
     @NotNull boolean customllmProviderEnabled;
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;

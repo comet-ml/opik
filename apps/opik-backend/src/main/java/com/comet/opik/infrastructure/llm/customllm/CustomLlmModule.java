@@ -21,9 +21,9 @@ public class CustomLlmModule extends AbstractModule {
 
     @Provides
     @Singleton
-    @Named("customLlm")
+    @Named("openAICompatible")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
             @NonNull @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator) {
-        return new CustomLlmServiceProvider(clientGenerator, llmProviderFactory);
+        return new OpenAICompatibleServiceProvider(clientGenerator, llmProviderFactory);
     }
 }
