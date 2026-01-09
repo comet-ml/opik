@@ -340,6 +340,7 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
                     .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
                     .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
+                    .put(ExperimentField.TAGS, TAGS_DB)
                     .build());
 
     private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
@@ -542,7 +543,8 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.EXPERIMENT, Set.of(
                 ExperimentField.METADATA,
                 ExperimentField.DATASET_ID,
-                ExperimentField.PROMPT_IDS));
+                ExperimentField.PROMPT_IDS,
+                ExperimentField.TAGS));
 
         map.put(FilterStrategy.PROMPT, Set.of(
                 PromptField.ID,
