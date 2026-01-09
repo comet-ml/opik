@@ -3,6 +3,9 @@ import { isPlainObject, get, isString, isArray, compact } from "lodash";
 import type {
   TraceAnalyzerRunStreamingArgs,
   TraceAnalyzerRunStreamingReturn,
+  MESSAGE_TYPE,
+  ToolCall,
+  ToolResponse,
 } from "@/types/ai-assistant";
 import api, { BASE_OPIK_AI_URL, TRACE_ANALYZER_REST_ENDPOINT } from "@/api/api";
 
@@ -12,21 +15,19 @@ type StreamResponsePart = {
 
 type StreamResponseContent = {
   parts: StreamResponsePart[];
-  role: string | "progress";
 };
 
 type StreamResponse = {
-  content: StreamResponseContent;
-  partial: boolean;
-  invocationId: string;
-  author: string;
-  actions: {
-    stateDelta: Record<string, unknown>;
-    artifactDelta: Record<string, unknown>;
-    requestedAuthConfigs: Record<string, unknown>;
-  };
+  message_type: MESSAGE_TYPE;
+  // For response events
+  content?: StreamResponseContent;
+  partial?: boolean;
+  invocationId?: string;
+  // For tool events
+  tool_call?: ToolCall;
+  tool_response?: ToolResponse;
+  // Common
   id: string;
-  timestamp: number;
   error?: string;
 };
 
@@ -36,11 +37,23 @@ const isRecord = (val: unknown): val is Record<string, unknown> =>
 const isValidStreamResponse = (payload: unknown): payload is StreamResponse => {
   if (!isRecord(payload)) return false;
 
-  const content = get(payload, "content");
-  if (!isPlainObject(content)) return false;
+  // Must have message_type
+  const messageType = get(payload, "message_type");
+  if (!isString(messageType)) return false;
 
-  const parts = get(content, "parts");
-  return isArray(parts);
+  // Validate based on message type
+  switch (messageType) {
+    case "response": {
+      const content = get(payload, "content");
+      return isPlainObject(content) && isArray(get(content, "parts"));
+    }
+    case "tool_call":
+      return isPlainObject(get(payload, "tool_call"));
+    case "tool_complete":
+      return isPlainObject(get(payload, "tool_response"));
+    default:
+      return false;
+  }
 };
 
 const isErrorResponse = (payload: unknown): payload is StreamResponse => {
@@ -49,18 +62,12 @@ const isErrorResponse = (payload: unknown): payload is StreamResponse => {
   return isString(error) && error.trim() !== "";
 };
 
-const extractDataFromStreamPayload = (
-  payload: StreamResponse,
-): { text: string; role: string } => {
-  const content = payload.content;
-  const text = compact(
+const extractTextFromStreamPayload = (payload: StreamResponse): string => {
+  // content is guaranteed to exist for "response" events by isValidStreamResponse
+  const content = payload.content!;
+  return compact(
     content.parts.map((part) => (isString(part.text) ? part.text : "")),
   ).join("");
-
-  return {
-    text,
-    role: content.role,
-  };
 };
 
 const extractErrorFromStreamPayload = (payload: StreamResponse): string =>
@@ -79,7 +86,6 @@ export default function useTraceAnalyzerRunStreaming({
       signal,
       onAddChunk,
     }: TraceAnalyzerRunStreamingArgs): Promise<TraceAnalyzerRunStreamingReturn> => {
-      let accumulatedValue = "";
       let detectedError: string | null = null;
 
       try {
@@ -128,21 +134,40 @@ export default function useTraceAnalyzerRunStreaming({
               }
 
               if (isValidStreamResponse(parsed)) {
-                const data = extractDataFromStreamPayload(parsed);
+                const messageType = parsed.message_type;
 
-                if (data.role === "progress") {
-                  onAddChunk({
-                    content: "",
-                    status: data.text,
-                  });
-                } else {
-                  accumulatedValue = parsed.partial
-                    ? accumulatedValue + data.text
-                    : data.text;
-                  onAddChunk({
-                    content: accumulatedValue,
-                    status: "",
-                  });
+                // Handle different message types
+                switch (messageType) {
+                  case "response": {
+                    const text = extractTextFromStreamPayload(parsed);
+                    // Use invocationId to group streaming chunks together, fall back to id
+                    const streamId = parsed.invocationId || parsed.id;
+                    onAddChunk({
+                      messageType,
+                      eventId: streamId,
+                      content: text,
+                      partial: parsed.partial,
+                    });
+                    break;
+                  }
+                  case "tool_call":
+                    if (parsed.tool_call) {
+                      onAddChunk({
+                        messageType: "tool_call" as MESSAGE_TYPE,
+                        eventId: parsed.id,
+                        toolCall: parsed.tool_call,
+                      });
+                    }
+                    break;
+                  case "tool_complete":
+                    if (parsed.tool_response) {
+                      onAddChunk({
+                        messageType: "tool_complete" as MESSAGE_TYPE,
+                        eventId: parsed.id,
+                        toolResponse: parsed.tool_response,
+                      });
+                    }
+                    break;
                 }
               }
             } catch {
