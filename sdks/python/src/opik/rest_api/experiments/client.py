@@ -119,6 +119,7 @@ class ExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
@@ -140,6 +141,8 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
 
@@ -174,6 +177,7 @@ class ExperimentsClient:
             id=id,
             name=name,
             metadata=metadata,
+            tags=tags,
             type=type,
             optimization_id=optimization_id,
             status=status,
@@ -485,6 +489,7 @@ class ExperimentsClient:
         *,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -500,6 +505,8 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNode]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -525,6 +532,7 @@ class ExperimentsClient:
             id,
             name=name,
             metadata=metadata,
+            tags=tags,
             type=type,
             status=status,
             experiment_scores=experiment_scores,
@@ -726,6 +734,7 @@ class AsyncExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
@@ -747,6 +756,8 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
 
@@ -784,6 +795,7 @@ class AsyncExperimentsClient:
             id=id,
             name=name,
             metadata=metadata,
+            tags=tags,
             type=type,
             optimization_id=optimization_id,
             status=status,
@@ -1122,6 +1134,7 @@ class AsyncExperimentsClient:
         *,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -1137,6 +1150,8 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNode]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -1165,6 +1180,7 @@ class AsyncExperimentsClient:
             id,
             name=name,
             metadata=metadata,
+            tags=tags,
             type=type,
             status=status,
             experiment_scores=experiment_scores,

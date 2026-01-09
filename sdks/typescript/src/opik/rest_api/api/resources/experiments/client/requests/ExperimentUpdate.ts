@@ -11,6 +11,7 @@ import * as OpikApi from "../../../../index";
 export interface ExperimentUpdate {
     name?: string;
     metadata?: OpikApi.JsonNode;
+    tags?: string[];
     type?: OpikApi.ExperimentUpdateType;
     /** The status of the experiment */
     status?: OpikApi.ExperimentUpdateStatus;

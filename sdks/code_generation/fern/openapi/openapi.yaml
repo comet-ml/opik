@@ -10145,6 +10145,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonListString"
+        tags:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
         type:
           type: string
           enum:
@@ -10285,6 +10294,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonListString_Write"
+        tags:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
         type:
           type: string
           enum:
@@ -10987,6 +11005,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonListString_Public"
+        tags:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
         type:
           type: string
           enum:
@@ -11221,6 +11248,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
         type:
           type: string
           enum:

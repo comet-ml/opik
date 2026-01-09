@@ -17,6 +17,7 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
         datasetName: core.serialization.property("dataset_name", core.serialization.string()),
         name: core.serialization.string().optional(),
         metadata: JsonListStringWrite.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         type: ExperimentWriteType.optional(),
         optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
         status: ExperimentWriteStatus.optional(),
@@ -38,6 +39,7 @@ export declare namespace ExperimentWrite {
         dataset_name: string;
         name?: string | null;
         metadata?: JsonListStringWrite.Raw | null;
+        tags?: string[] | null;
         type?: ExperimentWriteType.Raw | null;
         optimization_id?: string | null;
         status?: ExperimentWriteStatus.Raw | null;

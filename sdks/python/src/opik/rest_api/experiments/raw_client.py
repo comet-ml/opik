@@ -140,6 +140,7 @@ class RawExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
@@ -161,6 +162,8 @@ class RawExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
 
@@ -194,6 +197,7 @@ class RawExperimentsClient:
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
                 ),
+                "tags": tags,
                 "type": type,
                 "optimization_id": optimization_id,
                 "status": status,
@@ -706,6 +710,7 @@ class RawExperimentsClient:
         *,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -721,6 +726,8 @@ class RawExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNode]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -742,6 +749,7 @@ class RawExperimentsClient:
             json={
                 "name": name,
                 "metadata": metadata,
+                "tags": tags,
                 "type": type,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
@@ -1061,6 +1069,7 @@ class AsyncRawExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
@@ -1082,6 +1091,8 @@ class AsyncRawExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
 
@@ -1115,6 +1126,7 @@ class AsyncRawExperimentsClient:
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
                 ),
+                "tags": tags,
                 "type": type,
                 "optimization_id": optimization_id,
                 "status": status,
@@ -1627,6 +1639,7 @@ class AsyncRawExperimentsClient:
         *,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -1642,6 +1655,8 @@ class AsyncRawExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNode]
+
+        tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -1663,6 +1678,7 @@ class AsyncRawExperimentsClient:
             json={
                 "name": name,
                 "metadata": metadata,
+                "tags": tags,
                 "type": type,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
