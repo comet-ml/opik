@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 
 import opik
+from opik.decorator import span_creation_handler
 
 runtime_config = importlib.import_module("opik.tracing_runtime_config")
 
@@ -103,7 +104,9 @@ def test_track_decorator__generator_function__respects_runtime_flag():
     opik.set_tracing_active(False)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",
-        return_value=(None, mock.Mock()),
+        return_value=span_creation_handler.SpanCreationResult(
+            None, mock.Mock(), should_process_span_data=True
+        ),
     ) as mocked_create:
         for _ in gen_numbers(3):
             pass
@@ -112,7 +115,9 @@ def test_track_decorator__generator_function__respects_runtime_flag():
     opik.set_tracing_active(True)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",
-        return_value=(None, mock.Mock()),
+        return_value=span_creation_handler.SpanCreationResult(
+            None, mock.Mock(), should_process_span_data=True
+        ),
     ) as mocked_create:
         for _ in gen_numbers(2):
             pass
@@ -134,7 +139,9 @@ def test_track_decorator__async_generator_function__respects_runtime_flag():
     opik.set_tracing_active(False)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",
-        return_value=(None, mock.Mock()),
+        return_value=span_creation_handler.SpanCreationResult(
+            None, mock.Mock(), should_process_span_data=True
+        ),
     ) as mocked_create:
         asyncio.run(_consume_async_gen(3))
         assert not mocked_create.called
@@ -142,7 +149,9 @@ def test_track_decorator__async_generator_function__respects_runtime_flag():
     opik.set_tracing_active(True)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",
-        return_value=(None, mock.Mock()),
+        return_value=span_creation_handler.SpanCreationResult(
+            None, mock.Mock(), should_process_span_data=True
+        ),
     ) as mocked_create:
         asyncio.run(_consume_async_gen(2))
         assert mocked_create.called

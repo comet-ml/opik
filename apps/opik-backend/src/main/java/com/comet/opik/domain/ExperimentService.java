@@ -402,7 +402,17 @@ public class ExperimentService {
                                         .datasetVersionId(resolvedVersionId)
                                         .build();
                                 return processExperimentCreation(experimentWithVersion, id, name, datasetId);
-                            });
+                            })
+                            .switchIfEmpty(Mono.defer(() -> {
+                                // No version found - proceed with null dataset_version_id
+                                log.info(
+                                        "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
+                                        datasetId);
+                                var experimentWithNullVersion = experiment.toBuilder()
+                                        .datasetVersionId(null)
+                                        .build();
+                                return processExperimentCreation(experimentWithNullVersion, id, name, datasetId);
+                            }));
                 })
                 // If a conflict occurs, we just return the id of the existing experiment.
                 // If any other error occurs, we throw it. The event is not posted for both cases.
@@ -482,7 +492,15 @@ public class ExperimentService {
                     log.info("Using validated dataset version ID '{}' for experiment on dataset '{}'",
                             version.id(), datasetId);
                     return version.id();
-                }).subscribeOn(Schedulers.boundedElastic());
+                }).subscribeOn(Schedulers.boundedElastic())
+                        .onErrorResume(e -> {
+                            if (e instanceof NotFoundException) {
+                                log.warn("Dataset version not found: '{}'", e.getMessage(), e);
+                                return Mono.error(new ClientErrorException("Dataset version not found",
+                                        Response.Status.CONFLICT));
+                            }
+                            return Mono.error(e);
+                        });
             }
 
             // Case 2: No version specified - use latest version

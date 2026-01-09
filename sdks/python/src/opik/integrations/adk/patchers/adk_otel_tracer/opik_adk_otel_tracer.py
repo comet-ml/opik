@@ -190,11 +190,11 @@ def _prepare_trace_and_span_to_be_finalized(
             type="general",
         )
 
-        _, span_to_close_in_finally_block = (
+        span_to_close_in_finally_block = (
             span_creation_handler.create_span_respecting_context(
                 start_span_arguments=start_span_arguments,
                 distributed_trace_headers=None,
-            )
+            ).span_data
         )
         opik.context_storage.add_span_data(span_to_close_in_finally_block)
 

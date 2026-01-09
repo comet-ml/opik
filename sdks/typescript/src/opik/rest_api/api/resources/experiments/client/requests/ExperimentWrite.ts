@@ -15,10 +15,13 @@ export interface ExperimentWrite {
     datasetName: string;
     name?: string;
     metadata?: OpikApi.JsonListStringWrite;
+    tags?: string[];
     type?: OpikApi.ExperimentWriteType;
     optimizationId?: string;
     status?: OpikApi.ExperimentWriteStatus;
     experimentScores?: OpikApi.ExperimentScoreWrite[];
     promptVersion?: OpikApi.PromptVersionLinkWrite;
     promptVersions?: OpikApi.PromptVersionLinkWrite[];
+    /** ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version. */
+    datasetVersionId?: string;
 }

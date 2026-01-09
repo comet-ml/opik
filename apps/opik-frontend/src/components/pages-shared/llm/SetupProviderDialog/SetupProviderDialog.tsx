@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -12,17 +12,19 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import BedrockProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
 import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import { convertCustomProviderModels } from "@/lib/provider";
+import { useProviderOptions } from "@/hooks/useProviderOptions";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -35,9 +37,18 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   setOpen,
   onProviderAdded,
 }) => {
-  const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
-    PROVIDER_TYPE.OPEN_AI,
-  );
+  // Get provider options with "Add new" options for Bedrock and Custom
+  const providerOptions = useProviderOptions({
+    includeAddNewOptions: true,
+  });
+
+  const [selectedComposedProvider, setSelectedComposedProvider] = useState<
+    COMPOSED_PROVIDER_TYPE | ""
+  >("");
+  const [selectedProviderType, setSelectedProviderType] = useState<
+    PROVIDER_TYPE | ""
+  >("");
+
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
@@ -50,13 +61,30 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       url: "",
       models: "",
       providerName: "",
+      headers: [],
     } as AIProviderFormType,
   });
 
+  // Auto-select first available provider when options change
+  useEffect(() => {
+    if (!selectedComposedProvider && providerOptions.length > 0) {
+      const firstOption = providerOptions[0];
+      setSelectedComposedProvider(firstOption.value);
+      setSelectedProviderType(firstOption.providerType);
+      form.setValue("provider", firstOption.providerType);
+      form.setValue("composedProviderType", firstOption.value);
+    }
+  }, [providerOptions, selectedComposedProvider, form]);
+
   const handleProviderSelect = useCallback(
-    (provider: PROVIDER_TYPE) => {
-      setSelectedProvider(provider);
-      form.setValue("provider", provider);
+    (
+      composedProviderType: COMPOSED_PROVIDER_TYPE,
+      providerType: PROVIDER_TYPE,
+    ) => {
+      setSelectedComposedProvider(composedProviderType);
+      setSelectedProviderType(providerType);
+      form.setValue("provider", providerType);
+      form.setValue("composedProviderType", composedProviderType);
       form.setValue("apiKey", "");
       form.clearErrors();
     },
@@ -66,6 +94,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
       const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
+      const isBedrock = data.provider === PROVIDER_TYPE.BEDROCK;
       const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
 
       const providerKeyData: Partial<{
@@ -74,13 +103,14 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         apiKey: string;
         base_url: string;
         configuration: Record<string, string>;
+        headers: Record<string, string>;
       }> = {
         provider: data.provider as PROVIDER_TYPE,
         ...(data.apiKey && { apiKey: data.apiKey }),
       };
 
       if (
-        isCustom &&
+        (isCustom || isBedrock) &&
         "url" in data &&
         "models" in data &&
         "providerName" in data
@@ -94,6 +124,23 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             true,
           ),
         };
+
+        // Add headers if present
+        if ("headers" in data && data.headers && Array.isArray(data.headers)) {
+          const headersObj = data.headers.reduce<Record<string, string>>(
+            (acc, header) => {
+              const trimmedKey = header.key?.trim();
+              if (trimmedKey) {
+                acc[trimmedKey] = header.value;
+              }
+              return acc;
+            },
+            {},
+          );
+          if (Object.keys(headersObj).length > 0) {
+            providerKeyData.headers = headersObj;
+          }
+        }
       }
 
       if (isVertex && "location" in data) {
@@ -110,7 +157,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
           onSuccess: () => {
             setOpen(false);
             form.reset();
-            setSelectedProvider("");
+            setSelectedComposedProvider("");
+            setSelectedProviderType("");
 
             onProviderAdded?.();
           },
@@ -123,54 +171,74 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   const handleCancel = useCallback(() => {
     setOpen(false);
     form.reset();
-    setSelectedProvider("");
+    setSelectedComposedProvider("");
+    setSelectedProviderType("");
   }, [setOpen, form]);
+
+  const renderContent = () => {
+    if (providerOptions.length === 0) {
+      return (
+        <div className="comet-body-s text-muted-foreground">
+          No providers available for this environment
+        </div>
+      );
+    }
+
+    return (
+      <DialogAutoScrollBody className="flex flex-col pr-6">
+        <p className="comet-body-s mb-4 text-muted-foreground">
+          To use the Playground, select an AI provider and enter your API key
+        </p>
+
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="flex flex-col gap-4"
+          >
+            <ProviderGrid
+              options={providerOptions}
+              selectedProvider={selectedComposedProvider}
+              onSelectProvider={handleProviderSelect}
+            />
+
+            {selectedProviderType && (
+              <>
+                {selectedProviderType === PROVIDER_TYPE.CUSTOM ? (
+                  <CustomProviderDetails form={form} />
+                ) : selectedProviderType === PROVIDER_TYPE.BEDROCK ? (
+                  <BedrockProviderDetails form={form} />
+                ) : selectedProviderType === PROVIDER_TYPE.VERTEX_AI ? (
+                  <VertexAIProviderDetails form={form} />
+                ) : (
+                  <CloudAIProviderDetails
+                    provider={selectedProviderType}
+                    form={form}
+                  />
+                )}
+              </>
+            )}
+          </form>
+        </Form>
+      </DialogAutoScrollBody>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+      <DialogContent className="max-w-lg sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
-        <DialogAutoScrollBody className="flex flex-col">
-          <p className="comet-body-s mb-4 text-muted-foreground">
-            To use the Playground, select an AI provider and enter your API key
-          </p>
 
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleSubmit)}
-              className="flex flex-col gap-4"
-            >
-              <ProviderGrid
-                selectedProvider={selectedProvider}
-                onSelectProvider={handleProviderSelect}
-              />
+        {renderContent()}
 
-              {selectedProvider && (
-                <>
-                  {selectedProvider === PROVIDER_TYPE.CUSTOM ? (
-                    <CustomProviderDetails form={form} />
-                  ) : selectedProvider === PROVIDER_TYPE.VERTEX_AI ? (
-                    <VertexAIProviderDetails form={form} />
-                  ) : (
-                    <CloudAIProviderDetails
-                      provider={selectedProvider}
-                      form={form}
-                    />
-                  )}
-                </>
-              )}
-            </form>
-          </Form>
-        </DialogAutoScrollBody>
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel} type="button">
             Cancel
           </Button>
           <Button
             type="submit"
-            disabled={!selectedProvider}
+            disabled={!selectedProviderType}
             onClick={form.handleSubmit(handleSubmit)}
           >
             Done

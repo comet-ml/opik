@@ -8,6 +8,8 @@ import type {
   FilePart,
   ToolCallPart,
   ToolResultPart,
+  ToolApprovalRequest,
+  ToolApprovalResponse,
 } from "ai";
 import type { ReasoningPart } from "@ai-sdk/provider-utils";
 
@@ -57,6 +59,8 @@ function formatStructuredContentAsString(
     | ToolCallPart
     | ToolResultPart
     | ReasoningPart
+    | ToolApprovalRequest
+    | ToolApprovalResponse
   >
 ): string {
   return parts
@@ -79,6 +83,14 @@ function formatStructuredContentAsString(
 
       if (part.type === "reasoning") {
         return `[reasoning: ${part.text}]`;
+      }
+
+      if (part.type === "tool-approval-request") {
+        return `[tool-approval-request]`;
+      }
+
+      if (part.type === "tool-approval-response") {
+        return `[tool-approval-response]`;
       }
 
       return "";

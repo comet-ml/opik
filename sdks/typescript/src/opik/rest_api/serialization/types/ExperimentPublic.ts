@@ -13,6 +13,7 @@ import { PercentageValuesPublic } from "./PercentageValuesPublic";
 import { ExperimentPublicStatus } from "./ExperimentPublicStatus";
 import { ExperimentScorePublic } from "./ExperimentScorePublic";
 import { PromptVersionLinkPublic } from "./PromptVersionLinkPublic";
+import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic";
 
 export const ExperimentPublic: core.serialization.ObjectSchema<
     serializers.ExperimentPublic.Raw,
@@ -24,6 +25,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
     metadata: JsonListStringPublic.optional(),
+    tags: core.serialization.list(core.serialization.string()).optional(),
     type: ExperimentPublicType.optional(),
     optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
     feedbackScores: core.serialization.property(
@@ -53,6 +55,11 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
         "prompt_versions",
         core.serialization.list(PromptVersionLinkPublic).optional(),
     ),
+    datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
+    datasetVersionSummary: core.serialization.property(
+        "dataset_version_summary",
+        DatasetVersionSummaryPublic.optional(),
+    ),
 });
 
 export declare namespace ExperimentPublic {
@@ -63,6 +70,7 @@ export declare namespace ExperimentPublic {
         project_id?: string | null;
         name?: string | null;
         metadata?: JsonListStringPublic.Raw | null;
+        tags?: string[] | null;
         type?: ExperimentPublicType.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
@@ -80,5 +88,7 @@ export declare namespace ExperimentPublic {
         experiment_scores?: ExperimentScorePublic.Raw[] | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
+        dataset_version_id?: string | null;
+        dataset_version_summary?: DatasetVersionSummaryPublic.Raw | null;
     }
 }

@@ -457,6 +457,9 @@ serviceToggles:
   # Description: Whether or not Vertex AI provider is enabled
   vertexaiProviderEnabled: "true"
   # Default: true
+  # Description: Whether or not Bedrock provider is enabled
+  bedrockProviderEnabled: "true"
+  # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"
   # Default: false

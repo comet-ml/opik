@@ -2,7 +2,7 @@ import { trace } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { generateText, tool } from "ai";
-import { MockLanguageModelV2 } from "ai/test";
+import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModelV2ToolCall } from "@ai-sdk/provider";
 import { Opik } from "opik";
 import { OpikExporter } from "../src/exporter";
@@ -66,10 +66,13 @@ describe("Opik - Vercel AI SDK integration", () => {
     sdk.start();
 
     const { text } = await generateText({
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV3({
         doGenerate: {
-          finishReason: "stop",
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: undefined, reasoning: undefined },
+          },
           content: [{ type: "text", text: output }],
           warnings: [],
         },
@@ -125,10 +128,13 @@ describe("Opik - Vercel AI SDK integration", () => {
     };
 
     const response = await generateText({
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV3({
         doGenerate: {
-          finishReason: "tool-calls",
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: undefined, reasoning: undefined },
+          },
           content: [toolCallContent],
           warnings: [],
         },

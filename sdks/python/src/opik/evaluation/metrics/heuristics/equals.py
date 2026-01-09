@@ -42,22 +42,26 @@ class Equals(base_metric.BaseMetric):
         self._case_sensitive = case_sensitive
 
     def score(
-        self, output: str, reference: str, **ignored_kwargs: Any
+        self, output: Any, reference: Any, **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         """
-        Calculate the score based on whether the output string exactly matches the expected output.
+        Calculate the score based on whether the output exactly matches the expected output.
 
         Args:
-            output: The output string to check.
-            reference: The expected output string to compare against.
+            output: The output to check. Will be converted to string for comparison.
+            reference: The expected output to compare against. Will be converted to string for comparison.
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
-            score_result.ScoreResult: A ScoreResult object with a value of 1.0 if the strings match,
+            score_result.ScoreResult: A ScoreResult object with a value of 1.0 if the values match,
                 0.0 otherwise.
         """
-        value_left = output if self._case_sensitive else output.lower()
-        value_right = reference if self._case_sensitive else reference.lower()
+        # Convert to string to handle numeric and other types
+        output_str = str(output)
+        reference_str = str(reference)
+
+        value_left = output_str if self._case_sensitive else output_str.lower()
+        value_right = reference_str if self._case_sensitive else reference_str.lower()
 
         if value_left == value_right:
             return score_result.ScoreResult(value=1.0, name=self.name)
