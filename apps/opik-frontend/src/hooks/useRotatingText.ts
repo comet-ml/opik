@@ -32,4 +32,3 @@ const useRotatingText = ({
 };
 
 export default useRotatingText;
-
