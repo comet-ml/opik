@@ -113,8 +113,6 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
-  # Disable retries for faster test execution
-  retryAttempts: 0
 
 openTelemetry:
   # Default: 3h
@@ -562,6 +560,7 @@ webhook:
   poolingInterval: 1s
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  # Note: In tests, set this <= poolingInterval to avoid backpressure drops
   longPollingDuration: 500ms
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
