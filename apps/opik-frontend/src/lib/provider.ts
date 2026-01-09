@@ -17,6 +17,10 @@ export const getProviderDisplayName = (providerKey: ProviderObject) => {
     return provider_name ? provider_name : LEGACY_CUSTOM_PROVIDER_NAME;
   }
 
+  if (provider === PROVIDER_TYPE.BEDROCK) {
+    return provider_name ?? PROVIDERS[provider]?.label ?? "";
+  }
+
   return PROVIDERS[provider]?.label ?? "";
 };
 
@@ -28,15 +32,23 @@ export const buildComposedProviderKey = (
   providerType: PROVIDER_TYPE,
   providerName?: string,
 ): COMPOSED_PROVIDER_TYPE => {
-  return providerType === PROVIDER_TYPE.CUSTOM && providerName
-    ? `${PROVIDER_TYPE.CUSTOM}:${providerName}`
-    : providerType;
+  if (
+    providerName &&
+    [PROVIDER_TYPE.CUSTOM, PROVIDER_TYPE.BEDROCK].includes(providerType)
+  ) {
+    return `${providerType}:${providerName}`;
+  }
+  return providerType;
 };
 
 export const parseComposedProviderType = (provider: COMPOSED_PROVIDER_TYPE) => {
-  return provider.startsWith(PROVIDER_TYPE.CUSTOM)
-    ? PROVIDER_TYPE.CUSTOM
-    : (provider as PROVIDER_TYPE);
+  if (provider.startsWith(PROVIDER_TYPE.CUSTOM)) {
+    return PROVIDER_TYPE.CUSTOM;
+  }
+  if (provider.startsWith(PROVIDER_TYPE.BEDROCK)) {
+    return PROVIDER_TYPE.BEDROCK;
+  }
+  return provider as PROVIDER_TYPE;
 };
 
 export const convertCustomProviderModels = (
