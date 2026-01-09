@@ -122,10 +122,7 @@ component:
           - name: Accept
             value: application/json
       initialDelaySeconds: 0
-      periodSeconds: 10
       timeoutSeconds: 2
-      successThreshold: 1
-      failureThreshold: 2
     readinessProbe:
       httpGet:
         path: /health-check?name=all&type=ready
@@ -134,10 +131,7 @@ component:
           - name: Accept
             value: application/json
       initialDelaySeconds: 20
-      periodSeconds: 10
       timeoutSeconds: 2
-      successThreshold: 1
-      failureThreshold: 2
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
