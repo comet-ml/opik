@@ -8,6 +8,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
  * Listener for dataset export jobs from Redis stream.
@@ -19,7 +20,7 @@ public class DatasetExportJobListener extends BaseRedisSubscriber<DatasetExportM
 
     @Inject
     public DatasetExportJobListener(
-            @NonNull DatasetExportConfig config,
+            @NonNull @Config DatasetExportConfig config,
             @NonNull RedissonReactiveClient redisClient) {
         super(config, redisClient, DatasetExportConfig.PAYLOAD_FIELD, "opik", "dataset_export");
     }
