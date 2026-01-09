@@ -36,7 +36,7 @@ const WidgetOverrideDefaultsSection: React.FC<
               <div className="flex-1 pr-4">
                 <div className="flex flex-col gap-0.5 px-0.5">
                   <Label className="comet-body-s-accented">
-                    Override dashboard defaults
+                    Override dashboard default data source
                   </Label>
                   <Description>{description}</Description>
                 </div>
