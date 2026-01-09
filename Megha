@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>For You</title>
+    <style>
+        body {
+            background: radial-gradient(circle, #1a1a2e 0%, #0f0f1b 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: white;
+        }
+
+        .container { text-align: center; cursor: pointer; z-index: 10; }
+
+        /* Glowing Blue Heart */
+        .heart {
+            font-size: 80px;
+            color: #4cc9f0;
+            text-shadow: 0 0 20px #4cc9f0, 0 0 40px #4361ee;
+            transition: transform 0.3s ease;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.1); filter: brightness(1.3); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        /* The Letter Box */
+        #letter {
+            display: none;
+            background: rgba(15, 15, 27, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(76, 201, 240, 0.3);
+            max-width: 400px;
+            border: 1px solid #4361ee;
+            backdrop-filter: blur(10px);
+        }
+
+        h2 { color: #4cc9f0; margin-top: 0; letter-spacing: 2px; }
+        p { line-height: 1.8; color: #e0e0e0; font-size: 1.05rem; }
+        .signature { margin-top: 25px; font-weight: bold; color: #4cc9f0; text-shadow: 0 0 5px #4361ee; }
+
+        /* Blue Star Particles */
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: twinkle var(--duration) infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        .blue-heart-fly {
+            position: absolute;
+            color: #4361ee;
+            animation: fly 4s linear forwards;
+            pointer-events: none;
+        }
+
+        @keyframes fly {
+            0% { transform: translateY(0) scale(0); opacity: 1; }
+            100% { transform: translateY(-100vh) scale(1.5); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        for (let i = 0; i < 50; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.width = Math.random() * 3 + 'px';
+            star.style.height = star.style.width;
+            star.style.left = Math.random() * 100 + 'vw';
+            star.style.top = Math.random() * 100 + 'vh';
+            star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
+            document.body.appendChild(star);
+        }
+    </script>
+
+    <div class="container" id="wrapper" onclick="openLetter()">
+        <div id="envelope">
+            <div class="heart">💙</div>
+            <p style="color: #4cc9f0; text-transform: uppercase; letter-spacing: 3px; font-size: 0.8rem; margin-top: 15px;">
+                Touch the heart
+            </p>
+        </div>
+
+        <div id="letter">
+            <h2>To My North Star,</h2>
+            <p>
+                In a world full of noise, you are my favorite kind of quiet. 
+                Like the night sky, you are beautiful, deep, and I find myself 
+                lost in your light every single day.
+            </p>
+            <p>You make everything feel a little more magical.</p>
+            <div class="signature">Yours Forever, <br> [Your dev ]</div>
+        </div>
+    </div>
+
+    <script>
+        function openLetter() {
+            document.getElementById('envelope').style.display = 'none';
+            document.getElementById('letter').style.display = 'block';
+            
+            // Blue heart explosion
+            for(let i=0; i<30; i++) {
+                setTimeout(createBlueHeart, i * 100);
+            }
+        }
+
+        function createBlueHeart() {
+            const bh = document.createElement('div');
+            bh.classList.add('blue-heart-fly');
+            bh.innerHTML = '💙';
+            bh.style.left = Math.random() * 100 + 'vw';
+            bh.style.top = '100vh';
+            bh.style.fontSize = (Math.random() * 20 + 15) + 'px';
+            document.body.appendChild(bh);
+            
+            setTimeout(() => { bh.remove(); }, 4000);
+        }
+    </script>
+</body>
+</html>
