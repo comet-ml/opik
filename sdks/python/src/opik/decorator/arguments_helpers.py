@@ -71,6 +71,7 @@ class TrackOptions(BaseArguments):
     generations_aggregator: Optional[Callable[[List[Any]], Any]]
     flush: bool
     project_name: Optional[str]
+    create_duplicate_root_span: bool
 
 
 def create_span_data(
