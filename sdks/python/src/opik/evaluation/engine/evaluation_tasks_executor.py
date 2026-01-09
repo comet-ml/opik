@@ -71,21 +71,7 @@ def execute(
 
         return test_results
 
-    with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        test_result_futures = [
-            pool.submit(evaluation_task) for evaluation_task in evaluation_tasks
-        ]
-
-        test_results = [
-            test_result_future.result()
-            for test_result_future in _tqdm(
-                futures.as_completed(
-                    test_result_futures,
-                ),
-                disable=(verbose < 1),
-                desc=desc,
-                total=len(test_result_futures),
-            )
-        ]
-
-    return test_results
+    with StreamingExecutor[T](workers=workers, verbose=verbose, desc=desc) as executor:
+        for evaluation_task in evaluation_tasks:
+            executor.submit(evaluation_task)
+        return executor.get_results()
