@@ -128,7 +128,7 @@ component:
       failureThreshold: 2
     readinessProbe:
       httpGet:
-        path: /health-check?name=all&type=alive
+        path: /health-check?name=all&type=ready
         port: 8080
         httpHeaders:
           - name: Accept
