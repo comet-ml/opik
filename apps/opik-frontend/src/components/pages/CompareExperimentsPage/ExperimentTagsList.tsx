@@ -4,7 +4,7 @@ import { Experiment } from "@/types/datasets";
 
 type ExperimentTagsListProps = {
   tags: string[];
-  experiment?: Experiment;
+  experiment: Experiment;
   experimentId: string;
   className?: string;
 };
