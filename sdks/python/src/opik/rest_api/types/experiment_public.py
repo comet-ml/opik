@@ -23,6 +23,7 @@ class ExperimentPublic(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListStringPublic] = None
+    tags: typing.Optional[typing.List[str]] = None
     type: typing.Optional[ExperimentPublicType] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
