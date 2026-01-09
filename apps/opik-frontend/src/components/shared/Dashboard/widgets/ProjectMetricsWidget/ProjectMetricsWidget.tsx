@@ -59,11 +59,18 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const overrideDefaults = widget?.config?.overrideDefaults as
+    | boolean
+    | undefined;
 
   const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
     useMemo(() => {
       const { projectId: resolvedProjectId, infoMessage } =
-        resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
+        resolveProjectIdFromConfig(
+          widgetProjectId,
+          globalConfig.projectId,
+          overrideDefaults,
+        );
 
       const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
         globalConfig.dateRange,
@@ -76,7 +83,12 @@ const ProjectMetricsWidget: React.FunctionComponent<
         intervalStart,
         intervalEnd,
       };
-    }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+    }, [
+      widgetProjectId,
+      globalConfig.projectId,
+      globalConfig.dateRange,
+      overrideDefaults,
+    ]);
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
@@ -119,7 +131,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="Project not configured"
-          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          message="This widget needs a project to display data. Select a default project for the dashboard or set a custom one in the widget settings."
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />
@@ -130,7 +142,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
-          message="Please configure this widget to display a metric"
+          message="Choose a metric to display in this widget"
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />
@@ -189,7 +201,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}

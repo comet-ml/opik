@@ -7,6 +7,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Description } from "@/components/ui/description";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -28,13 +29,14 @@ interface DashboardFormFields {
   description?: string;
   projectId?: string;
   experimentIds?: string[];
+  templateType?: string;
 }
 
 interface DashboardDialogDetailsStepProps {
   control: Control<DashboardFormFields>;
   templateType?: string;
-  showProjectSelect?: boolean;
-  showExperimentsSelect?: boolean;
+  showDataSourceSection?: boolean;
+  descriptionExpanded?: boolean;
   onSubmit: () => void;
 }
 
@@ -43,8 +45,8 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
 > = ({
   control,
   templateType,
-  showProjectSelect,
-  showExperimentsSelect,
+  showDataSourceSection,
+  descriptionExpanded,
   onSubmit,
 }) => {
   const template = templateType
@@ -54,11 +56,20 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
   return (
     <div className="flex flex-col gap-4">
       {template && (
-        <DashboardTemplateCard
-          name={template.name}
-          description={template.description}
-          icon={template.icon}
-          iconColor={template.iconColor}
+        <FormField
+          control={control}
+          name="templateType"
+          render={() => (
+            <FormItem>
+              <FormLabel>Template</FormLabel>
+              <DashboardTemplateCard
+                name={template.name}
+                description={template.description}
+                icon={template.icon}
+                iconColor={template.iconColor}
+              />
+            </FormItem>
+          )}
         />
       )}
 
@@ -92,73 +103,96 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
         }}
       />
 
-      {showProjectSelect && (
-        <FormField
-          control={control}
-          name="projectId"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["projectId"]);
+      <Accordion
+        type="multiple"
+        defaultValue={descriptionExpanded ? ["description"] : []}
+        className="border-t"
+      >
+        <AccordionItem value="description">
+          <AccordionTrigger className="h-11 py-1.5">
+            Description
+          </AccordionTrigger>
+          <AccordionContent className="px-3">
+            <Textarea
+              {...control.register("description")}
+              placeholder="Dashboard description"
+              maxLength={255}
+            />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
-            return (
-              <FormItem>
-                <FormLabel>Project</FormLabel>
-                <FormControl>
-                  <ProjectsSelectBox
-                    value={field.value || ""}
-                    onValueChange={field.onChange}
-                    className={cn({
-                      "border-destructive": Boolean(validationErrors?.message),
-                    })}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
+      {showDataSourceSection && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <h4 className="comet-body-accented">Default data source</h4>
+            <Description>
+              Choose default project and experiments to preview data in this
+              dashboard. Individual widgets can override these settings if
+              needed.
+            </Description>
+          </div>
+
+          <FormField
+            control={control}
+            name="experimentIds"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, ["experimentIds"]);
+
+              return (
+                <FormItem>
+                  <FormLabel>Default experiments (optional)</FormLabel>
+                  <FormControl>
+                    <ExperimentsSelectBox
+                      value={field.value || []}
+                      onValueChange={field.onChange}
+                      multiselect
+                      showClearButton
+                      className={cn("flex-1", {
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                    />
+                  </FormControl>
+                  <Description>
+                    Used by widgets that show experiment data.
+                  </Description>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          <FormField
+            control={control}
+            name="projectId"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, ["projectId"]);
+
+              return (
+                <FormItem>
+                  <FormLabel>Default project (optional)</FormLabel>
+                  <FormControl>
+                    <ProjectsSelectBox
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      showClearButton
+                      className={cn("flex-1", {
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                    />
+                  </FormControl>
+                  <Description>Used to preview data by default.</Description>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+        </div>
       )}
-
-      {showExperimentsSelect && (
-        <FormField
-          control={control}
-          name="experimentIds"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["experimentIds"]);
-
-            return (
-              <FormItem>
-                <FormLabel>Experiments</FormLabel>
-                <FormControl>
-                  <ExperimentsSelectBox
-                    value={field.value || []}
-                    onValueChange={field.onChange}
-                    multiselect
-                    className={cn({
-                      "border-destructive": Boolean(validationErrors?.message),
-                    })}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-      )}
-
-      <div className="flex flex-col gap-2 border-t border-border pt-2">
-        <Accordion type="multiple" defaultValue={["description"]}>
-          <AccordionItem value="description">
-            <AccordionTrigger>Description</AccordionTrigger>
-            <AccordionContent>
-              <Textarea
-                {...control.register("description")}
-                placeholder="Dashboard description"
-                maxLength={255}
-              />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </div>
     </div>
   );
 };

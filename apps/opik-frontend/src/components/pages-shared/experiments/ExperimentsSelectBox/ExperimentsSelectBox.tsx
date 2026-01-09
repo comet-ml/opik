@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
+import { cn } from "@/lib/utils";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import SelectBoxClearWrapper from "@/components/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import useExperimentsList, {
   UseExperimentsListParams,
 } from "@/api/datasets/useExperimentsList";
@@ -119,6 +121,7 @@ interface BaseExperimentsSelectBoxProps {
   minWidth?: number;
   customOptions?: DropdownOption<string>[];
   sorting?: Sorting;
+  showClearButton?: boolean;
 }
 
 interface SingleSelectExperimentsProps extends BaseExperimentsSelectBoxProps {
@@ -140,7 +143,14 @@ type ExperimentsSelectBoxProps =
   | MultiSelectExperimentsProps;
 
 const ExperimentsSelectBox: React.FC<ExperimentsSelectBoxProps> = (props) => {
-  const { className, disabled, minWidth, customOptions, sorting } = props;
+  const {
+    className,
+    disabled,
+    minWidth,
+    customOptions,
+    sorting,
+    showClearButton = false,
+  } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
   const { experiments, total, isLoading } = useExperimentsSelectData({
@@ -195,7 +205,19 @@ const ExperimentsSelectBox: React.FC<ExperimentsSelectBoxProps> = (props) => {
         multiselect: false as const,
       };
 
-  return (
+  const isClearable =
+    showClearButton &&
+    (props.multiselect ? props.value.length > 0 : Boolean(props.value));
+
+  const handleClear = useCallback(() => {
+    if (props.multiselect) {
+      props.onValueChange([]);
+    } else {
+      props.onValueChange("");
+    }
+  }, [props]);
+
+  const selectBox = (
     <LoadableSelectBox
       {...loadableSelectBoxProps}
       onLoadMore={
@@ -203,12 +225,30 @@ const ExperimentsSelectBox: React.FC<ExperimentsSelectBoxProps> = (props) => {
           ? loadMoreHandler
           : undefined
       }
-      buttonClassName={className}
+      buttonClassName={cn(className, {
+        "rounded-r-none": isClearable,
+      })}
       minWidth={minWidth}
       disabled={disabled}
       isLoading={isLoading}
       optionsCount={DEFAULT_LOADED_EXPERIMENT_ITEMS}
     />
+  );
+
+  if (!showClearButton) {
+    return selectBox;
+  }
+
+  return (
+    <SelectBoxClearWrapper
+      isClearable={isClearable}
+      onClear={handleClear}
+      disabled={disabled}
+      clearTooltip="Clear experiment selection"
+      buttonSize="icon"
+    >
+      {selectBox}
+    </SelectBoxClearWrapper>
   );
 };
 
