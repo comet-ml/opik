@@ -13,9 +13,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamCreateGroupArgs;
-import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.Config;
@@ -63,8 +63,7 @@ class BaseRedisSubscriberTest {
         var redissonConfig = new Config();
         redissonConfig.useSingleServer()
                 .setAddress(redis.getRedisURI())
-                .setDatabase(0)
-                .setRetryAttempts(0); // Disable retries for faster test execution
+                .setDatabase(0);
         redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
         redissonClient = Redisson.create(redissonConfig).reactive();
 

@@ -4,20 +4,19 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.redisson.api.RedissonClient;
-import org.redisson.api.redisnode.RedisNodes;
+import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RedisHealthCheck extends NamedHealthCheck {
 
-    private final @NonNull RedissonClient redisClient;
+    private final @NonNull RedissonReactiveClient redisClient;
 
     @Override
     protected Result check() {
         try {
-            if (redisClient.getRedisNodes(RedisNodes.SINGLE).pingAll()) {
+            if (redisClient.getNodesGroup().pingAll()) {
                 return Result.healthy();
             }
         } catch (Exception ex) {
