@@ -89,6 +89,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         name: str | None = None,
         use_hall_of_fame: bool = True,
         prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
             model=model,
@@ -96,6 +98,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
         )
         self.prompts_per_round = prompts_per_round
         self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
@@ -430,6 +434,46 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             baseline_reporter.set_score(initial_score)
 
+        if self._should_skip_optimization(initial_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping meta-prompt optimization.",
+                initial_score,
+                self.perfect_score,
+            )
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=best_prompts,
+                initial_prompts=initial_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            reporting.display_result(
+                initial_score=initial_score,
+                best_score=initial_score,
+                prompt=early_result_prompt,
+                verbose=self.verbose,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=initial_score,
+                metric_name=metric.__name__,
+                details={
+                    "rounds": [],
+                    "total_rounds": 0,
+                    "metric_name": metric.__name__,
+                    "stopped_early": True,
+                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                },
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset_id,
+                optimization_id=optimization_id,
+            )
+
         reporting.display_optimization_start_message(verbose=self.verbose)
 
         # Calculate the maximum number of rounds, we will stop early if we hit the
@@ -485,6 +529,47 @@ class MetaPromptOptimizer(BaseOptimizer):
                         bundle.prompts
                         for bundle in bundle_candidates[:prompts_this_round]
                     ]
+
+                    synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+                    if (
+                        is_single_prompt_optimization
+                        and self.synthesis_prompts_per_round > 0
+                        and round_num >= self.synthesis_start_round
+                        and self.synthesis_round_interval > 0
+                        and (round_num - self.synthesis_start_round)
+                        % self.synthesis_round_interval
+                        == 0
+                    ):
+                        try:
+                            synthesis_prompts = (
+                                candidate_ops.generate_synthesis_prompts(
+                                    optimizer=self,
+                                    current_prompt=list(best_prompts.values())[0],
+                                    best_score=best_score,
+                                    previous_rounds=rounds,
+                                    metric=metric,
+                                    get_task_context_fn=self._get_task_context,
+                                    optimization_id=optimization_id,
+                                    project_name=self.project_name,
+                                )
+                            )
+                            prompt_key = next(iter(best_prompts.keys()))
+                            synthesis_candidates = [
+                                {prompt_key: prompt} for prompt in synthesis_prompts
+                            ]
+                        except Exception as synth_exc:
+                            if isinstance(
+                                synth_exc,
+                                (BadRequestError, StructuredOutputParsingError),
+                            ):
+                                raise
+                            logger.warning(
+                                "Synthesis prompt generation failed: %s", synth_exc
+                            )
+
+                    if synthesis_candidates:
+                        candidate_prompts = synthesis_candidates + candidate_prompts
+                        candidate_prompts = candidate_prompts[:prompts_this_round]
 
                 except Exception as e:
                     if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
@@ -587,16 +672,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                 round_num += 1
 
         # Prepare result prompts based on single vs multi-prompt mode
-        result_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompt: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_prompt, result_initial_prompt = self._select_result_prompts(
+            best_prompts=best_prompts,
+            initial_prompts=initial_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
         )
-        if is_single_prompt_optimization:
-            result_prompt = list(best_prompts.values())[0]
-            result_initial_prompt = list(initial_prompts.values())[0]
-        else:
-            result_prompt = best_prompts
-            result_initial_prompt = initial_prompts
 
         reporting.display_result(
             initial_score=initial_score,
@@ -661,28 +741,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             max_tokens=self.max_context_tokens,
             model=self.model,
             extract_metric_understanding=self.extract_metric_understanding,
-        )
-
-    def _generate_synthesis_prompts(
-        self,
-        current_prompt: chat_prompt.ChatPrompt,
-        best_score: float,
-        round_num: int,
-        previous_rounds: list[OptimizationRound],
-        metric: MetricFunction,
-        optimization_id: str | None = None,
-        project_name: str | None = None,
-    ) -> list[chat_prompt.ChatPrompt]:
-        """Generate synthesis prompts that combine top performers."""
-        return candidate_ops.generate_synthesis_prompts(
-            optimizer=self,
-            current_prompt=current_prompt,
-            best_score=best_score,
-            previous_rounds=previous_rounds,
-            metric=metric,
-            get_task_context_fn=self._get_task_context,
-            optimization_id=optimization_id,
-            project_name=project_name,
         )
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:

@@ -110,6 +110,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = DEFAULT_SEED,
         name: str | None = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         # Initialize base class first
         if sys.version_info >= (3, 13):
@@ -125,6 +127,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
         )
         self.population_size = population_size
         self.num_generations = num_generations
@@ -593,6 +597,50 @@ class EvolutionaryOptimizer(BaseOptimizer):
             best_prompts_overall = optimizable_prompts
             report_baseline_performance.set_score(initial_primary_score)
 
+        if self._should_skip_optimization(initial_primary_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping evolutionary optimization.",
+                initial_primary_score,
+                self.perfect_score,
+            )
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=optimizable_prompts,
+                initial_prompts=optimizable_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            reporting.display_result(
+                initial_score=initial_primary_score,
+                best_score=initial_primary_score,
+                prompt=early_result_prompt,
+                verbose=self.verbose,
+            )
+
+            early_details: dict[str, Any] = {
+                "initial_primary_score": initial_primary_score,
+                "initial_length": initial_length,
+                "final_prompts": optimizable_prompts,
+                "final_score": initial_primary_score,
+                "stopped_early": True,
+                "stopped_early_reason": "baseline_score_met_threshold",
+                "perfect_score": self.perfect_score,
+                "skip_perfect_score": self.skip_perfect_score,
+                "trials_used": 0,
+            }
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=initial_primary_score,
+                metric_name=metric.__name__,
+                details=early_details,
+                history=[],
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset.id,
+                optimization_id=self.current_optimization_id,
+            )
+
         # Step 3. Define the output style guide
         effective_output_style_guidance = self.output_style_guidance
         if self.infer_output_style and (
@@ -970,12 +1018,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Return the OptimizationResult
         # Display result - show single prompt or all prompts based on optimization type
-        if is_single_prompt_optimization:
-            display_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(final_best_prompts.values())[0]
-        else:
-            display_prompt = final_best_prompts
+        display_prompt, _ = self._select_result_prompts(
+            best_prompts=final_best_prompts,
+            initial_prompts=final_best_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
         reporting.display_result(
             initial_score=initial_score_for_display,
             best_score=final_primary_score,
@@ -992,18 +1039,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
             final_details["final_tools"] = all_final_tools
 
         # Convert result format based on input type
-        if is_single_prompt_optimization:
-            # Return single prompt (first one from dict)
-            result_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(final_best_prompts.values())[0]
-            result_initial_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(optimizable_prompts.values())[0]
-        else:
-            # Return all prompts as dict
-            result_prompt = final_best_prompts
-            result_initial_prompt = optimizable_prompts
+        result_prompt, result_initial_prompt = self._select_result_prompts(
+            best_prompts=final_best_prompts,
+            initial_prompts=optimizable_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

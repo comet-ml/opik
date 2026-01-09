@@ -73,9 +73,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         enable_diversity: bool = True,
         enable_multivariate_tpe: bool = True,
         enable_optuna_pruning: bool = True,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
-            model, verbose, seed=seed, model_parameters=model_parameters, name=name
+            model,
+            verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
         )
         self.min_examples = min_examples
         self.max_examples = max_examples
@@ -777,6 +785,50 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
 
             eval_report.set_score(baseline_score)
+
+        if self._should_skip_optimization(baseline_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping few-shot optimization.",
+                baseline_score,
+                self.perfect_score,
+            )
+            reporting.display_result(
+                initial_score=baseline_score,
+                best_score=baseline_score,
+                prompt=optimizable_prompts,
+                verbose=self.verbose,
+            )
+
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=optimizable_prompts,
+                initial_prompts=optimizable_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=baseline_score,
+                metric_name=metric.__name__,
+                details={
+                    "initial_score": baseline_score,
+                    "total_trials": 0,
+                    "total_rounds": 0,
+                    "rounds": [],
+                    "stopped_early": True,
+                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                    "model": self.model,
+                    "temperature": self.model_parameters.get("temperature"),
+                },
+                history=[],
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset.id,
+                optimization_id=optimization.id if optimization is not None else None,
+            )
 
         # Step 2. Create the few-shot prompt template
         prompts_with_placeholder, fewshot_template = (

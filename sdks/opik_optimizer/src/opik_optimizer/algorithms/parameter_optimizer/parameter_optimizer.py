@@ -59,6 +59,8 @@ class ParameterOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
             model=model,
@@ -66,6 +68,8 @@ class ParameterOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
         )
         self.default_n_trials = default_n_trials
         self.n_threads = n_threads
@@ -274,6 +278,67 @@ class ParameterOptimizer(BaseOptimizer):
                 n_samples=n_samples,
             )
             baseline_reporter.set_score(baseline_score)
+
+        if self._should_skip_optimization(baseline_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping parameter optimization.",
+                baseline_score,
+                self.perfect_score,
+            )
+            display_prompt = (
+                list(base_prompts.values())[0]
+                if is_single_prompt_optimization
+                else base_prompts
+            )
+            reporting.display_result(
+                initial_score=baseline_score,
+                best_score=baseline_score,
+                prompt=display_prompt,
+                verbose=self.verbose,
+            )
+
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=base_prompts,
+                initial_prompts=base_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=baseline_score,
+                metric_name=metric.__name__,
+                details={
+                    "initial_score": baseline_score,
+                    "optimized_parameters": {},
+                    "optimized_model_kwargs": base_model_kwargs,
+                    "optimized_model": list(base_prompts.values())[0].model,
+                    "trials": [],
+                    "parameter_space": expanded_parameter_space.model_dump(
+                        by_alias=True
+                    ),
+                    "n_trials": 0,
+                    "model": list(base_prompts.values())[0].model,
+                    "rounds": [],
+                    "baseline_parameters": base_model_kwargs,
+                    "local_trials": 0,
+                    "global_trials": 0,
+                    "search_stages": [],
+                    "search_ranges": {},
+                    "parameter_importance": {},
+                    "parameter_precision": 6,
+                    "stopped_early": True,
+                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                },
+                history=[],
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                optimization_id=optimization.id,
+                dataset_id=dataset.id,
+            )
 
         # Use first prompt for model info in history
         first_prompt = list(base_prompts.values())[0]
@@ -615,16 +680,11 @@ class ParameterOptimizer(BaseOptimizer):
         }
 
         # Prepare result prompt based on single vs multi-prompt optimization
-        if is_single_prompt_optimization:
-            result_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(best_tuned_prompts.values())[0]
-            initial_prompt_result: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(base_prompts.values())[0]
-        else:
-            result_prompt = best_tuned_prompts
-            initial_prompt_result = base_prompts
+        result_prompt, initial_prompt_result = self._select_result_prompts(
+            best_prompts=best_tuned_prompts,
+            initial_prompts=base_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

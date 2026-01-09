@@ -57,6 +57,8 @@ class BaseOptimizer(ABC):
         reasoning_model: str | None = None,
         reasoning_model_parameters: dict[str, Any] | None = None,
         name: str | None = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         """
         Base class for optimizers.
@@ -73,6 +75,8 @@ class BaseOptimizer(ABC):
            reasoning_model: Optional override for the optimizer's reasoning/analysis model. Falls back to ``model``.
            reasoning_model_parameters: Optional LiteLLM params for the reasoning model. Falls back to ``model_parameters``.
            name: Optional name for the optimizer instance. This will be used when creating optimizations.
+           skip_perfect_score: Whether to short-circuit optimization when baseline is strong.
+           perfect_score: Score threshold treated as "good enough" for short-circuiting.
         """
         self.model = model
         self.model_parameters = model_parameters or {}
@@ -83,6 +87,8 @@ class BaseOptimizer(ABC):
         self.verbose = verbose
         self.seed = seed
         self.name = name
+        self.skip_perfect_score = skip_perfect_score
+        self.perfect_score = perfect_score
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
@@ -90,6 +96,26 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
+
+    def _should_skip_optimization(
+        self,
+        baseline_score: float | None,
+        *,
+        skip_perfect_score: bool | None = None,
+        perfect_score: float | None = None,
+    ) -> bool:
+        """Return True if the baseline score is already good enough."""
+        if baseline_score is None:
+            return False
+        effective_skip = (
+            self.skip_perfect_score
+            if skip_perfect_score is None
+            else skip_perfect_score
+        )
+        if not effective_skip:
+            return False
+        threshold = self.perfect_score if perfect_score is None else perfect_score
+        return baseline_score >= threshold
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
@@ -103,6 +129,37 @@ class BaseOptimizer(ABC):
     def _increment_tool_counter(self) -> None:
         """Increment the tool call counter."""
         self.tool_call_counter += 1
+
+    def _select_result_prompts(self, **kwargs: Any) -> tuple[Any, Any]:
+        """Return the result prompt(s) and initial prompt(s) for output."""
+        best_prompts = kwargs["best_prompts"]
+        initial_prompts = kwargs["initial_prompts"]
+        is_single_prompt_optimization = kwargs["is_single_prompt_optimization"]
+        if is_single_prompt_optimization:
+            return list(best_prompts.values())[0], list(initial_prompts.values())[0]
+        return best_prompts, initial_prompts
+
+    def _build_early_result(
+        self, **kwargs: Any
+    ) -> optimization_result.OptimizationResult:
+        """Build a baseline-only OptimizationResult when skipping optimization."""
+        score = kwargs["score"]
+        return optimization_result.OptimizationResult(
+            optimizer=kwargs["optimizer_name"],
+            prompt=kwargs["prompt"],
+            score=score,
+            metric_name=kwargs["metric_name"],
+            initial_prompt=kwargs["initial_prompt"],
+            initial_score=score,
+            details=kwargs["details"],
+            history=kwargs.get("history", []) or [],
+            llm_calls=kwargs.get("llm_calls"),
+            llm_calls_tools=kwargs.get("llm_calls_tools"),
+            llm_cost_total=kwargs.get("llm_cost_total"),
+            llm_token_usage_total=kwargs.get("llm_token_usage_total"),
+            dataset_id=kwargs.get("dataset_id"),
+            optimization_id=kwargs.get("optimization_id"),
+        )
 
     def cleanup(self) -> None:
         """
