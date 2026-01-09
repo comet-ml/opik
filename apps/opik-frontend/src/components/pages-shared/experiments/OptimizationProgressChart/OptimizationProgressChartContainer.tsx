@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
-import { Clock } from "lucide-react";
 
 import { formatDate } from "@/lib/date";
 import { Experiment } from "@/types/datasets";
@@ -11,9 +10,19 @@ import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import NoData from "@/components/shared/NoData/NoData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import useRotatingText from "@/hooks/useRotatingText";
 import OptimizationProgressChartContent, {
   ChartData,
 } from "./OptimizationProgressChartContent";
+
+const OPTIMIZATION_TIPS = [
+  "Running optimization trials...",
+  "Evaluating prompt variations...",
+  "Searching for better prompts...",
+  "Analyzing trial results...",
+  "Testing new configurations...",
+  "Exploring the prompt space...",
+];
 
 type OptimizationProgressChartContainerProps = {
   experiments: Experiment[];
@@ -25,6 +34,14 @@ type OptimizationProgressChartContainerProps = {
 const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
 > = ({ experiments, bestEntityId, status, objectiveName = "" }) => {
+  const isInProgress =
+    !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+
+  const { currentText: currentTip } = useRotatingText({
+    texts: OPTIMIZATION_TIPS,
+    enabled: isInProgress,
+  });
+
   const chartData = useMemo(() => {
     const retVal: ChartData = {
       data: [],
@@ -72,18 +89,21 @@ const OptimizationProgressChartContainer: React.FC<
     }
 
     if (noData) {
-      const isInProgress =
-        !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+      if (isInProgress) {
+        return (
+          <div className="flex min-h-32 flex-col items-center justify-center gap-2">
+            <Spinner size="small" />
+            <div className="comet-body-s text-muted-slate transition-opacity duration-300">
+              {currentTip}
+            </div>
+          </div>
+        );
+      }
 
       return (
         <NoData
           className="min-h-32 text-light-slate"
-          icon={
-            isInProgress ? <Clock className="text-muted-slate" /> : undefined
-          }
-          message={
-            isInProgress ? "Results will appear shortly" : "No data to show"
-          }
+          message="No data to show"
         />
       );
     }
@@ -94,7 +114,7 @@ const OptimizationProgressChartContainer: React.FC<
         bestEntityId={bestEntityId}
       />
     );
-  }, [isPending, noData, chartData, bestEntityId, status]);
+  }, [isPending, noData, chartData, bestEntityId, isInProgress, currentTip]);
 
   return (
     <Card className="h-[224px] min-w-[400px] flex-auto">

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Optimization } from "@/types/optimizations";
 import useOptimizationStudioLogs from "@/api/optimizations/useOptimizationStudioLogs";
 import Loader from "@/components/shared/Loader/Loader";
+import { Spinner } from "@/components/ui/spinner";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import {
@@ -104,18 +105,24 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     return null;
   }
 
+  const isInProgress =
+    optimization?.status &&
+    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
   const renderContent = () => {
     if (isPending && !logContent) {
-      return <Loader />;
+      return (
+        <Loader
+          message={isInProgress ? "Waiting for logs..." : "Loading logs..."}
+          className="min-h-32"
+        />
+      );
     }
 
     if (!logContent) {
-      const isInProgress =
-        optimization?.status &&
-        IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
-
       return (
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-2">
+          {isInProgress && <Spinner size="small" />}
           <div className="comet-body-s text-muted-slate">
             {isInProgress ? "Logs will appear shortly" : "No logs available"}
           </div>
