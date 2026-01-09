@@ -162,7 +162,7 @@ class GepaOptimizer(BaseOptimizer):
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
         skip_perfect_score: bool = True,
-        perfect_score: float = 1.0,
+        perfect_score: float = 0.95,
         use_merge: bool = False,
         max_merge_invocations: int = 5,
         run_dir: str | None = None,
