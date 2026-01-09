@@ -52,8 +52,7 @@ public interface DatasetExportJobDAO {
             UPDATE dataset_export_jobs
             SET status = :status,
                 file_path = :filePath,
-                error_message = :errorMessage,
-                last_updated_at = :lastUpdatedAt
+                error_message = :errorMessage
             WHERE id = :id
                 AND workspace_id = :workspaceId
             """)
@@ -61,8 +60,7 @@ public interface DatasetExportJobDAO {
             @Bind("id") UUID id,
             @Bind("status") DatasetExportStatus status,
             @Bind("filePath") String filePath,
-            @Bind("errorMessage") String errorMessage,
-            @Bind("lastUpdatedAt") Instant lastUpdatedAt);
+            @Bind("errorMessage") String errorMessage);
 
     @SqlQuery("""
             SELECT

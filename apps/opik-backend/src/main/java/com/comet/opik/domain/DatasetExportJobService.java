@@ -125,7 +125,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.update(workspaceId, jobId, status, filePath, errorMessage, Instant.now());
+                    int updated = dao.update(workspaceId, jobId, status, filePath, errorMessage);
 
                     if (updated == 0) {
                         throw new NotFoundException("Export job not found: '%s'".formatted(jobId));

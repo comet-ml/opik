@@ -211,7 +211,7 @@ class DatasetExportJobServiceImplTest {
         // Given
         String filePath = "workspace/exports/dataset-123/job-456.csv";
         String errorMessage = null;
-        when(exportJobDAO.update(any(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.update(any(), any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobStatus(JOB_ID, DatasetExportStatus.COMPLETED, filePath, errorMessage)
@@ -223,14 +223,14 @@ class DatasetExportJobServiceImplTest {
 
         // Verify DAO.update() was called
         verify(exportJobDAO, times(1)).update(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.COMPLETED),
-                eq(filePath), eq(errorMessage), any());
+                eq(filePath), eq(errorMessage));
     }
 
     @Test
     void updateJobStatus_shouldUpdateWithErrorMessage_whenFailed() {
         // Given
         String errorMessage = "Export failed due to timeout";
-        when(exportJobDAO.update(any(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.update(any(), any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobStatus(JOB_ID, DatasetExportStatus.FAILED, null, errorMessage)
@@ -242,14 +242,14 @@ class DatasetExportJobServiceImplTest {
 
         // Verify DAO.update() was called
         verify(exportJobDAO, times(1)).update(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.FAILED), eq(null),
-                eq(errorMessage), any());
+                eq(errorMessage));
     }
 
     @Test
     void updateJobStatus_shouldThrowNotFoundException_whenJobDoesNotExist() {
         // Given
         String filePath = "workspace/exports/dataset-123/job-456.csv";
-        when(exportJobDAO.update(any(), any(), any(), any(), any(), any())).thenReturn(0); // No rows updated
+        when(exportJobDAO.update(any(), any(), any(), any(), any())).thenReturn(0); // No rows updated
 
         // When
         Mono<Void> result = service.updateJobStatus(JOB_ID, DatasetExportStatus.COMPLETED, filePath, null)
@@ -263,6 +263,6 @@ class DatasetExportJobServiceImplTest {
 
         // Verify DAO.update() was called
         verify(exportJobDAO, times(1)).update(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.COMPLETED),
-                eq(filePath), eq(null), any());
+                eq(filePath), eq(null));
     }
 }
