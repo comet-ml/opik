@@ -233,7 +233,8 @@ class OpikCallback(dspy_callback.BaseCallback):
                 # Store the original provider (e.g., "openrouter") in metadata
                 extra_metadata["llm_router"] = span_data.provider
                 # Update to the actual provider for accurate cost tracking
-                update_kwargs["provider"] = actual_provider
+                # Use lowercase to match backend pricing map keys
+                update_kwargs["provider"] = actual_provider.lower()
 
             if (
                 actual_model is not None

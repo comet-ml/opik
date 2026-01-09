@@ -129,9 +129,9 @@ def extract_lm_info_from_history(
         # Extract cost from history entry or usage dict
         # OpenRouter and other providers return accurate cost including all token types
         total_cost: Optional[float] = None
-        if last_entry.get("cost") is not None:
+        if last_entry.get("cost") and last_entry.get("cost") > 0:
             total_cost = last_entry.get("cost")
-        elif usage_dict and usage_dict.get("cost") is not None:
+        elif usage_dict and usage_dict.get("cost") and usage_dict.get("cost") > 0:
             total_cost = usage_dict.get("cost")
 
         # Get explicit cache_hit if set, otherwise infer from usage (empty = cached)
@@ -158,7 +158,7 @@ def extract_lm_info_from_history(
                 cache_hit=cache_hit,
                 actual_provider=actual_provider,
                 actual_model=actual_model,
-                total_cost=total_cost,
+                total_cost=None,
             )
     except Exception:
         LOGGER.debug(
