@@ -252,7 +252,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.readinessProbe.failureThreshold | int | `2` |  |
 | component.backend.readinessProbe.httpGet.httpHeaders[0].name | string | `"Accept"` |  |
 | component.backend.readinessProbe.httpGet.httpHeaders[0].value | string | `"application/json"` |  |
-| component.backend.readinessProbe.httpGet.path | string | `"/health-check?name=all&type=alive"` |  |
+| component.backend.readinessProbe.httpGet.path | string | `"/health-check?name=all&type=ready"` |  |
 | component.backend.readinessProbe.httpGet.port | int | `8080` |  |
 | component.backend.readinessProbe.initialDelaySeconds | int | `20` |  |
 | component.backend.readinessProbe.periodSeconds | int | `10` |  |
