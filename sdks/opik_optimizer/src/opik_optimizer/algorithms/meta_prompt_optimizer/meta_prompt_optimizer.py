@@ -696,7 +696,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             dataset_id=dataset_id,
             optimization_id=optimization_id,
             llm_call_counter=self.llm_call_counter,
-            tool_call_counter=self.tool_call_counter,
+            tool_call_counter=self.llm_calls_tools_counter,
         )
 
     def _create_round_data(

@@ -669,7 +669,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
         )

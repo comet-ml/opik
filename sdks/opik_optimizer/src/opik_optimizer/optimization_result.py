@@ -81,7 +81,9 @@ class OptimizationResult(pydantic.BaseModel):
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
     history: list[dict[str, Any]] = []
     llm_calls: int | None = None
-    tool_calls: int | None = None
+    llm_calls_tools: int | None = None
+    llm_cost_total: float | None = None
+    llm_token_usage_total: dict[str, int] | None = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 

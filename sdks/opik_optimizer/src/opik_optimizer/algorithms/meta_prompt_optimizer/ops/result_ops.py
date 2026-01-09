@@ -148,7 +148,7 @@ def create_result(
         metric_name=metric.__name__,
         details=details,
         llm_calls=llm_call_counter,
-        tool_calls=tool_call_counter,
+        llm_calls_tools=tool_call_counter,
         dataset_id=dataset_id,
         optimization_id=optimization_id,
     )

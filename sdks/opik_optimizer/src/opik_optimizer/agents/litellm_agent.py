@@ -54,7 +54,31 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             },
             **(model_kwargs or {}),
         )
+        # Surface token usage/cost if litellm returned it
+        try:
+            response._opik_cost = getattr(response, "cost", None)
+            if hasattr(response, "usage") and response.usage is not None:
+                usage_obj = response.usage
+                response._opik_usage = {
+                    "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
+                    "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
+                    "total_tokens": getattr(usage_obj, "total_tokens", 0),
+                }
+        except Exception:
+            pass
         return response
+
+    def _apply_cost_usage_to_owner(self, response: Any) -> None:
+        """Propagate cost/usage to the owning optimizer if available."""
+        try:
+            optimizer_candidate = getattr(self, "_optimizer_owner", None)
+            if optimizer_candidate is not None:
+                optimizer_candidate._add_llm_cost(getattr(response, "_opik_cost", None))
+                optimizer_candidate._add_llm_usage(
+                    getattr(response, "_opik_usage", None)
+                )
+        except Exception:
+            pass
 
     def invoke_agent(
         self,
@@ -100,6 +124,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 )
 
                 _llm_calls._increment_llm_counter_if_in_optimizer()
+                self._apply_cost_usage_to_owner(response)
 
                 msg = response.choices[0].message
                 all_messages.append(msg.to_dict())
@@ -139,6 +164,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 model_kwargs=prompt.model_kwargs,
             )
             _llm_calls._increment_llm_counter_if_in_optimizer()
+            self._apply_cost_usage_to_owner(response)
             choices = response.choices or []
             if os.getenv("ARC_AGI2_DEBUG", "0") not in {"", "0", "false", "False"}:
                 try:

@@ -91,8 +91,16 @@ class BaseOptimizer(ABC):
         self.perfect_score = perfect_score
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
+        # Counters for usage/cost; tool_call_counter kept for backward compat
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+        self.llm_calls_tools_counter = 0
+        self.llm_cost_total: float = 0.0
+        self.llm_token_usage_total: dict[str, int] = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
@@ -121,6 +129,13 @@ class BaseOptimizer(ABC):
         """Reset all call counters for a new optimization run."""
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+        self.llm_calls_tools_counter = 0
+        self.llm_cost_total = 0.0
+        self.llm_token_usage_total = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
     def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
@@ -129,6 +144,32 @@ class BaseOptimizer(ABC):
     def _increment_tool_counter(self) -> None:
         """Increment the tool call counter."""
         self.tool_call_counter += 1
+        self.llm_calls_tools_counter += 1
+
+    def _add_llm_cost(self, cost: float | None) -> None:
+        """Accumulate cost across optimizer calls."""
+        if cost is None:
+            return
+        self.llm_cost_total += float(cost)
+
+    def _add_llm_usage(self, usage: dict[str, Any] | None) -> None:
+        """Accumulate token usage across optimizer calls."""
+        if not usage:
+            return
+        self.llm_token_usage_total["prompt_tokens"] += int(
+            usage.get("prompt_tokens", 0)
+        )
+        self.llm_token_usage_total["completion_tokens"] += int(
+            usage.get("completion_tokens", 0)
+        )
+        self.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
+
+    def _attach_agent_owner(self, agent: Any) -> None:
+        """Attach this optimizer to the agent so it can push counters/cost."""
+        try:
+            setattr(agent, "_optimizer_owner", self)
+        except Exception:
+            pass
 
     def _select_result_prompts(self, **kwargs: Any) -> tuple[Any, Any]:
         """Return the result prompt(s) and initial prompt(s) for output."""
@@ -613,6 +654,8 @@ class BaseOptimizer(ABC):
             agent = LiteLLMAgent(project_name=self.project_name)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
+            # Let the agent push usage/cost counters back into this optimizer.
+            self._attach_agent_owner(agent)
             # Wrap single prompt in dict for invoke_agent
             prompts_dict: dict[str, chat_prompt.ChatPrompt]
             if isinstance(prompt, dict):

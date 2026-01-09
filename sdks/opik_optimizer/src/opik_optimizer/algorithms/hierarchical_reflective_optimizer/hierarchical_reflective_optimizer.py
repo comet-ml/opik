@@ -704,6 +704,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
             "trials_used": trials_used,
+            "llm_cost_total": getattr(self, "llm_cost_total", None),
+            "llm_token_usage_total": getattr(self, "llm_token_usage_total", None),
         }
 
         return OptimizationResult(
