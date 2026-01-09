@@ -58,9 +58,13 @@ def test_streaming_starts_evaluation_before_complete_download(
         dataset.__internal_api__stream_items_as_dataclasses__.__func__
     )
 
-    def tracked_streaming_generator(self, nb_samples=None):
+    def tracked_streaming_generator(
+        self, nb_samples=None, batch_size=None, dataset_item_ids=None
+    ):
         """Wrapper that tracks when items are yielded."""
-        for item in original_stream_method(self, nb_samples):
+        for item in original_stream_method(
+            self, nb_samples, batch_size, dataset_item_ids
+        ):
             with events_lock:
                 events.append("yield")
             yield item

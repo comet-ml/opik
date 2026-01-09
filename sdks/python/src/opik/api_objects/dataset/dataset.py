@@ -184,12 +184,11 @@ class Dataset:
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
         LOGGER.debug("Start hash sync in dataset")
-        all_items = self.__internal_api__get_items_as_dataclasses__()
 
         self._id_to_hash = {}
         self._hashes = set()
 
-        for item in all_items:
+        for item in self.__internal_api__stream_items_as_dataclasses__():
             item_hash = item.content_hash()
             self._id_to_hash[item.id] = item_hash  # type: ignore
             self._hashes.add(item_hash)
@@ -239,8 +238,11 @@ class Dataset:
         """
         Delete all items from the given dataset.
         """
-        all_items = self.__internal_api__get_items_as_dataclasses__()
-        item_ids = [item.id for item in all_items if item.id is not None]
+        item_ids = [
+            item.id
+            for item in self.__internal_api__stream_items_as_dataclasses__()
+            if item.id is not None
+        ]
 
         self.delete(item_ids)
 
@@ -253,7 +255,7 @@ class Dataset:
         Returns:
             A pandas DataFrame containing all items in the dataset.
         """
-        dataset_items = self.__internal_api__get_items_as_dataclasses__()
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
 
         return converters.to_pandas(dataset_items, keys_mapping={})
 
@@ -264,7 +266,7 @@ class Dataset:
         Returns:
             A JSON string representation of all items in the dataset.
         """
-        dataset_items = self.__internal_api__get_items_as_dataclasses__()
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
 
         return converters.to_json(dataset_items, keys_mapping={})
 
@@ -278,88 +280,18 @@ class Dataset:
         Returns:
             A list of dictionaries objects representing the samples.
         """
-        dataset_items_as_dataclasses = self.__internal_api__get_items_as_dataclasses__(
-            nb_samples
-        )
         dataset_items_as_dicts = [
             {"id": item.id, **item.get_content()}
-            for item in dataset_items_as_dataclasses
+            for item in self.__internal_api__stream_items_as_dataclasses__(nb_samples)
         ]
 
         return dataset_items_as_dicts
-
-    @retry_decorator.opik_rest_retry
-    def __internal_api__get_items_as_dataclasses__(
-        self,
-        nb_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-    ) -> List[dataset_item.DatasetItem]:
-        results: List[dataset_item.DatasetItem] = []
-        last_retrieved_id: Optional[str] = None
-        should_retrieve_more_items = True
-
-        dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
-
-        while should_retrieve_more_items:
-            dataset_items = rest_stream_parser.read_and_parse_stream(
-                stream=self._rest_client.datasets.stream_dataset_items(
-                    dataset_name=self._name,
-                    last_retrieved_id=last_retrieved_id,
-                ),
-                item_class=dataset_item.DatasetItem,
-                nb_samples=nb_samples,
-            )
-
-            if len(dataset_items) == 0:
-                should_retrieve_more_items = False
-
-            for item in dataset_items:
-                dataset_item_id = item.id
-                last_retrieved_id = dataset_item_id
-
-                if dataset_items_ids_left is not None:
-                    if dataset_item_id not in dataset_items_ids_left:
-                        continue
-                    else:
-                        dataset_items_ids_left.remove(dataset_item_id)
-
-                data_item_content = item.get_content().get("data", {})
-
-                reconstructed_item = dataset_item.DatasetItem(
-                    id=item.id,
-                    trace_id=item.trace_id,
-                    span_id=item.span_id,
-                    source=item.source,
-                    **data_item_content,
-                )
-
-                results.append(reconstructed_item)
-
-                # Stop retrieving if we have enough samples
-                if nb_samples is not None and len(results) == nb_samples:
-                    should_retrieve_more_items = False
-                    break
-
-                # Stop retrieving if we found all filtered dataset items
-                if (
-                    dataset_items_ids_left is not None
-                    and len(dataset_items_ids_left) == 0
-                ):
-                    should_retrieve_more_items = False
-                    break
-
-        if dataset_items_ids_left and len(dataset_items_ids_left) > 0:
-            LOGGER.warning(
-                "The following dataset items were not found in the dataset: %s",
-                dataset_items_ids_left,
-            )
-
-        return results
 
     def __internal_api__stream_items_as_dataclasses__(
         self,
         nb_samples: Optional[int] = None,
         batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
     ) -> Iterator[dataset_item.DatasetItem]:
         """
         Stream dataset items as a generator instead of loading all at once.
@@ -372,13 +304,11 @@ class Dataset:
             nb_samples: Maximum number of items to retrieve. If None, all items are streamed.
             batch_size: Maximum number of items to fetch per batch from the backend.
                         If None, uses the default value from constants.DATASET_STREAM_BATCH_SIZE.
+            dataset_item_ids: Optional list of specific item IDs to retrieve. If provided,
+                            only items with matching IDs will be yielded.
 
         Yields:
             DatasetItem objects one at a time
-
-        Note:
-            This method does not support filtering by dataset_item_ids. Use
-            __internal_api__get_items_as_dataclasses__() for that functionality.
         """
         if batch_size is None:
             batch_size = constants.DATASET_STREAM_BATCH_SIZE
@@ -386,6 +316,7 @@ class Dataset:
         last_retrieved_id: Optional[str] = None
         should_retrieve_more_items = True
         items_yielded = 0
+        dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
 
         while should_retrieve_more_items:
             # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
@@ -408,7 +339,15 @@ class Dataset:
                 break
 
             for item in dataset_items:
-                last_retrieved_id = item.id
+                dataset_item_id = item.id
+                last_retrieved_id = dataset_item_id
+
+                # Filter by dataset_item_ids if provided
+                if dataset_items_ids_left is not None:
+                    if dataset_item_id not in dataset_items_ids_left:
+                        continue
+                    else:
+                        dataset_items_ids_left.remove(dataset_item_id)
 
                 reconstructed_item = dataset_item.DatasetItem(
                     id=item.id,
@@ -425,6 +364,21 @@ class Dataset:
                 if nb_samples is not None and items_yielded >= nb_samples:
                     should_retrieve_more_items = False
                     break
+
+                # Stop retrieving if we found all filtered dataset items
+                if (
+                    dataset_items_ids_left is not None
+                    and len(dataset_items_ids_left) == 0
+                ):
+                    should_retrieve_more_items = False
+                    break
+
+        # Warn if some requested items were not found
+        if dataset_items_ids_left and len(dataset_items_ids_left) > 0:
+            LOGGER.warning(
+                "The following dataset items were not found in the dataset: %s",
+                dataset_items_ids_left,
+            )
 
     def insert_from_json(
         self,

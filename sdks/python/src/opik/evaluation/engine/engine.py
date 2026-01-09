@@ -305,8 +305,7 @@ class EvaluationEngine:
     ) -> List[test_result.TestResult]:
         # Can't use streaming with these parameters yet, so fallback to non-streaming
         use_streaming = (
-            dataset_item_ids is None
-            and dataset_sampler is None
+            dataset_sampler is None
             and not self._metrics_evaluator.has_task_span_metrics
         )
 
@@ -314,12 +313,15 @@ class EvaluationEngine:
         if use_streaming:
             dataset_items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
                 nb_samples=nb_samples,
+                dataset_item_ids=dataset_item_ids,
             )
         else:
             LOGGER.info("Dataset streaming disabled due to evaluation parameters")
-            dataset_items_list = dataset_.__internal_api__get_items_as_dataclasses__(
-                nb_samples=nb_samples,
-                dataset_item_ids=dataset_item_ids,
+            dataset_items_list = list(
+                dataset_.__internal_api__stream_items_as_dataclasses__(
+                    nb_samples=nb_samples,
+                    dataset_item_ids=dataset_item_ids,
+                )
             )
 
             if dataset_sampler is not None:

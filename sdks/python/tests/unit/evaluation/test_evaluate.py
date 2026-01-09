@@ -639,37 +639,39 @@ def test_evaluate__with_random_sampler__happy_flow(
     # Creates a dataset with 5 items and then evaluates it using a random dataset sampler with 3 samples limit.
     # Checks that only three samples are selected and that the metrics are computed for the three samples.
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
     )
     mock_dataset.name = "the-dataset-name"
-    # When dataset_sampler is provided, non-streaming mode is used
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-2",
-            input={"message": "hi there"},
-            reference="hello",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-3",
-            input={"message": "how are you"},
-            reference="hello",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-4",
-            input={"message": "say bye"},
-            reference="bye",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-5",
-            input={"message": "see ya"},
-            reference="bye",
-        ),
-    ]
+    # When dataset_sampler is provided, streaming is used but exhausted to a list
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "hi there"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-3",
+                input={"message": "how are you"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-4",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-5",
+                input={"message": "see ya"},
+                reference="bye",
+            ),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         if dataset_item["reference"] == "hello":
@@ -705,8 +707,8 @@ def test_evaluate__with_random_sampler__happy_flow(
                 dataset_sampler=sampler,
             )
 
-    # When dataset_sampler is provided, non-streaming mode is used
-    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+    # When dataset_sampler is provided, streaming is still used but exhausted to a list
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once()
 
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
@@ -1303,37 +1305,39 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
     )
     mock_dataset.name = "the-dataset-name"
-    # When dataset_sampler is provided, non-streaming mode is used
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            question="Hello, world!",
-            reference="Hello, world!",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-2",
-            question="What is the capital of France?",
-            reference="Paris",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-3",
-            question="Say hello",
-            reference="Hello, world!",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-4",
-            question="How are you!",
-            reference="Hello, world!",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-5",
-            question="What time is it?",
-            reference="Tea time!",
-        ),
-    ]
+    # When dataset_sampler is provided, streaming is used but exhausted to a list
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-3",
+                question="Say hello",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-4",
+                question="How are you!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-5",
+                question="What time is it?",
+                reference="Tea time!",
+            ),
+        ]
+    )
 
     mock_experiment = mock.Mock()
     mock_create_experiment = mock.Mock()
@@ -1376,8 +1380,8 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
                     dataset_sampler=sampler,
                 )
 
-    # When dataset_sampler is provided, non-streaming mode is used
-    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+    # When dataset_sampler is provided, streaming is still used but exhausted to a list
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once()
 
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
@@ -2125,7 +2129,6 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
     """Test that evaluate uses streaming mode by default when no dataset_item_ids or dataset_sampler is provided."""
     mock_dataset = mock.MagicMock(
         spec=[
-            "__internal_api__get_items_as_dataclasses__",
             "__internal_api__stream_items_as_dataclasses__",
             "id",
         ]
@@ -2169,28 +2172,29 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
 
     # Verify streaming method was called and non-streaming was not
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
-        nb_samples=None
+        nb_samples=None,
+        dataset_item_ids=None,
     )
-    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_not_called()
 
 
-def test_evaluate__falls_back_to_non_streaming_with_dataset_item_ids(fake_backend):
-    """Test that evaluate falls back to non-streaming mode when dataset_item_ids is provided."""
+def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
+    """Test that evaluate uses streaming mode even when dataset_item_ids is provided."""
     mock_dataset = mock.MagicMock(
         spec=[
-            "__internal_api__get_items_as_dataclasses__",
             "__internal_api__stream_items_as_dataclasses__",
             "id",
         ]
     )
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
-        ),
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -2217,36 +2221,36 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_item_ids(fake_backen
                 dataset_item_ids=["dataset-item-id-1"],
             )
 
-    # Verify non-streaming method was called and streaming was not
-    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once_with(
+    # Verify streaming method was called with dataset_item_ids
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=["dataset-item-id-1"],
     )
-    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_not_called()
 
 
 def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend):
     """Test that evaluate falls back to non-streaming mode when dataset_sampler is provided."""
     mock_dataset = mock.MagicMock(
         spec=[
-            "__internal_api__get_items_as_dataclasses__",
             "__internal_api__stream_items_as_dataclasses__",
             "id",
         ]
     )
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
-        ),
-        dataset_item.DatasetItem(
-            id="dataset-item-id-2",
-            input={"message": "say bye"},
-            reference="bye",
-        ),
-    ]
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+        ]
+    )
 
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
@@ -2275,12 +2279,11 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
                 dataset_sampler=sampler,
             )
 
-    # Verify non-streaming method was called and streaming was not
-    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once_with(
+    # Verify streaming method was called (but list() was used to exhaust it for sampling)
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
     )
-    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_not_called()
 
 
 def test_evaluate__streaming_with_nb_samples(fake_backend):
@@ -2338,6 +2341,6 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
 
     # Verify streaming method was called with nb_samples parameter and non-streaming was not
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
-        nb_samples=2
+        nb_samples=2,
+        dataset_item_ids=None,
     )
-    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_not_called()
