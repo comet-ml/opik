@@ -28,9 +28,7 @@ def _make_dataset() -> MagicMock:
     dataset = MagicMock(spec=Dataset)
     dataset.name = "test-dataset"
     dataset.id = "dataset-123"
-    dataset.get_items.return_value = [
-        {"id": "1", "question": "Q1", "answer": "A1"}
-    ]
+    dataset.get_items.return_value = [{"id": "1", "question": "Q1", "answer": "A1"}]
     return dataset
 
 
@@ -49,11 +47,13 @@ def test_synthesis_prompts_called_on_schedule(
 
     called = {"synthesis": 0}
 
-    def fake_generate_agent_bundle_candidates(**kwargs: Any):
+    def fake_generate_agent_bundle_candidates(
+        **kwargs: Any,
+    ) -> list[AgentBundleCandidate]:
         prompt = ChatPrompt(system="baseline", user="{question}")
         return [AgentBundleCandidate(prompts={prompt.name: prompt}, metadata={})]
 
-    def fake_generate_synthesis_prompts(**kwargs: Any):
+    def fake_generate_synthesis_prompts(**kwargs: Any) -> list[ChatPrompt]:
         called["synthesis"] += 1
         return [ChatPrompt(system="synth", user="{question}")]
 

@@ -245,6 +245,13 @@ def _load_dhpr_dataset(
 
     ds.enable_progress_bar()
 
+    if len(data) < actual_nb_items:
+        filter_note = f" after filter_by={filter_by}" if filter_by else ""
+        raise ValueError(
+            f"Driving Hazard dataset{filter_note} yielded {len(data)} items; "
+            f"expected {actual_nb_items}. Adjust count or filter_by to avoid emptying the split."
+        )
+
     # Insert into Opik dataset
     dataset.insert(data)
 
@@ -281,6 +288,10 @@ def _process_dhpr_item(
     image_base64 = encode_image_to_base64_uri(
         pil_image, image_format="JPEG", quality=image_quality
     )
+    if image_base64 is None:
+        raise ValueError(
+            "Failed to encode image to base64 - image may be missing or corrupted."
+        )
 
     # Return processed item
     # The optimizer will use:

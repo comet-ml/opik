@@ -1,4 +1,5 @@
 import types
+from typing import Any, cast
 
 import pytest
 
@@ -13,7 +14,7 @@ class DummyOptimizer(BaseOptimizer):
     def __init__(self) -> None:
         super().__init__(model="dummy", verbose=0)
 
-    def optimize_prompt(self, *args, **kwargs):
+    def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("not used in this test")
 
 
@@ -21,16 +22,16 @@ class DummyResponse:
     """LiteLLM-style response stub."""
 
     class _Choice:
-        def __init__(self, content: str):
+        def __init__(self, content: str) -> None:
             self.message = types.SimpleNamespace(content=content)
 
     class _Usage:
-        def __init__(self):
+        def __init__(self) -> None:
             self.prompt_tokens = 3
             self.completion_tokens = 5
             self.total_tokens = 8
 
-    def __init__(self, content: str, cost: float | None):
+    def __init__(self, content: str, cost: float | None) -> None:
         self.choices = [self._Choice(content)]
         self.cost = cost
         self.usage = self._Usage()
@@ -52,10 +53,10 @@ def dummy_prompt() -> chat_prompt.ChatPrompt:
     )
 
 
-def test_apply_cost_usage_to_owner_updates_optimizer():
+def test_apply_cost_usage_to_owner_updates_optimizer() -> None:
     opt = DummyOptimizer()
     agent = LiteLLMAgent(project_name="test")
-    agent._optimizer_owner = opt
+    cast(Any, agent)._optimizer_owner = opt
     resp = DummyResponse("hi", cost=1.5)
 
     agent._apply_cost_usage_to_owner(resp)
@@ -66,12 +67,14 @@ def test_apply_cost_usage_to_owner_updates_optimizer():
     assert opt.llm_token_usage_total["total_tokens"] == 8
 
 
-def test_invoke_agent_accumulates_cost(monkeypatch, dummy_prompt):
+def test_invoke_agent_accumulates_cost(
+    monkeypatch: pytest.MonkeyPatch, dummy_prompt: chat_prompt.ChatPrompt
+) -> None:
     opt = DummyOptimizer()
     agent = LiteLLMAgent(project_name="test")
-    agent._optimizer_owner = opt
+    cast(Any, agent)._optimizer_owner = opt
 
-    def fake_complete(*args, **kwargs):
+    def fake_complete(*args: Any, **kwargs: Any) -> DummyResponse:
         return DummyResponse("hi there", cost=2.0)
 
     monkeypatch.setattr(agent, "_llm_complete", fake_complete)

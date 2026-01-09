@@ -6,6 +6,14 @@ from io import BytesIO
 from typing import Any
 
 
+def _is_safe_relative_path(path: str) -> bool:
+    if os.path.isabs(path):
+        return False
+    normalized = os.path.normpath(path)
+    parts = normalized.split(os.sep)
+    return ".." not in parts
+
+
 def encode_image_to_base64_uri(
     image: Any,
     *,
@@ -33,9 +41,12 @@ def encode_image_to_base64_uri(
             payload = raw
         else:
             path = image.get("path")
-            if path and os.path.exists(path):
-                with open(path, "rb") as handle:
-                    payload = handle.read()
+            if isinstance(path, str) and _is_safe_relative_path(path):
+                if os.path.exists(path) and os.path.isfile(path):
+                    with open(path, "rb") as handle:
+                        payload = handle.read()
+            elif path:
+                return None
     elif hasattr(image, "save"):
         buffer = BytesIO()
         fmt = getattr(image, "format", None)

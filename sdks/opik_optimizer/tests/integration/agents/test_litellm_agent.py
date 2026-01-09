@@ -6,6 +6,7 @@ Defaults to gpt-4o-mini; override via MODEL_FOR_COST_TEST.
 """
 
 import os
+from typing import Any, cast
 
 import pytest
 
@@ -20,12 +21,12 @@ class LiveCostOptimizer(BaseOptimizer):
     def __init__(self, model: str) -> None:
         super().__init__(model=model, verbose=0)
 
-    def optimize_prompt(self, *args, **kwargs):
+    def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("not used in this integration test")
 
 
 @pytest.mark.integration
-def test_live_cost_tracking_round_trip():
+def test_live_cost_tracking_round_trip() -> None:
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LITELLM_API_KEY")
     if not api_key:
         pytest.skip("No API key found for live cost test.")
@@ -39,7 +40,7 @@ def test_live_cost_tracking_round_trip():
 
     opt = LiveCostOptimizer(model=model)
     agent = LiteLLMAgent(project_name="opik-cost-test")
-    agent._optimizer_owner = opt
+    cast(Any, agent)._optimizer_owner = opt
 
     result = agent.invoke_agent({"p": prompt}, dataset_item={})
 
