@@ -15,7 +15,10 @@ from typing import (
 
 from opik.api_objects import rest_stream_parser
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import dataset_item_write as rest_dataset_item
+from opik.rest_api.types import (
+    dataset_item_write as rest_dataset_item,
+    dataset_item as rest_dataset_item_read,
+)
 from opik.rest_api.core.api_error import ApiError
 from opik.message_processing.batching import sequence_splitter
 from opik.rate_limit import rate_limit
@@ -387,14 +390,14 @@ class Dataset:
         while should_retrieve_more_items:
             # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
             @retry_decorator.opik_rest_retry
-            def _fetch_batch() -> List[dataset_item.DatasetItem]:
+            def _fetch_batch() -> List[rest_dataset_item_read.DatasetItem]:
                 return rest_stream_parser.read_and_parse_stream(
                     stream=self._rest_client.datasets.stream_dataset_items(
                         dataset_name=self._name,
                         last_retrieved_id=last_retrieved_id,
                         steam_limit=batch_size,
                     ),
-                    item_class=dataset_item.DatasetItem,
+                    item_class=rest_dataset_item_read.DatasetItem,
                     nb_samples=nb_samples,
                 )
 
@@ -407,14 +410,12 @@ class Dataset:
             for item in dataset_items:
                 last_retrieved_id = item.id
 
-                data_item_content = item.get_content().get("data", {})
-
                 reconstructed_item = dataset_item.DatasetItem(
                     id=item.id,
                     trace_id=item.trace_id,
                     span_id=item.span_id,
                     source=item.source,
-                    **data_item_content,
+                    **item.data,
                 )
 
                 yield reconstructed_item
