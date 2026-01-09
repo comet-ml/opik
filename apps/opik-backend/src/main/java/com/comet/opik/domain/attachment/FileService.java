@@ -44,6 +44,8 @@ public interface FileService {
 
     PutObjectResponse upload(String key, byte[] data, String contentType);
 
+    PutObjectResponse uploadStream(String key, InputStream inputStream, long contentLength, String contentType);
+
     InputStream download(String key);
 
     void deleteObjects(Set<String> keys);
@@ -114,6 +116,30 @@ class FileServiceImpl implements FileService {
                 .build();
 
         return s3Client.putObject(putRequest, RequestBody.fromBytes(data));
+    }
+
+    @Override
+    @WithSpan
+    public PutObjectResponse uploadStream(@NonNull String key, @NonNull InputStream inputStream, long contentLength,
+            @NonNull String contentType) {
+        log.info("Uploading file with streaming for key: '{}'", key);
+
+        PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(s3Config.getS3BucketName())
+                .key(key)
+                .contentType(contentType)
+                .contentLength(contentLength)
+                .build();
+
+        try {
+            PutObjectResponse response = s3Client.putObject(putRequest,
+                    RequestBody.fromInputStream(inputStream, contentLength));
+            log.info("Successfully uploaded file for key: '{}'", key);
+            return response;
+        } catch (Exception exception) {
+            log.error("Failed to upload file for key: '{}'", key, exception);
+            throw exception;
+        }
     }
 
     @Override
