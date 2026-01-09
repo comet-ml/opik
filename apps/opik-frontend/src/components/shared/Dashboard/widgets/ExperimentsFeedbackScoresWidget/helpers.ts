@@ -113,6 +113,7 @@ const calculateExperimentsFeedbackScoresTitle = (
 
 export const widgetHelpers = {
   getDefaultConfig: () => ({
+    dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
     filters: [],
     groups: [],
     chartType: CHART_TYPE.line,

@@ -26,6 +26,7 @@ import FeedbackDefinitionsAndScoresSelectBox, {
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Filter, ListChecks } from "lucide-react";
+import WidgetOverrideDefaultsSection from "@/components/shared/Dashboard/widgets/shared/WidgetOverrideDefaultsSection/WidgetOverrideDefaultsSection";
 
 import { cn } from "@/lib/utils";
 import { Filters } from "@/types/filters";
@@ -64,7 +65,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
     const { config } = widgetData;
 
     const dataSource =
-      config.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
+      config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
 
     const filters = useMemo(() => config.filters || [], [config.filters]);
 
@@ -82,6 +83,8 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
       [config.feedbackScores],
     );
 
+    const overrideDefaults = config.overrideDefaults || false;
+
     const form = useForm<ExperimentsFeedbackScoresWidgetFormData>({
       resolver: zodResolver(ExperimentsFeedbackScoresWidgetSchema),
       mode: "onTouched",
@@ -92,6 +95,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
         experimentIds,
         chartType,
         feedbackScores,
+        overrideDefaults,
       },
     });
 
@@ -175,132 +179,6 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
           <div className="space-y-4">
             <FormField
               control={form.control}
-              name="dataSource"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data source</FormLabel>
-                  <FormControl>
-                    <ToggleGroup
-                      type="single"
-                      variant="ghost"
-                      value={
-                        field.value || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
-                      }
-                      onValueChange={(value) => {
-                        if (value) {
-                          field.onChange(value);
-                          handleDataSourceChange(value);
-                        }
-                      }}
-                      className="w-fit justify-start"
-                    >
-                      <ToggleGroupItem
-                        value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
-                        aria-label="Filter experiments"
-                        className="gap-1.5"
-                      >
-                        <Filter className="size-3.5" />
-                        <span>Filter experiments</span>
-                      </ToggleGroupItem>
-                      <ToggleGroupItem
-                        value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
-                        aria-label="Manual selection"
-                        className="gap-1.5"
-                      >
-                        <ListChecks className="size-3.5" />
-                        <span>Manual selection</span>
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {form.watch("dataSource") ===
-              EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP && (
-              <ExperimentWidgetDataSection
-                control={form.control}
-                filtersFieldName="filters"
-                groupsFieldName="groups"
-                filters={filters}
-                groups={groups}
-                onFiltersChange={handleFiltersChange}
-                onGroupsChange={handleGroupsChange}
-              />
-            )}
-
-            {form.watch("dataSource") ===
-              EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS && (
-              <FormField
-                control={form.control}
-                name="experimentIds"
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, [
-                    "experimentIds",
-                  ]);
-                  return (
-                    <FormItem>
-                      <FormLabel>Manual selection</FormLabel>
-                      <FormControl>
-                        <ExperimentsSelectBox
-                          value={field.value || []}
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleExperimentIdsChange(value);
-                          }}
-                          multiselect
-                          className={cn({
-                            "border-destructive": Boolean(
-                              validationErrors?.message,
-                            ),
-                          })}
-                        />
-                      </FormControl>
-                      <Description>
-                        Widgets use the dashboard&apos;s experiment settings by
-                        default. You can override them here and select different
-                        experiments.
-                      </Description>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-            )}
-
-            <FormField
-              control={form.control}
-              name="chartType"
-              render={({ field, formState }) => {
-                const validationErrors = get(formState.errors, ["chartType"]);
-                return (
-                  <FormItem>
-                    <FormLabel>Chart type</FormLabel>
-                    <FormControl>
-                      <SelectBox
-                        className={cn({
-                          "border-destructive": Boolean(
-                            validationErrors?.message,
-                          ),
-                        })}
-                        value={field.value || CHART_TYPE.line}
-                        onChange={(value) => {
-                          field.onChange(value);
-                          handleChartTypeChange(value);
-                        }}
-                        options={CHART_TYPE_OPTIONS}
-                        placeholder="Select chart type"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
-            />
-
-            <FormField
-              control={form.control}
               name="feedbackScores"
               render={({ field, formState }) => {
                 const validationErrors = get(formState.errors, [
@@ -337,6 +215,148 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
                 );
               }}
             />
+
+            <FormField
+              control={form.control}
+              name="chartType"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, ["chartType"]);
+                return (
+                  <FormItem>
+                    <FormLabel>Chart type</FormLabel>
+                    <FormControl>
+                      <SelectBox
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        value={field.value || CHART_TYPE.line}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          handleChartTypeChange(value);
+                        }}
+                        options={CHART_TYPE_OPTIONS}
+                        placeholder="Select chart type"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+
+            <WidgetOverrideDefaultsSection
+              value={form.watch("overrideDefaults") || false}
+              onChange={(value) => {
+                form.setValue("overrideDefaults", value);
+                updatePreviewWidget({
+                  config: {
+                    ...config,
+                    overrideDefaults: value,
+                  },
+                });
+              }}
+              description="Turn this on to override the dashboard's default experiments for this widget."
+            >
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="dataSource"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Experiment override</FormLabel>
+                      <FormControl>
+                        <ToggleGroup
+                          type="single"
+                          variant="ghost"
+                          value={
+                            field.value ||
+                            EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+                          }
+                          onValueChange={(value) => {
+                            if (value) {
+                              field.onChange(value);
+                              handleDataSourceChange(value);
+                            }
+                          }}
+                          className="w-fit justify-start"
+                        >
+                          <ToggleGroupItem
+                            value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
+                            aria-label="Manual selection"
+                            className="gap-1.5"
+                          >
+                            <ListChecks className="size-3.5" />
+                            <span>Manual selection</span>
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                            value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
+                            aria-label="Filter experiments"
+                            className="gap-1.5"
+                          >
+                            <Filter className="size-3.5" />
+                            <span>Filter experiments</span>
+                          </ToggleGroupItem>
+                        </ToggleGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {form.watch("dataSource") ===
+                  EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP && (
+                  <ExperimentWidgetDataSection
+                    control={form.control}
+                    filtersFieldName="filters"
+                    groupsFieldName="groups"
+                    filters={filters}
+                    groups={groups}
+                    onFiltersChange={handleFiltersChange}
+                    onGroupsChange={handleGroupsChange}
+                  />
+                )}
+
+                {form.watch("dataSource") ===
+                  EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS && (
+                  <FormField
+                    control={form.control}
+                    name="experimentIds"
+                    render={({ field, formState }) => {
+                      const validationErrors = get(formState.errors, [
+                        "experimentIds",
+                      ]);
+                      return (
+                        <FormItem>
+                          <FormLabel>Select experiments</FormLabel>
+                          <FormControl>
+                            <ExperimentsSelectBox
+                              value={field.value || []}
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                handleExperimentIdsChange(value);
+                              }}
+                              multiselect
+                              showClearButton
+                              className={cn("flex-1", {
+                                "border-destructive": Boolean(
+                                  validationErrors?.message,
+                                ),
+                              })}
+                            />
+                          </FormControl>
+                          <Description>
+                            Choose specific experiments to show in this widget.
+                          </Description>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                )}
+              </div>
+            </WidgetOverrideDefaultsSection>
           </div>
         </WidgetEditorBaseLayout>
       </Form>

@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Database, Plus, X } from "lucide-react";
+import { Database, Plus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import SelectBoxClearWrapper from "@/components/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset } from "@/types/datasets";
@@ -49,6 +49,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   const [isDatasetDialogOpen, setIsDatasetDialogOpen] = useState(false);
   const [isDatasetDropdownOpen, setIsDatasetDropdownOpen] = useState(false);
   const queryClient = useQueryClient();
+  const isClearable = showClearButton && Boolean(value);
 
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
@@ -99,7 +100,13 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
 
   return (
     <>
-      <div className="flex">
+      <SelectBoxClearWrapper
+        isClearable={isClearable}
+        onClear={() => handleChangeDatasetId(null)}
+        disabled={disabled}
+        clearTooltip="Clear dataset selection"
+        buttonSize="icon-sm"
+      >
         <LoadableSelectBox
           options={datasetOptions}
           value={value || ""}
@@ -120,13 +127,9 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
           }
           isLoading={isLoadingDatasets}
           optionsCount={DEFAULT_LOADED_DATASETS}
-          buttonClassName={cn(
-            "w-[220px]",
-            {
-              "rounded-r-none": !!value && showClearButton,
-            },
-            buttonClassName,
-          )}
+          buttonClassName={cn("w-[220px]", buttonClassName, {
+            "rounded-r-none": isClearable,
+          })}
           renderTitle={(option) => {
             return (
               <div className="flex w-full items-center text-foreground">
@@ -156,19 +159,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
           disabled={disabled}
           showTooltip
         />
-
-        {value && showClearButton && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="rounded-l-none border-l-0"
-            onClick={() => handleChangeDatasetId(null)}
-            disabled={disabled}
-          >
-            <X className="text-light-slate" />
-          </Button>
-        )}
-      </div>
+      </SelectBoxClearWrapper>
       <AddEditDatasetDialog
         open={isDatasetDialogOpen}
         setOpen={setIsDatasetDialogOpen}

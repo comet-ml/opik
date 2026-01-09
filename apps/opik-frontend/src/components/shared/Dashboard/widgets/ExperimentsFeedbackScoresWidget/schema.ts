@@ -21,6 +21,7 @@ export const ExperimentsFeedbackScoresWidgetSchema = z.object({
   experimentIds: z.array(z.string()).optional(),
   chartType: z.nativeEnum(CHART_TYPE).optional(),
   feedbackScores: z.array(z.string()).optional(),
+  overrideDefaults: z.boolean().optional(),
 });
 
 export type ExperimentsFeedbackScoresWidgetFormData = z.infer<

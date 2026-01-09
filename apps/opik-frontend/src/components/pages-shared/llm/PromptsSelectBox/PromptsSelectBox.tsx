@@ -1,13 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Database, Plus, X } from "lucide-react";
+import { Database, Plus } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import useAppStore from "@/store/AppStore";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import SelectBoxClearWrapper from "@/components/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useDeepMemo from "@/hooks/useDeepMemo";
@@ -131,7 +130,13 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   }, [asNewOption, onValueChange]);
 
   return (
-    <>
+    <SelectBoxClearWrapper
+      isClearable={isClearable}
+      onClear={() => onValueChange(undefined)}
+      disabled={disabled}
+      clearTooltip="Remove prompt selection"
+      buttonSize="icon-sm"
+    >
       <LoadableSelectBox
         options={promptsOptions}
         value={value ?? (asNewOption ? NEW_PROMPT_VALUE : "")}
@@ -164,21 +169,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         showTooltip
         disabled={disabled}
       />
-
-      {isClearable && (
-        <TooltipWrapper content="Remove prompt selection">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="shrink-0 rounded-l-none border-l-0"
-            onClick={() => onValueChange(undefined)}
-            disabled={disabled}
-          >
-            <X className="text-light-slate" />
-          </Button>
-        </TooltipWrapper>
-      )}
-    </>
+    </SelectBoxClearWrapper>
   );
 };
 

@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
+import { cn } from "@/lib/utils";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import SelectBoxClearWrapper from "@/components/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
@@ -94,6 +96,7 @@ interface BaseProjectsSelectBoxProps {
   minWidth?: number;
   customOptions?: DropdownOption<string>[];
   align?: "start" | "end" | "center";
+  showClearButton?: boolean;
 }
 
 interface SingleSelectProjectsProps extends BaseProjectsSelectBoxProps {
@@ -115,7 +118,14 @@ type ProjectsSelectBoxProps =
   | MultiSelectProjectsProps;
 
 const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
-  const { className, disabled, minWidth, customOptions, align } = props;
+  const {
+    className,
+    disabled,
+    minWidth,
+    customOptions,
+    align,
+    showClearButton = false,
+  } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
   const { projects, total, isLoading } = useProjectsSelectData({
@@ -152,7 +162,19 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
         multiselect: false as const,
       };
 
-  return (
+  const isClearable =
+    showClearButton &&
+    (props.multiselect ? props.value.length > 0 : Boolean(props.value));
+
+  const handleClear = useCallback(() => {
+    if (props.multiselect) {
+      props.onValueChange([]);
+    } else {
+      props.onValueChange("");
+    }
+  }, [props]);
+
+  const selectBox = (
     <LoadableSelectBox
       {...loadableSelectBoxProps}
       onLoadMore={
@@ -160,13 +182,31 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
           ? loadMoreHandler
           : undefined
       }
-      buttonClassName={className}
+      buttonClassName={cn(className, {
+        "rounded-r-none": isClearable,
+      })}
       minWidth={minWidth}
       align={align}
       disabled={disabled}
       isLoading={isLoading}
       optionsCount={DEFAULT_LOADED_PROJECT_ITEMS}
     />
+  );
+
+  if (!showClearButton) {
+    return selectBox;
+  }
+
+  return (
+    <SelectBoxClearWrapper
+      isClearable={isClearable}
+      onClear={handleClear}
+      disabled={disabled}
+      clearTooltip="Clear project selection"
+      buttonSize="icon"
+    >
+      {selectBox}
+    </SelectBoxClearWrapper>
   );
 };
 

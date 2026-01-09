@@ -20,7 +20,7 @@ const CATEGORY_CONFIG: Record<
   },
   [WIDGET_CATEGORY.GENERAL]: {
     label: "General",
-    gridCols: "grid-cols-1",
+    gridCols: "grid-cols-2",
   },
 };
 

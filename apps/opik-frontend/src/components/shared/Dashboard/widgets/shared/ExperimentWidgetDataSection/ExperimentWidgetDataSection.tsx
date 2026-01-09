@@ -169,7 +169,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
 
   return (
     <div className={cn("flex flex-col", className)}>
-      <Description className="mb-2">
+      <Description className="mb-4">
         Add filters to focus on specific experiments and group them by
         configuration to aggregate feedback scores.
       </Description>

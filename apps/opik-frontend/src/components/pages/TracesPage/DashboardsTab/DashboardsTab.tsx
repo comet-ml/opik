@@ -8,6 +8,7 @@ import DashboardSaveActions from "@/components/pages-shared/dashboards/Dashboard
 import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardSelectBox from "@/components/pages-shared/dashboards/DashboardSelectBox/DashboardSelectBox";
 import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
+import DashboardProjectSettingsButton from "@/components/pages-shared/dashboards/DashboardProjectSettingsButton/DashboardProjectSettingsButton";
 import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -20,7 +21,7 @@ import {
 } from "@/store/DashboardStore";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
+import { PROJECT_TEMPLATE_LIST } from "@/lib/dashboard/templates";
 import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
@@ -44,7 +45,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
 
   useEffect(() => {
     if (!dashboardId) {
-      setDashboardId(TEMPLATE_LIST[0].id);
+      setDashboardId(PROJECT_TEMPLATE_LIST[0].id);
     }
   }, [dashboardId, setDashboardId]);
 
@@ -94,7 +95,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   const handleDashboardDeleted = useCallback(
     (deletedDashboardId: string) => {
       if (dashboardId === deletedDashboardId) {
-        setDashboardId(TEMPLATE_LIST[0]?.id || null);
+        setDashboardId(PROJECT_TEMPLATE_LIST[0]?.id || null);
       }
     },
     [dashboardId, setDashboardId],
@@ -109,6 +110,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
       onDashboardDeleted={handleDashboardDeleted}
       defaultProjectId={projectId}
       disabled={hasUnsavedChanges}
+      templates={PROJECT_TEMPLATE_LIST}
     />
   );
 
@@ -137,6 +139,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
               navigateOnCreate={false}
               onDashboardCreated={handleDashboardCreated}
               defaultProjectId={projectId}
+              defaultExperimentIds={config?.experimentIds}
             />
           )}
           <MetricDateRangeSelect
@@ -148,6 +151,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ShareDashboardButton />
+          <DashboardProjectSettingsButton disableProjectSelector />
         </div>
       </PageBodyStickyContainer>
 

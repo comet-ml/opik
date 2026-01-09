@@ -42,6 +42,7 @@ export interface ProjectMetricsWidget {
     traceFilters?: Filters;
     threadFilters?: Filters;
     feedbackScores?: string[];
+    overrideDefaults?: boolean;
   } & Record<string, unknown>;
 }
 
@@ -60,6 +61,7 @@ export interface ProjectStatsCardWidget {
     metric: string;
     traceFilters?: Filters;
     spanFilters?: Filters;
+    overrideDefaults?: boolean;
   } & Record<string, unknown>;
 }
 
@@ -72,6 +74,7 @@ export interface ExperimentsFeedbackScoresWidgetType {
     experimentIds?: string[];
     chartType?: CHART_TYPE;
     feedbackScores?: string[];
+    overrideDefaults?: boolean;
   } & Record<string, unknown>;
 }
 
