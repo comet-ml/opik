@@ -11,7 +11,6 @@ export enum FeatureToggleKeys {
   DATASET_VERSIONING_ENABLED = "dataset_versioning_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
-  DASHBOARDS_ENABLED = "dashboards_enabled",
   OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
   // LLM Provider feature flags
   OPENAI_PROVIDER_ENABLED = "openai_provider_enabled",
