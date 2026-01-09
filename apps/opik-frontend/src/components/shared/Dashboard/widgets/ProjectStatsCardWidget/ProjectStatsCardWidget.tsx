@@ -149,7 +149,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="Project not configured"
-          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          message="This widget needs a project to display data. Select a default project for the dashboard or set a custom one in the widget settings."
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />
@@ -160,7 +160,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
-          message="Please configure this widget to display a metric"
+          message="Choose a metric to display in this widget"
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />

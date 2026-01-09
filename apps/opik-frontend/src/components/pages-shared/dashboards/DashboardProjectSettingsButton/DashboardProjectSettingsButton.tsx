@@ -112,7 +112,7 @@ const DashboardProjectSettingsButton: React.FC<
           <div>
             <h3 className="comet-title-s mb-2">Dashboard defaults</h3>
             <Description>
-              Select a default project to visualize data for this dashboard.
+              Select the defaults to visualize data for this dashboard.
               Individual widgets can override these settings if needed.
             </Description>
           </div>
@@ -120,15 +120,15 @@ const DashboardProjectSettingsButton: React.FC<
             <h4 className="comet-body-s-accented mb-2">Default project</h4>
             {renderProjectSelector()}
             <Description className="mt-1">
-              Choose the project this dashboard visualizes data from by default.
+              Select the default project for widgets that show project data.
             </Description>
           </div>
           <div>
             <h4 className="comet-body-s-accented mb-2">Default experiments</h4>
             {renderExperimentsSelector()}
             <Description className="mt-1">
-              Select which experiments are shown by default in widgets that use
-              experiment data.
+              Select the default experiments for widgets that show experiment
+              data.
             </Description>
           </div>
         </div>

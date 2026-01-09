@@ -42,8 +42,8 @@ import { TRACE_DATA_TYPE } from "@/constants/traces";
 import WidgetEditorBaseLayout from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetEditorBaseLayout";
 
 const SOURCE_OPTIONS = [
-  { value: TRACE_DATA_TYPE.traces, label: "Traces stats" },
-  { value: TRACE_DATA_TYPE.spans, label: "Spans stats" },
+  { value: TRACE_DATA_TYPE.traces, label: "Traces statistics" },
+  { value: TRACE_DATA_TYPE.spans, label: "Spans statistics" },
 ];
 
 const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
@@ -157,7 +157,7 @@ const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
               const validationErrors = get(formState.errors, ["source"]);
               return (
                 <FormItem>
-                  <FormLabel>Stats source</FormLabel>
+                  <FormLabel>Statistics source</FormLabel>
                   <FormControl>
                     <SelectBox
                       className={cn({

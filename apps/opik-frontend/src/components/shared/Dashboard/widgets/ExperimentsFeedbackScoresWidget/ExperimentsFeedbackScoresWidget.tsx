@@ -410,7 +410,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="Experiments not configured"
-          message="This widget requires experiments to be selected. Configure it in the widget settings or set default experiments for the dashboard."
+          message="This widget needs experiments to display data. Select default experiments for the dashboard or set custom ones in the widget settings."
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />

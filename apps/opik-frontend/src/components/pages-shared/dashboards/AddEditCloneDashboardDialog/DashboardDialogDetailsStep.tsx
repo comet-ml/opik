@@ -112,7 +112,7 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
           <AccordionTrigger className="h-11 py-1.5">
             Description
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent className="px-3">
             <Textarea
               {...control.register("description")}
               placeholder="Dashboard description"
@@ -132,34 +132,6 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
               needed.
             </Description>
           </div>
-
-          <FormField
-            control={control}
-            name="projectId"
-            render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["projectId"]);
-
-              return (
-                <FormItem>
-                  <FormLabel>Default project (optional)</FormLabel>
-                  <FormControl>
-                    <ProjectsSelectBox
-                      value={field.value || ""}
-                      onValueChange={field.onChange}
-                      showClearButton
-                      className={cn("flex-1", {
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      })}
-                    />
-                  </FormControl>
-                  <Description>Used to preview data by default.</Description>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
 
           <FormField
             control={control}
@@ -186,6 +158,34 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
                   <Description>
                     Used by widgets that show experiment data.
                   </Description>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          <FormField
+            control={control}
+            name="projectId"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, ["projectId"]);
+
+              return (
+                <FormItem>
+                  <FormLabel>Default project (optional)</FormLabel>
+                  <FormControl>
+                    <ProjectsSelectBox
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      showClearButton
+                      className={cn("flex-1", {
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                    />
+                  </FormControl>
+                  <Description>Used to preview data by default.</Description>
                   <FormMessage />
                 </FormItem>
               );
