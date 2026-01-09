@@ -115,12 +115,29 @@ component:
       requests:
         ephemeral-storage: 10Gi
     livenessProbe:
-      path: /health-check?name=all&type=alive
-      port:  8080
+      httpGet:
+        path: /health-check?name=all&type=alive
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      timeoutSeconds: 2
+      successThreshold: 1
+      failureThreshold: 2
     readinessProbe:
-      path: /health-check?name=all&type=ready
-      port:  8080
+      httpGet:
+        path: /health-check?name=all&type=alive
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
       initialDelaySeconds: 20
+      periodSeconds: 10
+      timeoutSeconds: 2
+      successThreshold: 1
+      failureThreshold: 2
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
