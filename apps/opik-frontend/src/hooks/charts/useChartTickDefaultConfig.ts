@@ -123,7 +123,8 @@ const useChartTickDefaultConfig = (
     if (showMinMaxDomain) {
       const range = max - min;
       const padding = range * DOMAIN_PADDING_RATIO;
-      const domainMin = Math.max(0, min - padding);
+      const domainMin =
+        max <= 0 ? min - padding : Math.max(0, min - padding);
       const domainMax = max + padding;
 
       return {

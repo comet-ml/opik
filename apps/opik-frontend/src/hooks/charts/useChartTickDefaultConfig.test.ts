@@ -382,6 +382,24 @@ describe("useChartTickDefaultConfig", () => {
       );
       expect(result.current.ticks).toContain(-5);
     });
+
+    it("should handle negative-only dataset with showMinMaxDomain", () => {
+      const { result } = renderHook(() =>
+        useChartTickDefaultConfig([-10, -5, -3], { showMinMaxDomain: true }),
+      );
+
+      expect(result.current.ticks).toBeDefined();
+      expect(result.current.ticks.length).toBeGreaterThan(0);
+      expect(result.current.ticks.every((tick) => Number.isFinite(tick))).toBe(
+        true,
+      );
+      // Domain should allow negative values
+      const [domainMin, domainMax] = result.current.domain as [number, number];
+      expect(domainMin).toBeLessThan(0);
+      expect(domainMax).toBeLessThan(0);
+      // Ticks should be in the negative range
+      expect(result.current.ticks.every((tick) => tick <= 0)).toBe(true);
+    });
   });
 
   describe("precision consistency tests", () => {
