@@ -356,6 +356,7 @@ class Dataset:
     def __internal_api__stream_items_as_dataclasses__(
         self,
         nb_samples: Optional[int] = None,
+        batch_size: Optional[int] = None,
     ) -> Iterator[dataset_item.DatasetItem]:
         """
         Stream dataset items as a generator instead of loading all at once.
@@ -366,6 +367,8 @@ class Dataset:
 
         Args:
             nb_samples: Maximum number of items to retrieve. If None, all items are streamed.
+            batch_size: Maximum number of items to fetch per batch from the backend.
+                        If None, uses the default value from constants.DATASET_STREAM_BATCH_SIZE.
 
         Yields:
             DatasetItem objects one at a time
@@ -374,6 +377,9 @@ class Dataset:
             This method does not support filtering by dataset_item_ids. Use
             __internal_api__get_items_as_dataclasses__() for that functionality.
         """
+        if batch_size is None:
+            batch_size = constants.DATASET_STREAM_BATCH_SIZE
+
         last_retrieved_id: Optional[str] = None
         should_retrieve_more_items = True
         items_yielded = 0
@@ -386,6 +392,7 @@ class Dataset:
                     stream=self._rest_client.datasets.stream_dataset_items(
                         dataset_name=self._name,
                         last_retrieved_id=last_retrieved_id,
+                        steam_limit=batch_size,
                     ),
                     item_class=dataset_item.DatasetItem,
                     nb_samples=nb_samples,
