@@ -22,7 +22,6 @@ class MetricFunction(Protocol):
         self,
         dataset_item: dict[str, Any],
         llm_output: str,
-        **kwargs: Any,
     ) -> float | score_result.ScoreResult | list[score_result.ScoreResult]: ...
 
 
