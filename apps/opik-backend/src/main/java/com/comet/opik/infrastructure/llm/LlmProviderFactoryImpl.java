@@ -59,8 +59,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
-        // For custom LLM providers, add provider_name to configuration if present
-        if (providerConfig.provider() == LlmProvider.CUSTOM_LLM
+        // For providers that support naming, add provider_name to configuration if present
+        if (providerConfig.provider().supportsProviderName()
                 && StringUtils.isNotBlank(providerConfig.providerName())) {
             configuration = new HashMap<>(configuration);
             configuration.put("provider_name", providerConfig.providerName());
@@ -146,14 +146,19 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
         return llmProviderApiKeyService.find(workspaceId).content().stream()
                 .filter(providerApiKey -> {
-                    // Match provider type
-                    if (!llmProvider.equals(providerApiKey.provider())) {
-                        return false;
+                    // For providers that support naming, match the model against configured models
+                    // Both CUSTOM_LLM and BEDROCK use the same "custom-llm/" prefix for models
+                    if (llmProvider.supportsProviderName()) {
+                        // Match against providers that support naming since they share the model prefix
+                        if (!providerApiKey.provider().supportsProviderName()) {
+                            return false;
+                        }
+                        return isModelConfiguredForProvider(model, providerApiKey);
                     }
 
-                    // For custom LLMs, match the model against configured models
-                    if (llmProvider == LlmProvider.CUSTOM_LLM) {
-                        return isModelConfiguredForProvider(model, providerApiKey);
+                    // Match provider type for non-custom providers
+                    if (!llmProvider.equals(providerApiKey.provider())) {
+                        return false;
                     }
 
                     return true;
