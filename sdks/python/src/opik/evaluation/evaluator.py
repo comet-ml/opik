@@ -88,6 +88,7 @@ def evaluate(
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_tags: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -156,6 +157,8 @@ def evaluate(
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
+
+        experiment_tags: Optional list of tags to associate with the experiment.
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -178,6 +181,7 @@ def evaluate(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
+        tags=experiment_tags,
     )
 
     # wrap scoring functions if any
@@ -506,6 +510,7 @@ def evaluate_prompt(
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_tags: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -556,6 +561,8 @@ def evaluate_prompt(
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
+
+        experiment_tags: List of tags to be associated with the experiment.
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -593,6 +600,7 @@ def evaluate_prompt(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
+        tags=experiment_tags,
     )
 
     # wrap scoring functions if any
@@ -691,6 +699,7 @@ def evaluate_optimization_trial(
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_tags: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -758,6 +767,8 @@ def evaluate_optimization_trial(
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
+
+        experiment_tags: A list of tags to associate with the experiment.
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -792,6 +803,7 @@ def evaluate_optimization_trial(
         prompts=checked_prompts,
         type="trial",
         optimization_id=optimization_id,
+        tags=experiment_tags,
     )
 
     return _evaluate_task(

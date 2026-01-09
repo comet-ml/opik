@@ -88,6 +88,7 @@ def get_dataset_experiments(
                     rest_client=rest_client,
                     streamer=streamer,
                     experiments_client=experiments_client,
+                    tags=experiment_.tags,
                 )
             )
 

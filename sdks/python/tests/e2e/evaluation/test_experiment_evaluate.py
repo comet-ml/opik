@@ -54,6 +54,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
+    experiment_tags = ["capital", "geography", "europe"]
+
     equals_metric = metrics.Equals()
     evaluation_result = opik.evaluate(
         dataset=dataset,
@@ -67,6 +69,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         prompt=prompt,
+        experiment_tags=experiment_tags,
     )
 
     opik.flush_tracker()
@@ -79,6 +82,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt],
+        experiment_tags=experiment_tags,
     )
 
     assert (
