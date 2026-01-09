@@ -30,8 +30,6 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean optimizationStudioEnabled;
     @JsonProperty
-    @NotNull boolean dashboardsEnabled;
-    @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
     // LLM Provider feature flags
     @JsonProperty
