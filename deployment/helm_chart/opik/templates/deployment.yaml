@@ -158,11 +158,13 @@ spec:
           ports:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if $value.livenessProbe }}
+          {{- with $value.livenessProbe }}
           livenessProbe:
+            {{- if and .path .port }}
+            {{- /* Backward compatibility: simplified path/port definition */}}
             httpGet:
-              path: {{ $value.livenessProbe.path }}
-              port: {{ $value.livenessProbe.port }}
+              path: {{ .path }}
+              port: {{ .port }}
               httpHeaders:
                 - name: Accept
                   value: application/json
@@ -171,20 +173,30 @@ spec:
             initialDelaySeconds: 0
             successThreshold: 1
             failureThreshold: 2
+            {{- else }}
+            {{- /* Full probe definition from values.yaml */}}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
-          {{- if $value.readinessProbe }}
+          {{- with $value.readinessProbe }}
           readinessProbe:
+            {{- if and .path .port}}
+            {{- /* Backward compatibility: simplified path/port definition */}}
             httpGet:
-              path: {{ $value.readinessProbe.path }}
-              port: {{ $value.readinessProbe.port }}
+              path: {{ .path }}
+              port: {{ .port }}
               httpHeaders:
                   - name: Accept
                     value: application/json
             timeoutSeconds: 2
             periodSeconds: 10
-            initialDelaySeconds: {{ $value.readinessProbe.initialDelaySeconds }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
             successThreshold: 1
             failureThreshold: 2
+            {{- else }}
+            {{- /* Full probe definition from values.yaml */}}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- with $value.resources }}
           resources:
