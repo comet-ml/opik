@@ -48,8 +48,8 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
     - `split` (e.g., `"train"`, `"validation"`)
     - `count` and `start` (slice size + offset after shuffling)
     - `seed` (deterministic shuffle)
-    - `prefer_presets` (use dataset-defined presets unless you override)
     - `filter_by` (filter rows before slicing)
+    Some helpers also expose `prefer_presets` to override dataset-defined presets.
   </Step>
 </Steps>
 
