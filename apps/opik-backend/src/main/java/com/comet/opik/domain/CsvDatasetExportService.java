@@ -96,8 +96,8 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                         "Export job published to Redis stream: jobId='{}', streamMessageId='{}'",
                         job.id(), streamMessageId))
                 .doOnError(throwable -> log.error(
-                        "Failed to publish export job to Redis stream: jobId='{}', error='{}'",
-                        job.id(), throwable.getMessage(), throwable))
+                        "Failed to publish export job to Redis stream: jobId='{}'",
+                        job.id(), throwable))
                 .then();
     }
 

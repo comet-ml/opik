@@ -40,6 +40,10 @@ public interface DatasetExportJobService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class DatasetExportJobServiceImpl implements DatasetExportJobService {
 
+    private static final Set<DatasetExportStatus> IN_PROGRESS_STATUSES = Set.of(
+            DatasetExportStatus.PENDING,
+            DatasetExportStatus.PROCESSING);
+
     private final @NonNull DatasetExportJobDAO exportJobDAO;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -87,7 +91,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
                 List<DatasetExportJob> existingJobs = dao.findInProgressByDataset(workspaceId, datasetId,
-                        Set.of(DatasetExportStatus.PENDING, DatasetExportStatus.PROCESSING));
+                        IN_PROGRESS_STATUSES);
 
                 if (!existingJobs.isEmpty()) {
                     log.info("Found '{}' existing in-progress export job(s) for dataset: '{}'", existingJobs.size(),
@@ -101,25 +105,38 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
 
     @Override
     public Mono<DatasetExportJob> getJob(@NonNull UUID jobId) {
-        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(DatasetExportJobDAO.class);
-            return dao.findById(jobId)
-                    .orElseThrow(() -> new NotFoundException("Export job not found: '%s'".formatted(jobId)));
-        })).subscribeOn(Schedulers.boundedElastic());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.findById(workspaceId, jobId)
+                        .orElseThrow(() -> new NotFoundException("Export job not found: '%s'".formatted(jobId)));
+            })).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     @Override
     public Mono<Void> updateJobStatus(@NonNull UUID jobId, @NonNull DatasetExportStatus status, String filePath,
             String errorMessage) {
-        return Mono.fromCallable(() -> {
-            template.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(DatasetExportJobDAO.class);
-                dao.update(jobId, status, filePath, errorMessage, Instant.now());
-                return null;
-            });
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info("Updated export job: '{}' to status: '{}'", jobId, status);
-            return null;
-        }).subscribeOn(Schedulers.boundedElastic()).then();
+            return Mono.fromCallable(() -> {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetExportJobDAO.class);
+                    int updated = dao.update(workspaceId, jobId, status, filePath, errorMessage, Instant.now());
+
+                    if (updated == 0) {
+                        throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
+                    }
+
+                    return null;
+                });
+
+                log.info("Updated export job: '{}' to status: '{}'", jobId, status);
+                return null;
+            }).subscribeOn(Schedulers.boundedElastic()).then();
+        });
     }
 }

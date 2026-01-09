@@ -27,9 +27,11 @@ public class DatasetExportJobListener extends BaseRedisSubscriber<DatasetExportM
 
     @Override
     protected Mono<Void> processEvent(@NonNull DatasetExportMessage message) {
-        log.info("Received dataset export job: jobId='{}', datasetId='{}', workspaceId='{}'",
+        log.warn("Dataset export job processing invoked but CSV export flow is not implemented yet. " +
+                "Failing job: jobId='{}', datasetId='{}', workspaceId='{}'",
                 message.jobId(), message.datasetId(), message.workspaceId());
 
+        // Return error to prevent message ACK until CSV generation is implemented in PR#5
         // TODO: PR#5 - Implement CSV generation logic
         // 1. Fetch dataset items from DatasetItemService
         // 2. Discover columns using DatasetItemDAO.SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID
@@ -37,7 +39,6 @@ public class DatasetExportJobListener extends BaseRedisSubscriber<DatasetExportM
         // 4. Upload to S3/MinIO using FileService.uploadStream()
         // 5. Update job status to COMPLETED using DatasetExportJobService.updateJobStatus()
 
-        log.debug("Dataset export job processing not yet implemented (PR#5)");
-        return Mono.empty();
+        return Mono.error(new IllegalStateException("Dataset export job processing is not implemented yet (PR#5)"));
     }
 }

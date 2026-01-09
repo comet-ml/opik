@@ -8,6 +8,8 @@ import com.comet.opik.infrastructure.lock.LockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
@@ -110,10 +112,11 @@ class CsvDatasetExportServiceImplTest {
         verify(mockStream, times(1)).add(any(StreamAddArgs.class));
     }
 
-    @Test
-    void startExport_shouldReturnExistingPendingJob_whenJobAlreadyExists() {
+    @ParameterizedTest
+    @EnumSource(value = DatasetExportStatus.class, names = {"PENDING", "PROCESSING"})
+    void startExport_shouldReturnExistingJob_whenJobAlreadyExists(DatasetExportStatus status) {
         // Given
-        DatasetExportJob existingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
+        DatasetExportJob existingJob = createJob(JOB_ID, status);
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
@@ -126,34 +129,7 @@ class CsvDatasetExportServiceImplTest {
         StepVerifier.create(result)
                 .assertNext(job -> {
                     assertThat(job).isEqualTo(existingJob);
-                    assertThat(job.status()).isEqualTo(DatasetExportStatus.PENDING);
-                })
-                .verifyComplete();
-
-        // Verify jobService was called to check existing jobs
-        verify(jobService).findInProgressJobs(eq(DATASET_ID));
-
-        // Verify no new job was created
-        verify(jobService, never()).createJob(any(), any());
-    }
-
-    @Test
-    void startExport_shouldReturnExistingProcessingJob_whenJobAlreadyExists() {
-        // Given
-        DatasetExportJob processingJob = createJob(JOB_ID, DatasetExportStatus.PROCESSING);
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(processingJob)));
-
-        // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                        .put(RequestContext.USER_NAME, USER_NAME));
-
-        // Then
-        StepVerifier.create(result)
-                .assertNext(job -> {
-                    assertThat(job).isEqualTo(processingJob);
-                    assertThat(job.status()).isEqualTo(DatasetExportStatus.PROCESSING);
+                    assertThat(job.status()).isEqualTo(status);
                 })
                 .verifyComplete();
 
