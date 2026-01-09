@@ -243,15 +243,12 @@ Call opik api on http://localhost:5173/api
 | component.backend.livenessProbe.httpGet.httpHeaders[0].value | string | `"application/json"` |  |
 | component.backend.livenessProbe.httpGet.path | string | `"/health-check?name=all&type=alive"` |  |
 | component.backend.livenessProbe.httpGet.port | int | `8080` |  |
-| component.backend.livenessProbe.initialDelaySeconds | int | `0` |  |
-| component.backend.livenessProbe.timeoutSeconds | int | `2` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
 | component.backend.readinessProbe.httpGet.httpHeaders[0].name | string | `"Accept"` |  |
 | component.backend.readinessProbe.httpGet.httpHeaders[0].value | string | `"application/json"` |  |
 | component.backend.readinessProbe.httpGet.path | string | `"/health-check?name=all&type=ready"` |  |
 | component.backend.readinessProbe.httpGet.port | int | `8080` |  |
 | component.backend.readinessProbe.initialDelaySeconds | int | `20` |  |
-| component.backend.readinessProbe.timeoutSeconds | int | `2` |  |
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.backend.run_migration | bool | `true` |  |
