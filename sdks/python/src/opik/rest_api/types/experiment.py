@@ -23,6 +23,7 @@ class Experiment(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListString] = None
+    tags: typing.Optional[typing.List[str]] = None
     type: typing.Optional[ExperimentType] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None

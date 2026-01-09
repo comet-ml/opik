@@ -15,6 +15,7 @@ export interface ExperimentWrite {
     datasetName: string;
     name?: string;
     metadata?: OpikApi.JsonListStringWrite;
+    tags?: string[];
     type?: OpikApi.ExperimentWriteType;
     optimizationId?: string;
     status?: OpikApi.ExperimentWriteStatus;
