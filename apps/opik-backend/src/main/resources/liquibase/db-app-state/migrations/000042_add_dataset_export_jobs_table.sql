@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andrescrz:000052_add_dataset_export_jobs_table
+--changeset thiagohora:000042_add_dataset_export_jobs_table
 
 CREATE TABLE IF NOT EXISTS dataset_export_jobs (
     id CHAR(36) PRIMARY KEY,
@@ -11,9 +11,9 @@ CREATE TABLE IF NOT EXISTS dataset_export_jobs (
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at TIMESTAMP(6),
     expires_at TIMESTAMP(6),
-    created_by VARCHAR(100),
-    INDEX idx_workspace_status (workspace_id, status),
-    INDEX idx_expires_at (expires_at)
+    created_by VARCHAR(255),
+    INDEX idx_expires_at (expires_at),
+    INDEX idx_workspace_dataset_status (workspace_id, dataset_id, status)
 );
 
 --rollback DROP TABLE IF EXISTS dataset_export_jobs;
