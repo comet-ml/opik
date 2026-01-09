@@ -6,8 +6,6 @@ import {
   useDashboardStore,
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export enum VIEW_TYPE {
   DETAILS = "details",
@@ -21,14 +19,8 @@ interface ViewSelectorProps {
 
 const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
-  const isDashboardsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DASHBOARDS_ENABLED,
-  );
   const disabled = value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges;
 
-  if (!isDashboardsEnabled) {
-    return null;
-  }
   const content = (
     <ToggleGroup
       type="single"

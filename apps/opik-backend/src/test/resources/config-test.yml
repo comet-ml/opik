@@ -432,9 +432,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
-  # Default: true
-  # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: "false"
