@@ -230,6 +230,7 @@ def verify_experiment(
     traces_amount: int,
     prompts: Optional[List[Prompt]] = None,
     experiment_scores: Optional[Dict[str, float]] = None,
+    experiment_tags: Optional[List[str]] = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -270,6 +271,8 @@ def verify_experiment(
     _verify_experiment_prompts(experiment_content, prompts)
 
     _verify_experiment_scores(experiment_content, experiment_scores)
+
+    testlib.assert_equal(expected=experiment_tags, actual=experiment_content.tags)
 
 
 def verify_attachments(

@@ -126,6 +126,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
         name="explicit-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
 
@@ -232,6 +233,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
         name=None,
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
 
@@ -449,6 +451,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
             "model": MODEL_NAME,
         },
         prompts=None,
+        tags=None,
     )
 
 
@@ -575,6 +578,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
             "model": MODEL_NAME,
         },
         prompts=None,
+        tags=None,
     )
 
 
