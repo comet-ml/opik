@@ -57,6 +57,8 @@ def test_evaluate__happyflow(
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
 
+    experiment_tags = ["one", "two", "three"]
+
     with mock.patch.object(
         opik_client.Opik, "create_experiment", mock_create_experiment
     ):
@@ -69,6 +71,7 @@ def test_evaluate__happyflow(
                 experiment_name="the-experiment-name",
                 scoring_metrics=[metrics.Equals()],
                 task_threads=1,
+                experiment_tags=experiment_tags,
             )
 
     mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
@@ -78,7 +81,7 @@ def test_evaluate__happyflow(
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
-        tags=None,
+        tags=experiment_tags,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -802,6 +805,8 @@ def test_evaluate_prompt_happyflow(
     )
     mock_models_factory_get.return_value = mock_model
 
+    experiment_tags = ["one", "two", "three"]
+
     with mock.patch.object(
         opik_client.Opik, "create_experiment", mock_create_experiment
     ):
@@ -822,6 +827,7 @@ def test_evaluate_prompt_happyflow(
                     model=MODEL_NAME,
                     scoring_metrics=[metrics.Equals()],
                     task_threads=1,
+                    experiment_tags=experiment_tags,
                 )
 
     mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
@@ -834,7 +840,7 @@ def test_evaluate_prompt_happyflow(
             "model": "gpt-3.5-turbo",
         },
         prompts=None,
-        tags=None,
+        tags=experiment_tags,
     )
 
     mock_experiment.insert.assert_has_calls(
