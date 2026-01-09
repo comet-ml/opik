@@ -23,6 +23,7 @@ import ViewSelector, {
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Separator } from "@/components/ui/separator";
+import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
 
 type ExperimentScoreTagsProps = {
   experiment: Experiment;
@@ -257,6 +258,13 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
       </div>
+      {!isCompare && experiment && (
+        <ExperimentTagsList
+          tags={experiment?.tags ?? []}
+          experimentId={experiment.id}
+          experiment={experiment}
+        />
+      )}
       {renderSubSection()}
       {renderCharts()}
     </div>
