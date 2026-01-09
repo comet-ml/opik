@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.metrics.BreakdownConfig;
+import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -55,8 +57,23 @@ public interface ProjectMetricsDAO {
     String NAME_THREAD_DURATION_P90 = String.join(".", THREAD_DURATION_PREFIX, P90);
     String NAME_THREAD_DURATION_P99 = String.join(".", THREAD_DURATION_PREFIX, P99);
 
+    /**
+     * Represents a single data point entry for metrics.
+     *
+     * @param name      The metric name (e.g., "cost", "duration.p50", feedback score name)
+     * @param time      The time bucket for this data point
+     * @param value     The metric value
+     * @param groupName The breakdown group name (null if no breakdown is applied)
+     */
     @Builder
-    record Entry(String name, Instant time, Number value) {
+    record Entry(String name, Instant time, Number value, String groupName) {
+
+        /**
+         * Constructor for backward compatibility when no breakdown is used.
+         */
+        public Entry(String name, Instant time, Number value) {
+            this(name, time, value, null);
+        }
     }
 
     Mono<List<Entry>> getDuration(UUID projectId, ProjectMetricRequest request);
@@ -189,14 +206,22 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 SELECT
                     id,
                     UUIDv7ToDateTime(toUUID(id)) as trace_time,
-                    duration
+                    duration,
+                    tags,
+                    metadata,
+                    name,
+                    error_info
                 FROM (
                     SELECT
                         id,
                         if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration
+                         NULL) AS duration,
+                        tags,
+                        metadata,
+                        name,
+                        error_info
                     FROM traces FINAL
                     <if(guardrails_filters)>
                     LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
@@ -432,6 +457,58 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
+    private static final String GET_TRACE_COUNT_WITH_BREAKDOWN = """
+            %s
+            SELECT <bucket> AS bucket,
+                   <group_expression> AS group_name,
+                   nullIf(count(DISTINCT id), 0) as count
+            FROM traces_filtered t
+            GROUP BY bucket, group_name
+            ORDER BY bucket, group_name;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_TRACE_DURATION_WITH_BREAKDOWN = """
+            %s
+            SELECT <bucket> AS bucket,
+                   <group_expression> AS group_name,
+                   arrayMap(
+                     v -> toDecimal64(
+                            greatest(
+                              least(if(isFinite(v), v, 0),  999999999.999999999),
+                              -999999999.999999999
+                            ),
+                            9
+                          ),
+                     quantiles(0.5, 0.9, 0.99)(duration)
+                   ) AS duration
+            FROM traces_filtered t
+            GROUP BY bucket, group_name
+            ORDER BY bucket, group_name;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_COST_WITH_BREAKDOWN = """
+            %s, spans_dedup AS (
+                SELECT t.trace_time AS trace_time,
+                       <group_expression> AS group_name,
+                       s.total_estimated_cost AS value
+                FROM traces_filtered t
+                JOIN (
+                    SELECT
+                        trace_id,
+                        total_estimated_cost
+                    FROM spans final
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) s ON s.trace_id = t.id
+            )
+            SELECT <bucket_spans_dedup> AS bucket,
+                   group_name,
+                   nullIf(sum(value), 0) AS value
+            FROM spans_dedup sd
+            GROUP BY bucket, group_name
+            ORDER BY bucket, group_name;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
     private static final String GET_FEEDBACK_SCORES = """
             %s, feedback_scores_deduplication AS (
                 SELECT t.trace_time,
@@ -632,9 +709,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_TRACE_DURATION, "traceDuration")
+                request.hasBreakdown() ? GET_TRACE_DURATION_WITH_BREAKDOWN : GET_TRACE_DURATION, "traceDuration")
                 .flatMapMany(result -> result
-                        .map((row, metadata) -> mapDuration(row, TRACE_DURATION_PREFIX)))
+                        .map((row, metadata) -> request.hasBreakdown()
+                                ? mapDurationWithBreakdown(row, TRACE_DURATION_PREFIX)
+                                : mapDuration(row, TRACE_DURATION_PREFIX)))
                 .reduce(Stream::concat)
                 .map(Stream::toList));
     }
@@ -657,6 +736,28 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .orElse(Stream.empty());
     }
 
+    private Stream<Entry> mapDurationWithBreakdown(Row row, String prefix) {
+        String groupName = RowUtils.getOptionalValue(row, "group_name", String.class);
+        return Optional.ofNullable(row.get("duration", List.class))
+                .map(durations -> Stream.of(
+                        Entry.builder().name(String.join(".", prefix, P50))
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 0))
+                                .groupName(groupName)
+                                .build(),
+                        Entry.builder().name(String.join(".", prefix, P90))
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 1))
+                                .groupName(groupName)
+                                .build(),
+                        Entry.builder().name(String.join(".", prefix, P99))
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 2))
+                                .groupName(groupName)
+                                .build()))
+                .orElse(Stream.empty());
+    }
+
     private static BigDecimal getP(List durations, int index) {
         if (durations.size() <= index) {
             return null;
@@ -668,9 +769,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_TRACE_COUNT, "traceCount")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
-                        row -> row.get("count", Integer.class)))
+                request.hasBreakdown() ? GET_TRACE_COUNT_WITH_BREAKDOWN : GET_TRACE_COUNT, "traceCount")
+                .flatMapMany(result -> request.hasBreakdown()
+                        ? rowToDataPointWithBreakdown(result, row -> NAME_TRACES,
+                                row -> row.get("count", Integer.class))
+                        : rowToDataPoint(result, row -> NAME_TRACES, row -> row.get("count", Integer.class)))
                 .collectList());
     }
 
@@ -732,11 +835,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_COST, "cost")
-                .flatMapMany(result -> rowToDataPoint(
-                        result,
-                        row -> NAME_COST,
-                        row -> row.get("value", BigDecimal.class)))
+                request.hasBreakdown() ? GET_COST_WITH_BREAKDOWN : GET_COST, "cost")
+                .flatMapMany(result -> request.hasBreakdown()
+                        ? rowToDataPointWithBreakdown(result, row -> NAME_COST,
+                                row -> row.get("value", BigDecimal.class))
+                        : rowToDataPoint(result, row -> NAME_COST, row -> row.get("value", BigDecimal.class)))
                 .collectList());
     }
 
@@ -877,6 +980,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
                                 .formatted(intervalToSql(request.interval()))));
 
+        // Add breakdown group expression if breakdown is enabled
+        if (request.hasBreakdown()) {
+            template.add("group_expression", getBreakdownGroupExpression(request.breakdown()));
+            // For cost query with breakdown, we need a different bucket expression that uses sd.trace_time
+            template.add("bucket_spans_dedup", wrapWeekly(request.interval(),
+                    "toStartOfInterval(sd.trace_time, %s)".formatted(intervalToSql(request.interval()))));
+        }
+
         // Add uuid flags for conditional SQL generation
         template.add("uuid_from_time", true);
         if (request.uuidToTime() != null) {
@@ -919,6 +1030,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             statement.bind("uuid_to_time", request.uuidToTime().toString());
         }
 
+        // Bind metadata_key if breakdown by metadata is enabled
+        if (request.hasBreakdown() && request.breakdown().field() == BreakdownField.METADATA) {
+            statement.bind("metadata_key", request.breakdown().metadataKey());
+        }
+
         Optional.ofNullable(request.traceFilters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
@@ -948,12 +1064,41 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .build()));
     }
 
+    private Publisher<Entry> rowToDataPointWithBreakdown(
+            Result result, Function<Row, String> nameGetter, Function<Row, ? extends Number> valueGetter) {
+        return result.map(((row, rowMetadata) -> Entry.builder()
+                .name(nameGetter.apply(row))
+                .value(valueGetter.apply(row))
+                .time(row.get("bucket", Instant.class))
+                .groupName(RowUtils.getOptionalValue(row, "group_name", String.class))
+                .build()));
+    }
+
     private String wrapWeekly(TimeInterval interval, String stmt) {
         if (interval == TimeInterval.WEEKLY) {
             return "toDateTime(%s)".formatted(stmt);
         }
 
         return stmt;
+    }
+
+    /**
+     * Get the SQL expression for the breakdown group based on the breakdown field.
+     * This is used in the GROUP BY clause to group metrics by the specified dimension.
+     * Uses 't.' prefix to reference columns from traces_filtered table alias.
+     */
+    private String getBreakdownGroupExpression(BreakdownConfig breakdown) {
+        if (breakdown == null || !breakdown.isEnabled()) {
+            return "''";
+        }
+
+        return switch (breakdown.field()) {
+            case TAGS -> "arrayJoin(if(empty(t.tags), ['Unknown'], t.tags))";
+            case METADATA -> "ifNull(JSONExtractString(t.metadata, :metadata_key), 'Unknown')";
+            case NAME -> "ifNull(t.name, 'Unknown')";
+            case ERROR_INFO -> "if(length(t.error_info) > 0, 'Has Error', 'No Error')";
+            default -> "''";
+        };
     }
 
     private String intervalToSql(TimeInterval interval) {
