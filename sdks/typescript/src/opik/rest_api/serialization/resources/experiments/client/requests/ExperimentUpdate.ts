@@ -14,6 +14,7 @@ export const ExperimentUpdate: core.serialization.Schema<serializers.ExperimentU
     core.serialization.object({
         name: core.serialization.string().optional(),
         metadata: JsonNode.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         type: ExperimentUpdateType.optional(),
         status: ExperimentUpdateStatus.optional(),
         experimentScores: core.serialization.property(
@@ -26,6 +27,7 @@ export declare namespace ExperimentUpdate {
     export interface Raw {
         name?: string | null;
         metadata?: JsonNode.Raw | null;
+        tags?: string[] | null;
         type?: ExperimentUpdateType.Raw | null;
         status?: ExperimentUpdateStatus.Raw | null;
         experiment_scores?: ExperimentScore.Raw[] | null;
