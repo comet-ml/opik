@@ -78,6 +78,7 @@ def test_evaluate__happyflow(
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -305,6 +306,7 @@ def test_evaluate_with_scoring_key_mapping(
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
     mock_experiment.insert.assert_has_calls(
         [
@@ -575,6 +577,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
     mock_experiment.insert.assert_called_once_with(
@@ -703,6 +706,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -830,6 +834,7 @@ def test_evaluate_prompt_happyflow(
             "model": "gpt-3.5-turbo",
         },
         prompts=None,
+        tags=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1026,6 +1031,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1370,6 +1376,7 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
             "model": "gpt-3.5-turbo",
         },
         prompts=None,
+        tags=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1459,6 +1466,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         name="the-experiment-name",
         experiment_config=None,
         prompts=None,
+        tags=None,
     )
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
@@ -1610,6 +1618,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "model": "some-model-name",
         },
         prompts=None,
+        tags=None,
     )
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
