@@ -180,6 +180,7 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.LIST, "has(%1$s, :filter%2$d)"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
                             Map.entry(FieldType.DICTIONARY,

@@ -24,6 +24,7 @@ public abstract class GroupingFactory {
 
     public static final String METADATA = "metadata";
     public static final String DATASET_ID = "dataset_id";
+    public static final String TAGS = "tags";
 
     private static final TypeReference<List<GroupBy>> GROUP_BY_LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
