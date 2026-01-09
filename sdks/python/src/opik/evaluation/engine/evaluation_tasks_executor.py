@@ -18,35 +18,35 @@ class StreamingExecutor(Generic[T]):
     """
 
     def __init__(self, workers: int, verbose: int, desc: str = "Evaluation"):
-        self.workers = workers
-        self.verbose = verbose
-        self.desc = desc
-        self.task_count = 0
-        self.pool: futures.ThreadPoolExecutor
-        self.submitted_futures: List[futures.Future[T]] = []
+        self._workers = workers
+        self._verbose = verbose
+        self._desc = desc
+        self._task_count = 0
+        self._pool: futures.ThreadPoolExecutor
+        self._submitted_futures: List[futures.Future[T]] = []
 
     def __enter__(self) -> "StreamingExecutor[T]":
-        self.pool = futures.ThreadPoolExecutor(max_workers=self.workers)
-        self.pool.__enter__()
+        self._pool = futures.ThreadPoolExecutor(max_workers=self._workers)
+        self._pool.__enter__()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.pool.__exit__(exc_type, exc_val, exc_tb)
+        self._pool.__exit__(exc_type, exc_val, exc_tb)
 
     def submit(self, task: EvaluationTask[T]) -> None:
         """Submit a task to the thread pool for execution."""
-        self.task_count += 1
-        future = self.pool.submit(task)
-        self.submitted_futures.append(future)
+        self._task_count += 1
+        future = self._pool.submit(task)
+        self._submitted_futures.append(future)
 
     def get_results(self) -> List[T]:
         """Collect results from futures as they complete with progress bar."""
         results: List[T] = []
         for future in _tqdm(
-            futures.as_completed(self.submitted_futures),
-            disable=(self.verbose < 1),
-            desc=self.desc,
-            total=self.task_count,
+            futures.as_completed(self._submitted_futures),
+            disable=(self._verbose < 1),
+            desc=self._desc,
+            total=self._task_count,
         ):
             results.append(future.result())
         return results
