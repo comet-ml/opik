@@ -13,6 +13,7 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
     LLMProvider.OPENAI: [
         opik_usage.OpikUsage.from_openai_completions_dict,
         opik_usage.OpikUsage.from_openai_responses_dict,
+        opik_usage.OpikUsage.from_openai_audio_speech_dict,
     ],
     LLMProvider.GOOGLE_VERTEXAI: [opik_usage.OpikUsage.from_google_dict],
     LLMProvider.GOOGLE_AI: [opik_usage.OpikUsage.from_google_dict],

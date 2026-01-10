@@ -8,6 +8,7 @@ from . import (
     unknown_usage,
     bedrock_usage,
     openai_responses_usage,
+    openai_audio_speech_usage,
 )
 import opik.dict_utils as dict_utils
 
@@ -17,6 +18,7 @@ ProviderUsage = Union[
     anthropic_usage.AnthropicUsage,
     bedrock_usage.BedrockUsage,
     openai_responses_usage.OpenAIResponsesUsage,
+    openai_audio_speech_usage.OpenAIAudioSpeechUsage,
     unknown_usage.UnknownUsage,
 ]
 
@@ -164,6 +166,27 @@ class OpikUsage(pydantic.BaseModel):
         return cls(
             completion_tokens=provider_usage.output_tokens,
             prompt_tokens=provider_usage.input_tokens,
+            total_tokens=provider_usage.total_tokens,
+            provider_usage=provider_usage,
+        )
+
+    @classmethod
+    def from_openai_audio_speech_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        """
+        Create OpikUsage from OpenAI Audio Speech (TTS) usage dict.
+
+        TTS models are billed by character count, not by token count.
+        For compatibility, we store character count in the token fields.
+        """
+        provider_usage = (
+            openai_audio_speech_usage.OpenAIAudioSpeechUsage.from_original_usage_dict(
+                usage
+            )
+        )
+
+        return cls(
+            completion_tokens=provider_usage.completion_tokens,
+            prompt_tokens=provider_usage.prompt_tokens,
             total_tokens=provider_usage.total_tokens,
             provider_usage=provider_usage,
         )
