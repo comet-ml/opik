@@ -23,7 +23,6 @@ class MethodInfo(BaseModel):
 
 
 class ClassInfo(BaseModel):
-    class_docstring: str | None
     init_parameters: list[ParameterInfo]
     public_methods: list[MethodInfo]
 
@@ -269,7 +268,6 @@ class ClassInspector:
             )
 
         return ClassInfo(
-            class_docstring=self.get_docstring(),
             init_parameters=init_params,
             public_methods=self.get_public_methods(),
         )
