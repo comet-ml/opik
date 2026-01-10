@@ -39,7 +39,7 @@ repos:
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
-        exclude: '(sdks/opik_optimizer/scripts/)|(sdks/opik_optimizer/benchmarks/benchmark_results/)'
+        exclude: '(sdks/opik_optimizer/scripts/benchmarks/|sdks/opik_optimizer/benchmarks/benchmark_results/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
 
@@ -54,6 +54,7 @@ repos:
     hooks:
       - id: markdownlint
         files: ^sdks/opik_optimizer/.*\.md$
+        exclude: '^sdks/opik_optimizer/scripts/arc_agi/prompts/(system_prompt|user_prompt)\.md$'
         args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
 
   - repo: https://github.com/codespell-project/codespell
@@ -69,4 +70,4 @@ repos:
     hooks:
       - id: vulture
         files: ^sdks/opik_optimizer
-        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/tests', 'sdks/opik_optimizer/scripts', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80', '--exclude=benchmarks/.venv']
+        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/tests', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80', '--exclude=benchmarks/.venv']
