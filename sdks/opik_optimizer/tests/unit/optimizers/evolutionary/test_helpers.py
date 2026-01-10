@@ -1,8 +1,6 @@
 """Tests for evolutionary optimizer helpers module."""
 
-import pytest
 from typing import Any
-from unittest.mock import MagicMock
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.helpers import (
@@ -75,7 +73,14 @@ class TestCalculatePopulationDiversity:
     def test_different_individuals_have_diversity(self) -> None:
         population = [
             {"prompt": [{"role": "system", "content": "Short test"}]},
-            {"prompt": [{"role": "system", "content": "A completely different and much longer prompt content"}]},
+            {
+                "prompt": [
+                    {
+                        "role": "system",
+                        "content": "A completely different and much longer prompt content",
+                    }
+                ]
+            },
         ]
         diversity = calculate_population_diversity(population)
         # Different individuals should have measurable diversity

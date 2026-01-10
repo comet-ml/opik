@@ -1,7 +1,6 @@
 """Tests for OptimizationResult class and helper functions."""
 
 import pytest
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from opik_optimizer import ChatPrompt
@@ -204,9 +203,7 @@ class TestOptimizationResultGetters:
             prompt=ChatPrompt(system="Test", user="Query"),
             score=0.85,
             metric_name="accuracy",
-            details={
-                "optimized_parameters": {"temperature": 0.5, "max_tokens": 1000}
-            },
+            details={"optimized_parameters": {"temperature": 0.5, "max_tokens": 1000}},
         )
         params = result.get_optimized_parameters()
         assert params == {"temperature": 0.5, "max_tokens": 1000}
@@ -312,9 +309,7 @@ class TestOptimizationResultStr:
             details={
                 "optimized_parameters": {"temperature": 0.7},
                 "parameter_importance": {"temperature": 0.8},
-                "search_ranges": {
-                    "stage1": {"temperature": {"min": 0.1, "max": 1.0}}
-                },
+                "search_ranges": {"stage1": {"temperature": {"min": 0.1, "max": 1.0}}},
             },
         )
         output = str(result)

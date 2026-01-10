@@ -31,9 +31,7 @@ def _extract_metrics_from_eval(
             for raw_sr in raw:
                 metrics[getattr(raw_sr, "name", "")] = getattr(raw_sr, "value", 0.0)
                 if not best_code:
-                    best_code = (
-                        (getattr(raw_sr, "metadata", {}) or {}).get("best_code")
-                    )
+                    best_code = (getattr(raw_sr, "metadata", {}) or {}).get("best_code")
     return metrics, composite_reason, best_code
 
 

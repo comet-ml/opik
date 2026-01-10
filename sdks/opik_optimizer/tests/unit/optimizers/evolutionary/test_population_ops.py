@@ -2,8 +2,7 @@
 
 import pytest
 import json
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import (
@@ -61,20 +60,35 @@ class TestInitializePopulation:
 
         # Mock LLM to return fresh prompts
         fresh_response = json.dumps(
-            [[{"role": "system", "content": "Fresh prompt 1"}, {"role": "user", "content": "{input}"}]]
+            [
+                [
+                    {"role": "system", "content": "Fresh prompt 1"},
+                    {"role": "user", "content": "{input}"},
+                ]
+            ]
         )
         variation_response = json.dumps(
             {
                 "prompts": [
-                    {"prompt": [{"role": "system", "content": "Variation 1"}, {"role": "user", "content": "{input}"}]},
-                    {"prompt": [{"role": "system", "content": "Variation 2"}, {"role": "user", "content": "{input}"}]},
+                    {
+                        "prompt": [
+                            {"role": "system", "content": "Variation 1"},
+                            {"role": "user", "content": "{input}"},
+                        ]
+                    },
+                    {
+                        "prompt": [
+                            {"role": "system", "content": "Variation 2"},
+                            {"role": "user", "content": "{input}"},
+                        ]
+                    },
                 ]
             }
         )
 
         call_count = {"n": 0}
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: object) -> str:
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return fresh_response
@@ -111,7 +125,7 @@ class TestInitializePopulation:
             lambda verbose: mock_context,
         )
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: object) -> str:
             raise Exception("LLM API error")
 
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
@@ -144,7 +158,7 @@ class TestInitializePopulation:
             lambda verbose: mock_context,
         )
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: object) -> str:
             return "This is not valid JSON"
 
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
@@ -180,21 +194,41 @@ class TestInitializePopulation:
 
         # Mock LLM responses
         fresh_response = json.dumps(
-            [[{"role": "system", "content": "Fresh"}, {"role": "user", "content": "{q}"}]]
+            [
+                [
+                    {"role": "system", "content": "Fresh"},
+                    {"role": "user", "content": "{q}"},
+                ]
+            ]
         )
         variation_response = json.dumps(
             {
                 "prompts": [
-                    {"prompt": [{"role": "system", "content": "Var 1"}, {"role": "user", "content": "{q}"}]},
-                    {"prompt": [{"role": "system", "content": "Var 2"}, {"role": "user", "content": "{q}"}]},
-                    {"prompt": [{"role": "system", "content": "Var 3"}, {"role": "user", "content": "{q}"}]},
+                    {
+                        "prompt": [
+                            {"role": "system", "content": "Var 1"},
+                            {"role": "user", "content": "{q}"},
+                        ]
+                    },
+                    {
+                        "prompt": [
+                            {"role": "system", "content": "Var 2"},
+                            {"role": "user", "content": "{q}"},
+                        ]
+                    },
+                    {
+                        "prompt": [
+                            {"role": "system", "content": "Var 3"},
+                            {"role": "user", "content": "{q}"},
+                        ]
+                    },
                 ]
             }
         )
 
         call_count = {"n": 0}
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: object) -> str:
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return fresh_response
@@ -229,7 +263,10 @@ class TestInitializePopulation:
         )
 
         # Return identical prompts
-        same_messages = [{"role": "system", "content": "Same content"}, {"role": "user", "content": "{q}"}]
+        same_messages = [
+            {"role": "system", "content": "Same content"},
+            {"role": "user", "content": "{q}"},
+        ]
         fresh_response = json.dumps([same_messages])
         variation_response = json.dumps(
             {"prompts": [{"prompt": same_messages}, {"prompt": same_messages}]}
@@ -237,7 +274,7 @@ class TestInitializePopulation:
 
         call_count = {"n": 0}
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: object) -> str:
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return fresh_response
@@ -245,9 +282,7 @@ class TestInitializePopulation:
 
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
 
-        prompt = ChatPrompt(
-            messages=same_messages
-        )
+        prompt = ChatPrompt(messages=same_messages)
 
         result = initialize_population(
             prompt=prompt,

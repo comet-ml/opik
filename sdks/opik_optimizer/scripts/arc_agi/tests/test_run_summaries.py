@@ -7,7 +7,13 @@ from scripts.arc_agi.utils.run_summaries import persist_run_summary
 
 
 class DummyScoreResult:
-    def __init__(self, name: str, value: float, reason: str | None = None, metadata=None):
+    def __init__(
+        self,
+        name: str,
+        value: float,
+        reason: str | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
         self.name = name
         self.value = value
         self.reason = reason
@@ -15,18 +21,22 @@ class DummyScoreResult:
 
 
 class DummyTestResult:
-    def __init__(self, score_results):
+    def __init__(self, score_results: list[DummyScoreResult]) -> None:
         self.score_results = score_results
 
 
 class DummyEval:
-    def __init__(self, score_results, cost=None):
+    def __init__(
+        self, score_results: list[DummyScoreResult], cost: float | None = None
+    ) -> None:
         self.test_results = [DummyTestResult(score_results)]
         self.cost = cost
 
 
 @pytest.mark.parametrize("final_cost", [None, 12.34])
-def test_persist_run_summary_writes_jsonl(tmp_path: Path, final_cost: float | None):
+def test_persist_run_summary_writes_jsonl(
+    tmp_path: Path, final_cost: float | None
+) -> None:
     composite_name = "arc_agi2_multi"
     raw_sr = DummyScoreResult(
         name="arc_agi2_exact",

@@ -2,7 +2,6 @@
 
 import pytest
 import copy
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from opik_optimizer.utils.colbert import (
@@ -137,9 +136,7 @@ class TestColbertv2GetRequest:
             "error": True,
             "message": "Cannot connect to host",
         }
-        mock_response_success = {
-            "topk": [{"text": "Result", "score": 0.9}]
-        }
+        mock_response_success = {"topk": [{"text": "Result", "score": 0.9}]}
 
         with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
             mock_session = MagicMock()
@@ -348,9 +345,7 @@ class TestColBERTv2Class:
             assert isinstance(results[0], str)
 
     def test_call_with_custom_max_retries(self) -> None:
-        mock_response = {
-            "topk": [{"text": "Result", "score": 0.9}]
-        }
+        mock_response = {"topk": [{"text": "Result", "score": 0.9}]}
 
         with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
             mock_session = MagicMock()
