@@ -155,7 +155,6 @@ class RichGEPAOptimizerLogger:
                     if iteration > 0 and iteration != self.current_iteration:
                         console.print("│")
 
-                    self.optimizer._gepa_current_iteration = iteration  # type: ignore[attr-defined]
                     self.current_iteration = iteration
                     self._last_raw_message = first
 
@@ -430,21 +429,3 @@ def _format_score(value: Any) -> str:
         return f"{float(value):.4f}"
     except Exception:
         return str(value)
-
-
-def display_candidate_update(
-    iteration: int | None,
-    phase: str,
-    aggregate: float | None,
-    prompt_snippet: str,
-    *,
-    verbose: int = 1,
-) -> None:
-    if verbose < 1:
-        return
-    iter_label = f"Iter {iteration}" if iteration is not None else "Candidate"
-    agg_str = f"{aggregate:.4f}" if isinstance(aggregate, (int, float)) else "—"
-    snippet = prompt_snippet.replace("\n", " ")
-    if len(snippet) > 100:
-        snippet = snippet[:100] + "…"
-    console.print(f"│   {iter_label}: [{phase}] agg={agg_str} prompt={snippet}")

@@ -120,6 +120,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         derived_seed = int.from_bytes(digest[:8], "big")
         return random.Random(derived_seed)
 
+    # FIXME: Dead code, should be wired or removed
     def _split_dataset(
         self, dataset: list[dict[str, Any]], train_ratio: float
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

@@ -512,23 +512,49 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 try:
-                    bundle_candidates = candidate_ops.generate_agent_bundle_candidates(
-                        optimizer=self,
-                        current_prompts=best_prompts,
-                        best_score=best_score,
-                        round_num=round_num,
-                        previous_rounds=rounds,
-                        metric=metric,
-                        optimization_id=optimization_id,
-                        project_name=self.project_name,
-                        build_history_context_fn=self._build_history_context,
-                        get_task_context_fn=self._get_task_context,
-                    )
-                    # Extract prompts from bundle candidates and limit to prompts_this_round
-                    candidate_prompts = [
-                        bundle.prompts
-                        for bundle in bundle_candidates[:prompts_this_round]
-                    ]
+                    if is_single_prompt_optimization:
+                        single_candidates = candidate_ops.generate_candidate_prompts(
+                            optimizer=self,
+                            current_prompt=list(best_prompts.values())[0],
+                            best_score=best_score,
+                            round_num=round_num,
+                            previous_rounds=rounds,
+                            metric=metric,
+                            optimization_id=optimization_id,
+                            project_name=self.project_name,
+                            build_history_context_fn=self._build_history_context,
+                            get_task_context_fn=self._get_task_context,
+                            winning_patterns=(
+                                self.hall_of_fame.get_patterns_for_injection()
+                                if self.hall_of_fame
+                                else None
+                            ),
+                        )
+                        prompt_key = next(iter(best_prompts.keys()))
+                        candidate_prompts = [
+                            {prompt_key: prompt}
+                            for prompt in single_candidates[:prompts_this_round]
+                        ]
+                    else:
+                        bundle_candidates = (
+                            candidate_ops.generate_agent_bundle_candidates(
+                                optimizer=self,
+                                current_prompts=best_prompts,
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=rounds,
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                project_name=self.project_name,
+                                build_history_context_fn=self._build_history_context,
+                                get_task_context_fn=self._get_task_context,
+                            )
+                        )
+                        # Extract prompts from bundle candidates and limit to prompts_this_round
+                        candidate_prompts = [
+                            bundle.prompts
+                            for bundle in bundle_candidates[:prompts_this_round]
+                        ]
 
                     synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
                     if (

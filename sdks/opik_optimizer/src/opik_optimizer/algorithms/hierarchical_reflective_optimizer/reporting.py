@@ -712,46 +712,6 @@ def display_prompt_improvement(
         pass
 
 
-def display_improvement_reasoning(
-    failure_mode_name: str, reasoning: str, verbose: int = 1
-) -> None:
-    """Display prompt improvement reasoning for a specific failure mode."""
-    if verbose < 1:
-        return
-
-    console.print(Text("│"))
-    console.print(Text("│   "))
-    console.print(
-        Text("│   ").append(Text(f"Addressing: {failure_mode_name}", style="bold cyan"))
-    )
-
-    reasoning_content = Text()
-    reasoning_content.append("Improvement Strategy:\n", style="cyan")
-    reasoning_content.append(reasoning)
-
-    panel = Panel(
-        reasoning_content,
-        title="💡 Reasoning",
-        title_align="left",
-        border_style="blue",
-        width=PANEL_WIDTH - 10,
-        padding=(0, 1),
-    )
-
-    # Capture and prefix each line
-    with console.capture() as capture:
-        console.print(panel)
-
-    rendered_panel = capture.get()
-
-    # Prefix each line with '│     ', preserving ANSI styles
-    prefixed_output = "\n".join(f"│     {line}" for line in rendered_panel.splitlines())
-
-    # Print the prefixed output (will include colors)
-    console.print(prefixed_output, highlight=False)
-    console.print(Text("│   "))
-
-
 def display_iteration_improvement(
     improvement: float, current_score: float, best_score: float, verbose: int = 1
 ) -> None:
