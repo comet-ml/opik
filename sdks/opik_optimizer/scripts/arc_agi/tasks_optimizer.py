@@ -13,6 +13,8 @@ registry, and Hierarchical Reflective Optimizer (HRPO) for a *single* ARC task:
 * Scoring is defined in :mod:`scripts.arc_agi.utils.metrics`; the constants
   exported from that module ensure the multi-metric objective and evaluation
   config remain aligned (pass@k, likeness weights, etc.).
+* Each run writes a JSONL summary under ``arc_agi/runs/<task_id>.jsonl`` for
+  downstream aggregation (scores, metrics, best code, llm_calls).
 """
 
 from __future__ import annotations
@@ -25,7 +27,8 @@ from opik.evaluation.metrics import score_result
 from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer
 from opik_optimizer.datasets import arc_agi2
 
-try:  # pragma: no cover - satisfied in package context
+# Local imports with fallback for script execution
+try:  # pragma: no cover - package context
     from .utils.code_evaluator import EvaluationConfig, evaluate_arc_response
     from .utils.image_agent import ArcAgiImageAgent
     from .utils.logging_utils import CONSOLE, debug_print
@@ -40,7 +43,8 @@ try:  # pragma: no cover - satisfied in package context
     )
     from .utils.prompt_loader import load_prompts
     from .utils.visualization import print_task_preview
-except ImportError:  # pragma: no cover - when executed as a script
+    from .utils.run_summaries import persist_run_summary
+except ImportError:  # pragma: no cover - script context
     import sys
     from pathlib import Path
 
@@ -65,6 +69,7 @@ except ImportError:  # pragma: no cover - when executed as a script
     )
     from scripts.arc_agi.utils.prompt_loader import load_prompts  # type: ignore
     from scripts.arc_agi.utils.visualization import print_task_preview  # type: ignore
+    from scripts.arc_agi.utils.run_summaries import persist_run_summary  # type: ignore
 
 SYSTEM_PROMPT, USER_PROMPT = load_prompts()
 
@@ -293,7 +298,22 @@ def main() -> None:
             trials=0,
             llm_calls=getattr(optimizer, "llm_call_counter", None),
         )
-        return
+    persist_run_summary(
+        task_id=first_item.get("task_id"),
+        composite_name=COMPOSITE_METRIC_NAME,
+        baseline_score=baseline_score,
+        baseline_eval=baseline_eval,
+        final_score=baseline_score,
+        trials_used=0,
+        llm_calls=getattr(optimizer, "llm_call_counter", None),
+        model=EVAL_MODEL,
+        reasoning_model=REASONING_MODEL,
+        pass_at_k=DEFAULT_PASS_AT_K,
+        n_samples=N_SAMPLES_PER_TRIAL,
+        include_images=INCLUDE_IMAGES,
+        include_images_hrpo_eval=INCLUDE_IMAGES_HRPO_EVAL,
+        final_cost=getattr(baseline_eval, "cost", None),
+    )
 
     result = optimizer.optimize_prompt(
         prompt=prompt,
@@ -319,6 +339,23 @@ def main() -> None:
     else:
         prompt_name = prompt_result.name
     CONSOLE.print(f"Best prompt name: {prompt_name}")
+
+    persist_run_summary(
+        task_id=first_item.get("task_id"),
+        composite_name=COMPOSITE_METRIC_NAME,
+        baseline_score=baseline_score,
+        baseline_eval=baseline_eval,
+        final_score=result.score,
+        trials_used=trials_used,
+        llm_calls=llm_calls,
+        model=EVAL_MODEL,
+        reasoning_model=REASONING_MODEL,
+        pass_at_k=DEFAULT_PASS_AT_K,
+        n_samples=N_SAMPLES_PER_TRIAL,
+        include_images=INCLUDE_IMAGES,
+        include_images_hrpo_eval=INCLUDE_IMAGES_HRPO_EVAL,
+        final_cost=getattr(result, "llm_cost_total", None),
+    )
 
 
 if __name__ == "__main__":
