@@ -12,7 +12,7 @@ import re
 import opik
 from ....base_optimizer import OptimizationRound
 from ....api_objects.types import MetricFunction
-from ..prompts import START_DELIM, END_DELIM
+from .. import prompts as meta_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -131,9 +131,9 @@ def get_task_context(
     while current_num_examples > 0:
         # Build context string
         context = "Task Context: "
-        context += f"Available input variables (use {START_DELIM}variable_name{END_DELIM} syntax): "
+        context += f"Available input variables (use {meta_prompts.START_DELIM}variable_name{meta_prompts.END_DELIM} syntax): "
         context += ", ".join(
-            [f"{START_DELIM}{field}{END_DELIM}" for field in input_fields]
+            [f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}" for field in input_fields]
         )
         context += "\n\n"
 
@@ -184,7 +184,7 @@ def get_task_context(
                 # Truncate long values
                 if len(value_str) > max_value_length:
                     value_str = value_str[:max_value_length] + "..."
-                context += f"{START_DELIM}{key}{END_DELIM}: {value_str}\n"
+                context += f"{meta_prompts.START_DELIM}{key}{meta_prompts.END_DELIM}: {value_str}\n"
             context += "```\n\n"
 
         # Count tokens

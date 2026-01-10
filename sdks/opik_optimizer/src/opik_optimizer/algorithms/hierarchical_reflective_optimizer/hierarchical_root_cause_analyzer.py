@@ -10,9 +10,9 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from . import reporting
-from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 from ...reporting_utils import get_console
 from ... import _llm_calls
+from ...utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ class HierarchicalRootCauseAnalyzer:
         max_parallel_batches: int,
         batch_size: int,
         model_parameters: dict[str, Any] | None,
+        prompts: PromptLibrary,
         verbose: int = 1,
     ) -> None:
         """
@@ -51,6 +52,7 @@ class HierarchicalRootCauseAnalyzer:
             seed: Random seed for reproducibility
             max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
             batch_size: Number of test cases per batch for analysis (default: 25)
+            prompts: PromptLibrary instance for accessing prompt templates
             verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         """
         self.reasoning_model = reasoning_model
@@ -59,6 +61,7 @@ class HierarchicalRootCauseAnalyzer:
         self.batch_size = batch_size
         self.verbose = verbose
         self.model_parameters = model_parameters or {}
+        self.prompts = prompts
 
     def _format_test_results_batch(
         self,
@@ -135,7 +138,8 @@ Scores:
             test_results, batch_start, batch_end
         )
 
-        batch_analysis_prompt = BATCH_ANALYSIS_PROMPT.format(
+        batch_analysis_prompt = self.prompts.get(
+            "batch_analysis_prompt",
             formatted_batch=formatted_batch,
         )
 
@@ -192,7 +196,8 @@ Scores:
 {chr(10).join(failure_list)}"""
             batch_summaries.append(summary)
 
-        synthesis_prompt = SYNTHESIS_PROMPT.format(
+        synthesis_prompt = self.prompts.get(
+            "synthesis_prompt",
             batch_summaries=chr(10).join(batch_summaries),
         )
 

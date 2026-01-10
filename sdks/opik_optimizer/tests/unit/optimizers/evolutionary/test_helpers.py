@@ -111,6 +111,15 @@ class TestCalculatePopulationDiversity:
             def items(self) -> Any:
                 return self._data.items()
 
+            def keys(self) -> Any:
+                return self._data.keys()
+
+            def __iter__(self) -> Any:
+                return iter(self._data)
+
+            def __getitem__(self, key: str) -> Any:
+                return self._data[key]
+
             def __str__(self) -> str:
                 return str(self._data)
 

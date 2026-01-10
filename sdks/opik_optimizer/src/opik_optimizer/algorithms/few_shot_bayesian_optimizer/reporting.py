@@ -61,6 +61,7 @@ def display_evaluation(
 def display_few_shot_prompt_template(
     prompts_with_placeholder: dict[str, "ChatPrompt"],
     fewshot_template: str,
+    placeholder: str,
     verbose: int = 1,
 ) -> None:
     """Display the few-shot prompt template creation results."""
@@ -78,9 +79,7 @@ def display_few_shot_prompt_template(
         display_messages(prompt.get_messages(), prefix="│    ")
         console.print(Text("│"))
 
-    console.print(
-        Text("│\n│   With the FEW_SHOT_EXAMPLE_PLACEHOLDER following the format:")
-    )
+    console.print(Text(f"│\n│   With the {placeholder} following the format:"))
 
     panel = Panel(
         Text(fewshot_template),

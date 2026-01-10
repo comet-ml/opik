@@ -20,6 +20,7 @@ from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from . import task_evaluator, helpers
+from .utils.prompt_library import PromptLibrary, PromptOverrides
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -47,6 +48,9 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer(ABC):
+    # Subclasses define their prompts here
+    DEFAULT_PROMPTS: dict[str, str] = {}
+
     def __init__(
         self,
         model: str,
@@ -58,6 +62,7 @@ class BaseOptimizer(ABC):
         name: str | None = None,
         skip_perfect_score: bool = True,
         perfect_score: float = 0.95,
+        prompt_overrides: PromptOverrides = None,
     ) -> None:
         """
         Base class for optimizers.
@@ -76,6 +81,9 @@ class BaseOptimizer(ABC):
            name: Optional name for the optimizer instance. This will be used when creating optimizations.
            skip_perfect_score: Whether to short-circuit optimization when baseline is strong.
            perfect_score: Score threshold treated as "good enough" for short-circuiting.
+           prompt_overrides: Optional dict or callable to customize internal prompts.
+               Dict: {"prompt_key": "new_template"} to override specific prompts.
+               Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
         """
         self.model = model
         self.model_parameters = model_parameters or {}
@@ -103,6 +111,14 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
+
+        # Initialize prompt library with overrides
+        self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
+
+    @property
+    def prompts(self) -> PromptLibrary:
+        """Access the prompt library for this optimizer."""
+        return self._prompts
 
     def _should_skip_optimization(
         self,
@@ -162,6 +178,44 @@ class BaseOptimizer(ABC):
             usage.get("completion_tokens", 0)
         )
         self.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
+
+
+    def get_prompt(self, key: str, **fmt: Any) -> str:
+        """Get a prompt template, optionally formatted with kwargs.
+
+        Args:
+            key: The prompt key to retrieve
+            **fmt: Optional format kwargs to apply to the template
+
+        Returns:
+            The prompt template, formatted if kwargs provided
+
+        Raises:
+            KeyError: If key is not a valid prompt key
+        """
+        return self._prompts.get(key, **fmt)
+
+    def list_prompts(self) -> list[str]:
+        """List available prompt keys.
+
+        Returns:
+            Sorted list of prompt keys
+        """
+        return self._prompts.keys()
+
+    def get_default_prompt(self, key: str) -> str:
+        """Get the original default prompt (before overrides).
+
+        Args:
+            key: The prompt key to retrieve
+
+        Returns:
+            The original default template
+
+        Raises:
+            KeyError: If key is not a valid prompt key
+        """
+        return self._prompts.get_default(key)
 
     def _attach_agent_owner(self, agent: Any) -> None:
         """Attach this optimizer to the agent so it can push counters/cost."""

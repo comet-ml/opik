@@ -12,10 +12,8 @@ from collections import Counter
 import re
 import logging
 
-from ..prompts import (
-    build_pattern_extraction_system_prompt,
-    build_pattern_extraction_user_prompt,
-)
+from .. import prompts as meta_prompts
+from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +42,19 @@ class PromptHallOfFame:
     4. Learn what makes prompts effective over time
     """
 
-    def __init__(self, max_size: int = 10, pattern_extraction_interval: int = 5):
+    def __init__(
+        self,
+        max_size: int = 10,
+        pattern_extraction_interval: int = 5,
+        prompts: PromptLibrary | None = None,
+    ):
         """
         Initialize the Hall of Fame.
 
         Args:
             max_size: Maximum number of prompts to keep
             pattern_extraction_interval: Extract patterns every N trials
+            prompts: PromptLibrary instance for accessing prompt templates
         """
         self.max_size = max_size
         self.pattern_extraction_interval = pattern_extraction_interval
@@ -58,6 +62,7 @@ class PromptHallOfFame:
         self.extracted_patterns: list[str] = []
         self.pattern_usage_count: Counter = Counter()
         self._last_extraction_trial: int = 0
+        self.prompts = prompts
 
     def add(self, entry: HallOfFameEntry) -> bool:
         """

@@ -9,6 +9,7 @@ from ...base_optimizer import BaseOptimizer
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent, LiteLLMAgent
+from ...utils.prompt_library import PromptOverrides
 
 from opik_optimizer.optimization_result import OptimizationResult
 from . import reporting
@@ -18,7 +19,7 @@ from .types import (
     ImprovedPrompt,
     HierarchicalRootCauseAnalysis,
 )
-from .prompts import IMPROVE_PROMPT_TEMPLATE
+from . import prompts as hierarchical_prompts
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -45,7 +46,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        prompt_overrides: Optional dict or callable to override/customize prompt templates.
+            If a dict, keys should match DEFAULT_PROMPTS keys.
+            If a callable, receives the PromptLibrary instance for in-place modification.
     """
+
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "batch_analysis_prompt": hierarchical_prompts.BATCH_ANALYSIS_PROMPT,
+        "synthesis_prompt": hierarchical_prompts.SYNTHESIS_PROMPT,
+        "improve_prompt_template": hierarchical_prompts.IMPROVE_PROMPT_TEMPLATE,
+    }
 
     DEFAULT_MAX_ITERATIONS = 5
     DEFAULT_CONVERGENCE_THRESHOLD = 0.01  # Stop if improvement is less than 1%
@@ -63,6 +73,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = True,
         perfect_score: float = 0.95,
     ):
@@ -76,6 +87,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches
@@ -91,6 +103,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             batch_size=self.batch_size,
             verbose=self.verbose,
             model_parameters=self.reasoning_model_parameters,
+            prompts=self._prompts,
         )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -166,7 +179,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
             prompts_section += f"```\n{prompt.get_messages()}\n```\n"
 
-        improve_prompt_prompt = IMPROVE_PROMPT_TEMPLATE.format(
+        improve_prompt_template = self.get_prompt("improve_prompt_template")
+        improve_prompt_prompt = improve_prompt_template.format(
             prompts_section=prompts_section,
             failure_mode_name=root_cause.name,
             failure_mode_description=root_cause.description,

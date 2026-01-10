@@ -3,6 +3,7 @@ from typing import Any, cast
 
 from opik import Dataset
 from ...base_optimizer import BaseOptimizer, OptimizationRound
+from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
@@ -15,6 +16,7 @@ from litellm.exceptions import BadRequestError
 
 # Import ops modules
 from .ops import candidate_ops, context_ops, result_ops
+from . import prompts as meta_prompts
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -53,7 +55,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
         prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
+        prompt_overrides: Optional dict or callable to customize internal prompts.
+            Dict: {"prompt_key": "new_template"} to override specific prompts.
+            Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    # Prompt templates for this optimizer
+    # Keys match what ops files expect (e.g., optimizer.get_prompt("reasoning_system"))
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "reasoning_system": meta_prompts.REASONING_SYSTEM_PROMPT_TEMPLATE,
+        "candidate_generation": meta_prompts.CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE,
+        "agent_bundle_user": meta_prompts.AGENT_BUNDLE_USER_PROMPT_TEMPLATE,
+        "pattern_extraction_system": meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE,
+        "pattern_extraction_user": meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE,
+        "synthesis": meta_prompts.SYNTHESIS_PROMPT_TEMPLATE,
+    }
 
     # --- Constants for Default Configuration ---
     DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
@@ -89,6 +105,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         name: str | None = None,
         use_hall_of_fame: bool = True,
         prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
+        prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = True,
         perfect_score: float = 0.95,
     ) -> None:
@@ -100,6 +117,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.prompts_per_round = prompts_per_round
         self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
@@ -125,11 +143,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
         self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
         self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
+
         self.hall_of_fame: PromptHallOfFame | None = None
         if self.use_hall_of_fame:
             self.hall_of_fame = PromptHallOfFame(
                 max_size=self.hall_of_fame_size,
                 pattern_extraction_interval=self.pattern_extraction_interval,
+                prompts=self._prompts,
             )
             logger.debug(
                 f"Hall of Fame enabled: size={self.hall_of_fame_size}, "
@@ -389,7 +409,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset
-        self.prompts = prompts
         self._reset_counters()  # Reset counters for run
         initial_prompts = prompts
         is_bundle = True

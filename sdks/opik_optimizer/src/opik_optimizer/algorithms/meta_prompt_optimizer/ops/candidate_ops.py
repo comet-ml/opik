@@ -19,10 +19,7 @@ from ....api_objects import chat_prompt, types
 from ....api_objects.types import MetricFunction
 from .... import _llm_calls
 from ....base_optimizer import OptimizationRound
-from ..prompts import (
-    build_reasoning_system_prompt,
-    build_candidate_generation_user_prompt,
-)
+from .. import prompts as meta_prompts
 from .. import reporting
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
@@ -279,7 +276,12 @@ def generate_candidate_prompts(
                 "Task context and metric-specific instructions disabled for reasoning prompt."
             )
 
-        user_prompt = build_candidate_generation_user_prompt(
+        # Get templates from optimizer (with potential overrides)
+        candidate_gen_template = optimizer.get_prompt("candidate_generation")
+        reasoning_template = optimizer.get_prompt("reasoning_system")
+
+        user_prompt = meta_prompts.build_candidate_generation_user_prompt(
+            template=candidate_gen_template,
             current_prompt_messages=str(current_prompt.get_messages()),
             best_score=best_score,
             history_context=history_context,
@@ -307,8 +309,10 @@ def generate_candidate_prompts(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_reasoning_system_prompt(
-                            optimizer.allow_user_prompt_optimization, mode="single"
+                        "content": meta_prompts.build_reasoning_system_prompt(
+                            template=reasoning_template,
+                            allow_user_prompt_optimization=optimizer.allow_user_prompt_optimization,
+                            mode="single",
                         ),
                     },
                     {"role": "user", "content": user_prompt},
@@ -506,7 +510,13 @@ def generate_agent_bundle_candidates(
             metric_focus_instruction = "Generate effective, role-appropriate updates."
 
         agent_blocks = _format_agent_prompts_for_prompt(current_prompts)
-        user_prompt = build_candidate_generation_user_prompt(
+
+        # Get templates from optimizer (with potential overrides)
+        candidate_gen_template = optimizer.get_prompt("candidate_generation")
+        reasoning_template = optimizer.get_prompt("reasoning_system")
+
+        user_prompt = meta_prompts.build_candidate_generation_user_prompt(
+            template=candidate_gen_template,
             current_prompt_messages="",  # unused in bundle mode
             best_score=best_score,
             history_context=history_context,
@@ -533,8 +543,10 @@ def generate_agent_bundle_candidates(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_reasoning_system_prompt(
-                            optimizer.allow_user_prompt_optimization, mode="bundle"
+                        "content": meta_prompts.build_reasoning_system_prompt(
+                            template=reasoning_template,
+                            allow_user_prompt_optimization=optimizer.allow_user_prompt_optimization,
+                            mode="bundle",
                         ),
                     },
                     {"role": "user", "content": user_prompt},
@@ -657,8 +669,6 @@ def generate_synthesis_prompts(
     Returns:
         List of comprehensive synthesis prompts
     """
-    from ..prompts import build_synthesis_prompt
-
     num_synthesis_prompts = getattr(optimizer, "synthesis_prompts_per_round", 2)
 
     with reporting.display_candidate_generation_report(
@@ -742,15 +752,21 @@ def generate_synthesis_prompts(
         if optimizer.enable_context:
             task_context_str, _ = get_task_context_fn(metric=metric)  # Unpack tuple
 
+        # Get templates from optimizer (with potential overrides)
+        synthesis_template = optimizer.get_prompt("synthesis")
+        reasoning_template = optimizer.get_prompt("reasoning_system")
+
         # Build synthesis prompt
-        synthesis_user_prompt = build_synthesis_prompt(
+        synthesis_user_prompt = meta_prompts.build_synthesis_prompt(
+            template=synthesis_template,
             top_prompts_with_scores=top_prompts_with_scores,
             task_context_str=task_context_str,
             best_score=best_score,
             num_prompts=num_synthesis_prompts,
         )
-        synthesis_system_prompt = build_reasoning_system_prompt(
-            optimizer.allow_user_prompt_optimization
+        synthesis_system_prompt = meta_prompts.build_reasoning_system_prompt(
+            template=reasoning_template,
+            allow_user_prompt_optimization=optimizer.allow_user_prompt_optimization,
         )
 
         try:
