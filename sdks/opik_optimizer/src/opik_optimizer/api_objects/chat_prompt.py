@@ -14,16 +14,6 @@ class ModelParameters(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class ChatPromptObject(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    messages: list[types.Message]
-    model: str
-    tools: list[types.Tool]
-    model_parameters: ModelParameters
-
-
 class ChatPrompt:
     """
     The ChatPrompt lies at the core of Opik Optimizer. It is
@@ -115,27 +105,6 @@ class ChatPrompt:
                 types.Tool.model_validate(tool)
 
     @staticmethod
-    def _merge_messages(
-        system: str | None, user: str | None, messages: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        merged_messages = []
-        if system is not None:
-            merged_messages.append({"role": "system", "content": system})
-        if user is not None:
-            merged_messages.append({"role": "user", "content": user})
-        if messages is not None:
-            merged_messages.extend(messages)
-        return merged_messages
-
-    def _has_content_parts(self) -> bool:
-        messages = self._standardize_prompts()
-
-        for message in messages:
-            if isinstance(message["content"], list):
-                return True
-        return False
-
-    @staticmethod
     def _update_string_content(content: str, label: str, value: str) -> str:
         """
         Update string content by replacing label with value.
@@ -194,6 +163,10 @@ class ChatPrompt:
                 self._update_content_parts(content, label, str(value))
 
         return messages
+
+    def _has_content_parts(self) -> bool:
+        messages = self._standardize_prompts()
+        return any(isinstance(message.get("content"), list) for message in messages)
 
     def get_messages(
         self,
