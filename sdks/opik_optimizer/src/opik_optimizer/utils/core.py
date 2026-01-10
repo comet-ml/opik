@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import random
-import string
 import urllib.parse
 from types import TracebackType
 
@@ -165,13 +164,8 @@ def get_random_seed() -> int:
     Returns:
         int: A random seed
     """
-    import random
 
     return random.randint(0, 2**32 - 1)
-
-
-def random_chars(n: int) -> str:
-    return "".join(random.choice(string.ascii_letters) for _ in range(n))
 
 
 def json_to_dict(json_str: str) -> Any:
@@ -290,25 +284,7 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-def get_trial_compare_url(
-    *, dataset_id: str | None, optimization_id: str | None, trial_ids: list[str]
-) -> str:
-    if dataset_id is None or optimization_id is None:
-        raise ValueError("dataset_id and optimization_id are required")
-    if not trial_ids:
-        raise ValueError("trial_ids must be a non-empty list")
-
-    opik_config = opik.config.get_from_user_inputs()
-    url_override = opik_config.url_override
-    base = ensure_ending_slash(url_override)
-
-    trials_query = urllib.parse.quote(json.dumps(trial_ids))
-    compare_path = (
-        f"optimizations/{optimization_id}/{dataset_id}/compare?trials={trials_query}"
-    )
-    return urllib.parse.urljoin(base, compare_path)
-
-
+# FIXME: Dead code, should be wired or removed
 def function_to_tool_definition(
     func: Callable, description: str | None = None
 ) -> dict[str, Any]:
