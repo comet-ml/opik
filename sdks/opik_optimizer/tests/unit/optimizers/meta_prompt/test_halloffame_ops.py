@@ -8,10 +8,14 @@ Tests cover:
 
 from typing import Any
 
+import pytest
+
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
     HallOfFameEntry,
     PromptHallOfFame,
 )
+
+pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
 
 class TestHallOfFameEntry:

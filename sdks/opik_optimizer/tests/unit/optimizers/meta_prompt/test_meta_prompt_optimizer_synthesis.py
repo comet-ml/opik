@@ -21,7 +21,9 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
 )
 
 
-pytestmark = pytest.mark.usefixtures("disable_rate_limiting")
+pytestmark = pytest.mark.usefixtures(
+    "disable_rate_limiting", "suppress_expected_optimizer_warnings"
+)
 
 
 def _make_dataset() -> MagicMock:

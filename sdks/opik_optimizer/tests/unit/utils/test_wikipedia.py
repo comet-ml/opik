@@ -2,9 +2,10 @@
 
 from typing import Any
 
-import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
 
 from opik_optimizer.utils.tools.wikipedia import (
     search_wikipedia,
@@ -13,6 +14,8 @@ from opik_optimizer.utils.tools.wikipedia import (
     _search_wikipedia_bm25,
     _download_bm25_index,
 )
+
+pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
 
 class TestSearchWikipediaAPI:

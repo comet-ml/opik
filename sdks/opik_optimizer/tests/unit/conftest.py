@@ -15,6 +15,7 @@ Usage:
 """
 
 import pytest
+import logging
 from unittest.mock import MagicMock
 from typing import Any
 
@@ -162,6 +163,18 @@ def mock_llm_sequence(monkeypatch: pytest.MonkeyPatch):
         return call_count
 
     return _configure
+
+
+@pytest.fixture
+def suppress_expected_optimizer_warnings(caplog: pytest.LogCaptureFixture) -> None:
+    loggers = [
+        "opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops",
+        "opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops",
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops",
+        "opik_optimizer.utils.tools.wikipedia",
+    ]
+    for name in loggers:
+        caplog.set_level(logging.ERROR, logger=name)
 
 
 @pytest.fixture

@@ -1,6 +1,15 @@
 """End-to-end test for Wikipedia API search."""
 
+import logging
+
+import pytest
+
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
+
+
+@pytest.fixture(autouse=True)
+def suppress_wikipedia_warnings(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.ERROR, logger="opik_optimizer.utils.tools.wikipedia")
 
 
 class TestWikipediaAPIE2E:
