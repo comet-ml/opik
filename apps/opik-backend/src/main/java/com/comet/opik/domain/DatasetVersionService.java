@@ -572,13 +572,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             boolean dataChanged = fromItem.dataHash() != toItem.dataHash();
 
             // Compare tags as sets (order-independent)
-            Set<String> fromTags = Optional.ofNullable(fromItem.tags())
-                    .map(HashSet::new)
-                    .orElseGet(HashSet::new);
-            Set<String> toTags = Optional.ofNullable(toItem.tags())
-                    .map(HashSet::new)
-                    .orElseGet(HashSet::new);
-            boolean tagsChanged = !fromTags.equals(toTags);
+            boolean tagsChanged = !toTagSet(fromItem.tags()).equals(toTagSet(toItem.tags()));
 
             if (dataChanged || tagsChanged) {
                 modified++;
@@ -591,6 +585,17 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 added, modified, deleted, unchanged);
 
         return new DatasetVersionDiffStats(added, modified, deleted, unchanged);
+    }
+
+    /**
+     * Converts a collection of tags to a Set for order-independent comparison.
+     * Returns an empty set if the input is null.
+     *
+     * @param tags the tags collection to convert, may be null
+     * @return a Set containing the tags, or an empty set if input is null
+     */
+    private static Set<String> toTagSet(Collection<String> tags) {
+        return new HashSet<>(Optional.ofNullable(tags).orElseGet(HashSet::new));
     }
 
     @Override
