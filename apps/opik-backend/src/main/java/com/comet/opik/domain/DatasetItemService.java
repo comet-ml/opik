@@ -1360,19 +1360,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
                         List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
-                        // Assign row IDs to edited items
-                        List<DatasetItem> editedItemsWithIds = IntStream.range(0, editedItems.size())
-                                .mapToObj(i -> editedItems.get(i).toBuilder()
-                                        .id(editedUuids.get(i))
-                                        .build())
-                                .toList();
-
-                        // Assign row IDs to added items
-                        List<DatasetItem> addedItemsWithIds = IntStream.range(0, addedItems.size())
-                                .mapToObj(i -> addedItems.get(i).toBuilder()
-                                        .id(addedUuids.get(i))
-                                        .build())
-                                .toList();
+                        // Assign row IDs to edited and added items
+                        List<DatasetItem> editedItemsWithIds = withAssignedRowIds(editedItems, editedUuids);
+                        List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
                         // Apply delta changes via DAO
                         return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
@@ -1721,11 +1711,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     List<DatasetItem> editedItemsWithIds = editedItems;
 
                     // Assign row IDs to added items
-                    List<DatasetItem> addedItemsWithIds = IntStream.range(0, addedItems.size())
-                            .mapToObj(i -> addedItems.get(i).toBuilder()
-                                    .id(addedUuids.get(i))
-                                    .build())
-                            .toList();
+                    List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
                     // Apply delta changes - no deletions in PUT flow
                     return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
@@ -1760,5 +1746,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
         List<UUID> reversed = new ArrayList<>(uuids);
         Collections.reverse(reversed);
         return reversed;
+    }
+
+    /**
+     * Assigns row IDs to a list of dataset items.
+     * Creates new DatasetItem instances with the specified UUIDs as their row IDs.
+     *
+     * @param items the items to assign row IDs to
+     * @param uuids the UUIDs to use as row IDs (must have same size as items)
+     * @return new list with items containing assigned row IDs
+     */
+    private List<DatasetItem> withAssignedRowIds(List<DatasetItem> items, List<UUID> uuids) {
+        return IntStream.range(0, items.size())
+                .mapToObj(i -> items.get(i).toBuilder()
+                        .id(uuids.get(i))
+                        .build())
+                .toList();
     }
 }
