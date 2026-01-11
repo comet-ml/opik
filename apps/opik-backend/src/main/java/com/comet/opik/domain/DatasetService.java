@@ -317,8 +317,15 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = findByName(workspaceId, identifier.datasetName(), Visibility.PRIVATE);
 
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(DatasetDAO.class);
-            dao.delete(workspaceId, identifier.datasetName());
+            var datasetDao = handle.attach(DatasetDAO.class);
+            var versionDao = handle.attach(DatasetVersionDAO.class);
+
+            // Delete version-related data first to avoid FK constraint violations
+            versionDao.deleteAllTagsByDatasetId(dataset.id(), workspaceId);
+            versionDao.deleteAllVersionsByDatasetId(dataset.id(), workspaceId);
+
+            // Then delete the dataset
+            datasetDao.delete(workspaceId, identifier.datasetName());
             return null;
         });
 
@@ -345,8 +352,15 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(DatasetDAO.class);
-            dao.delete(id, workspaceId);
+            var datasetDao = handle.attach(DatasetDAO.class);
+            var versionDao = handle.attach(DatasetVersionDAO.class);
+
+            // Delete version-related data first to avoid FK constraint violations
+            versionDao.deleteAllTagsByDatasetId(id, workspaceId);
+            versionDao.deleteAllVersionsByDatasetId(id, workspaceId);
+
+            // Then delete the dataset
+            datasetDao.delete(id, workspaceId);
             return null;
         });
 
@@ -366,7 +380,15 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
-            handle.attach(DatasetDAO.class).delete(ids, workspaceId);
+            var datasetDao = handle.attach(DatasetDAO.class);
+            var versionDao = handle.attach(DatasetVersionDAO.class);
+
+            // Delete version-related data first to avoid FK constraint violations
+            versionDao.deleteAllTagsByDatasetIds(ids, workspaceId);
+            versionDao.deleteAllVersionsByDatasetIds(ids, workspaceId);
+
+            // Then delete the datasets
+            datasetDao.delete(ids, workspaceId);
             return null;
         });
 

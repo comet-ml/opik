@@ -299,4 +299,18 @@ public interface DatasetVersionDAO {
             """)
     List<DatasetVersion> findByIds(@BindList("version_ids") Collection<UUID> versionIds,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id = :dataset_id AND workspace_id = :workspace_id")
+    void deleteAllTagsByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("DELETE FROM dataset_versions WHERE dataset_id = :dataset_id AND workspace_id = :workspace_id")
+    void deleteAllVersionsByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id")
+    void deleteAllTagsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("DELETE FROM dataset_versions WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id")
+    void deleteAllVersionsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,
+            @Bind("workspace_id") String workspaceId);
 }
