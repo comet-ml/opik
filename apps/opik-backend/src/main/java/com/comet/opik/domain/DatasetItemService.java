@@ -411,12 +411,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 log.info("Creating version with single item edit for dataset '{}', baseVersion='{}'",
                                         datasetId, baseVersionId);
 
-                                // Generate UUIDs for all items
-                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseItemsCount);
-                                UUID editedUuid = idGenerator.generateId();
+                                // Generate UUIDs for items
+                                // The edited item is excluded from the copy, so we need baseItemsCount - 1 UUIDs for unchanged items
+                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseItemsCount - 1);
 
                                 DatasetItem patchedItemWithId = patchedItem.toBuilder()
-                                        .id(editedUuid)
+                                        .id(existingItem.id()) // Preserve the original row ID
                                         .build();
 
                                 // Apply delta with only the edited item
@@ -1698,6 +1698,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         if (itemId != null && existingItemIds.contains(itemId)) {
                             // Existing item - treat as edit
                             editedItems.add(item.toBuilder()
+                                    .id(itemId) // Preserve original row ID
                                     .datasetItemId(itemId)
                                     .datasetId(datasetId)
                                     .build());
@@ -1717,15 +1718,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     // Generate UUIDs for all items
                     int baseVersionItemCount = existingItems.size();
                     List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
-                    List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
                     List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
-                    // Assign row IDs to edited items
-                    List<DatasetItem> editedItemsWithIds = IntStream.range(0, editedItems.size())
-                            .mapToObj(i -> editedItems.get(i).toBuilder()
-                                    .id(editedUuids.get(i))
-                                    .build())
-                            .toList();
+                    List<DatasetItem> editedItemsWithIds = editedItems;
 
                     // Assign row IDs to added items
                     List<DatasetItem> addedItemsWithIds = IntStream.range(0, addedItems.size())
