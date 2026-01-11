@@ -32,6 +32,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
@@ -1001,7 +1004,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                arrayElement(:uuids, row_number() OVER ()) as id,
+                arrayElement(:uuids, row_number() OVER (ORDER BY src.id DESC)) as id,
                 src.dataset_item_id,
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
@@ -1035,6 +1038,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS src
+            ORDER BY src.id DESC
             """;
 
     private static final String RESOLVE_DATASET_ID_FROM_ITEM_ID = """
@@ -1841,29 +1845,54 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         Set<UUID> excludedIds = new HashSet<>(deletedIds);
         excludedIds.addAll(editedItemIds);
 
-        // Generate UUID pool for worst-case scenario (all base items copied)
-        // We can't know how many excludedIds actually exist in base version,
-        // so we generate enough UUIDs for all items to prevent running out during copy
-        List<UUID> unchangedUuids = generateUuidPool(idGenerator, baseVersionItemCount);
-
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Step 1: Copy unchanged items from base version (excluding deleted and edited)
+            // UUID generation order is REVERSED from desired display order because:
+            // - ClickHouse sorts by id DESC (newest first)
+            // - UUIDv7 is time-ordered (later = larger)
+            // - We want added/edited to appear first, so they need the LATEST (largest) UUIDs
+
+            // Generate UUIDs for unchanged items FIRST (they will be smallest/oldest)
+            // They will appear LAST when sorted DESC
+            // IMPORTANT: Reverse the pool so that items maintain their original order from base version
+            List<UUID> unchangedUuidsGenerated = generateUuidPool(idGenerator, baseVersionItemCount);
+            List<UUID> unchangedUuids = new ArrayList<>(unchangedUuidsGenerated);
+            Collections.reverse(unchangedUuids);
+
+            // Generate UUIDs for edited items SECOND (they will be in the middle)
+            // They will appear in the MIDDLE when sorted DESC
+            List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
+            List<DatasetItem> editedItemsWithIds = IntStream.range(0, editedItems.size())
+                    .mapToObj(i -> editedItems.get(i).toBuilder()
+                            .id(editedUuids.get(i))
+                            .build())
+                    .toList();
+
+            // Generate UUIDs for added items LAST (they will be largest/newest)
+            // They will appear FIRST when sorted DESC
+            List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
+            List<DatasetItem> addedItemsWithIds = IntStream.range(0, addedItems.size())
+                    .mapToObj(i -> addedItems.get(i).toBuilder()
+                            .id(addedUuids.get(i))
+                            .build())
+                    .toList();
+
+            // Step 1: Insert added items (will sort first due to latest/largest UUIDs)
+            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItemsWithIds, workspaceId, userName);
+
+            // Step 2: Insert edited items (will sort after added due to middle UUIDs)
+            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItemsWithIds, workspaceId, userName);
+
+            // Step 3: Copy unchanged items (will sort last due to earliest/smallest UUIDs)
             Mono<Long> copyUnchanged = copyUnchangedItems(datasetId, baseVersionId, newVersionId,
                     excludedIds, unchangedUuids, workspaceId, userName);
 
-            // Step 2: Insert edited items
-            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
-
-            // Step 3: Insert added items
-            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
-
             // Execute all operations and sum the results
-            return copyUnchanged
+            return insertAdded
                     .zipWith(insertEdited, Long::sum)
-                    .zipWith(insertAdded, Long::sum)
+                    .zipWith(copyUnchanged, Long::sum)
                     .doOnSuccess(total -> log.info("Applied delta for dataset '{}': total items in new version '{}'",
                             datasetId, total));
         });
