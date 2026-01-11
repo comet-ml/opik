@@ -1859,12 +1859,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            // All items already have their row IDs set by the service layer
-            // The service layer has generated UUIDs in the correct order:
-            // - Added items have the largest UUIDs (will appear first in DESC sort)
-            // - Edited items have middle UUIDs (will appear in middle)
-            // - Unchanged items have smallest UUIDs, reversed to maintain original order
-
             // Step 1: Insert added items (will sort first due to latest/largest UUIDs)
             Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
 

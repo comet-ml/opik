@@ -38,6 +38,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1354,9 +1355,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // 3. Added items last (largest UUIDs) - will appear FIRST
 
                         // However, we reverse the unchanged UUID pool to maintain original order
-                        List<UUID> unchangedUuidsGenerated = generateUuidPool(idGenerator, baseVersionItemCount);
-                        List<UUID> unchangedUuids = new ArrayList<>(unchangedUuidsGenerated);
-                        java.util.Collections.reverse(unchangedUuids);
+                        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
 
                         List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
                         List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
@@ -1759,7 +1758,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private List<UUID> generateUnchangedUuidsReversed(int count) {
         List<UUID> uuids = generateUuidPool(idGenerator, count);
         List<UUID> reversed = new ArrayList<>(uuids);
-        java.util.Collections.reverse(reversed);
+        Collections.reverse(reversed);
         return reversed;
     }
 }
