@@ -572,8 +572,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             boolean dataChanged = fromItem.dataHash() != toItem.dataHash();
 
             // Compare tags as sets (order-independent)
-            Set<String> fromTags = fromItem.tags() != null ? new HashSet<>(fromItem.tags()) : Set.of();
-            Set<String> toTags = toItem.tags() != null ? new HashSet<>(toItem.tags()) : Set.of();
+            Set<String> fromTags = Optional.ofNullable(fromItem.tags())
+                    .map(HashSet::new)
+                    .orElseGet(HashSet::new);
+            Set<String> toTags = Optional.ofNullable(toItem.tags())
+                    .map(HashSet::new)
+                    .orElseGet(HashSet::new);
             boolean tagsChanged = !fromTags.equals(toTags);
 
             if (dataChanged || tagsChanged) {
