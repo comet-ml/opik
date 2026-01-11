@@ -1403,7 +1403,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Prepares added items by setting their stable IDs.
      * For new items, we generate a new stable ID.
-     * Note: The row ID (id field) will be set later in the DAO layer to control ordering.
      */
     private List<DatasetItem> prepareAddedItems(DatasetItemChanges changes, UUID datasetId) {
         if (changes.addedItems() == null || changes.addedItems().isEmpty()) {
@@ -1414,9 +1413,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .map(item -> {
                     // Generate new stable ID for new items
                     UUID stableId = idGenerator.generateId();
-                    // Set datasetItemId (stable ID) but leave id null - it will be set in DAO for ordering
+                    // Set datasetItemId (stable ID) but leave id null - it will be assigned later in this method
                     return item.toBuilder()
-                            .id(null) // Will be set in DAO layer to control ordering
+                            .id(null)
                             .datasetItemId(stableId)
                             .datasetId(datasetId)
                             .build();
