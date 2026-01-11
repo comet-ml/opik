@@ -46,6 +46,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
@@ -410,12 +411,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 log.info("Creating version with single item edit for dataset '{}', baseVersion='{}'",
                                         datasetId, baseVersionId);
 
+                                // Generate UUIDs for all items
+                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseItemsCount);
+                                UUID editedUuid = idGenerator.generateId();
+
+                                DatasetItem patchedItemWithId = patchedItem.toBuilder()
+                                        .id(editedUuid)
+                                        .build();
+
                                 // Apply delta with only the edited item
                                 return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
                                         List.of(), // No added items
-                                        List.of(patchedItem), // Single edited item
+                                        List.of(patchedItemWithId), // Single edited item
                                         Set.of(), // No deleted items
-                                        baseItemsCount)
+                                        unchangedUuids)
                                         .map(itemsTotal -> {
                                             log.info("Applied patch delta to dataset '{}': itemsTotal '{}'",
                                                     datasetId, itemsTotal);
@@ -587,12 +596,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 log.info("Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
                                         updatedCount, datasetId, baseVersionId);
 
+                                // Generate UUIDs for unchanged items
+                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseItemsCount);
+
                                 // Copy unchanged items using applyDelta (exclude updated IDs)
                                 return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
                                         List.of(), // No added items
                                         List.of(), // No edited items (already done via batch update)
                                         batchUpdate.ids(), // Exclude updated items from copy
-                                        baseItemsCount)
+                                        unchangedUuids)
                                         .flatMap(unchangedCount -> createVersionMetadata(
                                                 datasetId, newVersionId, baseVersionId,
                                                 updatedCount, unchangedCount, false,
@@ -1090,12 +1102,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private Mono<Void> createVersionWithDeletion(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             Set<UUID> deletedIds, int baseVersionItemCount, String workspaceId, String userName) {
 
+        // Generate UUIDs for unchanged items
+        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
+
         // Apply delta with only deletions (no adds or edits)
         return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
                 List.of(), // No added items
                 List.of(), // No edited items
                 deletedIds,
-                baseVersionItemCount)
+                unchangedUuids)
                 .map(itemsTotal -> {
                     log.info("Applied deletion delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
@@ -1331,9 +1346,38 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         List<DatasetItem> editedItems = tuple.getT1();
                         Set<UUID> deletedIds = tuple.getT2();
 
+                        // Generate UUIDs for all items in the correct order for ClickHouse's ORDER BY id DESC
+                        // Since UUIDv7 is time-ordered (later = larger) and we sort DESC (largest first),
+                        // we need to generate UUIDs in reverse order of desired appearance:
+                        // 1. Unchanged items first (smallest UUIDs) - will appear LAST
+                        // 2. Edited items second (middle UUIDs) - will appear in MIDDLE
+                        // 3. Added items last (largest UUIDs) - will appear FIRST
+
+                        // However, we reverse the unchanged UUID pool to maintain original order
+                        List<UUID> unchangedUuidsGenerated = generateUuidPool(idGenerator, baseVersionItemCount);
+                        List<UUID> unchangedUuids = new ArrayList<>(unchangedUuidsGenerated);
+                        java.util.Collections.reverse(unchangedUuids);
+
+                        List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
+                        List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
+
+                        // Assign row IDs to edited items
+                        List<DatasetItem> editedItemsWithIds = IntStream.range(0, editedItems.size())
+                                .mapToObj(i -> editedItems.get(i).toBuilder()
+                                        .id(editedUuids.get(i))
+                                        .build())
+                                .toList();
+
+                        // Assign row IDs to added items
+                        List<DatasetItem> addedItemsWithIds = IntStream.range(0, addedItems.size())
+                                .mapToObj(i -> addedItems.get(i).toBuilder()
+                                        .id(addedUuids.get(i))
+                                        .build())
+                                .toList();
+
                         // Apply delta changes via DAO
                         return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                                addedItems, editedItems, deletedIds, baseVersionItemCount)
+                                addedItemsWithIds, editedItemsWithIds, deletedIds, unchangedUuids)
                                 .map(itemsTotal -> {
                                     log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
@@ -1670,10 +1714,29 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Classified items: added='{}', edited='{}' for dataset '{}'",
                             addedItems.size(), editedItems.size(), datasetId);
 
-                    // Apply delta changes - no deletions in PUT flow
+                    // Generate UUIDs for all items
                     int baseVersionItemCount = existingItems.size();
+                    List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
+                    List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
+                    List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
+
+                    // Assign row IDs to edited items
+                    List<DatasetItem> editedItemsWithIds = IntStream.range(0, editedItems.size())
+                            .mapToObj(i -> editedItems.get(i).toBuilder()
+                                    .id(editedUuids.get(i))
+                                    .build())
+                            .toList();
+
+                    // Assign row IDs to added items
+                    List<DatasetItem> addedItemsWithIds = IntStream.range(0, addedItems.size())
+                            .mapToObj(i -> addedItems.get(i).toBuilder()
+                                    .id(addedUuids.get(i))
+                                    .build())
+                            .toList();
+
+                    // Apply delta changes - no deletions in PUT flow
                     return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                            addedItems, editedItems, Set.of(), baseVersionItemCount)
+                            addedItemsWithIds, editedItemsWithIds, Set.of(), unchangedUuids)
                             .map(itemsTotal -> {
                                 log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
@@ -1693,5 +1756,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 return version;
                             });
                 });
+    }
+
+    /**
+     * Generate UUIDs for unchanged items, reversed to maintain their original order.
+     * This is necessary because ClickHouse sorts by id DESC, and UUIDv7 is time-ordered.
+     */
+    private List<UUID> generateUnchangedUuidsReversed(int count) {
+        List<UUID> uuids = generateUuidPool(idGenerator, count);
+        List<UUID> reversed = new ArrayList<>(uuids);
+        java.util.Collections.reverse(reversed);
+        return reversed;
     }
 }
