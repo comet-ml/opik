@@ -23,6 +23,7 @@ import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/s
 import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
+import WidgetOverrideDefaultsSection from "@/components/shared/Dashboard/widgets/shared/WidgetOverrideDefaultsSection/WidgetOverrideDefaultsSection";
 
 import { cn } from "@/lib/utils";
 import {
@@ -30,11 +31,6 @@ import {
   selectMixedConfig,
   selectUpdatePreviewWidget,
 } from "@/store/DashboardStore";
-import {
-  UNSET_PROJECT_OPTION,
-  UNSET_PROJECT_VALUE,
-  WIDGET_PROJECT_SELECTOR_DESCRIPTION,
-} from "@/lib/dashboard/utils";
 
 import get from "lodash/get";
 
@@ -114,6 +110,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const metricType = config.metricType || "";
   const chartType = config.chartType || CHART_TYPE.line;
   const localProjectId = config.projectId;
+  const overrideDefaults = config.overrideDefaults || false;
 
   const traceFilters = useMemo(
     () => config.traceFilters || [],
@@ -151,6 +148,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       traceFilters,
       threadFilters,
       feedbackScores,
+      overrideDefaults,
     },
   });
 
@@ -214,38 +212,6 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     <Form {...form}>
       <WidgetEditorBaseLayout>
         <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="projectId"
-            render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["projectId"]);
-              return (
-                <FormItem>
-                  <FormLabel>Project</FormLabel>
-                  <FormControl>
-                    <ProjectsSelectBox
-                      className={cn({
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      })}
-                      value={field.value || UNSET_PROJECT_VALUE}
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        handleProjectChange(value);
-                      }}
-                      customOptions={UNSET_PROJECT_OPTION}
-                    />
-                  </FormControl>
-                  <Description>
-                    {WIDGET_PROJECT_SELECTOR_DESCRIPTION}
-                  </Description>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
-
           <FormField
             control={form.control}
             name="metricType"
@@ -370,6 +336,49 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
               );
             }}
           />
+
+          <WidgetOverrideDefaultsSection
+            value={form.watch("overrideDefaults") || false}
+            onChange={(value) => {
+              form.setValue("overrideDefaults", value);
+              updatePreviewWidget({
+                config: {
+                  ...config,
+                  overrideDefaults: value,
+                },
+              });
+            }}
+            description="Turn this on to override the dashboard's default project for this widget."
+          >
+            <FormField
+              control={form.control}
+              name="projectId"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, ["projectId"]);
+                return (
+                  <FormItem>
+                    <FormLabel>Project override</FormLabel>
+                    <FormControl>
+                      <ProjectsSelectBox
+                        className={cn("flex-1", {
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        value={field.value || ""}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          handleProjectChange(value);
+                        }}
+                        showClearButton
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          </WidgetOverrideDefaultsSection>
         </div>
       </WidgetEditorBaseLayout>
     </Form>
