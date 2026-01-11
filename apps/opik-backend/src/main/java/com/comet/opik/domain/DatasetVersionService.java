@@ -503,14 +503,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     private Mono<List<DatasetItemIdAndHash>> getItems(UUID datasetId, UUID versionId, String userName,
             String workspaceId) {
-        if (versionId == null) {
-            return datasetItemDAO.getDraftItemIdsAndHashes(datasetId)
-                    .contextWrite(ctx -> ctx
-                            .put(RequestContext.USER_NAME, userName)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .collectList();
-        }
-
         return datasetItemVersionDAO.getItemIdsAndHashes(datasetId, versionId)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, userName)
