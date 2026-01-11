@@ -1663,6 +1663,93 @@ class DatasetVersionResourceTest {
             assertThat(updatedCount).isEqualTo(3); // 3 items matched the filter
             assertThat(unchangedCount).isEqualTo(2); // 2 items were not filtered
         }
+
+        @Test
+        @DisplayName("Batch update with EMPTY filters should update ALL items (select all)")
+        void batchUpdateByEmptyFilters__shouldUpdateAllItems() {
+            // Given - Create dataset with items having different tags
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .datasetItemId(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .datasetItemId(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .id(null)
+                    .datasetItemId(null)
+                    .source(DatasetItemSource.MANUAL)
+                    .traceId(null)
+                    .spanId(null)
+                    .tags(Set.of("tag3"))
+                    .build();
+
+            var batch = new DatasetItemBatch(null, datasetId, List.of(item1, item2, item3));
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+
+            // When - Batch update with EMPTY filters (should select ALL items)
+            var newTag = "all-items-tag";
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of()) // Empty filters = select all items
+                    .update(DatasetItemUpdate.builder().tags(Set.of(newTag)).build())
+                    .mergeTags(true)
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created with ALL items updated
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(3);
+
+            // Verify ALL items in latest version have the new tag (merged with existing tags)
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            assertThat(latestItems).hasSize(3);
+            for (var item : latestItems) {
+                assertThat(item.tags()).contains(newTag); // All items should have the new tag
+                // Original tags should be preserved (merge behavior)
+                assertThat(item.tags().size()).isGreaterThan(1); // Should have both old and new tags
+            }
+
+            // Specifically verify each item
+            var itemsWithTag1 = latestItems.stream()
+                    .filter(i -> i.tags().contains("tag1"))
+                    .toList();
+            var itemsWithTag2 = latestItems.stream()
+                    .filter(i -> i.tags().contains("tag2"))
+                    .toList();
+            var itemsWithTag3 = latestItems.stream()
+                    .filter(i -> i.tags().contains("tag3"))
+                    .toList();
+
+            assertThat(itemsWithTag1).hasSize(1);
+            assertThat(itemsWithTag1.get(0).tags()).containsExactlyInAnyOrder("tag1", newTag);
+
+            assertThat(itemsWithTag2).hasSize(1);
+            assertThat(itemsWithTag2.get(0).tags()).containsExactlyInAnyOrder("tag2", newTag);
+
+            assertThat(itemsWithTag3).hasSize(1);
+            assertThat(itemsWithTag3.get(0).tags()).containsExactlyInAnyOrder("tag3", newTag);
+        }
     }
 
     @Nested
