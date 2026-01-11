@@ -400,14 +400,8 @@ class DatasetServiceImpl implements DatasetService {
         var versionDao = handle.attach(DatasetVersionDAO.class);
 
         // Delete in the correct order to respect foreign key constraints
-        if (datasetIds.size() == 1) {
-            UUID datasetId = datasetIds.iterator().next();
-            versionDao.deleteAllTagsByDatasetId(datasetId, workspaceId);
-            versionDao.deleteAllVersionsByDatasetId(datasetId, workspaceId);
-        } else {
-            versionDao.deleteAllTagsByDatasetIds(datasetIds, workspaceId);
-            versionDao.deleteAllVersionsByDatasetIds(datasetIds, workspaceId);
-        }
+        versionDao.deleteAllTagsByDatasetIds(datasetIds, workspaceId);
+        versionDao.deleteAllVersionsByDatasetIds(datasetIds, workspaceId);
     }
 
     @Override
