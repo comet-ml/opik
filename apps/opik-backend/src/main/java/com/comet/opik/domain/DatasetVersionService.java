@@ -27,8 +27,10 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -566,7 +568,15 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             var fromItem = fromMap.get(itemId);
             var toItem = toMap.get(itemId);
 
-            if (fromItem.dataHash() != toItem.dataHash()) {
+            // Compare data hash
+            boolean dataChanged = fromItem.dataHash() != toItem.dataHash();
+
+            // Compare tags as sets (order-independent)
+            Set<String> fromTags = fromItem.tags() != null ? new HashSet<>(fromItem.tags()) : Set.of();
+            Set<String> toTags = toItem.tags() != null ? new HashSet<>(toItem.tags()) : Set.of();
+            boolean tagsChanged = !fromTags.equals(toTags);
+
+            if (dataChanged || tagsChanged) {
                 modified++;
             } else {
                 unchanged++;
