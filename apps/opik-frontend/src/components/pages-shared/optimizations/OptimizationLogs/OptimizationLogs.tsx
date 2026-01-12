@@ -1,11 +1,5 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { ArrowDownToLine, ListEnd, RotateCw } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownToLine, Clock, ListEnd, RotateCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Optimization } from "@/types/optimizations";
@@ -19,22 +13,21 @@ import {
   OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
 } from "@/lib/optimizations";
 import { convertTerminalOutputToHtml } from "@/lib/terminalOutput";
+import { useChatScroll } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
+import { formatDate } from "@/lib/date";
 
 type OptimizationLogsProps = {
   optimization: Optimization | null;
 };
 
-const SCROLL_THRESHOLD = 50; // pixels from bottom to consider "at bottom"
-
 const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   optimization,
 }) => {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
-  const [hasNewLogs, setHasNewLogs] = useState(false);
-  const prevLogLengthRef = useRef<number>(0);
+  const isInProgress =
+    optimization?.status &&
+    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
 
-  const { data, isPending, refetch } = useOptimizationStudioLogs(
+  const { data, isPending, refetch, dataUpdatedAt } = useOptimizationStudioLogs(
     {
       optimizationId: optimization?.id ?? "",
     },
@@ -50,12 +43,21 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   );
 
   const logContent = data?.content ?? "";
+  const lastUpdatedAt = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toISOString()
+    : null;
+  const prevLogLengthRef = useRef<number>(0);
+  const [hasNewLogs, setHasNewLogs] = useState(false);
 
-  // Convert terminal output to HTML for Rich-formatted logs
-  const logHtml = useMemo(
-    () => convertTerminalOutputToHtml(logContent),
-    [logContent],
-  );
+  const {
+    scrollContainerRef,
+    isAutoScrollEnabled,
+    handleScroll,
+    scrollToBottom,
+  } = useChatScroll({
+    contentLength: logContent.length,
+    isStreaming: Boolean(isInProgress),
+  });
 
   useEffect(() => {
     const currentLength = logContent.length;
@@ -65,49 +67,21 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
       setHasNewLogs(true);
     }
 
+    if (isAutoScrollEnabled) {
+      setHasNewLogs(false);
+    }
+
     prevLogLengthRef.current = currentLength;
-  }, [logContent, isAutoScrollEnabled]);
+  }, [logContent.length, isAutoScrollEnabled]);
 
-  useEffect(() => {
-    if (isAutoScrollEnabled && scrollContainerRef.current && logContent) {
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
-    }
-  }, [logContent, isAutoScrollEnabled]);
-
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current) return;
-
-    const { scrollTop, scrollHeight, clientHeight } =
-      scrollContainerRef.current;
-    const isAtBottom =
-      scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
-
-    // if user scrolls away from bottom, disable auto-scroll
-    // if user scrolls back to bottom, re-enable auto-scroll
-    setIsAutoScrollEnabled(isAtBottom);
-
-    if (isAtBottom) {
-      setHasNewLogs(false);
-    }
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
-      setIsAutoScrollEnabled(true);
-      setHasNewLogs(false);
-    }
-  }, []);
+  const logHtml = useMemo(
+    () => convertTerminalOutputToHtml(logContent),
+    [logContent],
+  );
 
   if (!optimization) {
     return null;
   }
-
-  const isInProgress =
-    optimization?.status &&
-    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
 
   const renderContent = () => {
     if (isPending && !logContent) {
@@ -161,7 +135,18 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     <Card className="size-full">
       <CardContent className="flex h-full flex-col p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="comet-body-s-accented">Logs</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="comet-body-s-accented">Logs</h3>
+            {lastUpdatedAt && (
+              <TooltipWrapper
+                content={`Last updated at ${formatDate(lastUpdatedAt, {
+                  includeSeconds: true,
+                })}`}
+              >
+                <Clock className="size-3.5 text-muted-slate" />
+              </TooltipWrapper>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             {logContent && (
               <TooltipWrapper

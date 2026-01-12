@@ -10,7 +10,7 @@ import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import NoData from "@/components/shared/NoData/NoData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import useRotatingText from "@/hooks/useRotatingText";
+import useProgressSimulation from "@/hooks/useProgressSimulation";
 import OptimizationProgressChartContent, {
   ChartData,
 } from "./OptimizationProgressChartContent";
@@ -37,9 +37,9 @@ const OptimizationProgressChartContainer: React.FC<
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
-  const { currentText: currentTip } = useRotatingText({
-    texts: OPTIMIZATION_TIPS,
-    enabled: isInProgress,
+  const { message: currentTip } = useProgressSimulation({
+    messages: OPTIMIZATION_TIPS,
+    isPending: isInProgress,
   });
 
   const chartData = useMemo(() => {
