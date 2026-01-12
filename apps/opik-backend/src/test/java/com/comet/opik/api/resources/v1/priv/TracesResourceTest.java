@@ -1892,6 +1892,72 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when root span has same usage as child span, then only count child span usage (OPIK-3814)")
+        void getTraceWithUsage__whenRootSpanHasUsage__thenNotCountRootSpanUsage() {
+            // This test verifies the fix for OPIK-3814: Root trace usage should not be doubled
+            // when using LangGraph + Pydantic AI with OpenTelemetry.
+            // The issue was that root spans (parentSpanId = null) were being included in the
+            // usage aggregation, causing usage to be counted twice when the root span
+            // inherits/duplicates usage from its child spans.
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace()
+                    .toBuilder()
+                    .id(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .build();
+            var traceId = create(trace, apiKey, workspaceName);
+
+            // Define usage values - these will be used by child span and root span
+            var childSpanUsage = Map.of(
+                    "completion_tokens", 11,
+                    "prompt_tokens", 113,
+                    "total_tokens", 124);
+
+            // Create a root span (no parentSpanId) with the same usage as the child span
+            // This simulates the OTEL instrumentation behavior where root spans inherit usage
+            var rootSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(null) // Root span - no parent
+                    .usage(childSpanUsage)
+                    .type(SpanType.general)
+                    .build();
+
+            // Create a child span (the actual LLM span) with usage
+            var childSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(rootSpan.id()) // Child of root span
+                    .usage(childSpanUsage)
+                    .type(SpanType.llm)
+                    .build();
+
+            batchCreateSpansAndAssert(List.of(rootSpan, childSpan), apiKey, workspaceName);
+
+            // Expected usage should only count the child span's usage, NOT the root span's usage
+            // Before the fix, usage would be doubled (childSpanUsage * 2)
+            var expectedUsage = childSpanUsage.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> (long) entry.getValue()));
+
+            var projectId = getProjectId(projectName, workspaceName, apiKey);
+            trace = trace.toBuilder()
+                    .id(traceId)
+                    .usage(expectedUsage)
+                    .build();
+
+            // Verify that the trace usage matches expected (not doubled)
+            getAndAssert(trace, projectId, apiKey, workspaceName);
+        }
+
+        @Test
         @DisplayName("when trace does not exist, then return not found")
         void getTrace__whenTraceDoesNotExist__thenReturnNotFound() {
             var id = generator.generate();

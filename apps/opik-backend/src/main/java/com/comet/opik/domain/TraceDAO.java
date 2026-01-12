@@ -1043,6 +1043,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                AND parent_span_id != ''
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 GROUP BY workspace_id, project_id, trace_id
@@ -1818,6 +1819,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                AND parent_span_id != ''
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_combined_raw AS (
                 SELECT

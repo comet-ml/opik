@@ -733,6 +733,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     sumMap(usage) AS usage
                 FROM spans final
                 WHERE workspace_id = :workspace_id
+                AND parent_span_id != ''
                 AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
                 GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
@@ -1013,6 +1014,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         sumMap(usage) as usage
                     FROM spans final
                     WHERE workspace_id = :workspace_id
+                    AND parent_span_id != ''
                     AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
