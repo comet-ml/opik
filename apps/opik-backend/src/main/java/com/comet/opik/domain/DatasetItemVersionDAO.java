@@ -1919,9 +1919,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> batchUpdateItems(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull DatasetItemBatchUpdate batchUpdate, @NonNull List<UUID> uuids) {
 
-        // Early return if no IDs or filters provided
-        if ((batchUpdate.ids() == null || batchUpdate.ids().isEmpty())
-                && (batchUpdate.filters() == null || batchUpdate.filters().isEmpty())) {
+        // Early return ONLY if IDs are explicitly empty AND filters are null (not provided at all)
+        // Note: empty filters list means "select all items", so we should NOT early return in that case
+        boolean hasIds = batchUpdate.ids() != null && !batchUpdate.ids().isEmpty();
+        boolean hasFilters = batchUpdate.filters() != null; // null means not provided, empty list means "select all"
+
+        if (!hasIds && !hasFilters) {
+            // Neither IDs nor filters provided - nothing to update
             return Mono.just(0L);
         }
 
