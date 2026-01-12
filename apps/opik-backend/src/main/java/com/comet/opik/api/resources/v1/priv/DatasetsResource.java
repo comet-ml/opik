@@ -431,7 +431,8 @@ public class DatasetsResource {
     @RateLimited
     public Response createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
-                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch) {
+                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch,
+            @QueryParam("batch_id") String batchId) {
 
         // Generate ids for items without ids before the retryable operation
         List<DatasetItem> items = batch.items().stream().map(item -> {
@@ -443,17 +444,19 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+        log.info(
+                "Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetId(), batch.items().size(), batchId, workspaceId);
 
         DatasetItemBatch batchWithIds = new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items);
 
-        itemService.save(batchWithIds)
+        itemService.save(batchWithIds, batchId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
-        log.info("Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetName(), batch.items().size(), workspaceId);
+        log.info(
+                "Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batchId, workspaceId);
 
         return Response.noContent().build();
     }
@@ -605,25 +608,30 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "400", description = "Bad request - invalid parameters or conflicting fields"),
     })
     public Response deleteDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request,
+            @QueryParam("batch_id") String batchId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}'",
+        log.info(
+                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchId='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
-                emptyIfNull(request.filters()).size());
+                emptyIfNull(request.filters()).size(),
+                batchId);
 
-        itemService.delete(request.itemIds(), request.datasetId(), request.filters())
+        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), batchId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}'",
+        log.info(
+                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchId='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
-                emptyIfNull(request.filters()).size());
+                emptyIfNull(request.filters()).size(),
+                batchId);
 
         return Response.noContent().build();
     }

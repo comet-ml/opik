@@ -53,6 +53,7 @@ import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
 import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
@@ -72,7 +73,7 @@ public interface DatasetItemService {
 
     Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
-    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters);
+    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchId);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
@@ -122,9 +123,10 @@ public interface DatasetItemService {
      * </ul>
      *
      * @param batch the batch of items to save (must include datasetId or datasetName)
+     * @param batchId optional batch ID for SDK batch operations (null for old SDKs)
      * @return Mono emitting the newly created DatasetVersion when versioning is enabled, or empty when disabled
      */
-    Mono<DatasetVersion> save(DatasetItemBatch batch);
+    Mono<DatasetVersion> save(DatasetItemBatch batch, String batchId);
 }
 
 @Singleton
@@ -911,21 +913,40 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters) {
+    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (featureFlags.isDatasetVersioningEnabled()) {
-                log.info("Deleting items with versioning. datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
+            if (!featureFlags.isDatasetVersioningEnabled()) {
+                // Legacy: delete from legacy table
+                log.info("Deleting items from legacy table. datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
                         datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
-                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
+                return dao.delete(ids, datasetId, filters).then();
             }
 
-            // Legacy: delete from legacy table
-            log.info("Deleting items from legacy table. datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
-                    datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
-            return dao.delete(ids, datasetId, filters).then();
+            if (batchId == null) {
+                // Old SDK without batch_id - check rate limit
+                return checkRateLimitForOldSdk(datasetId, workspaceId)
+                        .flatMap(allowed -> {
+                            if (!allowed) {
+                                return Mono.error(new jakarta.ws.rs.ClientErrorException(
+                                        "Multiple rapid dataset deletes detected within 60 seconds. " +
+                                                "This operation requires SDK version >= 1.x.x that supports batched operations. "
+                                                +
+                                                "Please upgrade your Opik SDK.",
+                                        Response.Status.TOO_MANY_REQUESTS));
+                            }
+                            // Allow single delete for old SDK
+                            return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
+                        });
+            }
+
+            // New SDK with batch_id - for DELETE, batch_id is not used (only useful for INSERT)
+            // Each DELETE operation creates a new version
+            log.info("Deleting items for dataset '{}' (batch_id '{}' provided but not used for DELETE)",
+                    datasetId, batchId);
+            return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
         });
     }
 
@@ -1563,24 +1584,197 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
+    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch, String batchId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (featureFlags.isDatasetVersioningEnabled()) {
-                UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
-                log.info("Saving items with versioning for dataset '{}'", datasetId);
-                return saveItemsWithVersion(batch, datasetId)
+            if (!featureFlags.isDatasetVersioningEnabled()) {
+                // Legacy: save to legacy table
+                log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
+                return verifyDatasetExistsAndSave(batch).then(Mono.empty());
+            }
+
+            UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
+
+            if (batchId == null) {
+                // Old SDK without batch_id - check rate limit
+                return checkRateLimitForOldSdk(datasetId, workspaceId)
+                        .flatMap(allowed -> {
+                            if (!allowed) {
+                                return Mono.error(new jakarta.ws.rs.ClientErrorException(
+                                        "Multiple rapid dataset inserts detected within 60 seconds. " +
+                                                "This operation requires SDK version >= 1.x.x that supports batched operations. "
+                                                +
+                                                "Please upgrade your Opik SDK. See: https://docs.opik.ai/upgrade",
+                                        Response.Status.TOO_MANY_REQUESTS));
+                            }
+                            // Allow single insert for old SDK
+                            return saveItemsWithVersion(batch, datasetId);
+                        })
                         .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                                 .put(RequestContext.USER_NAME, userName));
             }
 
-            // Legacy: save to legacy table
-            log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
-            return verifyDatasetExistsAndSave(batch)
-                    .then(Mono.empty());
+            // New SDK with batch_id - check if version exists
+            return versionService.findByBatchId(batchId, datasetId, workspaceId)
+                    .map(existingVersion -> {
+                        // Version exists - append items to it
+                        log.info("Appending items to existing version '{}' for batch_id '{}'",
+                                existingVersion.id(), batchId);
+                        return appendItemsToVersion(datasetId, existingVersion.id(), batch.items(), workspaceId);
+                    })
+                    .orElseGet(() -> {
+                        // No version with this batch_id - create new one
+                        log.info("Creating new version with batch_id '{}' for dataset '{}'",
+                                batchId, datasetId);
+                        return createVersionWithBatchId(datasetId, batchId, batch.items(), workspaceId, userName);
+                    })
+                    .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName));
         });
+    }
+
+    private Mono<Boolean> checkRateLimitForOldSdk(UUID datasetId, String workspaceId) {
+        // Check if another insert happened within the last 60 seconds (configurable)
+        return Mono.fromCallable(() -> {
+            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+            if (latestVersion.isEmpty()) {
+                return true; // No versions yet - allow
+            }
+
+            java.time.Instant now = java.time.Instant.now();
+            java.time.Instant versionCreated = latestVersion.get().createdAt();
+            long secondsSinceLastInsert = java.time.Duration.between(versionCreated, now).getSeconds();
+
+            // Configurable threshold (default 60 seconds)
+            long rateLimitSeconds = 60; // TODO: Make this configurable via FeatureFlags
+            return secondsSinceLastInsert >= rateLimitSeconds;
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private Mono<DatasetVersion> appendItemsToVersion(UUID datasetId, UUID versionId, List<DatasetItem> items,
+            String workspaceId) {
+        // Validate items and generate IDs
+        List<DatasetItem> validatedItems = addIdIfAbsent(
+                new DatasetItemBatch(null, datasetId, items));
+
+        // Generate datasetItemId for items that don't have one
+        List<DatasetItem> itemsWithStableIds = validatedItems.stream()
+                .map(item -> {
+                    if (item.datasetItemId() == null) {
+                        return item.toBuilder()
+                                .datasetItemId(idGenerator.generateId())
+                                .build();
+                    }
+                    return item;
+                })
+                .toList();
+
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            // Validate spans and traces
+            return validateSpans(workspaceId, itemsWithStableIds)
+                    .then(validateTraces(workspaceId, itemsWithStableIds))
+                    .then(Mono.defer(() -> {
+                        // Insert items into the existing version
+                        return versionDao.insertItems(datasetId, versionId, itemsWithStableIds,
+                                workspaceId, userName)
+                                .flatMap(insertedCount -> {
+                                    // Update version counts
+                                    return Mono.fromCallable(() -> {
+                                        template.inTransaction(WRITE, handle -> {
+                                            var dao = handle.attach(DatasetVersionDAO.class);
+                                            // Get current version
+                                            var currentVersion = dao.findById(versionId, workspaceId)
+                                                    .orElseThrow(() -> new NotFoundException(
+                                                            "Version not found: '%s'".formatted(versionId)));
+
+                                            // Update counts
+                                            int newTotal = currentVersion.itemsTotal() + insertedCount.intValue();
+                                            int newAdded = currentVersion.itemsAdded() + insertedCount.intValue();
+
+                                            dao.updateCounts(versionId, newTotal, newAdded,
+                                                    currentVersion.itemsModified(), currentVersion.itemsDeleted(),
+                                                    workspaceId);
+                                            return null;
+                                        });
+
+                                        // Fetch updated version
+                                        return versionService.getVersionById(workspaceId, datasetId, versionId);
+                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                                });
+                    }));
+        });
+    }
+
+    private Mono<DatasetVersion> createVersionWithBatchId(
+            UUID datasetId, String batchId, List<DatasetItem> items,
+            String workspaceId, String userName) {
+
+        // Validate items and generate IDs
+        List<DatasetItem> validatedItems = addIdIfAbsent(
+                new DatasetItemBatch(null, datasetId, items));
+
+        // Generate datasetItemId for items that don't have one
+        List<DatasetItem> itemsWithStableIds = validatedItems.stream()
+                .map(item -> {
+                    if (item.datasetItemId() == null) {
+                        return item.toBuilder()
+                                .datasetItemId(idGenerator.generateId())
+                                .build();
+                    }
+                    return item;
+                })
+                .toList();
+
+        // Validate spans and traces
+        return validateSpans(workspaceId, itemsWithStableIds)
+                .then(validateTraces(workspaceId, itemsWithStableIds))
+                .then(Mono.defer(() -> {
+                    // Verify dataset exists
+                    datasetService.findById(datasetId, workspaceId, null);
+
+                    // Generate version ID
+                    UUID versionId = idGenerator.generateId();
+
+                    // Insert items into the new version first
+                    return versionDao.insertItems(datasetId, versionId, itemsWithStableIds,
+                            workspaceId, userName)
+                            .flatMap(itemCount -> {
+                                // Create version record with correct item counts
+                                return Mono.fromCallable(() -> {
+                                    // Create version from delta (no base version for first batch)
+                                    DatasetVersion version = versionService.createVersionFromDelta(
+                                            datasetId,
+                                            versionId,
+                                            itemCount.intValue(),
+                                            null, // No base version
+                                            null, // No tags
+                                            "Auto-created from SDK batch operation",
+                                            workspaceId,
+                                            userName);
+
+                                    // Now associate the batch_id with this version
+                                    template.inTransaction(WRITE, handle -> {
+                                        var dao = handle.attach(DatasetVersionDAO.class);
+                                        // Update the version to set batch_id
+                                        dao.updateBatchId(versionId, batchId, workspaceId);
+                                        // Set as latest
+                                        dao.deleteTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
+                                        dao.insertTag(datasetId, DatasetVersionService.LATEST_TAG, versionId, userName,
+                                                workspaceId);
+                                        return null;
+                                    });
+
+                                    log.info("Created version '{}' with batch_id '{}' for dataset '{}', itemCount '{}'",
+                                            versionId, batchId, datasetId, itemCount);
+
+                                    return version.toBuilder().batchId(batchId).build();
+                                }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                            });
+                }));
     }
 
     private UUID resolveDatasetId(DatasetItemBatch batch, String workspaceId, String userName) {

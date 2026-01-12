@@ -159,6 +159,29 @@ public interface DatasetVersionService {
     boolean isLatestVersion(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
+     * Finds a version by its batch ID.
+     * Used to support SDK batch operations where multiple API calls share the same batch_id.
+     *
+     * @param batchId the batch ID to search for
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @return Optional containing the version if found, empty otherwise
+     */
+    Optional<DatasetVersion> findByBatchId(String batchId, UUID datasetId, String workspaceId);
+
+    /**
+     * Creates a new version with a batch ID for SDK batch operations.
+     * Automatically sets the 'latest' tag to point to the new version.
+     *
+     * @param datasetId the dataset ID
+     * @param batchId the batch ID to associate with this version
+     * @param workspaceId the workspace ID
+     * @param userName the user creating the version
+     * @return Mono emitting the created version
+     */
+    Mono<DatasetVersion> createVersionWithBatchId(UUID datasetId, String batchId, String workspaceId, String userName);
+
+    /**
      * Creates a new version from the result of applying delta changes.
      * This is called after items have been written to the versions table.
      *
@@ -239,6 +262,60 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(workspaceId, datasetId, LATEST_TAG);
+    }
+
+    @Override
+    public Optional<DatasetVersion> findByBatchId(@NonNull String batchId, @NonNull UUID datasetId,
+            @NonNull String workspaceId) {
+        log.info("Finding version by batch_id '{}' for dataset '{}'", batchId, datasetId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findByBatchId(batchId, datasetId, workspaceId);
+        });
+    }
+
+    @Override
+    public Mono<DatasetVersion> createVersionWithBatchId(@NonNull UUID datasetId, @NonNull String batchId,
+            @NonNull String workspaceId, @NonNull String userName) {
+        log.info("Creating version with batch_id '{}' for dataset '{}'", batchId, datasetId);
+
+        return Mono.fromCallable(() -> {
+            UUID versionId = idGenerator.generateId();
+            String versionHash = CommitUtils.getCommit(versionId);
+
+            DatasetVersion version = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .batchId(batchId)
+                    .itemsTotal(0)
+                    .itemsAdded(0)
+                    .itemsModified(0)
+                    .itemsDeleted(0)
+                    .changeDescription("Auto-created from SDK batch operation")
+                    .createdBy(userName)
+                    .lastUpdatedBy(userName)
+                    .build();
+
+            return template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetVersionDAO.class);
+
+                // Insert the version
+                dao.insert(version, workspaceId);
+
+                // Remove 'latest' tag from previous version (if exists)
+                dao.deleteTag(datasetId, LATEST_TAG, workspaceId);
+
+                // Always add 'latest' tag to the new version
+                dao.insertTag(datasetId, LATEST_TAG, versionId, userName, workspaceId);
+
+                log.info("Created version '{}' with batch_id '{}' and set as 'latest' for dataset '{}'",
+                        versionId, batchId, datasetId);
+
+                return version;
+            });
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
