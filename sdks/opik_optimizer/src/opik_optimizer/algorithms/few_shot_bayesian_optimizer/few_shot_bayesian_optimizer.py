@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import logging
+import warnings
 import random
 from datetime import datetime
 
@@ -570,10 +571,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
-        # Explicitly create and seed the sampler for Optuna
-        sampler = optuna.samplers.TPESampler(
-            seed=self.seed, multivariate=self.enable_multivariate_tpe
-        )
+        # Explicitly create and seed the sampler for Optuna.
+        # Note: Optuna warns that `multivariate` is experimental; we suppress that warning here.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*multivariate.*experimental.*",
+                category=optuna.exceptions.ExperimentalWarning,
+            )
+            sampler = optuna.samplers.TPESampler(
+                seed=self.seed, multivariate=self.enable_multivariate_tpe
+            )
         pruner = (
             optuna.pruners.MedianPruner(n_startup_trials=3)
             if self.enable_optuna_pruning
