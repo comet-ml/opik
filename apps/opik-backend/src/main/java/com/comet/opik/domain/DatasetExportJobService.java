@@ -32,7 +32,9 @@ public interface DatasetExportJobService {
 
     Mono<DatasetExportJob> getJob(UUID jobId);
 
-    Mono<Void> updateJobStatus(UUID jobId, DatasetExportStatus status, String filePath, String errorMessage);
+    Mono<Void> updateJobToCompleted(UUID jobId, String filePath);
+
+    Mono<Void> updateJobToFailed(UUID jobId, String errorMessage);
 }
 
 @Slf4j
@@ -117,15 +119,14 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     }
 
     @Override
-    public Mono<Void> updateJobStatus(@NonNull UUID jobId, @NonNull DatasetExportStatus status, String filePath,
-            String errorMessage) {
+    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.update(workspaceId, jobId, status, filePath, errorMessage);
+                    int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath);
 
                     if (updated == 0) {
                         throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
@@ -134,7 +135,30 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     return null;
                 });
 
-                log.info("Updated export job: '{}' to status: '{}'", jobId, status);
+                log.info("Updated export job: '{}' to status: 'COMPLETED'", jobId);
+                return null;
+            }).subscribeOn(Schedulers.boundedElastic()).then();
+        });
+    }
+
+    @Override
+    public Mono<Void> updateJobToFailed(@NonNull UUID jobId, @NonNull String errorMessage) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetExportJobDAO.class);
+                    int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage);
+
+                    if (updated == 0) {
+                        throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
+                    }
+
+                    return null;
+                });
+
+                log.info("Updated export job: '{}' to status: 'FAILED'", jobId);
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });

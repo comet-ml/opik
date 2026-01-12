@@ -35,7 +35,8 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
             return;
         }
 
-        log.info("Starting dataset export job subscriber with config: streamName={}, consumerGroupName={}, batchSize={}",
+        log.info(
+                "Starting dataset export job subscriber with config: streamName={}, consumerGroupName={}, batchSize={}",
                 config.getStreamName(),
                 config.getConsumerGroupName(),
                 config.getConsumerBatchSize());

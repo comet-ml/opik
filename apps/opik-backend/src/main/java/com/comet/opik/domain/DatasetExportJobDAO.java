@@ -48,18 +48,50 @@ public interface DatasetExportJobDAO {
             """)
     void save(@BindMethods("job") DatasetExportJob job, @Bind("workspaceId") String workspaceId);
 
+    /**
+     * Updates a dataset export job when it completes successfully.
+     * Sets status, file_path, and clears error_message.
+     *
+     * @param workspaceId The workspace ID for security
+     * @param id The job ID to update
+     * @param status The new status (typically COMPLETED)
+     * @param filePath The path to the exported file
+     * @return The number of rows updated (0 or 1)
+     */
     @SqlUpdate("""
             UPDATE dataset_export_jobs
             SET status = :status,
                 file_path = :filePath,
+                error_message = NULL
+            WHERE id = :id
+                AND workspace_id = :workspaceId
+            """)
+    int updateToCompleted(@Bind("workspaceId") String workspaceId,
+            @Bind("id") UUID id,
+            @Bind("status") DatasetExportStatus status,
+            @Bind("filePath") String filePath);
+
+    /**
+     * Updates a dataset export job when it fails.
+     * Sets status, error_message, and clears file_path.
+     *
+     * @param workspaceId The workspace ID for security
+     * @param id The job ID to update
+     * @param status The new status (typically FAILED)
+     * @param errorMessage The error message describing the failure
+     * @return The number of rows updated (0 or 1)
+     */
+    @SqlUpdate("""
+            UPDATE dataset_export_jobs
+            SET status = :status,
+                file_path = NULL,
                 error_message = :errorMessage
             WHERE id = :id
                 AND workspace_id = :workspaceId
             """)
-    int update(@Bind("workspaceId") String workspaceId,
+    int updateToFailed(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetExportStatus status,
-            @Bind("filePath") String filePath,
             @Bind("errorMessage") String errorMessage);
 
     @SqlQuery("""
@@ -75,7 +107,7 @@ public interface DatasetExportJobDAO {
                 created_by
             FROM dataset_export_jobs
             WHERE id = :id
-                AND workspace_id = :workspaceId
+            AND workspace_id = :workspaceId
             """)
     Optional<DatasetExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
 
@@ -114,7 +146,6 @@ public interface DatasetExportJobDAO {
                 created_by
             FROM dataset_export_jobs
             WHERE expires_at < :now
-                AND status = :status
             LIMIT :limit
             """)
     List<DatasetExportJob> findExpired(@Bind("now") Instant now,
