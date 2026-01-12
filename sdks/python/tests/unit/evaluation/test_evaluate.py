@@ -775,6 +775,261 @@ def test_evaluate__with_random_sampler__happy_flow(
         assert feedback_score.value == expected_score
 
 
+def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
+    fake_backend,
+):
+    """Test that total_items passed to executor reflects the sampled count, not the original dataset size."""
+    mock_dataset = mock.MagicMock(
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = 10  # Original dataset has 10 items
+    # Return 10 items
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id=f"dataset-item-id-{i}",
+                input={"message": f"message {i}"},
+                reference="hello",
+            )
+            for i in range(10)
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    # Create a sampler that will reduce to 3 items
+    sampler = samplers.RandomDatasetSampler(max_samples=3)
+
+    # Patch the engine's _compute_test_results_for_llm_task to capture total_items
+    captured_total_items = []
+
+    original_compute = (
+        evaluation.engine.engine.EvaluationEngine._compute_test_results_for_llm_task
+    )
+
+    def patched_compute(self, *args, **kwargs):
+        captured_total_items.append(kwargs.get("total_items"))
+        return original_compute(self, *args, **kwargs)
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            with mock.patch.object(
+                evaluation.engine.engine.EvaluationEngine,
+                "_compute_test_results_for_llm_task",
+                patched_compute,
+            ):
+                evaluation.evaluate(
+                    dataset=mock_dataset,
+                    task=say_task,
+                    experiment_name="the-experiment-name",
+                    scoring_metrics=[metrics.Equals()],
+                    task_threads=1,
+                    dataset_sampler=sampler,
+                )
+
+    # Verify that total_items was 3 (sampled count), not 10 (original dataset size)
+    assert len(captured_total_items) == 1
+    assert captured_total_items[0] == 3, (
+        f"Expected total_items to be 3 (sampled count), "
+        f"but got {captured_total_items[0]} (original dataset size)"
+    )
+
+    # Also verify that only 3 items were actually processed
+    actual_traces = fake_backend.trace_trees
+    assert len(actual_traces) == 3, f"Expected 3 traces, got {len(actual_traces)}"
+
+
+def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
+    fake_backend,
+):
+    """Test that total_items is correct when task_span_metrics forces non-streaming mode."""
+    mock_dataset = mock.MagicMock(
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = 5
+    # Return 5 items
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id=f"dataset-item-id-{i}",
+                input={"message": f"message {i}"},
+                reference="hello",
+            )
+            for i in range(5)
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    # Create a task span metric to force non-streaming mode
+    class TaskSpanMetric(metrics.base_metric.BaseMetric):
+        def score(self, **kwargs):
+            return score_result.ScoreResult(name="task_span_metric", value=1.0)
+
+        @property
+        def track_task_span(self) -> bool:
+            return True
+
+    # Patch the engine's _compute_test_results_for_llm_task to capture total_items
+    captured_total_items = []
+
+    original_compute = (
+        evaluation.engine.engine.EvaluationEngine._compute_test_results_for_llm_task
+    )
+
+    def patched_compute(self, *args, **kwargs):
+        captured_total_items.append(kwargs.get("total_items"))
+        return original_compute(self, *args, **kwargs)
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            with mock.patch.object(
+                evaluation.engine.engine.EvaluationEngine,
+                "_compute_test_results_for_llm_task",
+                patched_compute,
+            ):
+                evaluation.evaluate(
+                    dataset=mock_dataset,
+                    task=say_task,
+                    experiment_name="the-experiment-name",
+                    scoring_metrics=[TaskSpanMetric()],
+                    task_threads=1,
+                )
+
+    # Verify that total_items was 5 (actual count from non-streaming list)
+    assert len(captured_total_items) == 1
+    assert captured_total_items[0] == 5, (
+        f"Expected total_items to be 5 (actual list length), "
+        f"but got {captured_total_items[0]}"
+    )
+
+    # Also verify that 5 items were actually processed
+    actual_traces = fake_backend.trace_trees
+    assert len(actual_traces) == 5, f"Expected 5 traces, got {len(actual_traces)}"
+
+
+def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count(
+    fake_backend,
+):
+    """Test that total_items is correct when both nb_samples and dataset_sampler are used."""
+    mock_dataset = mock.MagicMock(
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = 100  # Original dataset has 100 items
+    # nb_samples=10 will fetch 10 items
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        [
+            dataset_item.DatasetItem(
+                id=f"dataset-item-id-{i}",
+                input={"message": f"message {i}"},
+                reference="hello",
+            )
+            for i in range(10)  # 10 items fetched due to nb_samples
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    # Create a sampler that will further reduce to 3 items
+    sampler = samplers.RandomDatasetSampler(max_samples=3)
+
+    # Patch the engine's _compute_test_results_for_llm_task to capture total_items
+    captured_total_items = []
+
+    original_compute = (
+        evaluation.engine.engine.EvaluationEngine._compute_test_results_for_llm_task
+    )
+
+    def patched_compute(self, *args, **kwargs):
+        captured_total_items.append(kwargs.get("total_items"))
+        return original_compute(self, *args, **kwargs)
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            with mock.patch.object(
+                evaluation.engine.engine.EvaluationEngine,
+                "_compute_test_results_for_llm_task",
+                patched_compute,
+            ):
+                evaluation.evaluate(
+                    dataset=mock_dataset,
+                    task=say_task,
+                    experiment_name="the-experiment-name",
+                    scoring_metrics=[metrics.Equals()],
+                    task_threads=1,
+                    nb_samples=10,  # First filter: 10 items
+                    dataset_sampler=sampler,  # Second filter: 3 items
+                )
+
+    # Verify that total_items was 3 (final sampled count), not 10 (nb_samples) or 100 (dataset size)
+    assert len(captured_total_items) == 1
+    assert captured_total_items[0] == 3, (
+        f"Expected total_items to be 3 (final sampled count), "
+        f"but got {captured_total_items[0]}"
+    )
+
+    # Verify streaming was called with nb_samples
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=10,
+        dataset_item_ids=None,
+    )
+
+    # Also verify that only 3 items were actually processed
+    actual_traces = fake_backend.trace_trees
+    assert len(actual_traces) == 3, f"Expected 3 traces, got {len(actual_traces)}"
+
+
 def test_build_prompt_evaluation_task_logs_when_vision_missing() -> None:
     model = mock.Mock()
     model.model_name = "text-only-model"

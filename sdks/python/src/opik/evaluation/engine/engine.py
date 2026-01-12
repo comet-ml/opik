@@ -355,11 +355,15 @@ class EvaluationEngine:
             dataset_items_iter = iter(dataset_items_list)
 
         # Calculate total items for progress bar
-        total_items = _calculate_total_items(
-            dataset=dataset_,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-        )
+        if use_streaming:
+            total_items = _calculate_total_items(
+                dataset=dataset_,
+                nb_samples=nb_samples,
+                dataset_item_ids=dataset_item_ids,
+            )
+        else:
+            # After sampling, the actual count is the length of the list
+            total_items = len(dataset_items_list)
 
         if not self._metrics_evaluator.has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
