@@ -41,7 +41,7 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
     except Exception:
         dataset = client.create_dataset("tests")
 
-    dataset_items = dataset.__internal_api__get_items_as_dataclasses__()
+    dataset_items = list(dataset.__internal_api__stream_items_as_dataclasses__())
     dataset_item_id_finder = get_dataset_item_id_finder(
         existing_dataset_items=dataset_items
     )

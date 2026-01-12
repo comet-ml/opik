@@ -31,6 +31,7 @@ def get_datasets(
                 name=dataset_fern.name,
                 description=dataset_fern.description,
                 rest_client=rest_client,
+                dataset_items_count=dataset_fern.dataset_items_count,
             )
 
             if sync_items:
