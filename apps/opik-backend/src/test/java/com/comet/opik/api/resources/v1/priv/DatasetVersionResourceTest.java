@@ -12,7 +12,6 @@ import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemUpdate;
-import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
@@ -46,9 +45,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.net.HttpHeaders;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Entity;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -75,7 +72,6 @@ import java.util.stream.IntStream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -123,7 +119,6 @@ class DatasetVersionResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
-    private ClientSupport client;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
@@ -131,7 +126,6 @@ class DatasetVersionResourceTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-        this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -211,34 +205,11 @@ class DatasetVersionResourceTest {
     }
 
     private void deleteDatasetItem(UUID datasetId, UUID itemId) {
-        try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
-                .path("items")
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .post(Entity.json(DatasetItemsDelete.builder()
-                        .itemIds(Set.of(itemId))
-                        .build()))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-        }
+        datasetResourceClient.deleteDatasetItem(itemId, API_KEY, TEST_WORKSPACE);
     }
 
     private void deleteDatasetItemsByFilters(UUID datasetId, List<DatasetItemFilter> filters) {
-        try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
-                .path("items")
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .post(Entity.json(DatasetItemsDelete.builder()
-                        .datasetId(datasetId)
-                        .filters(filters)
-                        .build()))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-        }
+        datasetResourceClient.deleteDatasetItemsByFilters(datasetId, filters, API_KEY, TEST_WORKSPACE);
     }
 
     @Nested
@@ -1074,6 +1045,103 @@ class DatasetVersionResourceTest {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
+        }
+
+        @Test
+        @DisplayName("Success: Added and edited items appear before unchanged items in ordering")
+        void applyChanges__whenAddingAndEditing__thenNewItemsAppearFirst() {
+            // Given - Create dataset with 3 original items (auto-creates version 1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(3);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get version 1 and tag it
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get items from v1 to obtain their IDs for editing
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(3);
+
+            var itemToEdit = v1Items.get(0); // Will be edited
+            var unchangedItem1 = v1Items.get(1); // Will remain unchanged
+            var unchangedItem2 = v1Items.get(2); // Will remain unchanged
+
+            // Prepare changes: add 1 new item, edit 1 item
+            var newItem = generateDatasetItems(1).getFirst();
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(itemToEdit.id()) // Row ID from API response
+                    .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
+                            "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .addedItems(List.of(newItem))
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .changeDescription("Add and edit items - testing ordering")
+                    .build();
+
+            // When - Apply changes
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created with correct item count
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(4); // 3 original + 1 added
+            assertThat(version2.itemsAdded()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+
+            // Verify v2 items ordering: added and edited items should appear before unchanged items
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(4);
+
+            // Extract actual ordering of datasetItemIds from v2
+            var actualOrder = v2Items.stream()
+                    .map(DatasetItem::datasetItemId)
+                    .toList();
+
+            // Find the newly added item in v2 (it won't be in v1)
+            var v1ItemIds = v1Items.stream()
+                    .map(DatasetItem::datasetItemId)
+                    .toList();
+
+            var addedItemId = v2Items.stream()
+                    .filter(item -> !v1ItemIds.contains(item.datasetItemId()))
+                    .map(DatasetItem::datasetItemId)
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Added item not found in v2"));
+
+            // Expected order: added item first, edited item second, then unchanged items in their original order
+            // Unchanged items should maintain their order from v1
+            var expectedOrder = List.of(
+                    addedItemId,
+                    itemToEdit.datasetItemId(),
+                    unchangedItem1.datasetItemId(),
+                    unchangedItem2.datasetItemId());
+
+            // Verify ordering matches expected
+            assertThat(actualOrder)
+                    .as("Items should be ordered: added, edited, then unchanged in their original v1 order")
+                    .isEqualTo(expectedOrder);
+
+            // Verify the edited item has the new data
+            var editedInV2 = v2Items.stream()
+                    .filter(item -> item.datasetItemId().equals(itemToEdit.datasetItemId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Edited item not found in v2"));
+            assertThat(editedInV2.data().get("edited")).isNotNull();
+            assertThat(editedInV2.data().get("description")).isNotNull();
         }
     }
 
@@ -1988,15 +2056,7 @@ class DatasetVersionResourceTest {
     class ExperimentDatasetVersionLinking {
 
         private Experiment getExperiment(UUID id) {
-            try (var response = client.target("%s/v1/private/experiments/%s".formatted(baseURI, id))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                return response.readEntity(Experiment.class);
-            }
+            return experimentResourceClient.getExperiment(id, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -2406,13 +2466,7 @@ class DatasetVersionResourceTest {
                     .build();
 
             // when - PUT without query param (default behavior)
-            try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch))) {
-
+            try (var actualResponse = datasetResourceClient.callCreateDatasetItems(batch, TEST_WORKSPACE, API_KEY)) {
                 // then - should return 204 No Content (backward compatible)
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -2527,26 +2581,14 @@ class DatasetVersionResourceTest {
             assertThat(versions.content()).hasSize(2);
 
             // when - delete the dataset
-            try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path(datasetId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
-
+            try (var actualResponse = datasetResourceClient.callDeleteDataset(datasetId, API_KEY, TEST_WORKSPACE)) {
                 // then - should return 204 No Content
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
             // Verify dataset is deleted
-            try (var getResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path(datasetId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
+            try (var getResponse = datasetResourceClient.callGetDatasetById(datasetId, API_KEY, TEST_WORKSPACE)) {
                 assertThat(getResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
             }
         }
