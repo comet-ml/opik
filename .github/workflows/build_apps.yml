@@ -18,7 +18,7 @@ on:
         default: false
       is_adhoc:
         type: boolean
-        required: true
+        required: false
         description: Is adhoc build
         default: false
       build_guardrails:
@@ -40,7 +40,7 @@ on:
         default: false
       is_adhoc:
         type: boolean
-        required: true
+        required: false
         description: Is adhoc build
         default: false
       ref:
