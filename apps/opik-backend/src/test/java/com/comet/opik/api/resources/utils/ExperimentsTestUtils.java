@@ -46,7 +46,7 @@ import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 @UtilityClass
 public class ExperimentsTestUtils {
 
-    private static ExperimentResponseBuilder experimentResponseBuilder = new ExperimentResponseBuilder();
+    private static final ExperimentResponseBuilder experimentResponseBuilder = new ExperimentResponseBuilder();
 
     /**
      * Helper function to build expected ExperimentGroupResponse for testing.
@@ -55,11 +55,17 @@ public class ExperimentsTestUtils {
      */
     public static ExperimentGroupResponse buildExpectedGroupResponse(List<GroupBy> groups,
             List<Experiment> experiments) {
-        // Group experiments by extracting values for each GroupBy criterion
-        Map<List<String>, List<Experiment>> experimentGroups = experiments.stream()
-                .collect(Collectors.groupingBy(experiment -> extractGroupValues(experiment, groups)));
+        // Explode experiments by LIST fields (like arrayJoin in ClickHouse)
+        // Each experiment with LIST fields will appear in multiple groups
+        List<ExperimentWithGroupValues> explodedExperiments = explodeExperimentsByListFields(experiments, groups);
 
-        // Convert to ExperimentGroupItem format (similar to what comes from database)
+        // Group experiments by extracting values for each GroupBy criterion
+        Map<List<String>, List<Experiment>> experimentGroups = explodedExperiments.stream()
+                .collect(Collectors.groupingBy(
+                        ExperimentWithGroupValues::groupValues,
+                        Collectors.mapping(ExperimentWithGroupValues::experiment, Collectors.toList())));
+
+        // Convert to ExperimentGroupItem format (similar to what comes from a database)
         // Include lastCreatedExperimentAt for each group
         List<ExperimentGroupItem> groupItems = experimentGroups.entrySet().stream()
                 .map(entry -> {

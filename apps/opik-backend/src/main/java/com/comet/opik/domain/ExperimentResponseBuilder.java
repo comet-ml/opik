@@ -368,8 +368,15 @@ public class ExperimentResponseBuilder {
                 .map(groupList -> ExperimentGroupResponse.GroupDetail.builder()
                         .groupSorting(
                                 groupList.stream()
-                                        .sorted((a, b) -> b.lastCreatedExperimentAt()
-                                                .compareTo(a.lastCreatedExperimentAt()))
+                                        .sorted((a, b) -> {
+                                            int timeCompare = b.lastCreatedExperimentAt()
+                                                    .compareTo(a.lastCreatedExperimentAt());
+                                            if (timeCompare != 0) {
+                                                return timeCompare;
+                                            }
+                                            // Secondary sort by label for deterministic ordering when timestamps are equal
+                                            return a.name().compareTo(b.name());
+                                        })
                                         .map(ExperimentGroupWithTime::name)
                                         .distinct()
                                         .toList())
