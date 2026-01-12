@@ -561,7 +561,7 @@ class OpenTelemetryResourceTest {
                             .setValue(AnyValue.newBuilder().setIntValue(completionTokens))
                             .build())
                     .addAttributes(KeyValue.newBuilder()
-                            .setKey("llm.token_count.total")
+                            .setKey("gen_ai.usage.total_tokens")
                             .setValue(AnyValue.newBuilder().setIntValue(totalTokens))
                             .build())
                     .build();
@@ -583,7 +583,7 @@ class OpenTelemetryResourceTest {
                             .setValue(AnyValue.newBuilder().setIntValue(completionTokens))
                             .build())
                     .addAttributes(KeyValue.newBuilder()
-                            .setKey("llm.token_count.total")
+                            .setKey("gen_ai.usage.total_tokens")
                             .setValue(AnyValue.newBuilder().setIntValue(totalTokens))
                             .build())
                     .addAttributes(KeyValue.newBuilder()
