@@ -210,11 +210,13 @@ class DatasetExportJobServiceImplTest {
     void updateJobToCompleted_shouldUpdateStatusAndFilePath() {
         // Given
         String filePath = "workspace/exports/dataset-123/job-456.csv";
-        when(exportJobDAO.updateToCompleted(any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobToCompleted(JOB_ID, filePath)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -223,18 +225,20 @@ class DatasetExportJobServiceImplTest {
         // Verify DAO.updateToCompleted() was called
         verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
                 eq(DatasetExportStatus.COMPLETED),
-                eq(filePath));
+                eq(filePath), eq(USER_NAME));
     }
 
     @Test
     void updateJobToFailed_shouldUpdateStatusAndErrorMessage() {
         // Given
         String errorMessage = "Export failed due to timeout";
-        when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.updateToFailed(any(), any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobToFailed(JOB_ID, errorMessage)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -242,18 +246,20 @@ class DatasetExportJobServiceImplTest {
 
         // Verify DAO.updateToFailed() was called
         verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.FAILED),
-                eq(errorMessage));
+                eq(errorMessage), eq(USER_NAME));
     }
 
     @Test
     void updateJobToCompleted_shouldThrowNotFoundException_whenJobDoesNotExist() {
         // Given
         String filePath = "workspace/exports/dataset-123/job-456.csv";
-        when(exportJobDAO.updateToCompleted(any(), any(), any(), any())).thenReturn(0); // No rows updated
+        when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any())).thenReturn(0); // No rows updated
 
         // When
         Mono<Void> result = service.updateJobToCompleted(JOB_ID, filePath)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -264,18 +270,20 @@ class DatasetExportJobServiceImplTest {
         // Verify DAO.updateToCompleted() was called
         verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
                 eq(DatasetExportStatus.COMPLETED),
-                eq(filePath));
+                eq(filePath), eq(USER_NAME));
     }
 
     @Test
     void updateJobToFailed_shouldThrowNotFoundException_whenJobDoesNotExist() {
         // Given
         String errorMessage = "Export failed due to timeout";
-        when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(0); // No rows updated
+        when(exportJobDAO.updateToFailed(any(), any(), any(), any(), any())).thenReturn(0); // No rows updated
 
         // When
         Mono<Void> result = service.updateJobToFailed(JOB_ID, errorMessage)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -285,6 +293,6 @@ class DatasetExportJobServiceImplTest {
 
         // Verify DAO.updateToFailed() was called
         verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.FAILED),
-                eq(errorMessage));
+                eq(errorMessage), eq(USER_NAME));
     }
 }

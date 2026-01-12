@@ -122,11 +122,13 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath);
+                    int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
+                            userName);
 
                     if (updated == 0) {
                         throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
@@ -145,11 +147,13 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     public Mono<Void> updateJobToFailed(@NonNull UUID jobId, @NonNull String errorMessage) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage);
+                    int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage,
+                            userName);
 
                     if (updated == 0) {
                         throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
