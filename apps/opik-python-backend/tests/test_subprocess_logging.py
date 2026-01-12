@@ -59,6 +59,42 @@ def assert_log_field(log: Dict, field: str, expected_value: Any = None, between:
         assert value is not None, f"{field} is None"
 
 
+def wait_for_captured_requests(
+    expected_count: int = 1,
+    timeout_secs: float = 5.0,
+    poll_interval_secs: float = 0.1
+) -> List[Dict[str, Any]]:
+    """Wait for captured HTTP requests with polling instead of fixed sleep.
+    
+    This avoids flaky tests in CI where log flushing may take longer than expected.
+    
+    Args:
+        expected_count: Number of requests to wait for
+        timeout_secs: Maximum time to wait
+        poll_interval_secs: Time between polls
+        
+    Returns:
+        List of captured requests
+        
+    Raises:
+        AssertionError: If expected requests not received within timeout
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout_secs:
+        captured = LogCapturingHandler.captured_requests
+        if len(captured) >= expected_count:
+            return captured
+        time.sleep(poll_interval_secs)
+    
+    # Timeout - return what we have for better error messages
+    captured = LogCapturingHandler.captured_requests
+    assert len(captured) >= expected_count, (
+        f"Expected {expected_count} captured requests within {timeout_secs}s, "
+        f"but got {len(captured)}"
+    )
+    return captured
+
+
 # ============================================================================
 # Mock HTTP Server
 # ============================================================================
@@ -179,12 +215,8 @@ print(json.dumps(result))
             
             assert result['status'] == 'ok'
             
-            time.sleep(0.5)
-            
-            # Extract and validate payload
-            captured_requests = LogCapturingHandler.captured_requests
-            assert len(captured_requests) == 1
-            
+            # Wait for log flush with polling (avoids flaky tests in CI)
+            captured_requests = wait_for_captured_requests(expected_count=1)
             captured_request = captured_requests[0]
             payload = captured_request['body']
             logs = payload.get('logs', [])
@@ -266,12 +298,8 @@ print(json.dumps(result))
             
             assert result['status'] == 'ok'
             
-            time.sleep(0.5)
-            
-            # Extract and validate payload
-            captured_requests = LogCapturingHandler.captured_requests
-            assert len(captured_requests) == 1
-            
+            # Wait for log flush with polling (avoids flaky tests in CI)
+            captured_requests = wait_for_captured_requests(expected_count=1)
             captured_request = captured_requests[0]
             payload = captured_request['body']
             logs = payload.get('logs', [])
@@ -372,11 +400,8 @@ print(json.dumps(result))
             
             assert result['task_id'] == 42
             
-            time.sleep(0.5)
-            
-            captured_requests = LogCapturingHandler.captured_requests
-            assert len(captured_requests) == 1
-            
+            # Wait for log flush with polling (avoids flaky tests in CI)
+            captured_requests = wait_for_captured_requests(expected_count=1)
             captured_request = captured_requests[0]
             payload = captured_request['body']
             logs = payload.get('logs', [])
@@ -462,11 +487,8 @@ print(json.dumps(result))
             
             assert result['processed'] == 3
             
-            time.sleep(0.5)
-            
-            captured_requests = LogCapturingHandler.captured_requests
-            assert len(captured_requests) == 1
-            
+            # Wait for log flush with polling (avoids flaky tests in CI)
+            captured_requests = wait_for_captured_requests(expected_count=1)
             captured_request = captured_requests[0]
             payload = captured_request['body']
             logs = payload.get('logs', [])
