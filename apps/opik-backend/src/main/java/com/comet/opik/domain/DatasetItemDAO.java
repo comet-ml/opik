@@ -70,6 +70,14 @@ public interface DatasetItemDAO {
 
     Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
+
+    /**
+     * Retrieves the column definitions (column names and their types) for the dataset items' data field.
+     *
+     * @param datasetId The ID of the dataset
+     * @return A Mono containing a map of column names to their types
+     */
+    Mono<Map<String, List<String>>> getColumns(UUID datasetId);
 }
 
 @Singleton
@@ -1700,5 +1708,28 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<String, List<String>>> getColumns(@NonNull UUID datasetId) {
+        log.debug("Getting columns for dataset '{}'", datasetId);
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_columns");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Statement statement = connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
+                    .bind("datasetId", datasetId);
+
+            Flux<Map<String, List<String>>> resultFlux = makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, List<String>> columns = (Map<String, List<String>>) row.get("columns", Map.class);
+                        return columns != null ? columns : new HashMap<String, List<String>>();
+                    }));
+
+            return resultFlux.next();
+        })
+                .doFinally(signalType -> endSegment(segment));
     }
 }
