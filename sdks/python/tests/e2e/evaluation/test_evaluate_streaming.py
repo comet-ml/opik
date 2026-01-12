@@ -3,6 +3,7 @@ from typing import Dict, Any, List
 from unittest import mock
 
 import opik
+from opik.api_objects import rest_stream_parser, constants
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
@@ -15,6 +16,9 @@ DATASET_ITEMS = [
     }
     for i in range(20)  # Create 20 items to test streaming behavior
 ]
+
+# Batch size for streaming - must be less than len(DATASET_ITEMS) to test multi-batch streaming
+TEST_BATCH_SIZE = 5
 
 
 def simple_task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -41,9 +45,10 @@ def test_streaming_starts_evaluation_before_complete_download(
 
     This test verifies the core streaming behavior by:
     1. Creating a dataset with multiple items
-    2. Patching the streaming generator to track when items are yielded
-    3. Patching the task execution to track when tasks start
-    4. Verifying that the first task starts before the last item is yielded
+    2. Setting a small batch size to force multiple batches
+    3. Patching read_and_parse_stream to track when items are yielded
+    4. Patching the task execution to track when tasks start
+    5. Verifying that the first task starts before the last item is yielded
     """
     # Create dataset with multiple items
     dataset = opik_client.create_dataset(dataset_name)
@@ -53,21 +58,18 @@ def test_streaming_starts_evaluation_before_complete_download(
     events: List[str] = []
     events_lock = threading.Lock()
 
-    # Store original streaming method
-    original_stream_method = (
-        dataset.__internal_api__stream_items_as_dataclasses__.__func__
-    )
+    # Store original read_and_parse_stream function
+    original_read_and_parse_stream = rest_stream_parser.read_and_parse_stream
 
-    def tracked_streaming_generator(
-        self, nb_samples=None, batch_size=None, dataset_item_ids=None
-    ):
-        """Wrapper that tracks when items are yielded."""
-        for item in original_stream_method(
-            self, nb_samples, batch_size, dataset_item_ids
-        ):
+    def tracked_read_and_parse_stream(stream, item_class, nb_samples=None):
+        """Wrapper that tracks when items are yielded from the stream."""
+        items = original_read_and_parse_stream(stream, item_class, nb_samples)
+        tracked_items = []
+        for item in items:
             with events_lock:
                 events.append("yield")
-            yield item
+            tracked_items.append(item)
+        return tracked_items
 
     def tracked_task(item: Dict[str, Any]) -> Dict[str, Any]:
         """Wrapper that tracks when tasks start executing."""
@@ -75,11 +77,15 @@ def test_streaming_starts_evaluation_before_complete_download(
             events.append("task")
         return simple_task(item)
 
-    # Patch the streaming method to track yields
-    with mock.patch.object(
-        type(dataset),
-        "__internal_api__stream_items_as_dataclasses__",
-        tracked_streaming_generator,
+    # Patch both read_and_parse_stream to track yields and DATASET_STREAM_BATCH_SIZE
+    # to ensure we stream in multiple batches
+    with (
+        mock.patch.object(
+            rest_stream_parser,
+            "read_and_parse_stream",
+            side_effect=tracked_read_and_parse_stream,
+        ),
+        mock.patch.object(constants, "DATASET_STREAM_BATCH_SIZE", TEST_BATCH_SIZE),
     ):
         # Run evaluation with streaming
         evaluation_result = opik.evaluate(
