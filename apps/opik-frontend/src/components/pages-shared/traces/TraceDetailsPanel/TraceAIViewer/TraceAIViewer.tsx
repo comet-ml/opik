@@ -71,8 +71,13 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   const { data: historyData, isPending: isHistoryPending } =
     useTraceAnalyzerHistory({ traceId });
 
+  const totalContentLength = useMemo(
+    () => chat.messages.reduce((acc, msg) => acc + msg.content.length, 0),
+    [chat.messages],
+  );
+
   const { scrollContainerRef } = useChatScroll({
-    contentLength: chat.messages.length,
+    contentLength: totalContentLength,
     isStreaming: isRunning,
   });
 
