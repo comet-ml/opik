@@ -451,7 +451,7 @@ public class DatasetsResource {
                 .items(items)
                 .build();
 
-        itemService.save(batchWithIds, batch.batchGroupId())
+        itemService.save(batchWithIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();

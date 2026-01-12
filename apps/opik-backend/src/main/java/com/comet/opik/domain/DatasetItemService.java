@@ -126,7 +126,7 @@ public interface DatasetItemService {
      * @param batchId optional batch ID for SDK batch operations (null for old SDKs)
      * @return Mono emitting the newly created DatasetVersion when versioning is enabled, or empty when disabled
      */
-    Mono<DatasetVersion> save(DatasetItemBatch batch, String batchGroupId);
+    Mono<DatasetVersion> save(DatasetItemBatch batch);
 }
 
 @Singleton
@@ -1611,7 +1611,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch, String batchGroupId) {
+    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -1623,6 +1623,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             }
 
             UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
+            String batchGroupId = batch.batchGroupId();
 
             if (batchGroupId == null) {
                 // Old SDK without batch_group_id - use legacy behavior
