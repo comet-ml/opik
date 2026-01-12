@@ -84,7 +84,7 @@ const GetStartedSection = () => {
         <div className="flex w-full min-w-fit flex-col pb-12">
           <div className="pb-8">
             <SheetTitle>Log a trace</SheetTitle>
-            <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
+            <div className="comet-body-s mt-4 w-full self-center px-4 text-center text-muted-slate md:mx-auto md:w-[468px] md:px-0">
               Select a framework and follow the instructions to integrate Comet
               with your code, or explore our ready-to-run examples on the right
             </div>
