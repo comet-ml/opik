@@ -82,7 +82,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     yTickFormatter,
     interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
-    tickPrecision: 2,
+    maxTickPrecision: 2,
   });
 
   const truncateXAxisLabel = useCallback(

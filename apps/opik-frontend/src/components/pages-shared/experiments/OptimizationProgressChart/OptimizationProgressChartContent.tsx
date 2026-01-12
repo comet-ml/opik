@@ -98,8 +98,8 @@ const OptimizationProgressChartContent: React.FC<
     yTickFormatter,
     interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
-    tickPrecision: 2,
-    numberOfTicks: 3,
+    maxTickPrecision: 2,
+    targetTickCount: 3,
     showMinMaxDomain: true,
   });
 
