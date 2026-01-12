@@ -88,7 +88,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND parent_span_id != ''
                   AND trace_id IN (SELECT DISTINCT id FROM traces_final)
                 GROUP BY workspace_id, project_id, trace_id
             ), trace_threads_final AS (
@@ -406,7 +405,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND parent_span_id != ''
                   AND trace_id IN (SELECT DISTINCT id FROM traces_final)
                 GROUP BY workspace_id, project_id, trace_id
             ), trace_threads_final AS (
@@ -700,7 +698,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND parent_span_id != ''
                   AND trace_id IN (SELECT DISTINCT id FROM traces_final)
                 GROUP BY workspace_id, project_id, trace_id
             ), trace_threads_final AS (
@@ -979,7 +976,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     FROM spans final
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
-                      AND parent_span_id != ''
                       AND trace_id IN (SELECT DISTINCT id FROM traces_final)
                     GROUP BY workspace_id, project_id, trace_id
                 ), trace_threads_final AS (

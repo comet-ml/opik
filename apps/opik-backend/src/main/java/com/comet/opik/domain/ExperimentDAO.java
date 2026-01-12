@@ -224,7 +224,6 @@ class ExperimentDAO {
                             sum(total_estimated_cost) as total_estimated_cost
                         FROM spans final
                         WHERE workspace_id = :workspace_id
-                        AND parent_span_id != ''
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         GROUP BY workspace_id, project_id, trace_id
                     ) AS s ON ei.trace_id = s.trace_id

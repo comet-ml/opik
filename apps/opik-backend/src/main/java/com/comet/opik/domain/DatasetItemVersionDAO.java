@@ -840,7 +840,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     sumMap(usage) AS usage
                 FROM spans final
                 WHERE workspace_id = :workspace_id
-                AND parent_span_id != ''
                 AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
                 GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
@@ -1327,7 +1326,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FROM spans final
                     INNER JOIN trace_project_mapping tpm ON tpm.trace_id = spans.trace_id
                     WHERE workspace_id = :workspace_id
-                    AND parent_span_id != ''
                     AND project_id = tpm.project_id
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id

@@ -290,7 +290,6 @@ class ExperimentItemDAO {
                         sumMap(usage) AS usage
                     FROM spans final
                     WHERE workspace_id = :workspace_id
-                    AND parent_span_id != ''
                     AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
                     GROUP BY workspace_id, project_id, trace_id
                 ) s ON s.trace_id = t.id

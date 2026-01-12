@@ -532,6 +532,111 @@ class OpenTelemetryResourceTest {
         }
 
         @Test
+        @DisplayName("when root span has usage, then clear it to prevent double-counting (OPIK-3814)")
+        void testRootSpanUsageCleared() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var rootSpanId = UUID.randomUUID().toString().getBytes();
+
+            // Define usage values
+            int promptTokens = 113;
+            int completionTokens = 11;
+            int totalTokens = 124;
+
+            // Create a root span with usage (simulating LangGraph root span that inherits usage)
+            var rootSpan = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(rootSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.prompt_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(promptTokens))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.completion_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(completionTokens))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("llm.token_count.total")
+                            .setValue(AnyValue.newBuilder().setIntValue(totalTokens))
+                            .build())
+                    .build();
+
+            // Create a child span with the same usage (simulating Pydantic AI LLM span)
+            var childSpan = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(rootSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.prompt_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(promptTokens))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.completion_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(completionTokens))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("llm.token_count.total")
+                            .setValue(AnyValue.newBuilder().setIntValue(totalTokens))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build())
+                    .build();
+
+            var otelSpans = List.of(rootSpan, childSpan);
+
+            // Calculate expected Opik trace ID
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            // Send the spans
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            // Verify the trace was created with correct usage (should NOT be doubled)
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+
+            // Usage should equal only the child span's usage, not doubled
+            // Before the fix, usage would be doubled because both root and child spans had usage
+            assertThat(trace.usage()).isNotNull();
+            assertThat(trace.usage().get("prompt_tokens")).isEqualTo((long) promptTokens);
+            assertThat(trace.usage().get("completion_tokens")).isEqualTo((long) completionTokens);
+            assertThat(trace.usage().get("total_tokens")).isEqualTo((long) totalTokens);
+
+            // Verify the spans were created
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            // Verify root span has NO usage (cleared to prevent double-counting)
+            var rootSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(rootSpanFromDb.usage()).isNullOrEmpty();
+
+            // Verify child span HAS usage
+            var childSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() != null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(childSpanFromDb.usage()).isNotNull();
+            assertThat(childSpanFromDb.usage().get("prompt_tokens")).isEqualTo(promptTokens);
+            assertThat(childSpanFromDb.usage().get("completion_tokens")).isEqualTo(completionTokens);
+            assertThat(childSpanFromDb.usage().get("total_tokens")).isEqualTo(totalTokens);
+        }
+
+        @Test
         @DisplayName("test integer thread_id is properly stored in OpenTelemetry traces")
         void testIntegerThreadIdSupport() {
             String workspaceName = UUID.randomUUID().toString();
