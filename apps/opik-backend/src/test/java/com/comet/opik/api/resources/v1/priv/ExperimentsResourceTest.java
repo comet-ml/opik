@@ -149,6 +149,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.ExperimentsTestUtils.getQuantities;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
@@ -2692,7 +2693,8 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DICTIONARY).build())));
         }
 
         private Stream<Arguments> groupExperiments() {
