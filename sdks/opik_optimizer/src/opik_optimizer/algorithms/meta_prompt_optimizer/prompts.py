@@ -12,21 +12,9 @@ START_DELIM = "{"
 END_DELIM = "}"
 
 
-def build_reasoning_system_prompt(
-    allow_user_prompt_optimization: bool = True, mode: str = "single"
-) -> str:
-    """Build the system prompt for the meta-reasoning LLM that generates improved prompts.
-
-    Args:
-        allow_user_prompt_optimization: If True, allows modifying both system and user prompts.
-                                       If False, only system prompt is modified.
-
-    Returns:
-        System prompt string for the reasoning LLM
-    """
-    return (
-        textwrap.dedent(
-            """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+# Template for reasoning system prompt - extracted for customization
+REASONING_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
+    """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
         Focus on making the prompt more effective by:
         1. Being clear and specific about what is expected
@@ -54,7 +42,7 @@ def build_reasoning_system_prompt(
 
         {bundle_constraints}
 
-        {{mode_instruction}}
+        {mode_instruction}
 
         Instructions:
         1. FIRST: Review "Available input variables" in task context - ensure your prompt uses ALL necessary input variables for the task
@@ -66,22 +54,41 @@ def build_reasoning_system_prompt(
         JSON object with correct use of double quotes and single quotes. JSON keys should be
         double-quoted:
         {output_format}"""
-        )
-        .strip()
-        .replace(
-            "{{mode_instruction}}",
-            (
-                "OPTIMIZATION MODE: You can modify BOTH system and user prompts."
-                if allow_user_prompt_optimization
-                else "OPTIMIZATION MODE: You can ONLY modify the system prompt. The user prompt will remain unchanged from the original."
-            ),
-        )
-        .replace("{start}", START_DELIM)
-        .replace("{end}", END_DELIM)
-        .replace(
-            "{bundle_constraints}",
-            (
-                """
+).strip()
+
+
+def build_reasoning_system_prompt(
+    allow_user_prompt_optimization: bool = True,
+    mode: str = "single",
+    *,
+    template: str | None = None,
+) -> str:
+    """Build the system prompt for the meta-reasoning LLM that generates improved prompts.
+
+    Args:
+        allow_user_prompt_optimization: If True, allows modifying both system and user prompts.
+                                       If False, only system prompt is modified.
+        mode: "single" or "bundle" for multi-agent optimization
+        template: The base template to use. If None, uses REASONING_SYSTEM_PROMPT_TEMPLATE.
+
+    Returns:
+        System prompt string for the reasoning LLM
+    """
+    if template is None:
+        template = REASONING_SYSTEM_PROMPT_TEMPLATE
+    result = template.replace(
+        "{mode_instruction}",
+        (
+            "OPTIMIZATION MODE: You can modify BOTH system and user prompts."
+            if allow_user_prompt_optimization
+            else "OPTIMIZATION MODE: You can ONLY modify the system prompt. The user prompt will remain unchanged from the original."
+        ),
+    )
+    result = result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)
+    result = result.replace(
+        "{bundle_constraints}",
+        (
+            """
         Bundle mode:
         - You will be given multiple named agents (each with its own chat prompt).
         - Keep agent names unchanged.
@@ -90,14 +97,14 @@ def build_reasoning_system_prompt(
         - Try to propose multiple distinct candidate bundles (e.g., up to the requested count) if possible.
         - Each candidate must include every agent under "agents" with fields: name, messages, improvement_focus, reasoning.
         """
-            )
-            if mode == "bundle"
-            else "",
         )
-        .replace(
-            "{output_format}",
-            (
-                """
+        if mode == "bundle"
+        else "",
+    )
+    return result.replace(
+        "{output_format}",
+        (
+            """
         {
           "candidates": [
             {
@@ -114,9 +121,9 @@ def build_reasoning_system_prompt(
             }
           ]
         }"""
-            )
-            if mode == "bundle"
-            else """
+        )
+        if mode == "bundle"
+        else """
         {
             "prompts": [
                 {
@@ -126,7 +133,6 @@ def build_reasoning_system_prompt(
                 }
             ]
         }""",
-        )
     )
 
 
@@ -233,6 +239,8 @@ def build_candidate_generation_user_prompt(
     pattern_guidance: str = "",
     mode: str = "single",
     agent_blocks: str | None = None,
+    *,
+    template: str | None = None,
 ) -> str:
     """Build the user prompt for generating candidate prompt variations.
 
@@ -245,10 +253,16 @@ def build_candidate_generation_user_prompt(
         metric_focus_instruction: Instruction focusing on metric improvement
         prompts_per_round: Number of prompts to generate
         pattern_guidance: Optional winning patterns to inject
+        mode: "single" or "bundle"
+        agent_blocks: Agent blocks for bundle mode
+        template: The base template to use. If None, uses CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE.
 
     Returns:
         Formatted user prompt string
     """
+    if template is None:
+        template = CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE
+
     # Use structured sections for clarity
     if mode == "bundle" and agent_blocks is not None:
         prompt_section = META_PROMPT_SECTIONS["agents"].format(agents=agent_blocks)
@@ -282,8 +296,7 @@ def build_candidate_generation_user_prompt(
         else ""
     )
 
-    # Use the template
-    result = CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE.format(
+    result = template.format(
         prompt_section=prompt_section,
         best_score=best_score,
         history_section=history_section,
@@ -298,14 +311,48 @@ def build_candidate_generation_user_prompt(
     return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)
 
 
-def build_pattern_extraction_system_prompt() -> str:
+def build_pattern_extraction_system_prompt(
+    *,
+    template: str | None = None,
+) -> str:
     """Build the system prompt for Hall of Fame pattern extraction.
+
+    Args:
+        template: The base template to use. If None, uses PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE.
 
     Returns:
         System prompt string for pattern extraction
     """
-    return textwrap.dedent(
-        """You are an expert at analyzing successful prompts and extracting reusable patterns.
+    return template or PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE
+
+
+def build_pattern_extraction_user_prompt(
+    top_prompts_scorecard: str,
+    metric_name: str,
+    *,
+    template: str | None = None,
+) -> str:
+    """Build the user prompt for extracting patterns from winning prompts.
+
+    Args:
+        top_prompts_scorecard: Formatted string with top-performing prompts
+        metric_name: Name of the metric being optimized
+        template: The base template to use. If None, uses PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE.
+
+    Returns:
+        Formatted user prompt string
+    """
+    if template is None:
+        template = PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE
+    return template.format(
+        top_prompts_scorecard=top_prompts_scorecard,
+        metric_name=metric_name,
+    )
+
+
+# Template for pattern extraction system prompt
+PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
+    """You are an expert at analyzing successful prompts and extracting reusable patterns.
 
         Your goal is to identify what makes prompts effective at achieving high scores on specific metrics.
         Focus on structural and stylistic elements that can be transferred to new prompts.
@@ -314,24 +361,11 @@ def build_pattern_extraction_system_prompt() -> str:
 
         CRITICAL: Do NOT mention specific dataset fields, metric names (like "F1 score", "HotpotQA"),
         or evaluation-specific terminology. Focus on GENERAL prompt engineering principles."""
-    ).strip()
+).strip()
 
-
-def build_pattern_extraction_user_prompt(
-    top_prompts_scorecard: str,
-    metric_name: str,
-) -> str:
-    """Build the user prompt for extracting patterns from winning prompts.
-
-    Args:
-        top_prompts_scorecard: Formatted string with top-performing prompts
-        metric_name: Name of the metric being optimized
-
-    Returns:
-        Formatted user prompt string
+# Template for pattern extraction user prompt
+PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE = textwrap.dedent(
     """
-    return textwrap.dedent(
-        f"""
         Analyze these high-performing prompts and extract GENERALIZABLE patterns that made them successful.
 
         Metric being optimized: {metric_name}
@@ -362,55 +396,13 @@ def build_pattern_extraction_user_prompt(
           ]
         }}
         """
-    ).strip()
+).strip()
 
 
-def build_synthesis_prompt(
-    top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]],
-    task_context_str: str,
-    best_score: float,
-    num_prompts: int = 2,
-) -> str:
-    """Build a synthesis prompt that combines insights from top performers.
-
-    This is used every N rounds to create comprehensive prompts that combine
-    the best elements from multiple high-performing prompts, preventing convergence
-    to overly terse solutions.
-
-    Args:
-        top_prompts_with_scores: List of (prompt_messages, score, reasoning) tuples
-        task_context_str: Task context with dataset examples
-        best_score: Current best score
-        num_prompts: Number of synthesis prompts to request
-
-    Returns:
-        Synthesis prompt for generating comprehensive combined prompts
+# Template for synthesis prompt
+SYNTHESIS_PROMPT_TEMPLATE = textwrap.dedent(
     """
-    # Build showcase of top performers with FULL prompts (no truncation)
-    top_performers = ""
-    for i, (prompt_msg, score, reasoning) in enumerate(top_prompts_with_scores, 1):
-        improvement = ((score / best_score) - 1) * 100 if best_score > 0 else 0
-        top_performers += (
-            f"\n--- Top Performer #{i} | Score: {score:.4f} ({improvement:+.1f}%) ---\n"
-        )
-
-        # Format prompt messages cleanly - show FULL content without truncation
-        top_performers += "Full Prompt Messages:\n"
-        for msg in prompt_msg:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            # Show complete content - no truncation for synthesis
-            top_performers += f"  [{role.upper()}]: {content}\n"
-        top_performers += "\n"
-
-        if reasoning:
-            top_performers += f"Why it worked: {reasoning}\n"
-
-    return textwrap.dedent(
-        f"""
         SYNTHESIS ROUND - Combining Best Elements
-        ==========================================
-
         You've seen multiple high-performing prompts. Now it's time to synthesize their best elements
         into comprehensive, well-structured prompts that combine their strengths.
 
@@ -419,7 +411,7 @@ def build_synthesis_prompt(
         TOP PERFORMING PROMPTS TO SYNTHESIZE:
         {top_performers}
 
-        {META_PROMPT_SECTIONS["examples"].format(examples=task_context_str) if task_context_str else ""}
+        {task_context_section}
 
         YOUR TASK:
         Generate EXACTLY {num_prompts} COMPREHENSIVE prompts that:
@@ -463,18 +455,80 @@ def build_synthesis_prompt(
 
         IMPORTANT: Each prompt object MUST have "prompt", "improvement_focus", and "reasoning" fields. Do NOT mix array and object syntax.
         """
-    ).strip()
+).strip()
 
 
 def build_agent_bundle_reasoning_system_prompt(
     allow_user_prompt_optimization: bool = True,
+    *,
+    template: str | None = None,
 ) -> str:
-    """
-    System prompt for optimizing multiple named chat prompts at once.
-    """
-    # Thin wrapper to keep compatibility; delegates to build_reasoning_system_prompt
+    """System prompt for optimizing multiple named chat prompts at once."""
     return build_reasoning_system_prompt(
-        allow_user_prompt_optimization=allow_user_prompt_optimization, mode="bundle"
+        allow_user_prompt_optimization=allow_user_prompt_optimization,
+        mode="bundle",
+        template=template,
+    )
+
+
+def build_synthesis_prompt(
+    top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]],
+    task_context_str: str,
+    best_score: float,
+    num_prompts: int = 2,
+    *,
+    template: str | None = None,
+) -> str:
+    """Build a synthesis prompt that combines insights from top performers.
+
+    This is used every N rounds to create comprehensive prompts that combine
+    the best elements from multiple high-performing prompts, preventing convergence
+    to overly terse solutions.
+
+    Args:
+        top_prompts_with_scores: List of (prompt_messages, score, reasoning) tuples
+        task_context_str: Task context with dataset examples
+        best_score: Current best score
+        num_prompts: Number of synthesis prompts to request
+        template: The base template to use. If None, uses SYNTHESIS_PROMPT_TEMPLATE.
+
+    Returns:
+        Synthesis prompt for generating comprehensive combined prompts
+    """
+    if template is None:
+        template = SYNTHESIS_PROMPT_TEMPLATE
+
+    # Build showcase of top performers with FULL prompts (no truncation)
+    top_performers = ""
+    for i, (prompt_msg, score, reasoning) in enumerate(top_prompts_with_scores, 1):
+        improvement = ((score / best_score) - 1) * 100 if best_score > 0 else 0
+        top_performers += (
+            f"\n--- Top Performer #{i} | Score: {score:.4f} ({improvement:+.1f}%) ---\n"
+        )
+
+        # Format prompt messages cleanly - show FULL content without truncation
+        top_performers += "Full Prompt Messages:\n"
+        for msg in prompt_msg:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            # Show complete content - no truncation for synthesis
+            top_performers += f"  [{role.upper()}]: {content}\n"
+        top_performers += "\n"
+
+        if reasoning:
+            top_performers += f"Why it worked: {reasoning}\n"
+
+    task_context_section = (
+        META_PROMPT_SECTIONS["examples"].format(examples=task_context_str)
+        if task_context_str
+        else ""
+    )
+
+    return template.format(
+        best_score=best_score,
+        top_performers=top_performers,
+        task_context_section=task_context_section,
+        num_prompts=num_prompts,
     )
 
 
@@ -487,10 +541,28 @@ def build_agent_bundle_user_prompt(
     metric_focus_instruction: str,
     prompts_per_round: int,
     pattern_guidance: str = "",
+    *,
+    template: str | None = None,
 ) -> str:
+    """User prompt for generating improved prompts across multiple named agents.
+
+    Args:
+        agent_blocks: Formatted agent prompt blocks
+        best_score: Current best score
+        history_context: History of previous rounds
+        task_context_str: Task context
+        analysis_instruction: Analysis instruction
+        metric_focus_instruction: Metric focus instruction
+        prompts_per_round: Number of prompts per round
+        pattern_guidance: Optional pattern guidance
+        template: The base template to use. If None, uses AGENT_BUNDLE_USER_PROMPT_TEMPLATE.
+
+    Returns:
+        Formatted user prompt string
     """
-    User prompt for generating improved prompts across multiple named agents.
-    """
+    if template is None:
+        template = AGENT_BUNDLE_USER_PROMPT_TEMPLATE
+
     # Build conditional sections
     history_section = (
         META_PROMPT_SECTIONS["history"].format(history=history_context)
@@ -508,8 +580,7 @@ def build_agent_bundle_user_prompt(
         else ""
     )
 
-    # Use the template
-    result = AGENT_BUNDLE_USER_PROMPT_TEMPLATE.format(
+    result = template.format(
         agent_blocks=agent_blocks,
         best_score=best_score,
         history_section=history_section,

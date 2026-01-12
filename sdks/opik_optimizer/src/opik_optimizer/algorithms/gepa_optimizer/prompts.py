@@ -10,5 +10,3 @@ surface instead of internal templates.
 DEFAULT_PROMPTS: dict[str, str] = {
     "gepa_placeholder": "GEPA prompt overrides are not supported yet.",
 }
-
-__all__ = ["DEFAULT_PROMPTS"]

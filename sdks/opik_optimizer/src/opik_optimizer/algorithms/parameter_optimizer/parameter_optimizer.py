@@ -161,6 +161,7 @@ class ParameterOptimizer(BaseOptimizer):
         """
         # Set project name
         self.project_name = project_name
+        self._reset_counters()
 
         # Create agent if not provided
         if agent is None:

@@ -16,9 +16,6 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
     MetaPromptOptimizer,
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops import candidate_ops
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
-    AgentBundleCandidate,
-)
 
 
 pytestmark = pytest.mark.usefixtures(
@@ -49,20 +46,19 @@ def test_synthesis_prompts_called_on_schedule(
 
     called = {"synthesis": 0}
 
-    def fake_generate_agent_bundle_candidates(
-        **kwargs: Any,
-    ) -> list[AgentBundleCandidate]:
-        prompt = ChatPrompt(system="baseline", user="{question}")
-        return [AgentBundleCandidate(prompts={prompt.name: prompt}, metadata={})]
+    def fake_generate_candidate_prompts(**kwargs: Any) -> list[ChatPrompt]:
+        """Mock for single prompt optimization path."""
+        return [ChatPrompt(system="baseline", user="{question}")]
 
     def fake_generate_synthesis_prompts(**kwargs: Any) -> list[ChatPrompt]:
         called["synthesis"] += 1
         return [ChatPrompt(system="synth", user="{question}")]
 
+    # For single prompt optimization, generate_candidate_prompts is called (not generate_agent_bundle_candidates)
     monkeypatch.setattr(
         candidate_ops,
-        "generate_agent_bundle_candidates",
-        fake_generate_agent_bundle_candidates,
+        "generate_candidate_prompts",
+        fake_generate_candidate_prompts,
     )
     monkeypatch.setattr(
         candidate_ops, "generate_synthesis_prompts", fake_generate_synthesis_prompts

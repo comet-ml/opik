@@ -68,10 +68,3 @@ def build_system_prompt_template(
         The template with {placeholder} replaced by the actual placeholder value
     """
     return template.replace("{placeholder}", placeholder)
-
-
-__all__ = [
-    "FEW_SHOT_EXAMPLE_PLACEHOLDER",
-    "SYSTEM_PROMPT_TEMPLATE",
-    "build_system_prompt_template",
-]
