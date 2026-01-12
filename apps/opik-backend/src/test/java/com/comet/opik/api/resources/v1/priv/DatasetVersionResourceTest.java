@@ -2800,7 +2800,6 @@ class DatasetVersionResourceTest {
             assertThat(version2.itemsTotal()).isEqualTo(5);
             assertThat(version2.itemsDeleted()).isEqualTo(5);
             assertThat(version2.versionName()).isEqualTo("v2");
-            assertThat(version2.batchGroupId()).isEqualTo(batchGroupId);
         }
 
         @Test
@@ -2854,14 +2853,12 @@ class DatasetVersionResourceTest {
             assertThat(version2.itemsTotal()).isEqualTo(7);
             assertThat(version2.itemsDeleted()).isEqualTo(3);
             assertThat(version2.versionName()).isEqualTo("v2");
-            assertThat(version2.batchGroupId()).isEqualTo(batchGroupId1);
 
             // Verify v3 has 5 items (7 - 2)
             var version3 = versions.content().get(0); // Latest
             assertThat(version3.itemsTotal()).isEqualTo(5);
             assertThat(version3.itemsDeleted()).isEqualTo(2);
             assertThat(version3.versionName()).isEqualTo("v3");
-            assertThat(version3.batchGroupId()).isEqualTo(batchGroupId2);
         }
 
         @Test

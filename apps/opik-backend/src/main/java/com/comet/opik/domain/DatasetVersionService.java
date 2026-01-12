@@ -289,7 +289,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     .id(versionId)
                     .datasetId(datasetId)
                     .versionHash(versionHash)
-                    .batchGroupId(batchGroupId)
                     .itemsTotal(0)
                     .itemsAdded(0)
                     .itemsModified(0)
@@ -304,6 +303,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
                 // Insert the version
                 dao.insert(version, workspaceId);
+
+                // Associate the batch_group_id with this version
+                dao.updateBatchGroupId(versionId, batchGroupId, workspaceId);
 
                 // Remove 'latest' tag from previous version (if exists)
                 dao.deleteTag(datasetId, LATEST_TAG, workspaceId);

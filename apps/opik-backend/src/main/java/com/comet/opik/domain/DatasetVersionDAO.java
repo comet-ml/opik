@@ -28,10 +28,10 @@ public interface DatasetVersionDAO {
 
     @SqlUpdate("""
             INSERT INTO dataset_versions (
-                id, dataset_id, version_hash, batch_group_id, items_total, items_added, items_modified, items_deleted,
+                id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
                 change_description, metadata, created_by, last_updated_by, workspace_id
             ) VALUES (
-                :version.id, :version.datasetId, :version.versionHash, :version.batchGroupId,
+                :version.id, :version.datasetId, :version.versionHash,
                 :version.itemsTotal, :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
                 :version.changeDescription, :version.metadata, :version.createdBy, :version.lastUpdatedBy, :workspace_id
             )
@@ -50,7 +50,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -87,7 +86,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -128,7 +126,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -168,7 +165,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -231,7 +227,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -281,7 +276,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -320,7 +314,6 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,

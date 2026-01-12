@@ -1751,7 +1751,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             log.info("Associated version '{}' with batch_group_id '{}' for dataset '{}'",
                                     version.id(), batchGroupId, datasetId);
 
-                            return version.toBuilder().batchGroupId(batchGroupId).build();
+                            return version;
                         }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
                     });
                 }));
