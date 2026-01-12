@@ -122,8 +122,7 @@ public interface DatasetItemService {
      *   <li>Returns empty Mono</li>
      * </ul>
      *
-     * @param batch the batch of items to save (must include datasetId or datasetName)
-     * @param batchId optional batch ID for SDK batch operations (null for old SDKs)
+     * @param batch the batch of items to save (must include datasetId or datasetName, may include batchGroupId)
      * @return Mono emitting the newly created DatasetVersion when versioning is enabled, or empty when disabled
      */
     Mono<DatasetVersion> save(DatasetItemBatch batch);
@@ -200,7 +199,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             log.info("Creating dataset items from traces with versioning for dataset '{}'", datasetId);
                             return saveItemsWithVersion(
                                     DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems).build(),
-                                    datasetId)
+                                    datasetId, null)
                                     .then(Mono.just(0L));
                         }
 
@@ -252,7 +251,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             log.info("Creating dataset items from spans with versioning for dataset '{}'", datasetId);
                             return saveItemsWithVersion(
                                     DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems).build(),
-                                    datasetId)
+                                    datasetId, null)
                                     .then(Mono.just(0L));
                         }
 
@@ -842,7 +841,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Route to versioned or legacy based on toggle
         if (featureFlags.isDatasetVersioningEnabled()) {
             log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
-            return saveItemsWithVersion(batch, datasetId)
+            return saveItemsWithVersion(batch, datasetId, null)
                     .map(version -> (long) items.size())
                     .defaultIfEmpty((long) items.size());
         }
@@ -937,7 +936,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             if (batchGroupId == null) {
                 // Old SDK without batch_group_id - use legacy behavior
-                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
+                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName, null);
             }
 
             // New SDK with batch_group_id - need to resolve datasetId if not provided
@@ -966,8 +965,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             // No version with this batch_group_id - create new version with deletions
                             log.info("Creating new version with batch_group_id '{}' for dataset '{}' with deletions",
                                     batchGroupId, resolvedDatasetId);
-                            return createVersionWithBatchGroupIdForDeletions(ids, resolvedDatasetId, filters,
-                                    batchGroupId, workspaceId, userName);
+                            // Pass null for datasetId to route by itemIds (datasetId and itemIds are mutually exclusive)
+                            return deleteItemsWithVersion(ids, null, filters, workspaceId, userName,
+                                    batchGroupId);
                         }
                     }));
         });
@@ -986,16 +986,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * </ul>
      */
     private Mono<Void> deleteItemsWithVersion(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters,
-            String workspaceId, String userName) {
+            String workspaceId, String userName, String batchGroupId) {
 
         // Case 1: Deleting by datasetId with filters
         if (datasetId != null) {
-            return deleteByDatasetIdWithVersion(datasetId, filters, workspaceId, userName);
+            return deleteByDatasetIdWithVersion(datasetId, filters, workspaceId, userName, batchGroupId);
         }
 
         // Case 2: Deleting by item IDs - need to find the dataset
         if (ids != null && !ids.isEmpty()) {
-            return deleteByItemIdsWithVersion(ids, workspaceId, userName);
+            return deleteByItemIdsWithVersion(ids, workspaceId, userName, batchGroupId);
         }
 
         // No valid input
@@ -1009,9 +1009,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * to the new version, avoiding the need to load all item IDs into memory.
      */
     private Mono<Void> deleteByDatasetIdWithVersion(UUID datasetId, List<DatasetItemFilter> filters,
-            String workspaceId, String userName) {
-        log.info("Deleting items by datasetId '{}' with versioning, filtersSize='{}'",
-                datasetId, filters != null ? filters.size() : 0);
+            String workspaceId, String userName, String batchGroupId) {
+        log.info("Deleting items by datasetId '{}' with versioning, filtersSize='{}', batchGroupId='{}'",
+                datasetId, filters != null ? filters.size() : 0, batchGroupId);
 
         // Verify dataset exists
         datasetService.findById(datasetId, workspaceId, null);
@@ -1063,7 +1063,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             changeDescription,
-                            null, // No batch group ID
+                            batchGroupId, // Pass batch group ID
                             workspaceId,
                             userName);
 
@@ -1079,8 +1079,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * The frontend sends row IDs (id field) but deletion works on dataset_item_id (stable IDs).
      * This method first maps row IDs to dataset_item_ids, then performs the deletion.
      */
-    private Mono<Void> deleteByItemIdsWithVersion(Set<UUID> ids, String workspaceId, String userName) {
-        log.info("Deleting '{}' items by IDs with versioning", ids.size());
+    private Mono<Void> deleteByItemIdsWithVersion(Set<UUID> ids, String workspaceId, String userName,
+            String batchGroupId) {
+        log.info("Deleting '{}' items by IDs with versioning, batchGroupId='{}'", ids.size(), batchGroupId);
 
         // First, map the provided IDs (could be row IDs from frontend) to dataset_item_ids
         // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for deletion
@@ -1090,7 +1091,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     if (mappings.isEmpty()) {
                         // IDs might be dataset_item_ids directly (from SDK), try the old lookup
                         log.info("No row ID mappings found, trying as dataset_item_ids directly");
-                        return deleteByDatasetItemIds(ids, workspaceId, userName);
+                        return deleteByDatasetItemIds(ids, workspaceId, userName, batchGroupId);
                     }
 
                     // Extract the dataset_item_ids and dataset_id from the mappings
@@ -1102,14 +1103,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset '{}'",
                             ids.size(), datasetItemIds.size(), datasetId);
 
-                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName);
+                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName,
+                            batchGroupId);
                 });
     }
 
     /**
      * Deletes items by dataset_item_id values (stable IDs), first resolving which dataset they belong to.
      */
-    private Mono<Void> deleteByDatasetItemIds(Set<UUID> datasetItemIds, String workspaceId, String userName) {
+    private Mono<Void> deleteByDatasetItemIds(Set<UUID> datasetItemIds, String workspaceId, String userName,
+            String batchGroupId) {
         UUID firstItemId = datasetItemIds.iterator().next();
 
         // Resolve which dataset contains this item
@@ -1124,7 +1127,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return Mono.empty();
                     }
 
-                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName);
+                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName,
+                            batchGroupId);
                 });
     }
 
@@ -1132,8 +1136,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Deletes items by dataset_item_id values within a known dataset.
      */
     private Mono<Void> deleteByDatasetItemIdsInDataset(Set<UUID> datasetItemIds, UUID datasetId,
-            String workspaceId, String userName) {
-        log.info("Deleting '{}' items from dataset '{}' with versioning", datasetItemIds.size(), datasetId);
+            String workspaceId, String userName, String batchGroupId) {
+        log.info("Deleting '{}' items from dataset '{}' with versioning, batchGroupId='{}'",
+                datasetItemIds.size(), datasetId, batchGroupId);
 
         // Get the latest version (use overload that takes workspaceId since we're in reactive context)
         Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
@@ -1152,7 +1157,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 datasetId, datasetItemIds.size());
 
         return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, datasetItemIds,
-                baseVersionItemCount, null, workspaceId, userName);
+                baseVersionItemCount, batchGroupId, workspaceId, userName);
     }
 
     /**
@@ -1627,7 +1632,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             if (batchGroupId == null) {
                 // Old SDK without batch_group_id - use legacy behavior
-                return saveItemsWithVersion(batch, datasetId)
+                return saveItemsWithVersion(batch, datasetId, null)
                         .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                                 .put(RequestContext.USER_NAME, userName));
             }
@@ -1644,8 +1649,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // No version with this batch_group_id - create new one
                         log.info("Creating new version with batch_group_id '{}' for dataset '{}'",
                                 batchGroupId, datasetId);
-                        return createVersionWithBatchGroupId(datasetId, batchGroupId, batch.items(), workspaceId,
-                                userName);
+                        return saveItemsWithVersion(batch, datasetId, batchGroupId);
                     })
                     .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName));
@@ -1654,21 +1658,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     private Mono<DatasetVersion> appendItemsToVersion(UUID datasetId, UUID versionId, List<DatasetItem> items,
             String workspaceId) {
-        // Validate items and generate IDs
-        List<DatasetItem> validatedItems = addIdIfAbsent(
-                DatasetItemBatch.builder().datasetId(datasetId).items(items).build());
+        // Validate items and generate IDs using existing logic
+        DatasetItemBatch batch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
+        List<DatasetItem> validatedItems = addIdIfAbsent(batch);
 
-        // Generate datasetItemId for items that don't have one
-        List<DatasetItem> itemsWithStableIds = validatedItems.stream()
-                .map(item -> {
-                    if (item.datasetItemId() == null) {
-                        return item.toBuilder()
-                                .datasetItemId(idGenerator.generateId())
-                                .build();
-                    }
-                    return item;
-                })
-                .toList();
+        // Ensure all items have stable datasetItemId
+        List<DatasetItem> itemsWithStableIds = ensureStableIds(validatedItems);
 
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -1709,41 +1704,28 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
+     * Ensures all items have stable datasetItemId values.
+     * Generates IDs for items that don't have one.
+     */
+    private List<DatasetItem> ensureStableIds(List<DatasetItem> items) {
+        return items.stream()
+                .map(item -> {
+                    if (item.datasetItemId() == null) {
+                        UUID stableId = item.id() != null ? item.id() : idGenerator.generateId();
+                        return item.toBuilder()
+                                .datasetItemId(stableId)
+                                .build();
+                    }
+                    return item;
+                })
+                .toList();
+    }
+
+    /**
      * Creates a new version with batch_group_id by reusing existing version creation logic.
      * This delegates to either createFirstVersion or createVersionWithDelta, then associates
      * the batch_group_id with the created version.
      */
-    private Mono<DatasetVersion> createVersionWithBatchGroupId(
-            UUID datasetId, String batchGroupId, List<DatasetItem> items,
-            String workspaceId, String userName) {
-
-        log.info("Creating new version with batch_group_id '{}' for dataset '{}', itemCount '{}'",
-                batchGroupId, datasetId, items.size());
-
-        // Validate items and generate IDs (reuse existing logic)
-        List<DatasetItem> validatedItems = addIdIfAbsent(
-                DatasetItemBatch.builder().datasetId(datasetId).items(items).build());
-
-        // Validate spans and traces
-        return validateSpans(workspaceId, validatedItems)
-                .then(validateTraces(workspaceId, validatedItems))
-                .then(Mono.defer(() -> {
-                    // Verify dataset exists
-                    datasetService.findById(datasetId, workspaceId, null);
-
-                    // Get the latest version to determine if this is the first version
-                    Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
-
-                    // Delegate to existing methods with batchGroupId
-                    if (latestVersion.isEmpty()) {
-                        return createFirstVersion(datasetId, validatedItems, batchGroupId, workspaceId, userName);
-                    } else {
-                        UUID baseVersionId = latestVersion.get().id();
-                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, batchGroupId,
-                                workspaceId, userName);
-                    }
-                }));
-    }
 
     private UUID resolveDatasetId(DatasetItemBatch batch, String workspaceId, String userName) {
         if (batch.datasetId() == null) {
@@ -1757,7 +1739,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dataset.id();
     }
 
-    private Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId) {
+    private Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId, String batchGroupId) {
         if (batch.items() == null || batch.items().isEmpty()) {
             log.debug("Empty batch, skipping version creation for dataset '{}'", datasetId);
             return Mono.empty();
@@ -1770,8 +1752,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            log.info("Saving items with version for dataset '{}', itemCount '{}'",
-                    datasetId, batch.items().size());
+            log.info("Saving items with version for dataset '{}', itemCount '{}', batchGroupId '{}'",
+                    datasetId, batch.items().size(), batchGroupId);
 
             // Validate span and trace workspaces before proceeding
             return validateSpans(workspaceId, validatedItems)
@@ -1786,13 +1768,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         if (latestVersion.isEmpty()) {
                             // No versions exist yet - create the first version with all items as "added"
-                            return createFirstVersion(datasetId, validatedItems, null, workspaceId, userName);
+                            return createFirstVersion(datasetId, validatedItems, batchGroupId, workspaceId, userName);
                         }
 
                         // Versions exist - apply delta on top of the latest
                         UUID baseVersionId = latestVersion.get().id();
-                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, null, workspaceId,
-                                userName);
+                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, batchGroupId,
+                                workspaceId, userName);
                     }));
         });
     }
@@ -1966,46 +1948,47 @@ class DatasetItemServiceImpl implements DatasetItemService {
             // Get current version to update counts
             DatasetVersion currentVersion = versionService.getVersionById(workspaceId, datasetId, versionId);
 
-            // Get items to delete from this version
-            return versionDao.getItemIdsAndHashes(datasetId, versionId)
-                    .filter(item -> {
-                        // Filter by IDs if provided
-                        if (ids != null && !ids.isEmpty()) {
-                            return ids.contains(item.itemId());
-                        }
-                        // TODO: Apply filters if provided
-                        return true;
-                    })
-                    .map(DatasetItemIdAndHash::itemId)
-                    .collect(Collectors.toSet())
-                    .flatMap(itemsToDelete -> {
-                        if (itemsToDelete.isEmpty()) {
-                            log.info("No items to delete from version '{}'", versionId);
+            log.info(
+                    "deleteItemsFromExistingVersion: currentVersion itemsTotal='{}', itemsDeleted='{}', versionId='{}'",
+                    currentVersion.itemsTotal(), currentVersion.itemsDeleted(), versionId);
+
+            // Determine items to remove
+            Set<UUID> itemsToRemove = (ids != null && !ids.isEmpty()) ? ids : Set.of();
+
+            log.info("deleteItemsFromExistingVersion: attempting to remove '{}' items", itemsToRemove.size());
+
+            // Remove items from the version
+            return versionDao.removeItemsFromVersion(datasetId, versionId, itemsToRemove, workspaceId)
+                    .flatMap(deletedCount -> {
+                        log.info("deleteItemsFromExistingVersion: removeItemsFromVersion returned deletedCount='{}'",
+                                deletedCount);
+
+                        if (deletedCount == 0) {
+                            log.info("No items deleted from version '{}'", versionId);
                             return Mono.<Void>empty();
                         }
 
-                        // Remove items from ClickHouse
-                        return versionDao.removeItemsFromVersion(datasetId, versionId, itemsToDelete, workspaceId)
-                                .flatMap(deletedCount -> {
-                                    // Update version counts in MySQL
-                                    return Mono.fromCallable(() -> {
-                                        int newTotal = currentVersion.itemsTotal() - deletedCount.intValue();
-                                        int newDeleted = currentVersion.itemsDeleted() + deletedCount.intValue();
+                        // Update version counts in MySQL
+                        return Mono.fromCallable(() -> {
+                            int newTotal = currentVersion.itemsTotal() - deletedCount.intValue();
+                            int newDeleted = currentVersion.itemsDeleted() + deletedCount.intValue();
 
-                                        template.inTransaction(WRITE, handle -> {
-                                            var dao = handle.attach(DatasetVersionDAO.class);
-                                            dao.updateCounts(versionId, newTotal, currentVersion.itemsAdded(),
-                                                    currentVersion.itemsModified(), newDeleted, workspaceId);
-                                            return null;
-                                        });
+                            log.info("deleteItemsFromExistingVersion: updating counts - newTotal='{}', newDeleted='{}'",
+                                    newTotal, newDeleted);
 
-                                        log.info("Deleted '{}' items from version '{}', new total '{}'",
-                                                deletedCount, versionId, newTotal);
-                                        return null;
-                                    }).subscribeOn(Schedulers.boundedElastic());
-                                })
-                                .then();
-                    });
+                            template.inTransaction(WRITE, handle -> {
+                                var dao = handle.attach(DatasetVersionDAO.class);
+                                dao.updateCounts(versionId, newTotal, currentVersion.itemsAdded(),
+                                        currentVersion.itemsModified(), newDeleted, workspaceId);
+                                return null;
+                            });
+
+                            log.info("Deleted '{}' items from version '{}', new total '{}'",
+                                    deletedCount, versionId, newTotal);
+                            return null;
+                        }).subscribeOn(Schedulers.boundedElastic());
+                    })
+                    .then();
         });
     }
 
@@ -2018,32 +2001,4 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * This delegates to the existing createVersionWithDeletion method, then associates
      * the batch_group_id with the created version.
      */
-    private Mono<Void> createVersionWithBatchGroupIdForDeletions(Set<UUID> ids, UUID datasetId,
-            List<DatasetItemFilter> filters, String batchGroupId,
-            String workspaceId, String userName) {
-
-        log.info("Creating new version with batch_group_id '{}' and deletions for dataset '{}'",
-                batchGroupId, datasetId);
-
-        return Mono.defer(() -> {
-            // Verify dataset exists
-            datasetService.findById(datasetId, workspaceId, null);
-
-            // Get the latest version to use as base
-            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
-
-            if (latestVersion.isEmpty()) {
-                log.warn("Cannot delete items from dataset '{}' - no versions exist", datasetId);
-                return Mono.empty();
-            }
-
-            UUID baseVersionId = latestVersion.get().id();
-            int baseVersionItemCount = latestVersion.get().itemsTotal();
-            UUID newVersionId = idGenerator.generateId();
-
-            // Delegate to existing deletion logic with batch_group_id
-            return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, ids,
-                    baseVersionItemCount, batchGroupId, workspaceId, userName);
-        });
-    }
 }
