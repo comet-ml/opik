@@ -19,7 +19,6 @@ export class FeedbackScoresPage extends BasePage {
 
   async goto(): Promise<void> {
     await super.goto();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async searchFeedback(name: string): Promise<void> {

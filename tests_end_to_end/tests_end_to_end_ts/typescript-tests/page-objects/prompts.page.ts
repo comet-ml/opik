@@ -11,7 +11,6 @@ export class PromptsPage extends BasePage {
 
   async goto(): Promise<void> {
     await super.goto();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async searchPrompt(name: string): Promise<void> {
@@ -38,7 +37,6 @@ export class PromptsPage extends BasePage {
   async clickPrompt(name: string): Promise<void> {
     await this.searchPrompt(name);
     await this.page.getByRole('link', { name }).first().click();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async deletePrompt(name: string): Promise<void> {
@@ -77,12 +75,10 @@ export class PromptDetailsPage {
     await this.saveButton.click();
 
     await this.page.waitForTimeout(1000);
-    await this.page.waitForLoadState('networkidle');
   }
 
   async switchToCommitsTab(): Promise<void> {
     await this.commitsTab.click();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async getAllCommitVersions(): Promise<Record<string, string>> {
