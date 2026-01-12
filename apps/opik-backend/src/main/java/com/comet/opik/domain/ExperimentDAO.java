@@ -22,7 +22,6 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RowUtils;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -57,9 +56,9 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
 import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
@@ -146,6 +145,7 @@ class ExperimentDAO {
                 LIMIT 1 BY id
             ) AS old
             ON new.id = old.id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -430,6 +430,7 @@ class ExperimentDAO {
             LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -450,6 +451,7 @@ class ExperimentDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -469,6 +471,7 @@ class ExperimentDAO {
             SELECT <groupSelects>, max(created_at) AS last_created_experiment_at
             FROM experiments_filtered
             GROUP BY <groupBy>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -670,6 +673,7 @@ class ExperimentDAO {
                 <groupSelects>
             FROM experiments_full
             GROUP BY <groupBy>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -688,6 +692,8 @@ class ExperimentDAO {
             AND ilike(name, CONCAT('%', :name, '%'))
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
@@ -695,6 +701,7 @@ class ExperimentDAO {
                 DISTINCT id, workspace_id
             FROM experiments
             WHERE id in :experiment_ids
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -702,6 +709,7 @@ class ExperimentDAO {
             DELETE FROM experiments
             WHERE id IN :ids
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
     private static final String FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_DATASET_IDS = """
@@ -719,7 +727,8 @@ class ExperimentDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
-            GROUP BY dataset_id;
+            GROUP BY dataset_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -732,6 +741,7 @@ class ExperimentDAO {
             <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -748,6 +758,7 @@ class ExperimentDAO {
                 WHERE name IN :excluded_names
             )
             GROUP BY workspace_id, created_by
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -794,6 +805,8 @@ class ExperimentDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -874,13 +887,15 @@ class ExperimentDAO {
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         var limit = 1;
-        var template = TemplateUtils.newST(FIND);
-        template.add("id", id.toString());
-        template.add("limit", limit);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> get(
-                        template.render(), connection,
-                        statement -> statement.bind("id", id).bind("limit", limit)))
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND, "get_experiment_by_id", workspaceId, "");
+                    template.add("id", id.toString());
+                    template.add("limit", limit);
+                    return Flux.from(get(template.render(), connection,
+                            statement -> statement.bind("id", id).bind("limit", limit).bind("workspace_id",
+                                    workspaceId)));
+                }))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
     }
@@ -888,34 +903,37 @@ class ExperimentDAO {
     @WithSpan
     Flux<Experiment> getByIds(@NonNull Set<UUID> ids) {
         log.info("Getting experiment by ids '{}'", ids);
-        var template = TemplateUtils.newST(FIND);
-        template.add("ids_list", ids);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> get(
-                        template.render(), connection,
-                        statement -> statement.bind("ids_list", ids.toArray(UUID[]::new))))
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND, "get_experiments_by_ids", workspaceId, ids.size());
+                    template.add("ids_list", ids);
+                    return Flux.from(get(template.render(), connection,
+                            statement -> statement.bind("ids_list", ids.toArray(UUID[]::new)).bind("workspace_id",
+                                    workspaceId)));
+                }))
                 .flatMap(this::mapToDto);
     }
 
     @WithSpan
     Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
         log.info("Getting experiment by '{}'", request);
-        var template = TemplateUtils.newST(FIND);
-        template.add("name", request.name());
-        if (request.lastRetrievedId() != null) {
-            template.add("lastRetrievedId", request.lastRetrievedId());
-        }
-        template.add("limit", request.limit());
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> get(
-                        template.render(), connection,
-                        statement -> {
-                            statement.bind("name", request.name());
-                            if (request.lastRetrievedId() != null) {
-                                statement = statement.bind("lastRetrievedId", request.lastRetrievedId());
-                            }
-                            return statement.bind("limit", request.limit());
-                        }))
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND, "get_experiments_stream", workspaceId, "");
+                    template.add("name", request.name());
+                    if (request.lastRetrievedId() != null) {
+                        template.add("lastRetrievedId", request.lastRetrievedId());
+                    }
+                    template.add("limit", request.limit());
+                    return Flux.from(get(template.render(), connection,
+                            statement -> {
+                                statement.bind("name", request.name());
+                                if (request.lastRetrievedId() != null) {
+                                    statement = statement.bind("lastRetrievedId", request.lastRetrievedId());
+                                }
+                                return statement.bind("limit", request.limit()).bind("workspace_id", workspaceId);
+                            }));
+                }))
                 .flatMap(this::mapToDto);
     }
 
@@ -1075,28 +1093,31 @@ class ExperimentDAO {
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
 
-        var sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields());
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields());
 
-        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(experimentSearchCriteria.sortingFields());
+            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(experimentSearchCriteria.sortingFields());
 
-        int offset = (page - 1) * size;
+            int offset = (page - 1) * size;
 
-        var template = newFindTemplate(FIND, experimentSearchCriteria);
+            var template = newFindTemplate(FIND, experimentSearchCriteria, "find_experiments", workspaceId);
 
-        template.add("sort_fields", sorting);
-        template.add("limit", size);
-        template.add("offset", offset);
+            template.add("sort_fields", sorting);
+            template.add("limit", size);
+            template.add("offset", offset);
 
-        var statement = connection.createStatement(template.render())
-                .bind("limit", size)
-                .bind("offset", offset);
+            var statement = connection.createStatement(template.render())
+                    .bind("limit", size)
+                    .bind("offset", offset)
+                    .bind("workspace_id", workspaceId);
 
-        if (hasDynamicKeys) {
-            statement = sortingQueryBuilder.bindDynamicKeys(statement, experimentSearchCriteria.sortingFields());
-        }
+            if (hasDynamicKeys) {
+                statement = sortingQueryBuilder.bindDynamicKeys(statement, experimentSearchCriteria.sortingFields());
+            }
 
-        bindSearchCriteria(statement, experimentSearchCriteria, false);
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+            bindSearchCriteria(statement, experimentSearchCriteria, false);
+            return Flux.from(statement.execute());
+        });
     }
 
     private Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria) {
@@ -1109,14 +1130,17 @@ class ExperimentDAO {
     private Publisher<? extends Result> countTotal(
             ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Counting experiments by '{}'", experimentSearchCriteria);
-        var template = newFindTemplate(FIND_COUNT, experimentSearchCriteria);
-        var statement = connection.createStatement(template.render());
-        bindSearchCriteria(statement, experimentSearchCriteria, true);
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = newFindTemplate(FIND_COUNT, experimentSearchCriteria, "count_experiments", workspaceId);
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId);
+            bindSearchCriteria(statement, experimentSearchCriteria, true);
+            return Flux.from(statement.execute());
+        });
     }
 
-    private ST newFindTemplate(String query, ExperimentSearchCriteria criteria) {
-        var template = TemplateUtils.newST(query);
+    private ST newFindTemplate(String query, ExperimentSearchCriteria criteria, String queryName, String workspaceId) {
+        var template = getSTWithLogComment(query, queryName, workspaceId, "");
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -1251,13 +1275,15 @@ class ExperimentDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = TemplateUtils.newST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS,
+                            "get_experiments_dataset_info", workspaceId, ids.size());
                     template.add("experiment_ids", ids);
-                    var statement = connection.createStatement(template.render());
-                    statement.bind("experiment_ids", ids.toArray(UUID[]::new));
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    var statement = connection.createStatement(template.render())
+                            .bind("experiment_ids", ids.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(this::mapDatasetInfo)
                 .collectList();
     }
@@ -1265,17 +1291,19 @@ class ExperimentDAO {
     @WithSpan
     public Mono<List<DatasetEventInfoHolder>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = TemplateUtils.newST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS,
+                            "find_all_dataset_ids", workspaceId, "");
 
                     bindFindAllDatasetIdsTemplateParams(criteria, template);
 
-                    var statement = connection.createStatement(template.render());
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId);
 
                     bindFindAllDatasetIdsParams(criteria, statement);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(this::mapDatasetInfo)
                 .collectList();
     }
@@ -1311,13 +1339,14 @@ class ExperimentDAO {
         log.info("Finding experiment groups by criteria '{}'", criteria);
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = newGroupTemplate(FIND_GROUPS, criteria);
-                    var statement = connection.createStatement(template.render());
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = newGroupTemplate(FIND_GROUPS, criteria, "find_experiment_groups", workspaceId);
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId);
                     bindGroupCriteria(statement, criteria);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> mapExperimentGroupItem(result, criteria.groups().size()));
     }
 
@@ -1326,18 +1355,20 @@ class ExperimentDAO {
         log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS, criteria);
-                    var statement = connection.createStatement(template.render());
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS, criteria,
+                            "find_experiment_groups_aggregations", workspaceId);
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId);
                     bindGroupCriteria(statement, criteria);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> mapExperimentGroupAggregationItem(result, criteria.groups().size()));
     }
 
-    private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria) {
-        var template = TemplateUtils.newST(query);
+    private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
+        var template = getSTWithLogComment(query, queryName, workspaceId, "");
 
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> template.add("name", name));
@@ -1413,18 +1444,23 @@ class ExperimentDAO {
     private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
             Connection connection) {
 
-        var template = buildUpdateTemplate(experimentUpdate, UPDATE);
-        String sql = template.render();
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = buildUpdateTemplate(experimentUpdate, UPDATE, "update_experiment", workspaceId);
+            String sql = template.render();
 
-        Statement statement = connection.createStatement(sql);
-        bindUpdateParams(experimentUpdate, statement);
-        statement.bind("id", id);
+            Statement statement = connection.createStatement(sql);
+            bindUpdateParams(experimentUpdate, statement);
+            statement.bind("id", id)
+                    .bind("workspace_id", workspaceId)
+                    .bind("user_name", userName);
 
-        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+            return Flux.from(statement.execute());
+        });
     }
 
-    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update) {
-        var template = TemplateUtils.newST(update);
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update, String queryName,
+            String workspaceId) {
+        var template = getSTWithLogComment(update, queryName, workspaceId, "");
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
             template.add("name", experimentUpdate.name());
