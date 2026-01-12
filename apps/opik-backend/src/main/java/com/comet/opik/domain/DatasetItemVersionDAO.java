@@ -1928,7 +1928,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Early return ONLY if IDs are explicitly empty AND filters are null (not provided at all)
         // Note: empty filters list means "select all items", so we should NOT early return in that case
-        boolean hasIds = batchUpdate.ids() != null && !batchUpdate.ids().isEmpty();
+        boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
         boolean hasFilters = batchUpdate.filters() != null; // null means not provided, empty list means "select all"
 
         if (!hasIds && !hasFilters) {
