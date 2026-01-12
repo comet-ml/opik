@@ -46,7 +46,9 @@ describe("base64Extension", () => {
         expect(foldRange?.from).toBeGreaterThan(line.from);
         expect(foldRange?.to).toBeGreaterThan(foldRange!.from);
         // Should fold from after the comma
-        expect(foldRange?.from).toBeGreaterThan(line.from + content.indexOf(","));
+        expect(foldRange?.from).toBeGreaterThan(
+          line.from + content.indexOf(","),
+        );
       } finally {
         view.destroy();
       }
@@ -161,7 +163,7 @@ describe("base64Extension", () => {
 
       try {
         const foldSvc = view.state.facet(foldService);
-        
+
         // Check first line
         const line1 = view.state.doc.line(1);
         const foldRange1 = foldSvc[0](view.state, line1.from + 10, line1.to);
@@ -187,7 +189,7 @@ describe("base64Extension", () => {
         const foldSvc = view.state.facet(foldService);
         const line = view.state.doc.line(1);
         const foldRange = foldSvc[0](view.state, line.from + 10, line.to);
-        
+
         expect(foldRange).not.toBeNull();
 
         // Verify fold state exists (required for expand/collapse to work)
