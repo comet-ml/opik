@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000042_add_dataset_export_jobs_table
+--changeset thiagohora:000043_add_dataset_export_jobs_table
 
 CREATE TABLE IF NOT EXISTS dataset_export_jobs (
     id CHAR(36) PRIMARY KEY,
