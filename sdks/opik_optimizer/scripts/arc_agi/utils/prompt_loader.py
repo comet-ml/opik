@@ -24,4 +24,14 @@ def load_prompts() -> tuple[str, str]:
     return system_prompt, user_prompt
 
 
-__all__ = ["load_prompts"]
+@lru_cache(maxsize=1)
+def load_hrpo_prompt_overrides() -> dict[str, str]:
+    """Return ARC-specific prompt overrides for HRPO."""
+    return {
+        "batch_analysis_prompt": _read_file("hrpo_batch_analysis.md"),
+        "synthesis_prompt": _read_file("hrpo_synthesis.md"),
+        "improve_prompt_template": _read_file("hrpo_improve.md"),
+    }
+
+
+__all__ = ["load_prompts", "load_hrpo_prompt_overrides"]

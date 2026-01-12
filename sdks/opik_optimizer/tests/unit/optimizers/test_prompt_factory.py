@@ -47,3 +47,38 @@ def test_evolutionary_prompt_factory_updates_templates() -> None:
     optimizer = EvolutionaryOptimizer(prompt_overrides=factory)
 
     assert optimizer.prompts.get("synonyms_system_prompt") == "Return one synonym word."
+
+
+def test_meta_prompt_builder_accepts_custom_template() -> None:
+    """Test that prompt builder functions accept custom templates."""
+    from opik_optimizer.algorithms.meta_prompt_optimizer import prompts as meta_prompts
+
+    custom_template = "Custom reasoning: {mode_instruction}"
+    result = meta_prompts.build_reasoning_system_prompt(
+        allow_user_prompt_optimization=True,
+        mode="single",
+        template=custom_template,
+    )
+
+    assert "Custom reasoning:" in result
+    assert "OPTIMIZATION MODE" in result
+
+
+def test_meta_prompt_synthesis_with_custom_template() -> None:
+    """Test synthesis prompt builder with custom template."""
+    from opik_optimizer.algorithms.meta_prompt_optimizer import prompts as meta_prompts
+
+    custom_template = "Synthesize: {best_score} - {top_performers}"
+    result = meta_prompts.build_synthesis_prompt(
+        top_prompts_with_scores=[
+            ([{"role": "system", "content": "test"}], 0.8, "reason")
+        ],
+        task_context_str="context",
+        best_score=0.9,
+        num_prompts=2,
+        template=custom_template,
+    )
+
+    assert "Synthesize: 0.9" in result
+    assert "test" in result
+    assert "Top Performer #1" in result

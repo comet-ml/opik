@@ -41,7 +41,7 @@ try:  # pragma: no cover - package context
         normalized_weights,
         build_multi_metric_objective,
     )
-    from .utils.prompt_loader import load_prompts
+    from .utils.prompt_loader import load_hrpo_prompt_overrides, load_prompts
     from .utils.visualization import print_task_preview
     from .utils.run_summaries import persist_run_summary
 except ImportError:  # pragma: no cover - script context
@@ -67,17 +67,22 @@ except ImportError:  # pragma: no cover - script context
         normalized_weights,
         build_multi_metric_objective,
     )
-    from scripts.arc_agi.utils.prompt_loader import load_prompts  # type: ignore
+    from scripts.arc_agi.utils.prompt_loader import (  # type: ignore
+        load_hrpo_prompt_overrides,
+        load_prompts,
+    )
     from scripts.arc_agi.utils.visualization import print_task_preview  # type: ignore
     from scripts.arc_agi.utils.run_summaries import persist_run_summary  # type: ignore
 
 SYSTEM_PROMPT, USER_PROMPT = load_prompts()
+HRPO_PROMPT_OVERRIDES = load_hrpo_prompt_overrides()
 
 DATASET_SPLIT = "train"
 DATASET_COUNT = 1
 DATASET_START = 0
 TEST_MODE = False
 ARC_AGI2_TASK_ID = os.getenv("ARC_AGI2_TASK_ID")
+PROJECT_NAME = "ARC-AGI-2 HRPO"
 
 EVAL_MODEL = "openai/gpt-5.2"
 REASONING_MODEL = "openai/gpt-5.2"
@@ -237,6 +242,7 @@ def main() -> None:
         reasoning_model=REASONING_MODEL,
         reasoning_model_parameters={"temperature": REASONING_TEMPERATURE},
         n_threads=HRPO_THREADS,
+        prompt_overrides=HRPO_PROMPT_OVERRIDES,
     )
 
     # Baseline stays text-only; HRPO evaluation can optionally use images
@@ -244,7 +250,7 @@ def main() -> None:
     baseline_agent = None
     hrpo_agent = (
         ArcAgiImageAgent(
-            project_name="ARC-AGI-2 HRPO",
+            project_name=PROJECT_NAME,
             include_images=INCLUDE_IMAGES and INCLUDE_IMAGES_HRPO_EVAL,
             debug_log=DEBUG_LOG,
         )
@@ -252,6 +258,7 @@ def main() -> None:
         else None
     )
 
+    optimizer.project_name = PROJECT_NAME
     baseline_eval = optimizer.evaluate_prompt(
         prompt=prompt,
         dataset=dataset,
@@ -321,7 +328,7 @@ def main() -> None:
         metric=composite_metric,
         n_samples=N_SAMPLES_PER_TRIAL,
         max_trials=HRPO_MAX_TRIALS,
-        project_name="ARC-AGI-2 HRPO",
+        project_name=PROJECT_NAME,
         agent=hrpo_agent,
     )
 
