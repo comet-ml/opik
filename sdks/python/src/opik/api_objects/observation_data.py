@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeVar
 
 import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
@@ -9,6 +9,8 @@ from opik.types import ErrorInfoDict, FeedbackScoreDict
 from . import data_helpers
 
 LOGGER = logging.getLogger(__name__)
+
+ObservationDataT = TypeVar("ObservationDataT", bound="ObservationData")
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -34,7 +36,7 @@ class ObservationData:
     error_info: Optional[ErrorInfoDict] = None
     attachments: Optional[List[attachment.Attachment]] = None
 
-    def update(self, **new_data: Any) -> "ObservationData":
+    def update(self: ObservationDataT, **new_data: Any) -> ObservationDataT:
         """
         Updates the attributes of the object with the provided key-value pairs. This method checks if
         an attribute exists before updating it and merges the data appropriately for specific
@@ -46,7 +48,7 @@ class ObservationData:
                 attributes on the object, and values that are None will not update.
 
         Returns:
-            ObservationData: The updated object instance.
+            The updated object instance (preserves the actual subclass type).
         """
         for key, value in new_data.items():
             if value is None:
@@ -86,7 +88,7 @@ class ObservationData:
 
         return self
 
-    def init_end_time(self) -> "ObservationData":
+    def init_end_time(self: ObservationDataT) -> ObservationDataT:
         """Initialize the end_time to the current timestamp."""
         self.end_time = datetime_helpers.local_timestamp()
         return self
