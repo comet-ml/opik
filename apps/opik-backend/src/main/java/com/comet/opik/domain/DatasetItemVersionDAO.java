@@ -305,6 +305,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
+    private static final String DELETE_ITEMS_FROM_VERSION = """
+            ALTER TABLE dataset_item_versions DELETE
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND dataset_item_id IN (:item_ids)
+              AND workspace_id = :workspace_id
+            """;
+
     /**
      * Counts dataset items with experiment items, applying all filters from search criteria.
      * This ensures pagination totals match the filtered results.
@@ -2116,17 +2124,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "remove_items_from_version");
 
-            // ClickHouse uses ALTER TABLE ... DELETE for lightweight deletes
-            // Build the DELETE query with IN clause for item IDs
-            String deleteQuery = """
-                    ALTER TABLE dataset_item_versions DELETE
-                    WHERE dataset_id = :dataset_id
-                      AND dataset_version_id = :version_id
-                      AND dataset_item_id IN (:item_ids)
-                      AND workspace_id = :workspace_id
-                    """;
-
-            var statement = connection.createStatement(deleteQuery)
+            var statement = connection.createStatement(DELETE_ITEMS_FROM_VERSION)
                     .bind("dataset_id", datasetId.toString())
                     .bind("version_id", versionId.toString())
                     .bind("workspace_id", workspaceId);

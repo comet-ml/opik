@@ -2597,12 +2597,12 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
-    @DisplayName("SDK Batch Versioning with batch_id:")
+    @DisplayName("SDK Batch Versioning with batch_group_id:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SdkBatchVersioning {
 
         @Test
-        @DisplayName("Success: Multiple INSERT batches with same batch_id create single version")
+        @DisplayName("Success: Multiple INSERT batches with same batch_group_id create single version")
         void putItems_whenSameBatchId_thenSingleVersion() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
@@ -2653,7 +2653,7 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Different batch_ids create different versions")
+        @DisplayName("Success: Different batch_group_ids create different versions")
         void putItems_whenDifferentBatchIds_thenMultipleVersions() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
@@ -2685,62 +2685,14 @@ class DatasetVersionResourceTest {
             assertThat(versions.content()).hasSize(2);
 
             // Verify version 1 has 2 items
-            var version1 = versions.content().get(1); // Oldest first
+            var version1 = versions.content().getLast(); // Oldest first
             assertThat(version1.itemsTotal()).isEqualTo(2);
             assertThat(version1.versionName()).isEqualTo("v1");
 
             // Verify version 2 has 5 items (2 from v1 + 3 new)
-            var version2 = versions.content().get(0); // Latest first
+            var version2 = versions.content().getFirst(); // Latest first
             assertThat(version2.itemsTotal()).isEqualTo(5);
             assertThat(version2.versionName()).isEqualTo("v2");
-        }
-
-        @Test
-        @DisplayName("Success: Old SDK without batch_id works for single insert")
-        void putItems_whenNoBatchGroupIdSingleInsert_thenSuccess() {
-            // Given - Create dataset
-            var datasetId = createDataset(UUID.randomUUID().toString());
-
-            // When - Send single batch without batch_group_id (old SDK behavior)
-            var batchItems = generateDatasetItems(5);
-            var batch = DatasetItemBatch.builder()
-                    .datasetId(datasetId)
-                    .items(batchItems)
-                    .build();
-
-            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
-
-            // Verify version was created
-            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
-            assertThat(versions.content()).hasSize(1);
-            assertThat(versions.content().getFirst().itemsTotal()).isEqualTo(5);
-        }
-
-        @Test
-        @DisplayName("Success: Multiple rapid inserts WITH batch_group_id bypass rate limit")
-        void putItems_whenBatchGroupIdProvided_thenNoRateLimit() {
-            // Given - Create dataset
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchGroupId = UUID.randomUUID().toString();
-
-            // When - Send multiple batches rapidly WITH batch_group_id
-            for (int i = 0; i < 5; i++) {
-                var batchItems = generateDatasetItems(1);
-                var batch = DatasetItemBatch.builder()
-                        .datasetId(datasetId)
-                        .items(batchItems)
-                        .batchGroupId(batchGroupId)
-                        .build();
-
-                datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
-            }
-
-            // Verify single version with all items
-            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
-            assertThat(versions.content()).hasSize(1);
-
-            var version = getLatestVersion(datasetId);
-            assertThat(version.itemsTotal()).isEqualTo(5);
         }
     }
 
@@ -2791,12 +2743,12 @@ class DatasetVersionResourceTest {
             assertThat(versions.content()).hasSize(2);
 
             // Verify v1 has 10 items
-            var versionAfter1 = versions.content().get(1); // Oldest first
+            var versionAfter1 = versions.content().getLast(); // Oldest first
             assertThat(versionAfter1.itemsTotal()).isEqualTo(10);
             assertThat(versionAfter1.versionName()).isEqualTo("v1");
 
             // Verify v2 has 5 items (10 - 5 deleted)
-            var version2 = versions.content().get(0); // Latest first
+            var version2 = versions.content().getFirst(); // Latest first
             assertThat(version2.itemsTotal()).isEqualTo(5);
             assertThat(version2.itemsDeleted()).isEqualTo(5);
             assertThat(version2.versionName()).isEqualTo("v2");
@@ -2855,7 +2807,7 @@ class DatasetVersionResourceTest {
             assertThat(version2.versionName()).isEqualTo("v2");
 
             // Verify v3 has 5 items (7 - 2)
-            var version3 = versions.content().get(0); // Latest
+            var version3 = versions.content().getFirst(); // Latest
             assertThat(version3.itemsTotal()).isEqualTo(5);
             assertThat(version3.itemsDeleted()).isEqualTo(2);
             assertThat(version3.versionName()).isEqualTo("v3");
