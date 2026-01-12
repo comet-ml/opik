@@ -40,8 +40,8 @@ const HomePageChart: React.FC<MetricOverviewChartProps> = ({
     interval: tickInterval,
   } = useChartTickDefaultConfig(chartData.values, {
     tickFormatter: customYTickFormatter,
-    tickPrecision: 2,
-    numberOfTicks: 3,
+    maxTickPrecision: 2,
+    targetTickCount: 3,
   });
 
   const config = useMemo(() => {
