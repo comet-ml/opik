@@ -27,7 +27,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -588,14 +587,14 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     /**
-     * Converts a collection of tags to a Set for order-independent comparison.
+     * Converts a set of tags to a non-null Set for order-independent comparison.
      * Returns an empty set if the input is null.
      *
-     * @param tags the tags collection to convert, may be null
+     * @param tags the tags set to convert, may be null
      * @return a Set containing the tags, or an empty set if input is null
      */
-    private static Set<String> toTagSet(Collection<String> tags) {
-        return new HashSet<>(Optional.ofNullable(tags).orElseGet(HashSet::new));
+    private static Set<String> toTagSet(Set<String> tags) {
+        return Optional.ofNullable(tags).orElseGet(Set::of);
     }
 
     @Override

@@ -36,6 +36,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -396,7 +397,7 @@ class DatasetServiceImpl implements DatasetService {
      * @param datasetIds the set of dataset IDs to delete version data for
      * @param workspaceId the workspace ID
      */
-    private void deleteDatasetVersionData(org.jdbi.v3.core.Handle handle, Set<UUID> datasetIds, String workspaceId) {
+    private void deleteDatasetVersionData(Handle handle, Set<UUID> datasetIds, String workspaceId) {
         var versionDao = handle.attach(DatasetVersionDAO.class);
 
         // Delete in the correct order to respect foreign key constraints

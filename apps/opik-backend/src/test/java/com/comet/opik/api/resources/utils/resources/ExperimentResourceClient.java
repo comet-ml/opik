@@ -106,6 +106,22 @@ public class ExperimentResourceClient {
         return create(experiment, apiKey, workspaceName);
     }
 
+    public Experiment getExperiment(UUID experimentId, String apiKey, String workspaceName) {
+        try (var response = callGetExperiment(experimentId, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Experiment.class);
+        }
+    }
+
+    public Response callGetExperiment(UUID experimentId, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(experimentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public List<Experiment> streamExperiments(ExperimentStreamRequest experimentStreamRequest, String apiKey,
             String workspaceName) {
         try (var actualResponse = streamExperiments(experimentStreamRequest, apiKey, workspaceName, HttpStatus.SC_OK)) {
