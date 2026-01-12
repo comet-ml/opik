@@ -11,18 +11,47 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
- * Listener for dataset export jobs from Redis stream.
+ * Subscriber for dataset export jobs from Redis stream.
  * Receives export job messages and triggers CSV generation (to be implemented in PR#5).
  */
 @Slf4j
 @Singleton
-public class DatasetExportJobListener extends BaseRedisSubscriber<DatasetExportMessage> {
+public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExportMessage> {
+
+    private final DatasetExportConfig config;
 
     @Inject
-    public DatasetExportJobListener(
+    public DatasetExportJobSubscriber(
             @NonNull @Config DatasetExportConfig config,
             @NonNull RedissonReactiveClient redisClient) {
         super(config, redisClient, DatasetExportConfig.PAYLOAD_FIELD, "opik", "dataset_export");
+        this.config = config;
+    }
+
+    @Override
+    public void start() {
+        if (!config.isEnabled()) {
+            log.info("Dataset export job subscriber is disabled, skipping startup");
+            return;
+        }
+
+        log.info("Starting dataset export job subscriber with config: streamName={}, consumerGroupName={}, batchSize={}",
+                config.getStreamName(),
+                config.getConsumerGroupName(),
+                config.getConsumerBatchSize());
+
+        super.start();
+    }
+
+    @Override
+    public void stop() {
+        if (!config.isEnabled()) {
+            log.info("Dataset export job subscriber is disabled, skipping shutdown");
+            return;
+        }
+
+        log.info("Stopping dataset export job subscriber");
+        super.stop();
     }
 
     @Override
