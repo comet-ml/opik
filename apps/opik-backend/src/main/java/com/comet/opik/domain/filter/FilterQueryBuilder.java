@@ -144,6 +144,8 @@ public class FilterQueryBuilder {
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.LIST,
+                            "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 0",
                             // MAP values are stored as JSON strings, NOT_CONTAINS works with raw value
                             FieldType.MAP,
                             "notILike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))",
@@ -199,6 +201,7 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.LIST, "NOT has(%1$s, :filter%2$d)"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
                             Map.entry(FieldType.DICTIONARY,

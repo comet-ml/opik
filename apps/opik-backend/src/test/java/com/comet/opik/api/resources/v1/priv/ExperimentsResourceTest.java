@@ -1122,6 +1122,61 @@ class ExperimentsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void findByFilterTags(Operator operator, String value) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var name = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .datasetName(datasetName)
+                            .name(name)
+                            .tags(Set.of("tag1", "tag2", "tag3"))
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment().toBuilder().tags(Set.of("other")).build());
+
+            unexpectedExperiments
+                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
+                    .datasetId();
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.TAGS)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+            findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+        }
+
+        private Stream<Arguments> findByFilterTags() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL, "tag1"),
+                    Arguments.of(Operator.NOT_EQUAL, "other"),
+                    Arguments.of(Operator.CONTAINS, "tag"),
+                    Arguments.of(Operator.NOT_CONTAINS, "other"));
+        }
+
+        @ParameterizedTest
         @MethodSource("getValidFilters")
         void findByFiltering(Function<Experiment, ExperimentFilter> getFilter) {
             var workspaceName = UUID.randomUUID().toString();
