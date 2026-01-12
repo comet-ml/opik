@@ -20,7 +20,7 @@ public record DatasetVersion(
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String versionHash,
-        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String batchId,
+        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String batchGroupId,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) SequencedSet<String> tags,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Indicates whether this is the latest version of the dataset") boolean isLatest,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Sequential version name formatted as 'v1', 'v2', etc.") String versionName,

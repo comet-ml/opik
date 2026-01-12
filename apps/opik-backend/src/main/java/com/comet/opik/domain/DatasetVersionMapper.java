@@ -19,7 +19,7 @@ public interface DatasetVersionMapper {
     @Mapping(target = "metadata", source = "request.metadata")
     @Mapping(target = "createdBy", source = "userName")
     @Mapping(target = "lastUpdatedBy", source = "userName")
-    @Mapping(target = "batchId", ignore = true)
+    @Mapping(target = "batchGroupId", ignore = true)
     @Mapping(target = "isLatest", ignore = true)
     @Mapping(target = "tags", ignore = true)
     @Mapping(target = "versionName", ignore = true)

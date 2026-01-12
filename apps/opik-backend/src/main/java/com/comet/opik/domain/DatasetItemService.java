@@ -73,7 +73,7 @@ public interface DatasetItemService {
 
     Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
-    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchId);
+    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
@@ -126,7 +126,7 @@ public interface DatasetItemService {
      * @param batchId optional batch ID for SDK batch operations (null for old SDKs)
      * @return Mono emitting the newly created DatasetVersion when versioning is enabled, or empty when disabled
      */
-    Mono<DatasetVersion> save(DatasetItemBatch batch, String batchId);
+    Mono<DatasetVersion> save(DatasetItemBatch batch, String batchGroupId);
 }
 
 @Singleton
@@ -198,12 +198,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Save dataset items - route to versioned or legacy based on toggle
                         if (featureFlags.isDatasetVersioningEnabled()) {
                             log.info("Creating dataset items from traces with versioning for dataset '{}'", datasetId);
-                            return saveItemsWithVersion(new DatasetItemBatch(null, datasetId, datasetItems), datasetId)
+                            return saveItemsWithVersion(
+                                    DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems).build(),
+                                    datasetId)
                                     .then(Mono.just(0L));
                         }
 
                         // Legacy: save to legacy table
-                        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
+                        DatasetItemBatch batch = DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems)
+                                .build();
                         return saveBatch(batch, datasetId);
                     });
         }).then();
@@ -247,12 +250,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Save dataset items - route to versioned or legacy based on toggle
                         if (featureFlags.isDatasetVersioningEnabled()) {
                             log.info("Creating dataset items from spans with versioning for dataset '{}'", datasetId);
-                            return saveItemsWithVersion(new DatasetItemBatch(null, datasetId, datasetItems), datasetId)
+                            return saveItemsWithVersion(
+                                    DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems).build(),
+                                    datasetId)
                                     .then(Mono.just(0L));
                         }
 
                         // Legacy: save to legacy table
-                        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
+                        DatasetItemBatch batch = DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems)
+                                .build();
                         return saveBatch(batch, datasetId);
                     });
         }).then();
@@ -344,8 +350,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         log.info("Patching item '{}' in legacy table for dataset '{}'",
                                 id, existingItem.datasetId());
-                        DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(),
-                                List.of(patchedItem));
+                        DatasetItemBatch batch = DatasetItemBatch.builder()
+                                .datasetId(existingItem.datasetId())
+                                .items(List.of(patchedItem))
+                                .build();
                         return saveBatch(batch, existingItem.datasetId());
                     });
         }).then();
@@ -827,7 +835,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }
 
         // Create a batch with the items
-        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
+        DatasetItemBatch batch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
 
         // Route to versioned or legacy based on toggle
         if (featureFlags.isDatasetVersioningEnabled()) {
@@ -913,7 +921,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchId) {
+    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -925,15 +933,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 return dao.delete(ids, datasetId, filters).then();
             }
 
-            if (batchId == null) {
-                // Old SDK without batch_id - use legacy behavior
+            if (batchGroupId == null) {
+                // Old SDK without batch_group_id - use legacy behavior
                 return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
             }
 
-            // New SDK with batch_id - for DELETE, batch_id is not used (only useful for INSERT)
+            // New SDK with batch_group_id - for DELETE, batch_group_id is not used (only useful for INSERT)
             // Each DELETE operation creates a new version
-            log.info("Deleting items for dataset '{}' (batch_id '{}' provided but not used for DELETE)",
-                    datasetId, batchId);
+            log.info("Deleting items for dataset '{}' (batch_group_id '{}' provided but not used for DELETE)",
+                    datasetId, batchGroupId);
             return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
         });
     }
@@ -1572,7 +1580,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch, String batchId) {
+    public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch, String batchGroupId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -1585,26 +1593,27 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
 
-            if (batchId == null) {
-                // Old SDK without batch_id - use legacy behavior
+            if (batchGroupId == null) {
+                // Old SDK without batch_group_id - use legacy behavior
                 return saveItemsWithVersion(batch, datasetId)
                         .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                                 .put(RequestContext.USER_NAME, userName));
             }
 
-            // New SDK with batch_id - check if version exists
-            return versionService.findByBatchId(batchId, datasetId, workspaceId)
+            // New SDK with batch_group_id - check if version exists
+            return versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId)
                     .map(existingVersion -> {
                         // Version exists - append items to it
-                        log.info("Appending items to existing version '{}' for batch_id '{}'",
-                                existingVersion.id(), batchId);
+                        log.info("Appending items to existing version '{}' for batch_group_id '{}'",
+                                existingVersion.id(), batchGroupId);
                         return appendItemsToVersion(datasetId, existingVersion.id(), batch.items(), workspaceId);
                     })
                     .orElseGet(() -> {
-                        // No version with this batch_id - create new one
-                        log.info("Creating new version with batch_id '{}' for dataset '{}'",
-                                batchId, datasetId);
-                        return createVersionWithBatchId(datasetId, batchId, batch.items(), workspaceId, userName);
+                        // No version with this batch_group_id - create new one
+                        log.info("Creating new version with batch_group_id '{}' for dataset '{}'",
+                                batchGroupId, datasetId);
+                        return createVersionWithBatchGroupId(datasetId, batchGroupId, batch.items(), workspaceId,
+                                userName);
                     })
                     .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName));
@@ -1615,7 +1624,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId) {
         // Validate items and generate IDs
         List<DatasetItem> validatedItems = addIdIfAbsent(
-                new DatasetItemBatch(null, datasetId, items));
+                DatasetItemBatch.builder().datasetId(datasetId).items(items).build());
 
         // Generate datasetItemId for items that don't have one
         List<DatasetItem> itemsWithStableIds = validatedItems.stream()
@@ -1667,13 +1676,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
         });
     }
 
-    private Mono<DatasetVersion> createVersionWithBatchId(
-            UUID datasetId, String batchId, List<DatasetItem> items,
+    private Mono<DatasetVersion> createVersionWithBatchGroupId(
+            UUID datasetId, String batchGroupId, List<DatasetItem> items,
             String workspaceId, String userName) {
 
         // Validate items and generate IDs
         List<DatasetItem> validatedItems = addIdIfAbsent(
-                new DatasetItemBatch(null, datasetId, items));
+                DatasetItemBatch.builder().datasetId(datasetId).items(items).build());
 
         // Generate datasetItemId for items that don't have one
         List<DatasetItem> itemsWithStableIds = validatedItems.stream()
@@ -1714,11 +1723,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             workspaceId,
                                             userName);
 
-                                    // Now associate the batch_id with this version
+                                    // Now associate the batch_group_id with this version
                                     template.inTransaction(WRITE, handle -> {
                                         var dao = handle.attach(DatasetVersionDAO.class);
-                                        // Update the version to set batch_id
-                                        dao.updateBatchId(versionId, batchId, workspaceId);
+                                        // Update the version to set batch_group_id
+                                        dao.updateBatchGroupId(versionId, batchGroupId, workspaceId);
                                         // Set as latest
                                         dao.deleteTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
                                         dao.insertTag(datasetId, DatasetVersionService.LATEST_TAG, versionId, userName,
@@ -1726,10 +1735,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         return null;
                                     });
 
-                                    log.info("Created version '{}' with batch_id '{}' for dataset '{}', itemCount '{}'",
-                                            versionId, batchId, datasetId, itemCount);
+                                    log.info(
+                                            "Created version '{}' with batch_group_id '{}' for dataset '{}', itemCount '{}'",
+                                            versionId, batchGroupId, datasetId, itemCount);
 
-                                    return version.toBuilder().batchId(batchId).build();
+                                    return version.toBuilder().batchGroupId(batchGroupId).build();
                                 }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
                             });
                 }));

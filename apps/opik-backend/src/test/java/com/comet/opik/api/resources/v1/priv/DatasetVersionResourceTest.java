@@ -1711,7 +1711,8 @@ class DatasetVersionResourceTest {
                     .tags(Set.of("keep-me", "tag5"))
                     .build();
 
-            var batch = new DatasetItemBatch(null, datasetId, List.of(item1, item2, item3, item4, item5));
+            var batch = DatasetItemBatch.builder().datasetId(datasetId)
+                    .items(List.of(item1, item2, item3, item4, item5)).build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             var version1 = getLatestVersion(datasetId);
@@ -1808,7 +1809,7 @@ class DatasetVersionResourceTest {
                     .tags(Set.of("tag3"))
                     .build();
 
-            var batch = new DatasetItemBatch(null, datasetId, List.of(item1, item2, item3));
+            var batch = DatasetItemBatch.builder().datasetId(datasetId).items(List.of(item1, item2, item3)).build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             var version1 = getLatestVersion(datasetId);
@@ -2604,56 +2605,35 @@ class DatasetVersionResourceTest {
         void putItems_whenSameBatchId_thenSingleVersion() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchId = UUID.randomUUID().toString();
+            var batchGroupId = UUID.randomUUID().toString();
 
-            // When - Send 3 batches with same batch_id
+            // When - Send 3 batches with same batch_group_id
             var batch1Items = generateDatasetItems(2);
             var batch1 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(batch1Items)
+                    .batchGroupId(batchGroupId)
                     .build();
 
-            try (var response1 = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .queryParam("batch_id", batchId)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch1))) {
-                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
             var batch2Items = generateDatasetItems(3);
             var batch2 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(batch2Items)
+                    .batchGroupId(batchGroupId)
                     .build();
 
-            try (var response2 = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .queryParam("batch_id", batchId)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch2))) {
-                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
             var batch3Items = generateDatasetItems(1);
             var batch3 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(batch3Items)
+                    .batchGroupId(batchGroupId)
                     .build();
 
-            try (var response3 = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .queryParam("batch_id", batchId)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch3))) {
-                assertThat(response3.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            datasetResourceClient.createDatasetItems(batch3, TEST_WORKSPACE, API_KEY);
 
             // Then - Verify only ONE version was created
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
@@ -2676,42 +2656,28 @@ class DatasetVersionResourceTest {
         void putItems_whenDifferentBatchIds_thenMultipleVersions() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchId1 = UUID.randomUUID().toString();
-            var batchId2 = UUID.randomUUID().toString();
+            var batchGroupId1 = UUID.randomUUID().toString();
+            var batchGroupId2 = UUID.randomUUID().toString();
 
-            // When - Send batch with batchId1
+            // When - Send batch with batchGroupId1
             var batch1Items = generateDatasetItems(2);
             var batch1 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(batch1Items)
+                    .batchGroupId(batchGroupId1)
                     .build();
 
-            try (var response1 = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .queryParam("batch_id", batchId1)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch1))) {
-                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
-            // When - Send batch with batchId2
+            // When - Send batch with batchGroupId2
             var batch2Items = generateDatasetItems(3);
             var batch2 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(batch2Items)
+                    .batchGroupId(batchGroupId2)
                     .build();
 
-            try (var response2 = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .queryParam("batch_id", batchId2)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch2))) {
-                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
             // Then - Verify TWO versions were created
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
@@ -2730,26 +2696,18 @@ class DatasetVersionResourceTest {
 
         @Test
         @DisplayName("Success: Old SDK without batch_id works for single insert")
-        void putItems_whenNoBatchIdSingleInsert_thenSuccess() {
+        void putItems_whenNoBatchGroupIdSingleInsert_thenSuccess() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
 
-            // When - Send single batch without batch_id (old SDK behavior)
+            // When - Send single batch without batch_group_id (old SDK behavior)
             var batchItems = generateDatasetItems(5);
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(batchItems)
                     .build();
 
-            try (var response = client.target("%s/v1/private/datasets".formatted(baseURI))
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(batch))) {
-                // Then - Should succeed
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             // Verify version was created
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
@@ -2758,31 +2716,22 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Multiple rapid inserts WITH batch_id bypass rate limit")
-        void putItems_whenBatchIdProvided_thenNoRateLimit() {
+        @DisplayName("Success: Multiple rapid inserts WITH batch_group_id bypass rate limit")
+        void putItems_whenBatchGroupIdProvided_thenNoRateLimit() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchId = UUID.randomUUID().toString();
+            var batchGroupId = UUID.randomUUID().toString();
 
-            // When - Send multiple batches rapidly WITH batch_id
+            // When - Send multiple batches rapidly WITH batch_group_id
             for (int i = 0; i < 5; i++) {
                 var batchItems = generateDatasetItems(1);
                 var batch = DatasetItemBatch.builder()
                         .datasetId(datasetId)
                         .items(batchItems)
+                        .batchGroupId(batchGroupId)
                         .build();
 
-                try (var response = client.target("%s/v1/private/datasets".formatted(baseURI))
-                        .path("items")
-                        .queryParam("batch_id", batchId)
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .put(Entity.json(batch))) {
-
-                    // Then - All requests should succeed
-                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(204);
-                }
+                datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
             }
 
             // Verify single version with all items

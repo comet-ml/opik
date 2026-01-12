@@ -160,26 +160,27 @@ public interface DatasetVersionService {
 
     /**
      * Finds a version by its batch ID.
-     * Used to support SDK batch operations where multiple API calls share the same batch_id.
+     * Used to support SDK batch operations where multiple API calls share the same batch_group_id.
      *
-     * @param batchId the batch ID to search for
+     * @param batchGroupId the batch group ID to search for
      * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
      * @return Optional containing the version if found, empty otherwise
      */
-    Optional<DatasetVersion> findByBatchId(String batchId, UUID datasetId, String workspaceId);
+    Optional<DatasetVersion> findByBatchGroupId(String batchGroupId, UUID datasetId, String workspaceId);
 
     /**
      * Creates a new version with a batch ID for SDK batch operations.
      * Automatically sets the 'latest' tag to point to the new version.
      *
      * @param datasetId the dataset ID
-     * @param batchId the batch ID to associate with this version
+     * @param batchGroupId the batch group ID to associate with this version
      * @param workspaceId the workspace ID
      * @param userName the user creating the version
      * @return Mono emitting the created version
      */
-    Mono<DatasetVersion> createVersionWithBatchId(UUID datasetId, String batchId, String workspaceId, String userName);
+    Mono<DatasetVersion> createVersionWithBatchGroupId(UUID datasetId, String batchGroupId, String workspaceId,
+            String userName);
 
     /**
      * Creates a new version from the result of applying delta changes.
@@ -265,20 +266,20 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
-    public Optional<DatasetVersion> findByBatchId(@NonNull String batchId, @NonNull UUID datasetId,
+    public Optional<DatasetVersion> findByBatchGroupId(@NonNull String batchGroupId, @NonNull UUID datasetId,
             @NonNull String workspaceId) {
-        log.info("Finding version by batch_id '{}' for dataset '{}'", batchId, datasetId);
+        log.info("Finding version by batch_group_id '{}' for dataset '{}'", batchGroupId, datasetId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByBatchId(batchId, datasetId, workspaceId);
+            return dao.findByBatchGroupId(batchGroupId, datasetId, workspaceId);
         });
     }
 
     @Override
-    public Mono<DatasetVersion> createVersionWithBatchId(@NonNull UUID datasetId, @NonNull String batchId,
+    public Mono<DatasetVersion> createVersionWithBatchGroupId(@NonNull UUID datasetId, @NonNull String batchGroupId,
             @NonNull String workspaceId, @NonNull String userName) {
-        log.info("Creating version with batch_id '{}' for dataset '{}'", batchId, datasetId);
+        log.info("Creating version with batch_group_id '{}' for dataset '{}'", batchGroupId, datasetId);
 
         return Mono.fromCallable(() -> {
             UUID versionId = idGenerator.generateId();
@@ -288,7 +289,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     .id(versionId)
                     .datasetId(datasetId)
                     .versionHash(versionHash)
-                    .batchId(batchId)
+                    .batchGroupId(batchGroupId)
                     .itemsTotal(0)
                     .itemsAdded(0)
                     .itemsModified(0)
@@ -310,8 +311,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 // Always add 'latest' tag to the new version
                 dao.insertTag(datasetId, LATEST_TAG, versionId, userName, workspaceId);
 
-                log.info("Created version '{}' with batch_id '{}' and set as 'latest' for dataset '{}'",
-                        versionId, batchId, datasetId);
+                log.info("Created version '{}' with batch_group_id '{}' and set as 'latest' for dataset '{}'",
+                        versionId, batchGroupId, datasetId);
 
                 return version;
             });

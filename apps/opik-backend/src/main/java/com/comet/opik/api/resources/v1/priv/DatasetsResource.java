@@ -431,8 +431,7 @@ public class DatasetsResource {
     @RateLimited
     public Response createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
-                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch,
-            @QueryParam("batch_id") String batchId) {
+                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch) {
 
         // Generate ids for items without ids before the retryable operation
         List<DatasetItem> items = batch.items().stream().map(item -> {
@@ -445,18 +444,20 @@ public class DatasetsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info(
-                "Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchId '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), batchId, workspaceId);
+                "Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetId(), batch.items().size(), batch.batchGroupId(), workspaceId);
 
-        DatasetItemBatch batchWithIds = new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items);
+        DatasetItemBatch batchWithIds = batch.toBuilder()
+                .items(items)
+                .build();
 
-        itemService.save(batchWithIds, batchId)
+        itemService.save(batchWithIds, batch.batchGroupId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info(
-                "Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchId '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetName(), batch.items().size(), batchId, workspaceId);
+                "Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batch.batchGroupId(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -608,30 +609,29 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "400", description = "Bad request - invalid parameters or conflicting fields"),
     })
     public Response deleteDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request,
-            @QueryParam("batch_id") String batchId) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info(
-                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchId='{}'",
+                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
                 emptyIfNull(request.filters()).size(),
-                batchId);
+                request.batchGroupId());
 
-        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), batchId)
+        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), request.batchGroupId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info(
-                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchId='{}'",
+                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
                 emptyIfNull(request.filters()).size(),
-                batchId);
+                request.batchGroupId());
 
         return Response.noContent().build();
     }

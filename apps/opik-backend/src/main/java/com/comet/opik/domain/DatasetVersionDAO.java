@@ -28,10 +28,10 @@ public interface DatasetVersionDAO {
 
     @SqlUpdate("""
             INSERT INTO dataset_versions (
-                id, dataset_id, version_hash, batch_id, items_total, items_added, items_modified, items_deleted,
+                id, dataset_id, version_hash, batch_group_id, items_total, items_added, items_modified, items_deleted,
                 change_description, metadata, created_by, last_updated_by, workspace_id
             ) VALUES (
-                :version.id, :version.datasetId, :version.versionHash, :version.batchId,
+                :version.id, :version.datasetId, :version.versionHash, :version.batchGroupId,
                 :version.itemsTotal, :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
                 :version.changeDescription, :version.metadata, :version.createdBy, :version.lastUpdatedBy, :workspace_id
             )
@@ -50,7 +50,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -87,7 +87,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -108,11 +108,12 @@ public interface DatasetVersionDAO {
                 FROM dataset_version_tags
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
-            WHERE dv.batch_id = :batch_id
+            WHERE dv.batch_group_id = :batch_group_id
                 AND dv.dataset_id = :dataset_id
                 AND dv.workspace_id = :workspace_id
             """)
-    Optional<DatasetVersion> findByBatchId(@Bind("batch_id") String batchId, @Bind("dataset_id") UUID datasetId,
+    Optional<DatasetVersion> findByBatchGroupId(@Bind("batch_group_id") String batchGroupId,
+            @Bind("dataset_id") UUID datasetId,
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
@@ -127,7 +128,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -167,7 +168,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -230,7 +231,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -280,7 +281,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -319,7 +320,7 @@ public interface DatasetVersionDAO {
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                dv.batch_id,
+                dv.batch_group_id,
                 CONCAT('v', vs.seq_num) AS version_name,
                 dv.items_total,
                 dv.items_added,
@@ -356,13 +357,13 @@ public interface DatasetVersionDAO {
 
     @SqlUpdate("""
             UPDATE dataset_versions
-            SET batch_id = :batch_id,
+            SET batch_group_id = :batch_group_id,
                 last_updated_at = NOW()
             WHERE id = :version_id
-              AND workspace_id = :workspace_id
+                AND workspace_id = :workspace_id
             """)
-    void updateBatchId(@Bind("version_id") UUID versionId,
-            @Bind("batch_id") String batchId,
+    void updateBatchGroupId(@Bind("version_id") UUID versionId,
+            @Bind("batch_group_id") String batchGroupId,
             @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
