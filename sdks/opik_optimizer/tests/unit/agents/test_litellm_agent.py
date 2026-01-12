@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -80,6 +79,7 @@ class TestLiteLLMAgentInitialization:
         try:
             agent = LiteLLMAgent(project_name="env-test-project")
             assert os.environ.get("OPIK_PROJECT_NAME") == "env-test-project"
+            assert agent.project_name == "env-test-project"
         finally:
             # Restore
             if old_val:
@@ -137,7 +137,9 @@ class TestLiteLLMAgentInvoke:
 
         captured_messages: list[dict[str, Any]] = []
 
-        def capture_complete(model, messages, **kwargs):
+        def capture_complete(
+            model: str, messages: list[dict[str, Any]], **kwargs: Any
+        ) -> MagicMock:
             captured_messages.extend(messages)
             return mock_response
 
@@ -173,7 +175,9 @@ class TestLiteLLMAgentToolCalling:
 
         tool_call_msg = MagicMock()
         tool_call_msg.tool_calls = tool_calls_data
-        tool_call_msg.__getitem__ = lambda self, key: tool_calls_data if key == "tool_calls" else None
+        tool_call_msg.__getitem__ = (
+            lambda self, key: tool_calls_data if key == "tool_calls" else None
+        )
         tool_call_msg.to_dict = lambda: {
             "role": "assistant",
             "tool_calls": tool_calls_data,
@@ -191,7 +195,11 @@ class TestLiteLLMAgentToolCalling:
         # Second response: final answer
         final_msg = MagicMock()
         final_msg.tool_calls = None
-        final_msg.__getitem__ = lambda self, key: "The weather is Sunny in NYC" if key == "content" else None
+        final_msg.__getitem__ = (
+            lambda self, key: "The weather is Sunny in NYC"
+            if key == "content"
+            else None
+        )
         final_msg.to_dict = lambda: {
             "role": "assistant",
             "content": "The weather is Sunny in NYC",
@@ -208,7 +216,7 @@ class TestLiteLLMAgentToolCalling:
 
         call_count = 0
 
-        def mock_complete(*args, **kwargs):
+        def mock_complete(*args: Any, **kwargs: Any) -> MagicMock:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -216,8 +224,12 @@ class TestLiteLLMAgentToolCalling:
             return final_response
 
         with patch.object(agent, "_llm_complete", side_effect=mock_complete):
-            with patch("opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"):
-                with patch("opik_optimizer._llm_calls._increment_tool_counter_if_in_optimizer"):
+            with patch(
+                "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+            ):
+                with patch(
+                    "opik_optimizer._llm_calls._increment_tool_counter_if_in_optimizer"
+                ):
                     result = agent.invoke_agent(
                         prompts={"tool-prompt": tool_prompt},
                         dataset_item={"input": "What's the weather?"},
@@ -243,7 +255,9 @@ class TestLiteLLMAgentCostTracking:
         mock_response.usage.total_tokens = 150
 
         with patch("litellm.completion", return_value=mock_response):
-            with patch("opik_optimizer.agents.litellm_agent.track_completion") as mock_track:
+            with patch(
+                "opik_optimizer.agents.litellm_agent.track_completion"
+            ) as mock_track:
                 mock_track.return_value = lambda x: x
 
                 result = agent._llm_complete(
@@ -260,7 +274,7 @@ class TestLiteLLMAgentCostTracking:
     def test_apply_cost_usage_to_owner(self, agent: LiteLLMAgent) -> None:
         """Test that cost/usage is propagated to optimizer owner."""
         mock_optimizer = MagicMock()
-        agent._optimizer_owner = mock_optimizer
+        cast(Any, agent)._optimizer_owner = mock_optimizer
 
         mock_response = MagicMock()
         mock_response._opik_cost = 0.01
@@ -288,7 +302,9 @@ class TestLiteLLMAgentCostTracking:
         mock_response.usage = None
 
         with patch("litellm.completion", return_value=mock_response):
-            with patch("opik_optimizer.agents.litellm_agent.track_completion") as mock_track:
+            with patch(
+                "opik_optimizer.agents.litellm_agent.track_completion"
+            ) as mock_track:
                 mock_track.return_value = lambda x: x
 
                 result = agent._llm_complete(
@@ -361,7 +377,9 @@ class TestLiteLLMAgentPrepareMessages:
 
         class CustomAgent(LiteLLMAgent):
             def _prepare_messages(
-                self, messages: list[dict[str, Any]], dataset_item: dict[str, Any] | None
+                self,
+                messages: list[dict[str, Any]],
+                dataset_item: dict[str, Any] | None,
             ) -> list[dict[str, Any]]:
                 return messages + [{"role": "user", "content": "extra"}]
 

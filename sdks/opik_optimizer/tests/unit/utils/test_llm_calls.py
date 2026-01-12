@@ -8,8 +8,11 @@ Tests cover:
 - StructuredOutputParsingError: Exception behavior
 """
 
+from typing import Any
+from collections.abc import Callable
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock
 from pydantic import BaseModel, ValidationError
 
 from opik_optimizer._llm_calls import (
@@ -18,6 +21,7 @@ from opik_optimizer._llm_calls import (
     _parse_response,
     StructuredOutputParsingError,
 )
+from opik_optimizer import _llm_calls
 
 
 class TestBuildCallTimeParams:
@@ -475,3 +479,251 @@ class TestEdgeCases:
         )
 
         assert result["metadata"]["opik"]["project_name"] == "existing-project"
+
+
+class SampleResponseModel(BaseModel):
+    """Sample Pydantic model for testing structured output."""
+
+    name: str
+    score: float
+
+
+class TestCallModelSync:
+    """Test synchronous call_model function."""
+
+    def test_call_model_increments_counter(self) -> None:
+        """Test that call_model increments LLM counter."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "response"
+        mock_response.choices[0].finish_reason = "stop"
+
+        with patch(
+            "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+        ) as mock_inc:
+            with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+                mock_track.return_value = lambda x: x
+                with patch("litellm.completion", return_value=mock_response):
+                    _llm_calls.call_model(
+                        messages=[{"role": "user", "content": "test"}],
+                        model="gpt-4o",
+                    )
+                    mock_inc.assert_called_once()
+
+    def test_call_model_with_structured_output(self) -> None:
+        """Test call_model with Pydantic response model."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = '{"name": "test", "score": 0.9}'
+        mock_response.choices[0].finish_reason = "stop"
+
+        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            mock_completion = MagicMock(return_value=mock_response)
+            mock_track.return_value = lambda x: mock_completion
+
+            result = _llm_calls.call_model(
+                messages=[{"role": "user", "content": "test"}],
+                model="gpt-4o",
+                response_model=SampleResponseModel,
+            )
+
+            assert isinstance(result, SampleResponseModel)
+            assert result.name == "test"
+
+
+class TestCallModelAsync:
+    """Test asynchronous call_model_async function."""
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_increments_counter(self) -> None:
+        """Test that call_model_async increments LLM counter."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "response"
+        mock_response.choices[0].finish_reason = "stop"
+
+        with patch(
+            "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+        ) as mock_inc:
+            with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+                async_mock = AsyncMock(return_value=mock_response)
+                mock_track.return_value = lambda x: async_mock
+
+                await _llm_calls.call_model_async(
+                    messages=[{"role": "user", "content": "test"}],
+                    model="gpt-4o",
+                )
+                mock_inc.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_with_structured_output(self) -> None:
+        """Test call_model_async with Pydantic response model."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = '{"name": "test", "score": 0.9}'
+        mock_response.choices[0].finish_reason = "stop"
+
+        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            async_mock = AsyncMock(return_value=mock_response)
+            mock_track.return_value = lambda x: async_mock
+
+            result = await _llm_calls.call_model_async(
+                messages=[{"role": "user", "content": "test"}],
+                model="gpt-4o",
+                response_model=SampleResponseModel,
+            )
+
+            assert isinstance(result, SampleResponseModel)
+            assert result.name == "test"
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_passes_model_parameters(self) -> None:
+        """Test that model_parameters are passed to acompletion."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "response"
+        mock_response.choices[0].finish_reason = "stop"
+
+        captured_kwargs: dict[str, Any] = {}
+
+        async def capture_call(**kwargs: Any) -> Any:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: capture_call
+
+            await _llm_calls.call_model_async(
+                messages=[{"role": "user", "content": "test"}],
+                model="gpt-4o",
+                model_parameters={"temperature": 0.5},
+                temperature=0.7,  # Call-time override
+            )
+
+            # Call-time should override model_parameters
+            assert captured_kwargs["temperature"] == 0.7
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_project_name_passed(self) -> None:
+        """Test that project_name is passed to track_completion."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "response"
+        mock_response.choices[0].finish_reason = "stop"
+
+        captured_project: str | None = None
+
+        def capture_track(
+            project_name: str | None = None,
+        ) -> Callable[[Any], AsyncMock]:
+            nonlocal captured_project
+            captured_project = project_name
+            return lambda x: AsyncMock(return_value=mock_response)
+
+        with patch(
+            "opik_optimizer._llm_calls.track_completion", side_effect=capture_track
+        ):
+            await _llm_calls.call_model_async(
+                messages=[{"role": "user", "content": "test"}],
+                model="gpt-4o",
+                project_name="my-project",
+            )
+
+            assert captured_project == "my-project"
+
+
+class TestStripProjectName:
+    """Test _strip_project_name utility."""
+
+    def test_strip_removes_project_name(self) -> None:
+        """Test that project_name is removed from opik metadata."""
+        params: dict[str, Any] = {
+            "model": "gpt-4o",
+            "metadata": {
+                "opik": {
+                    "project_name": "test",
+                    "tags": ["tag1"],
+                }
+            },
+        }
+
+        result: dict[str, Any] = _llm_calls._strip_project_name(params)
+
+        # Original unchanged
+        assert "project_name" in params["metadata"]["opik"]
+
+        # Result has project_name removed
+        assert "project_name" not in result["metadata"]["opik"]
+        assert result["metadata"]["opik"]["tags"] == ["tag1"]
+
+    def test_strip_handles_missing_metadata(self) -> None:
+        """Test handling of missing metadata."""
+        params = {"model": "gpt-4o"}
+        result = _llm_calls._strip_project_name(params)
+        assert result == params
+
+    def test_strip_handles_empty_opik(self) -> None:
+        """Test that empty opik metadata is removed."""
+        params = {
+            "metadata": {
+                "opik": {
+                    "project_name": "test",
+                }
+            }
+        }
+
+        result = _llm_calls._strip_project_name(params)
+
+        # Empty opik dict should be removed
+        assert "opik" not in result["metadata"]
+
+
+class TestCounterIncrement:
+    """Test LLM counter increment from optimizer context."""
+
+    def test_increment_llm_counter_walks_stack(self) -> None:
+        """Test that counter increment walks call stack to find optimizer."""
+        from opik_optimizer.base_optimizer import BaseOptimizer
+
+        class MockOptimizer(BaseOptimizer):
+            DEFAULT_PROMPTS: dict[str, str] = {}
+
+            def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
+                pass
+
+            def get_optimizer_metadata(self) -> dict[str, Any]:
+                return {}
+
+        optimizer = MockOptimizer(model="gpt-4o")
+        initial_count = optimizer.llm_call_counter
+
+        # Simulate a call from within optimizer context
+        def inner_call(self: Any) -> None:
+            _llm_calls._increment_llm_counter_if_in_optimizer()
+
+        inner_call(optimizer)
+
+        assert optimizer.llm_call_counter == initial_count + 1
+
+    def test_increment_tool_counter_walks_stack(self) -> None:
+        """Test that tool counter increment walks call stack."""
+        from opik_optimizer.base_optimizer import BaseOptimizer
+
+        class MockOptimizer(BaseOptimizer):
+            DEFAULT_PROMPTS: dict[str, str] = {}
+
+            def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
+                pass
+
+            def get_optimizer_metadata(self) -> dict[str, Any]:
+                return {}
+
+        optimizer = MockOptimizer(model="gpt-4o")
+        initial_count = optimizer.tool_call_counter
+
+        def inner_call(self: Any) -> None:
+            _llm_calls._increment_tool_counter_if_in_optimizer()
+
+        inner_call(optimizer)
+
+        assert optimizer.tool_call_counter == initial_count + 1

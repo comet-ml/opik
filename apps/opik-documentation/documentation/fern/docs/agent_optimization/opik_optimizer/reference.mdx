@@ -271,7 +271,7 @@ FewShotBayesianOptimizer(
     enable_diversity: bool = True,
     enable_multivariate_tpe: bool = True,
     enable_optuna_pruning: bool = True,
-    prompt_overrides: Union = None,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95
 )
@@ -292,7 +292,7 @@ FewShotBayesianOptimizer(
 <ParamField path="enable_diversity" type="bool" optional={true} default="True" />
 <ParamField path="enable_multivariate_tpe" type="bool" optional={true} default="True">Enable Optuna's multivariate TPE sampler (default: True)</ParamField>
 <ParamField path="enable_optuna_pruning" type="bool" optional={true} default="True">Enable Optuna pruner for early stopping (default: True)</ParamField>
-<ParamField path="prompt_overrides" type="Union" optional={true}>Optional dict or callable to override/customize prompt templates. If a dict, keys should match DEFAULT_PROMPTS keys. If a callable, receives the PromptLibrary instance for in-place modification.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to override/customize prompt templates. If a dict, keys should match DEFAULT_PROMPTS keys. If a callable, receives the PromptLibrary instance for in-place modification.</ParamField>
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -431,7 +431,7 @@ MetaPromptOptimizer(
     name: str | None = None,
     use_hall_of_fame: bool = True,
     prettymode_prompt_history: bool = True,
-    prompt_overrides: Union = None,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95
 )
@@ -452,7 +452,7 @@ MetaPromptOptimizer(
 <ParamField path="name" type="str | None" optional={true} />
 <ParamField path="use_hall_of_fame" type="bool" optional={true} default="True">Enable Hall of Fame pattern extraction and re-injection</ParamField>
 <ParamField path="prettymode_prompt_history" type="bool" optional={true} default="True">Display prompt history in pretty format (True) or JSON (False)</ParamField>
-<ParamField path="prompt_overrides" type="Union" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -596,7 +596,7 @@ EvolutionaryOptimizer(
     verbose: int = 1,
     seed: int = 42,
     name: str | None = None,
-    prompt_overrides: Union = None,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95
 )
@@ -622,7 +622,7 @@ EvolutionaryOptimizer(
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
 <ParamField path="name" type="str | None" optional={true} />
-<ParamField path="prompt_overrides" type="Union" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -756,7 +756,8 @@ GepaOptimizer(
     seed: int = 42,
     name: str | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95
+    perfect_score: float = 0.95,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
 )
 ```
 
@@ -771,6 +772,7 @@ GepaOptimizer(
 <ParamField path="name" type="str | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Accepted for API parity, but ignored (GEPA does not expose prompt hooks).</ParamField>
 
 ### Methods
 #### cleanup
@@ -928,7 +930,7 @@ HierarchicalReflectiveOptimizer(
     verbose: int = 1,
     seed: int = 42,
     name: str | None = None,
-    prompt_overrides: Union = None,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95
 )
@@ -948,7 +950,7 @@ HierarchicalReflectiveOptimizer(
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
 <ParamField path="name" type="str | None" optional={true} />
-<ParamField path="prompt_overrides" type="Union" optional={true}>Optional dict or callable to override/customize prompt templates. If a dict, keys should match DEFAULT_PROMPTS keys. If a callable, receives the PromptLibrary instance for in-place modification.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to override/customize prompt templates. If a dict, keys should match DEFAULT_PROMPTS keys. If a callable, receives the PromptLibrary instance for in-place modification.</ParamField>
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 

@@ -2,7 +2,6 @@
 Unit tests for MetaPromptOptimizer token calculation and context fitting logic.
 """
 
-import pytest
 from unittest.mock import Mock, patch
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
@@ -309,7 +308,3 @@ class TestMetadataMapping:
         assert "hall_of_fame_size" in metadata
         assert "pattern_extraction_interval" in metadata
         assert "pattern_injection_rate" in metadata
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

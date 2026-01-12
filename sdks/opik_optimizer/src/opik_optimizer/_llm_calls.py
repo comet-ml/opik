@@ -433,7 +433,9 @@ def call_model(
     )
 
     choices = getattr(response, "choices", None)
-    logger.debug(f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}")
+    logger.debug(
+        f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+    )
     return _parse_response(response, response_model)
 
 
@@ -564,5 +566,7 @@ async def call_model_async(
     )
 
     choices = getattr(response, "choices", None)
-    logger.debug(f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}")
+    logger.debug(
+        f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+    )
     return _parse_response(response, response_model)

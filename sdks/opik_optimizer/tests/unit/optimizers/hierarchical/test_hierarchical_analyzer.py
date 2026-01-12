@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -62,7 +62,9 @@ def mock_evaluation_result() -> MagicMock:
         score = MagicMock()
         score.name = "accuracy"
         score.value = 0.5 if i % 2 == 0 else 0.9
-        score.reason = f"Test case {i} failed due to parsing error" if i % 2 == 0 else "Correct"
+        score.reason = (
+            f"Test case {i} failed due to parsing error" if i % 2 == 0 else "Correct"
+        )
         score.scoring_failed = False
         test_result.score_results = [score]
 
@@ -75,7 +77,9 @@ def mock_evaluation_result() -> MagicMock:
 class TestHierarchicalRootCauseAnalyzer:
     """Test HierarchicalRootCauseAnalyzer async wiring."""
 
-    def test_analyzer_initialization(self, analyzer: HierarchicalRootCauseAnalyzer) -> None:
+    def test_analyzer_initialization(
+        self, analyzer: HierarchicalRootCauseAnalyzer
+    ) -> None:
         """Test analyzer initializes with correct parameters."""
         assert analyzer.reasoning_model == "gpt-4o"
         assert analyzer.seed == 42
@@ -215,7 +219,9 @@ class TestHierarchicalAnalyzerAsync:
             total_test_cases=10,
             num_batches=2,
             unified_failure_modes=[
-                FailureMode(name="UnifiedError", description="Combined", root_cause="Root")
+                FailureMode(
+                    name="UnifiedError", description="Combined", root_cause="Root"
+                )
             ],
             synthesis_notes="Merged similar errors",
         )
@@ -256,14 +262,16 @@ class TestHierarchicalAnalyzerAsync:
             total_test_cases=10,
             num_batches=2,
             unified_failure_modes=[
-                FailureMode(name="UnifiedError", description="Combined", root_cause="Root")
+                FailureMode(
+                    name="UnifiedError", description="Combined", root_cause="Root"
+                )
             ],
             synthesis_notes="Analysis complete",
         )
 
         call_count = 0
 
-        async def mock_call(*args, **kwargs):
+        async def mock_call(*args: Any, **kwargs: Any) -> Any:
             nonlocal call_count
             call_count += 1
             if kwargs.get("response_model") is RootCauseAnalysis:
@@ -332,7 +340,7 @@ class TestHierarchicalAnalyzerConcurrency:
         concurrent_count = 0
         max_concurrent = 0
 
-        async def track_concurrent(*args, **kwargs):
+        async def track_concurrent(*args: Any, **kwargs: Any) -> Any:
             nonlocal concurrent_count, max_concurrent
             concurrent_count += 1
             max_concurrent = max(max_concurrent, concurrent_count)
@@ -369,7 +377,8 @@ class TestHierarchicalAnalyzerErrorHandling:
         mock_evaluation_result: MagicMock,
     ) -> None:
         """Test that errors in batch analysis propagate correctly."""
-        async def failing_call(*args, **kwargs):
+
+        async def failing_call(*args: Any, **kwargs: Any) -> Any:
             raise RuntimeError("LLM call failed")
 
         with patch(

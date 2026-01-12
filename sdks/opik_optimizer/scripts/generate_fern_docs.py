@@ -1,10 +1,14 @@
 import argparse
 import inspect
+import os
 import re
 from pathlib import Path
 from typing import Any, get_type_hints
 
-import opik_optimizer
+# Suppress banner for helper scripts
+os.environ["OPIK_OPTIMIZER_NO_BANNER"] = "1"
+
+import opik_optimizer  # noqa: E402
 from pydantic import BaseModel
 
 
