@@ -133,25 +133,6 @@ public interface DatasetExportJobDAO {
             @Bind("datasetId") UUID datasetId,
             @BindList("statuses") Set<DatasetExportStatus> statuses);
 
-    @SqlQuery("""
-            SELECT
-                id,
-                dataset_id,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                created_by
-            FROM dataset_export_jobs
-            WHERE expires_at < :now
-            LIMIT :limit
-            """)
-    List<DatasetExportJob> findExpired(@Bind("now") Instant now,
-            @Bind("status") DatasetExportStatus status,
-            @Bind("limit") int limit);
-
     @SqlUpdate("DELETE FROM dataset_export_jobs WHERE id IN (<ids>)")
     int deleteByIds(@BindList("ids") Set<UUID> ids);
 }
