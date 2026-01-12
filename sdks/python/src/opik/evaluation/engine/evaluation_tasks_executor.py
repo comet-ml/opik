@@ -31,13 +31,23 @@ class StreamingExecutor(Generic[T]):
         self._task_count = 0
         self._pool: futures.ThreadPoolExecutor
         self._submitted_futures: List[futures.Future[T]] = []
+        self._progress_bar: Optional[Any] = None
 
     def __enter__(self) -> "StreamingExecutor[T]":
         self._pool = futures.ThreadPoolExecutor(max_workers=self._workers)
         self._pool.__enter__()
+        # Initialize progress bar on enter
+        self._progress_bar = _tqdm(
+            disable=(self._verbose < 1),
+            desc=self._desc,
+            total=self._total,
+        )
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        # Close progress bar if it exists
+        if self._progress_bar is not None:
+            self._progress_bar.close()
         self._pool.__exit__(exc_type, exc_val, exc_tb)
 
     def submit(self, task: EvaluationTask[T]) -> None:
@@ -49,14 +59,17 @@ class StreamingExecutor(Generic[T]):
     def get_results(self) -> List[T]:
         """Collect results from futures as they complete with progress bar."""
         results: List[T] = []
-        progress_total = self._total if self._total is not None else self._task_count
-        for future in _tqdm(
-            futures.as_completed(self._submitted_futures),
-            disable=(self._verbose < 1),
-            desc=self._desc,
-            total=progress_total,
-        ):
+
+        # Update total if it wasn't known initially
+        if self._progress_bar is not None and self._total is None:
+            self._progress_bar.total = self._task_count
+
+        # Process futures as they complete and update progress bar
+        for future in futures.as_completed(self._submitted_futures):
             results.append(future.result())
+            if self._progress_bar is not None:
+                self._progress_bar.update(1)
+
         return results
 
 
