@@ -11,7 +11,6 @@ export class ExperimentsPage extends BasePage {
 
   async goto(): Promise<void> {
     await super.goto();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async searchExperiment(name: string): Promise<void> {
