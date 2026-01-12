@@ -142,6 +142,6 @@ public interface DatasetExportJobDAO {
             @Bind("datasetId") UUID datasetId,
             @BindList("statuses") Set<DatasetExportStatus> statuses);
 
-    @SqlUpdate("DELETE FROM dataset_export_jobs WHERE id IN (<ids>)")
-    int deleteByIds(@BindList("ids") Set<UUID> ids);
+    @SqlUpdate("DELETE FROM dataset_export_jobs WHERE workspace_id = :workspaceId AND id IN (<ids>)")
+    int deleteByIds(@Bind("workspaceId") String workspaceId, @BindList("ids") Set<UUID> ids);
 }

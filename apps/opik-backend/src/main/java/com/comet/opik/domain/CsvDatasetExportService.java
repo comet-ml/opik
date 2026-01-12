@@ -38,6 +38,11 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
 
     @Override
     public Mono<DatasetExportJob> startExport(@NonNull UUID datasetId, @NonNull Duration ttl) {
+        if (!exportConfig.isEnabled()) {
+            log.warn("CSV dataset export is disabled; skipping export for dataset: '{}'", datasetId);
+            return Mono.error(new IllegalStateException("Dataset export is disabled"));
+        }
+
         log.info("Starting CSV export for dataset: '{}'", datasetId);
 
         return Mono.deferContextual(ctx -> {
@@ -92,9 +97,9 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                 exportConfig.getCodec());
 
         return stream.add(StreamAddArgs.entry(DatasetExportConfig.PAYLOAD_FIELD, message))
-                .doOnNext(streamMessageId -> log.info(
-                        "Export job published to Redis stream: jobId='{}', streamMessageId='{}'",
-                        job.id(), streamMessageId))
+                .doOnNext(messageId -> log.info(
+                        "Export job published to Redis stream: jobId='{}', messageId='{}'",
+                        job.id(), messageId))
                 .doOnError(throwable -> log.error(
                         "Failed to publish export job to Redis stream: jobId='{}'",
                         job.id(), throwable))

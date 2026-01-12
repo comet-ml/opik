@@ -14,8 +14,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
-import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -66,6 +66,9 @@ class CsvDatasetExportServiceImplTest {
         // Given
         DatasetExportJob newJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
 
+        // Mock: export is enabled
+        when(exportConfig.isEnabled()).thenReturn(true);
+
         // Mock: no existing jobs
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of()));
 
@@ -85,7 +88,7 @@ class CsvDatasetExportServiceImplTest {
                 RStreamReactive.class);
         when(redisClient.getStream(any(String.class), any())).thenReturn((RStreamReactive) mockStream);
 
-        StreamMessageId mockMessageId = mock(StreamMessageId.class);
+        StreamMessageId mockMessageId = new StreamMessageId(UUID.randomUUID().getMostSignificantBits());
         when(mockStream.add(any(StreamAddArgs.class))).thenReturn(Mono.just(mockMessageId));
         when(exportConfig.getStreamName()).thenReturn("dataset-export-events");
 
@@ -117,6 +120,7 @@ class CsvDatasetExportServiceImplTest {
     void startExport_shouldReturnExistingJob_whenJobAlreadyExists(DatasetExportStatus status) {
         // Given
         DatasetExportJob existingJob = createJob(JOB_ID, status);
+        when(exportConfig.isEnabled()).thenReturn(true);
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
@@ -144,6 +148,7 @@ class CsvDatasetExportServiceImplTest {
     void startExport_shouldCheckInProgressJobsWithCorrectStatuses() {
         // Given
         DatasetExportJob existingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
+        when(exportConfig.isEnabled()).thenReturn(true);
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
@@ -156,6 +161,28 @@ class CsvDatasetExportServiceImplTest {
         // Then - verify that findInProgressJobs is called with DATASET_ID
         // The Set<DatasetExportStatus> is created inside the service, so we just verify the call
         verify(jobService).findInProgressJobs(eq(DATASET_ID));
+    }
+
+    @Test
+    void startExport_shouldReturnError_whenExportIsDisabled() {
+        // Given
+        when(exportConfig.isEnabled()).thenReturn(false);
+
+        // When
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof IllegalStateException &&
+                        throwable.getMessage().contains("Dataset export is disabled"))
+                .verify();
+
+        // Verify no job service calls were made
+        verify(jobService, never()).findInProgressJobs(any());
+        verify(jobService, never()).createJob(any(), any());
     }
 
     private DatasetExportJob createJob(UUID jobId, DatasetExportStatus status) {
