@@ -178,19 +178,13 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const isDraftMode = useIsDraftMode();
   const deletedIds = useDeletedIds();
 
-  // Compute effective size for draft mode: use 100 if in draft mode and size is default (10)
-  const effectiveSize = useMemo(
-    () => (isDraftMode && size === 10 ? 100 : (size as number)),
-    [isDraftMode, size],
-  );
-
   const { data, isPending, isPlaceholderData, isFetching } =
     useDatasetItemsWithDraft(
       {
         datasetId,
         filters: transformedFilters,
         page: page as number,
-        size: effectiveSize,
+        size: size as number,
         search: search!,
         truncate: false,
       },
@@ -214,7 +208,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       datasetId,
       filters: transformedFilters,
       page: page as number,
-      size: effectiveSize,
+      size: size as number,
       search: search!,
       truncate: false,
     },
@@ -652,7 +646,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             <DataTablePagination
               page={page as number}
               pageChange={setPage}
-              size={effectiveSize}
+              size={size as number}
               sizeChange={setSize}
               total={data?.total ?? 0}
               isLoadingTotal={isProcessing}
