@@ -15,7 +15,7 @@ class ProviderApiKeyPublic(UniversalBaseModel):
     name: typing.Optional[str] = None
     provider_name: typing.Optional[str] = pydantic.Field(default=None)
     """
-    Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
+    Provider name - required for custom LLM and Bedrock providers to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1'). Must not be blank for custom and Bedrock providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
     """
 
     headers: typing.Optional[typing.Dict[str, str]] = None

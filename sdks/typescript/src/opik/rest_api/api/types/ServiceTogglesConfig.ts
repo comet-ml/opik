@@ -14,13 +14,13 @@ export interface ServiceTogglesConfig {
     csvUploadEnabled: boolean;
     exportEnabled: boolean;
     optimizationStudioEnabled: boolean;
-    dashboardsEnabled: boolean;
     datasetVersioningEnabled: boolean;
     openaiProviderEnabled: boolean;
     anthropicProviderEnabled: boolean;
     geminiProviderEnabled: boolean;
     openrouterProviderEnabled: boolean;
     vertexaiProviderEnabled: boolean;
+    bedrockProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
 }
