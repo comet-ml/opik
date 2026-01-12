@@ -138,12 +138,18 @@ class PromptHallOfFame:
 
         from .... import _llm_calls
 
+        # Get system prompt from prompts library or use default
+        if self.prompts is not None:
+            system_prompt = self.prompts.get("pattern_extraction_system")
+        else:
+            system_prompt = meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE
+
         try:
             response = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_pattern_extraction_system_prompt(),
+                        "content": system_prompt,
                     },
                     {"role": "user", "content": prompt_analysis},
                 ],
@@ -231,7 +237,14 @@ class PromptHallOfFame:
             prompt_scorecard += json.dumps(entry.prompt_messages, indent=2)
             prompt_scorecard += "\n"
 
-        return build_pattern_extraction_user_prompt(
+        # Get user prompt template from prompts library or use default
+        if self.prompts is not None:
+            template = self.prompts.get("pattern_extraction_user")
+        else:
+            template = meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE
+
+        return meta_prompts.build_pattern_extraction_user_prompt(
+            template=template,
             top_prompts_scorecard=prompt_scorecard,
             metric_name=metric_name,
         )

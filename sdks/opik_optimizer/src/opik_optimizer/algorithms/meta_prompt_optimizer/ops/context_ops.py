@@ -133,7 +133,10 @@ def get_task_context(
         context = "Task Context: "
         context += f"Available input variables (use {meta_prompts.START_DELIM}variable_name{meta_prompts.END_DELIM} syntax): "
         context += ", ".join(
-            [f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}" for field in input_fields]
+            [
+                f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}"
+                for field in input_fields
+            ]
         )
         context += "\n\n"
 

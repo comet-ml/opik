@@ -7,7 +7,6 @@ import random
 from pydantic import BaseModel
 from deap import creator as _creator
 
-from .. import prompts as evo_prompts
 from .. import reporting
 from .... import _llm_calls
 from ...._llm_calls import StructuredOutputParsingError
@@ -17,6 +16,7 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
+from ....utils.prompt_library import PromptLibrary
 
 
 logger = logging.getLogger(__name__)
@@ -167,18 +167,23 @@ def _llm_crossover_messages(
     output_style_guidance: str,
     model: str,
     model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply LLM-based crossover to a single prompt's messages."""
-    user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
-        messages_1, messages_2, output_style_guidance
+    user_prompt_for_llm_crossover = prompts.get(
+        "llm_crossover_user_prompt_template",
+        parent1_messages=messages_1,
+        parent2_messages=messages_2,
+        style=output_style_guidance,
     )
 
     response = _llm_calls.call_model(
         messages=[
             {
                 "role": "system",
-                "content": evo_prompts.llm_crossover_system_prompt(
-                    output_style_guidance
+                "content": prompts.get(
+                    "llm_crossover_system_prompt_template",
+                    style=output_style_guidance,
                 ),
             },
             {"role": "user", "content": user_prompt_for_llm_crossover},
@@ -202,6 +207,7 @@ def llm_deap_crossover(
     output_style_guidance: str,
     model: str,
     model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
     verbose: int = 1,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts.
@@ -236,6 +242,7 @@ def llm_deap_crossover(
                         output_style_guidance,
                         model,
                         model_parameters,
+                        prompts=prompts,
                     )
                     child1_data[prompt_name] = child1_messages
                     child2_data[prompt_name] = child2_messages

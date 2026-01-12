@@ -11,21 +11,21 @@ pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 class TestGetSynonym:
     """Tests for _get_synonym function."""
 
-    def test_returns_synonym_from_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_synonym_from_llm(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             return "quick"
 
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
 
         result = mutation_ops._get_synonym(
-            word="fast",
-            model="gpt-4",
-            model_parameters={},
+            word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
         assert result == "quick"
 
     def test_returns_original_word_on_error(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             raise Exception("API error")
@@ -33,14 +33,12 @@ class TestGetSynonym:
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
 
         result = mutation_ops._get_synonym(
-            word="fast",
-            model="gpt-4",
-            model_parameters={},
+            word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
         assert result == "fast"
 
     def test_strips_whitespace_from_response(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             return "  quick  \n"
@@ -48,9 +46,7 @@ class TestGetSynonym:
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
 
         result = mutation_ops._get_synonym(
-            word="fast",
-            model="gpt-4",
-            model_parameters={},
+            word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
         assert result == "quick"
 
@@ -59,7 +55,7 @@ class TestModifyPhrase:
     """Tests for _modify_phrase function."""
 
     def test_returns_modified_phrase_from_llm(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             return "rapidly"
@@ -67,14 +63,12 @@ class TestModifyPhrase:
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
 
         result = mutation_ops._modify_phrase(
-            phrase="quickly",
-            model="gpt-4",
-            model_parameters={},
+            phrase="quickly", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
         assert result == "rapidly"
 
     def test_returns_original_phrase_on_error(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             raise Exception("API error")
@@ -82,9 +76,7 @@ class TestModifyPhrase:
         monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
 
         result = mutation_ops._modify_phrase(
-            phrase="quickly",
-            model="gpt-4",
-            model_parameters={},
+            phrase="quickly", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
         assert result == "quickly"
 
@@ -93,17 +85,17 @@ class TestWordLevelMutation:
     """Tests for _word_level_mutation function."""
 
     def test_returns_original_for_single_word(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         content = "Hello"
         result = mutation_ops._word_level_mutation(
-            msg_content=content,
-            model="gpt-4",
-            model_parameters={},
+            msg_content=content, model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
         assert result == content
 
-    def test_synonym_mutation_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_synonym_mutation_path(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force the synonym mutation path (random < 0.3)
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -126,10 +118,13 @@ class TestWordLevelMutation:
             msg_content="Hello world",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
         )
         assert "great" in result or "world" in result
 
-    def test_word_swap_mutation_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_word_swap_mutation_path(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force the word swap path (0.3 <= random < 0.6)
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -144,11 +139,14 @@ class TestWordLevelMutation:
             msg_content="Hello beautiful world",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
         )
         # Words should be swapped
         assert isinstance(result, str)
 
-    def test_modify_phrase_mutation_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_modify_phrase_mutation_path(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force the modify phrase path (random >= 0.6)
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -171,10 +169,13 @@ class TestWordLevelMutation:
             msg_content="Hello world",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
         )
         assert isinstance(result, str)
 
-    def test_handles_content_parts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_handles_content_parts(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force synonym path
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -208,6 +209,7 @@ class TestWordLevelMutation:
             msg_content=content_parts,
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
         )
         # Should preserve structure
         assert isinstance(result, list)
@@ -216,7 +218,9 @@ class TestWordLevelMutation:
 class TestWordLevelMutationPrompt:
     """Tests for _word_level_mutation_prompt function."""
 
-    def test_mutates_all_messages(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mutates_all_messages(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
             lambda: 0.1,
@@ -243,6 +247,7 @@ class TestWordLevelMutationPrompt:
             prompt=prompt,
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
         )
 
         assert isinstance(result, ChatPrompt)
@@ -252,7 +257,9 @@ class TestWordLevelMutationPrompt:
 class TestStructuralMutation:
     """Tests for _structural_mutation function."""
 
-    def test_shuffle_sentences_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_shuffle_sentences_path(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force shuffle path (random < 0.3)
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -265,14 +272,14 @@ class TestStructuralMutation:
         )
 
         result = mutation_ops._structural_mutation(
-            prompt=prompt,
-            model="gpt-4",
-            model_parameters={},
+            prompt=prompt, model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
 
         assert isinstance(result, ChatPrompt)
 
-    def test_combine_sentences_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_combine_sentences_path(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force combine path (0.3 <= random < 0.6)
         call_count = {"n": 0}
 
@@ -295,14 +302,14 @@ class TestStructuralMutation:
         )
 
         result = mutation_ops._structural_mutation(
-            prompt=prompt,
-            model="gpt-4",
-            model_parameters={},
+            prompt=prompt, model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
 
         assert isinstance(result, ChatPrompt)
 
-    def test_split_sentences_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_split_sentences_path(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Force split path (random >= 0.6)
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -319,15 +326,13 @@ class TestStructuralMutation:
         )
 
         result = mutation_ops._structural_mutation(
-            prompt=prompt,
-            model="gpt-4",
-            model_parameters={},
+            prompt=prompt, model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
 
         assert isinstance(result, ChatPrompt)
 
     def test_fallback_to_word_mutation_for_single_sentence(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # For single sentence, should fall back to word-level mutation
         monkeypatch.setattr(
@@ -353,9 +358,7 @@ class TestStructuralMutation:
         )
 
         result = mutation_ops._structural_mutation(
-            prompt=prompt,
-            model="gpt-4",
-            model_parameters={},
+            prompt=prompt, model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
 
         assert isinstance(result, ChatPrompt)
@@ -365,7 +368,7 @@ class TestRadicalInnovationMutation:
     """Tests for _radical_innovation_mutation function."""
 
     def test_returns_new_prompt_on_success(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             return '[{"role": "system", "content": "New innovative prompt"}, {"role": "user", "content": "{input}"}]'
@@ -381,6 +384,7 @@ class TestRadicalInnovationMutation:
             model="gpt-4",
             model_parameters={},
             output_style_guidance="Be concise",
+            prompts=evo_prompts,
         )
 
         assert isinstance(result, ChatPrompt)
@@ -388,7 +392,7 @@ class TestRadicalInnovationMutation:
         assert any("innovative" in str(m.get("content", "")).lower() for m in messages)
 
     def test_returns_original_on_parse_error(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             return "Not valid JSON at all"
@@ -404,13 +408,14 @@ class TestRadicalInnovationMutation:
             model="gpt-4",
             model_parameters={},
             output_style_guidance="Be concise",
+            prompts=evo_prompts,
         )
 
         # Should return original prompt on error
         assert result is prompt
 
     def test_returns_original_on_llm_error(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         def fake_call_model(**kwargs: Any) -> str:
             raise Exception("LLM API error")
@@ -426,6 +431,7 @@ class TestRadicalInnovationMutation:
             model="gpt-4",
             model_parameters={},
             output_style_guidance="Be concise",
+            prompts=evo_prompts,
         )
 
         # Should return original prompt on error
@@ -436,7 +442,7 @@ class TestSemanticMutation:
     """Tests for _semantic_mutation function."""
 
     def test_triggers_radical_innovation_randomly(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force radical innovation path (random < 0.1)
         monkeypatch.setattr(
@@ -461,11 +467,14 @@ class TestSemanticMutation:
             model_parameters={},
             verbose=0,
             output_style_guidance="Be concise",
+            prompts=evo_prompts,
         )
 
         assert isinstance(result, ChatPrompt)
 
-    def test_returns_original_on_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_original_on_error(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Skip radical innovation
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
@@ -500,6 +509,7 @@ class TestSemanticMutation:
             model_parameters={},
             verbose=1,
             output_style_guidance="Be concise",
+            prompts=evo_prompts,
         )
 
         assert result is prompt
@@ -509,7 +519,9 @@ class TestSemanticMutation:
 class TestDeapMutation:
     """Tests for deap_mutation function."""
 
-    def test_mutates_single_prompt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mutates_single_prompt(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         # Setup DEAP creator
         from deap import creator
 
@@ -575,6 +587,7 @@ class TestDeapMutation:
             diversity_threshold=0.3,
             optimization_id="opt-123",
             verbose=0,
+            prompts=evo_prompts,
         )
 
         assert hasattr(result, "keys")
@@ -583,6 +596,7 @@ class TestDeapMutation:
 
 def test_semantic_mutation_invalid_json_response(
     monkeypatch: pytest.MonkeyPatch,
+    evo_prompts: Any,
 ) -> None:
     def fake_call_model(
         *,
@@ -637,6 +651,7 @@ def test_semantic_mutation_invalid_json_response(
         model="openai/gpt-5-mini",
         model_parameters={},
         verbose=1,
+        prompts=evo_prompts,
     )
 
     assert result is not original_prompt

@@ -6,10 +6,10 @@ import logging
 from deap import tools
 from deap import creator as _creator
 
-from .. import prompts as evo_prompts
 from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
+from ....utils.prompt_library import PromptLibrary
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ def restart_population(
             optimization_id=optimizer.current_optimization_id,
             population_size=optimizer.population_size,
             verbose=optimizer.verbose,
+            prompts=optimizer._prompts,
         )
         prompt_variations[prompt_name] = variations
 
@@ -85,6 +86,7 @@ def initialize_population(
     output_style_guidance: str,
     model: str,
     model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
     optimization_id: str | None,
     population_size: int,
     verbose: int,
@@ -110,16 +112,20 @@ def initialize_population(
         # Fresh starts
         if num_fresh_starts > 0:
             init_pop_report.start_fresh_prompts(num_fresh_starts)
-            fresh_start_user_prompt = evo_prompts.fresh_start_user_prompt(
-                task_desc_for_llm, current_output_style_guidance, num_fresh_starts
+            fresh_start_user_prompt = prompts.get(
+                "fresh_start_user_prompt_template",
+                task_description=task_desc_for_llm,
+                style=current_output_style_guidance,
+                num_to_generate=num_fresh_starts,
             )
             try:
                 response_content = _llm_calls.call_model(
                     messages=[
                         {
                             "role": "system",
-                            "content": evo_prompts.fresh_start_system_prompt(
-                                current_output_style_guidance
+                            "content": prompts.get(
+                                "fresh_start_system_prompt_template",
+                                style=current_output_style_guidance,
                             ),
                         },
                         {"role": "user", "content": fresh_start_user_prompt},
@@ -179,19 +185,21 @@ def initialize_population(
         # Variations on the initial prompt
         if num_variations_on_initial > 0:
             init_pop_report.start_variations(num_variations_on_initial)
-            user_prompt_for_variation = evo_prompts.variation_user_prompt(
-                prompt.get_messages(),
-                task_desc_for_llm,
-                current_output_style_guidance,
-                num_variations_on_initial,
+            user_prompt_for_variation = prompts.get(
+                "variation_user_prompt_template",
+                initial_prompt_messages=prompt.get_messages(),
+                task_description=task_desc_for_llm,
+                style=current_output_style_guidance,
+                num_variations=num_variations_on_initial,
             )
             try:
                 response_content_variations = _llm_calls.call_model(
                     messages=[
                         {
                             "role": "system",
-                            "content": evo_prompts.variation_system_prompt(
-                                current_output_style_guidance
+                            "content": prompts.get(
+                                "variation_system_prompt_template",
+                                style=current_output_style_guidance,
                             ),
                         },
                         {"role": "user", "content": user_prompt_for_variation},

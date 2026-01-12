@@ -1,8 +1,9 @@
-# Centralized prompt templates used by EvolutionaryOptimizer. This file contains
-# only string builders and constants; it has no side effects.
+# Centralized prompt templates used by EvolutionaryOptimizer.
+# Contains prompt templates as constants.
 
-from typing import Any
-
+DEFAULT_OUTPUT_STYLE = (
+    "Produce clear, effective, and high-quality responses suitable for the task."
+)
 
 INFER_STYLE_SYSTEM_PROMPT = """You are an expert in linguistic analysis and prompt engineering. Your task is to analyze a few input-output examples from a dataset and provide a concise, actionable description of the desired output style. This description will be used to guide other LLMs in generating and refining prompts.
 
@@ -19,9 +20,7 @@ For example: {"style": "Outputs should be a single, concise proper noun."} OR {"
 Return ONLY this JSON object string, with no preamble or extra formatting.
 """
 
-
-def style_inference_user_prompt(examples_str: str) -> str:
-    return f"""Please analyze the following examples from a dataset and provide a concise, actionable description of the REQUIRED output style for the target LLM. Before describing the output style, make sure to understand the dataset content and structure as it can include input, output and metadata fields. This description will be used to guide other LLMs in generating and refining prompts.
+STYLE_INFERENCE_USER_PROMPT_TEMPLATE = """Please analyze the following examples from a dataset and provide a concise, actionable description of the REQUIRED output style for the target LLM. Before describing the output style, make sure to understand the dataset content and structure as it can include input, output and metadata fields. This description will be used to guide other LLMs in generating and refining prompts.
 
 {examples_str}
 
@@ -31,51 +30,29 @@ The description should be a single string that can be directly used as an instru
 Return ONLY this JSON object string, with no preamble or extra formatting.
 """
 
+SEMANTIC_MUTATION_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a prompt engineering expert. Your goal is to modify prompts to improve their "
+    "effectiveness in eliciting specific types of answers, particularly matching the style: "
+    "'{style}'. Follow the specific modification instruction provided."
+)
 
-def semantic_mutation_system_prompt(output_style_guidance: str | None) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return (
-        "You are a prompt engineering expert. Your goal is to modify prompts to improve their "
-        f"effectiveness in eliciting specific types of answers, particularly matching the style: '{style}'. "
-        "Follow the specific modification instruction provided."
-    )
+SYNONYMS_SYSTEM_PROMPT = (
+    "You are a helpful assistant that provides synonyms. Return only the synonym word, "
+    "no explanation or additional text."
+)
 
+REPHRASE_SYSTEM_PROMPT = (
+    "You are a helpful assistant that rephrases text. Return only the modified phrase, "
+    "no explanation or additional text."
+)
 
-def synonyms_system_prompt() -> str:
-    return (
-        "You are a helpful assistant that provides synonyms. Return only the synonym word, "
-        "no explanation or additional text."
-    )
+FRESH_START_SYSTEM_PROMPT_TEMPLATE = (
+    "You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch "
+    "based on a task description, specifically aiming for prompts that elicit answers in the style: "
+    "'{style}'."
+)
 
-
-def rephrase_system_prompt() -> str:
-    return (
-        "You are a helpful assistant that rephrases text. Return only the modified phrase, "
-        "no explanation or additional text."
-    )
-
-
-def fresh_start_system_prompt(output_style_guidance: str | None) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return (
-        "You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch "
-        "based on a task description, specifically aiming for prompts that elicit answers in the style: "
-        f"'{style}'."
-    )
-
-
-def variation_system_prompt(output_style_guidance: str | None) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
+VARIATION_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
 
 For each prompt variation, consider:
 1. Different levels of specificity and detail, including significantly more detailed and longer versions.
@@ -105,13 +82,7 @@ Return a JSON array of prompts with the following structure:
 Each prompt variation should aim to get the target LLM to produce answers matching the desired style: '{style}'.
 """
 
-
-def llm_crossover_system_prompt(output_style_guidance: str | None) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones.
+LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones.
 Given two parent prompts, your task is to generate one or two new child prompts that effectively combine the strengths, styles, or core ideas of both parents.
 The children should be coherent and aim to explore a potentially more effective region of the prompt design space, with a key goal of eliciting responses from the target language model in the following style: '{style}'.
 
@@ -126,30 +97,7 @@ All generated prompts must aim for eliciting answers in the style: '{style}'.
 Return two child prompts as "child_1" and "child_2". Each child is a list of LLM messages with role ("system", "user", or "assistant") and content.
 """
 
-
-def radical_innovation_system_prompt(output_style_guidance: str | None) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""You are an expert prompt engineer and a creative problem solver.
-Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt.
-Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance.
-Consider clarity, specificity, constraints, and how to best guide the language model for the described task TO PRODUCE OUTPUTS IN THE FOLLOWING STYLE: '{style}'.
-Return only the new prompt string, with no preamble or explanation.
-"""
-
-
-def llm_crossover_user_prompt(
-    parent1_messages: list[dict[str, Any]],
-    parent2_messages: list[dict[str, Any]],
-    output_style_guidance: str | None,
-) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""Parent Prompt 1:
+LLM_CROSSOVER_USER_PROMPT_TEMPLATE = """Parent Prompt 1:
 '''{parent1_messages}'''
 
 Parent Prompt 2:
@@ -161,73 +109,14 @@ Please generate TWO child prompts by intelligently blending the ideas, styles, o
 Follow the instructions provided in the system prompt regarding the JSON output format.
 """
 
-
-def mutation_strategy_prompts(output_style_guidance: str | None) -> dict[str, str]:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return {
-        "rephrase": (
-            "Create a different way to express the same instruction, possibly with a different "
-            "length or structure, ensuring it still aims for an answer from the target LLM in the style of: "
-            f"'{style}'."
-        ),
-        "simplify": (
-            "Simplify the instruction while maintaining its core meaning, potentially making it more concise, "
-            "to elicit an answer in the style of: "
-            f"'{style}'."
-        ),
-        "elaborate": (
-            "Add more relevant detail and specificity to the instruction, potentially increasing its length, "
-            "but only if it helps achieve a more accurate answer from the target LLM in the style of: "
-            f"'{style}'."
-        ),
-        "restructure": (
-            "Change the structure of the instruction (e.g., reorder sentences, combine/split ideas) while keeping its intent, ensuring the new structure strongly guides towards an output in the style of: "
-            f"'{style}'."
-        ),
-        "focus": (
-            "Emphasize the key aspects of the instruction, perhaps by rephrasing or adding clarifying statements, "
-            "to better elicit an answer in the style of: "
-            f"'{style}'."
-        ),
-        "increase_complexity_and_detail": (
-            "Significantly elaborate on this instruction. Add more details, examples, context, or constraints to make it more comprehensive. "
-            "The goal of this elaboration is to make the prompt itself more detailed, so that it VERY CLEARLY guides the target LLM to produce a highly accurate final answer in the style of: "
-            f"'{style}'. The prompt can be long if needed to achieve this output style."
-        ),
-    }
-
-
-def semantic_mutation_user_prompt(
-    prompt_messages: list[dict[str, str]],
-    task_description: str,
-    output_style_guidance: str | None,
-    strategy_instruction: str,
-) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""Given this prompt: '{prompt_messages}'
-Task context: {task_description}
-Desired output style from target LLM: '{style}'
-Instruction for this modification: {strategy_instruction}.
-Return only the modified prompt message list, nothing else. Make sure to return a valid JSON object.
+RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer and a creative problem solver.
+Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt.
+Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance.
+Consider clarity, specificity, constraints, and how to best guide the language model for the described task TO PRODUCE OUTPUTS IN THE FOLLOWING STYLE: '{style}'.
+Return only the new prompt string, with no preamble or explanation.
 """
 
-
-def radical_innovation_user_prompt(
-    task_description: str,
-    output_style_guidance: str | None,
-    existing_prompt_messages: list[dict[str, str]],
-) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""Task Context:
+RADICAL_INNOVATION_USER_PROMPT_TEMPLATE = """Task Context:
 {task_description}
 Desired output style from target LLM: '{style}'
 
@@ -239,17 +128,7 @@ Focus on alternative approaches, better clarity, or more effective guidance for 
 Return only the new prompt list object.
 """
 
-
-def fresh_start_user_prompt(
-    task_description: str,
-    output_style_guidance: str | None,
-    num_to_generate: int,
-) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""Here is a description of a task: ```{task_description}```
+FRESH_START_USER_PROMPT_TEMPLATE = """Here is a description of a task: ```{task_description}```
 
 The goal is to generate prompts that will make a target LLM produce responses in the following style: ```{style}```.
 
@@ -264,18 +143,7 @@ Example of valid response: [
 Your response MUST be a valid JSON list of AI messages. Do NOT include any other text, explanations, or Markdown formatting like ```json ... ``` around the list.
 """
 
-
-def variation_user_prompt(
-    initial_prompt_messages: list[dict[str, str]],
-    task_description: str,
-    output_style_guidance: str | None,
-    num_variations: int,
-) -> str:
-    style = (
-        output_style_guidance
-        or "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    return f"""Initial prompt:'''{initial_prompt_messages}'''
+VARIATION_USER_PROMPT_TEMPLATE = """Initial prompt:'''{initial_prompt_messages}'''
 Task context: ```{task_description}```
 Desired output style from target LLM: '{style}'
 
@@ -297,3 +165,71 @@ Ensure a good mix of variations, all targeting the specified output style from t
 
 Return a valid JSON object that is correctly escaped. Return nothing else, do not include any additional text or Markdown formatting.
 """
+
+SEMANTIC_MUTATION_USER_PROMPT_TEMPLATE = """Given this prompt: '{prompt_messages}'
+Task context: {task_description}
+Desired output style from target LLM: '{style}'
+Instruction for this modification: {strategy_instruction}.
+Return only the modified prompt message list, nothing else. Make sure to return a valid JSON object.
+"""
+
+# Mutation strategies
+MUTATION_STRATEGY_REPHRASE = (
+    "Create a different way to express the same instruction, possibly with a different "
+    "length or structure, ensuring it still aims for an answer from the target LLM in the style of: "
+    "'{style}'."
+)
+
+MUTATION_STRATEGY_SIMPLIFY = (
+    "Simplify the instruction while maintaining its core meaning, potentially making it more concise, "
+    "to elicit an answer in the style of: "
+    "'{style}'."
+)
+
+MUTATION_STRATEGY_ELABORATE = (
+    "Add more relevant detail and specificity to the instruction, potentially increasing its length, "
+    "but only if it helps achieve a more accurate answer from the target LLM in the style of: "
+    "'{style}'."
+)
+
+MUTATION_STRATEGY_RESTRUCTURE = (
+    "Change the structure of the instruction (e.g., reorder sentences, combine/split ideas) while keeping its intent, ensuring the new structure strongly guides towards an output in the style of: "
+    "'{style}'."
+)
+
+MUTATION_STRATEGY_FOCUS = (
+    "Emphasize the key aspects of the instruction, perhaps by rephrasing or adding clarifying statements, "
+    "to better elicit an answer in the style of: "
+    "'{style}'."
+)
+
+MUTATION_STRATEGY_INCREASE_COMPLEXITY = (
+    "Significantly elaborate on this instruction. Add more details, examples, context, or constraints to make it more comprehensive. "
+    "The goal of this elaboration is to make the prompt itself more detailed, so that it VERY CLEARLY guides the target LLM to produce a highly accurate final answer in the style of: "
+    "'{style}'. The prompt can be long if needed to achieve this output style."
+)
+
+
+__all__ = [
+    "DEFAULT_OUTPUT_STYLE",
+    "INFER_STYLE_SYSTEM_PROMPT",
+    "STYLE_INFERENCE_USER_PROMPT_TEMPLATE",
+    "SEMANTIC_MUTATION_SYSTEM_PROMPT_TEMPLATE",
+    "SYNONYMS_SYSTEM_PROMPT",
+    "REPHRASE_SYSTEM_PROMPT",
+    "FRESH_START_SYSTEM_PROMPT_TEMPLATE",
+    "VARIATION_SYSTEM_PROMPT_TEMPLATE",
+    "LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE",
+    "LLM_CROSSOVER_USER_PROMPT_TEMPLATE",
+    "RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE",
+    "RADICAL_INNOVATION_USER_PROMPT_TEMPLATE",
+    "FRESH_START_USER_PROMPT_TEMPLATE",
+    "VARIATION_USER_PROMPT_TEMPLATE",
+    "SEMANTIC_MUTATION_USER_PROMPT_TEMPLATE",
+    "MUTATION_STRATEGY_REPHRASE",
+    "MUTATION_STRATEGY_SIMPLIFY",
+    "MUTATION_STRATEGY_ELABORATE",
+    "MUTATION_STRATEGY_RESTRUCTURE",
+    "MUTATION_STRATEGY_FOCUS",
+    "MUTATION_STRATEGY_INCREASE_COMPLEXITY",
+]

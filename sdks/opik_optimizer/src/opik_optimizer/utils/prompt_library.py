@@ -20,7 +20,7 @@ Example usage:
     optimizer = MetaPromptOptimizer(model="gpt-4o", prompt_overrides=customize)
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 __all__ = ["PromptLibrary", "PromptOverrides"]
 
@@ -102,7 +102,7 @@ class PromptLibrary:
 
     # === Read methods (for optimization) ===
 
-    def get(self, key: str, **fmt) -> str:
+    def get(self, key: str, **fmt: object) -> str:
         """Get a prompt, optionally formatted with kwargs.
 
         Args:

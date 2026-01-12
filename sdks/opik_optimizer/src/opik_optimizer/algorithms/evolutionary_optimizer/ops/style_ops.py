@@ -4,9 +4,9 @@ import logging
 import opik
 from pydantic import BaseModel
 
-from .. import prompts as evo_prompts
 from .. import reporting
 from .... import _llm_calls
+from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ def infer_output_style_from_dataset(
     dataset: opik.Dataset,
     model: str,
     model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
     n_examples: int = 5,
     verbose: int = 1,
     *,
@@ -57,8 +58,8 @@ def infer_output_style_from_dataset(
                 f"Example {i + 1}:\nDataset Item:\n{filtered_content}\n---\n"
             )
 
-        user_prompt_for_style_inference = evo_prompts.style_inference_user_prompt(
-            examples_str
+        user_prompt_for_style_inference = prompts.get(
+            "style_inference_user_prompt_template", examples_str=examples_str
         )
 
         try:
@@ -68,7 +69,7 @@ def infer_output_style_from_dataset(
                     messages=[
                         {
                             "role": "system",
-                            "content": evo_prompts.INFER_STYLE_SYSTEM_PROMPT,
+                            "content": prompts.get("infer_style_system_prompt"),
                         },
                         {"role": "user", "content": user_prompt_for_style_inference},
                     ],

@@ -2,6 +2,7 @@
 
 import pytest
 import json
+from typing import Any
 from unittest.mock import MagicMock
 
 from opik_optimizer import ChatPrompt
@@ -15,7 +16,7 @@ class TestInitializePopulation:
     """Tests for initialize_population function."""
 
     def test_returns_single_prompt_for_population_size_1(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should return just the initial prompt when population_size is 1."""
         # Mock the reporting context manager
@@ -36,6 +37,7 @@ class TestInitializePopulation:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             optimization_id="opt-123",
             population_size=1,
             verbose=0,
@@ -45,7 +47,7 @@ class TestInitializePopulation:
         assert result[0] is prompt
 
     def test_generates_fresh_start_prompts(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should generate fresh start prompts as part of population."""
         mock_report = MagicMock()
@@ -103,6 +105,7 @@ class TestInitializePopulation:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             optimization_id="opt-123",
             population_size=5,
             verbose=0,
@@ -112,7 +115,7 @@ class TestInitializePopulation:
         assert len(result) >= 1
 
     def test_handles_llm_error_for_fresh_starts(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should handle LLM errors gracefully when generating fresh starts."""
         mock_report = MagicMock()
@@ -137,6 +140,7 @@ class TestInitializePopulation:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             optimization_id="opt-123",
             population_size=5,
             verbose=0,
@@ -146,7 +150,9 @@ class TestInitializePopulation:
         assert len(result) >= 1
         assert result[0] is prompt
 
-    def test_handles_json_decode_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_handles_json_decode_error(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         """Should handle invalid JSON responses from LLM."""
         mock_report = MagicMock()
         mock_context = MagicMock()
@@ -170,6 +176,7 @@ class TestInitializePopulation:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             optimization_id="opt-123",
             population_size=5,
             verbose=0,
@@ -179,7 +186,7 @@ class TestInitializePopulation:
         assert len(result) >= 1
 
     def test_generates_variations_on_initial_prompt(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should generate variations of the initial prompt."""
         mock_report = MagicMock()
@@ -243,6 +250,7 @@ class TestInitializePopulation:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             optimization_id="opt-123",
             population_size=5,
             verbose=0,
@@ -250,7 +258,9 @@ class TestInitializePopulation:
 
         assert len(result) >= 1
 
-    def test_deduplicates_population(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_deduplicates_population(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         """Should remove duplicate prompts from the population."""
         mock_report = MagicMock()
         mock_context = MagicMock()
@@ -289,6 +299,7 @@ class TestInitializePopulation:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             optimization_id="opt-123",
             population_size=5,
             verbose=0,
@@ -301,7 +312,7 @@ class TestInitializePopulation:
 class TestShouldRestartPopulation:
     """Tests for should_restart_population function."""
 
-    def test_no_restart_on_improvement(self) -> None:
+    def test_no_restart_on_improvement(self, evo_prompts: Any) -> None:
         """Should not restart when there is improvement."""
         curr_best = 0.9
         history = [0.7, 0.75, 0.8]
@@ -322,7 +333,7 @@ class TestShouldRestartPopulation:
         assert len(new_history) == 4
         assert new_history[-1] == curr_best
 
-    def test_restart_after_stagnation(self) -> None:
+    def test_restart_after_stagnation(self, evo_prompts: Any) -> None:
         """Should trigger restart after too many generations without improvement."""
         curr_best = 0.80  # Same as before, no improvement
         history = [0.80]
@@ -341,7 +352,7 @@ class TestShouldRestartPopulation:
         assert should_restart is True
         assert new_gens >= restart_generations
 
-    def test_no_restart_with_empty_history(self) -> None:
+    def test_no_restart_with_empty_history(self, evo_prompts: Any) -> None:
         """Should not restart on first generation."""
         curr_best = 0.5
         history: list[float] = []
@@ -361,7 +372,7 @@ class TestShouldRestartPopulation:
         assert len(new_history) == 1
         assert new_history[0] == curr_best
 
-    def test_increments_stagnation_counter(self) -> None:
+    def test_increments_stagnation_counter(self, evo_prompts: Any) -> None:
         """Should increment counter when no significant improvement."""
         curr_best = 0.81  # Only 1.25% improvement (threshold is 1%)
         history = [0.80]
@@ -380,7 +391,7 @@ class TestShouldRestartPopulation:
         # Counter should increment since improvement is below threshold
         assert new_gens == 3
 
-    def test_resets_counter_on_significant_improvement(self) -> None:
+    def test_resets_counter_on_significant_improvement(self, evo_prompts: Any) -> None:
         """Should reset counter when improvement exceeds threshold."""
         curr_best = 0.90  # 12.5% improvement, exceeds threshold
         history = [0.80]
@@ -399,7 +410,7 @@ class TestShouldRestartPopulation:
         assert should_restart is False
         assert new_gens == 0  # Reset due to improvement
 
-    def test_appends_to_history(self) -> None:
+    def test_appends_to_history(self, evo_prompts: Any) -> None:
         """Should always append current best to history."""
         curr_best = 0.85
         history = [0.7, 0.75, 0.8]
@@ -426,7 +437,7 @@ class TestRestartPopulation:
     # which makes it more suitable for integration testing.
     # Here we test the basic logic through should_restart_population.
 
-    def test_restart_population_is_imported(self) -> None:
+    def test_restart_population_is_imported(self, evo_prompts: Any) -> None:
         """Verify restart_population can be imported."""
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import (
             restart_population,

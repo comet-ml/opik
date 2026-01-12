@@ -573,6 +573,24 @@ def sample_metric_with_reason():
 
 
 # ============================================================
+# Prompt Library Fixtures
+# ============================================================
+
+
+@pytest.fixture
+def evo_prompts():
+    """
+    PromptLibrary for evolutionary optimizer tests.
+
+    Provides the default prompts used by the EvolutionaryOptimizer.
+    """
+    from opik_optimizer.algorithms.evolutionary_optimizer import EvolutionaryOptimizer
+    from opik_optimizer.utils.prompt_library import PromptLibrary
+
+    return PromptLibrary(EvolutionaryOptimizer.DEFAULT_PROMPTS)
+
+
+# ============================================================
 # Agent Mocks
 # ============================================================
 

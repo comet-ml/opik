@@ -179,7 +179,6 @@ class BaseOptimizer(ABC):
         )
         self.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
 
-
     def get_prompt(self, key: str, **fmt: Any) -> str:
         """Get a prompt template, optionally formatted with kwargs.
 

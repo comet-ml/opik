@@ -26,10 +26,7 @@ def test_meta_prompt_factory_updates_template() -> None:
 
     optimizer = MetaPromptOptimizer(prompt_overrides=factory)
 
-    assert (
-        optimizer.prompts.get("candidate_generation")
-        == "CANDIDATE {best_score}"
-    )
+    assert optimizer.prompts.get("candidate_generation") == "CANDIDATE {best_score}"
     assert optimizer.hall_of_fame is not None
 
 

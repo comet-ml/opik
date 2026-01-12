@@ -427,7 +427,9 @@ class TestDeapCrossover:
 class TestLLMCrossoverMessages:
     """Tests for _llm_crossover_messages function."""
 
-    def test_llm_crossover_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_llm_crossover_success(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         """Should return children from LLM crossover."""
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             _llm_crossover_messages,
@@ -465,6 +467,7 @@ class TestLLMCrossoverMessages:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
         )
 
         assert len(child1) == 2
@@ -476,7 +479,7 @@ class TestLLMDeapCrossover:
     """Tests for llm_deap_crossover function."""
 
     def test_llm_crossover_fallback_on_error(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should fall back to DEAP crossover on LLM error."""
         from deap import creator
@@ -515,6 +518,7 @@ class TestLLMDeapCrossover:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             verbose=0,
         )
 
@@ -522,7 +526,9 @@ class TestLLMDeapCrossover:
         assert "main" in child1
         assert "main" in child2
 
-    def test_llm_crossover_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_llm_crossover_success(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
         """Should use LLM crossover when it succeeds."""
         from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
@@ -564,6 +570,7 @@ class TestLLMDeapCrossover:
             output_style_guidance="Be concise",
             model="gpt-4",
             model_parameters={},
+            prompts=evo_prompts,
             verbose=0,
         )
 

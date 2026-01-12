@@ -15,14 +15,15 @@ from deap import creator as _creator
 from opik.api_objects import optimization
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.agents import OptimizableAgent, LiteLLMAgent
 
-from . import reporting
+from . import reporting, helpers
+from . import prompts as evo_prompts
 from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
-from . import helpers
 
 logger = logging.getLogger(__name__)
 creator = cast(Any, _creator)  # type: ignore[assignment]
@@ -67,7 +68,35 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_threads: Number of threads for parallel evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        prompt_overrides: Optional dict or callable to customize internal prompts.
+            Dict: {"prompt_key": "new_template"} to override specific prompts.
+            Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    # Prompt templates for this optimizer
+    # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "infer_style_system_prompt": evo_prompts.INFER_STYLE_SYSTEM_PROMPT,
+        "style_inference_user_prompt_template": evo_prompts.STYLE_INFERENCE_USER_PROMPT_TEMPLATE,
+        "semantic_mutation_system_prompt_template": evo_prompts.SEMANTIC_MUTATION_SYSTEM_PROMPT_TEMPLATE,
+        "semantic_mutation_user_prompt_template": evo_prompts.SEMANTIC_MUTATION_USER_PROMPT_TEMPLATE,
+        "synonyms_system_prompt": evo_prompts.SYNONYMS_SYSTEM_PROMPT,
+        "rephrase_system_prompt": evo_prompts.REPHRASE_SYSTEM_PROMPT,
+        "fresh_start_system_prompt_template": evo_prompts.FRESH_START_SYSTEM_PROMPT_TEMPLATE,
+        "fresh_start_user_prompt_template": evo_prompts.FRESH_START_USER_PROMPT_TEMPLATE,
+        "variation_system_prompt_template": evo_prompts.VARIATION_SYSTEM_PROMPT_TEMPLATE,
+        "variation_user_prompt_template": evo_prompts.VARIATION_USER_PROMPT_TEMPLATE,
+        "llm_crossover_system_prompt_template": evo_prompts.LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE,
+        "llm_crossover_user_prompt_template": evo_prompts.LLM_CROSSOVER_USER_PROMPT_TEMPLATE,
+        "radical_innovation_system_prompt_template": evo_prompts.RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE,
+        "radical_innovation_user_prompt_template": evo_prompts.RADICAL_INNOVATION_USER_PROMPT_TEMPLATE,
+        "mutation_strategy_rephrase": evo_prompts.MUTATION_STRATEGY_REPHRASE,
+        "mutation_strategy_simplify": evo_prompts.MUTATION_STRATEGY_SIMPLIFY,
+        "mutation_strategy_elaborate": evo_prompts.MUTATION_STRATEGY_ELABORATE,
+        "mutation_strategy_restructure": evo_prompts.MUTATION_STRATEGY_RESTRUCTURE,
+        "mutation_strategy_focus": evo_prompts.MUTATION_STRATEGY_FOCUS,
+        "mutation_strategy_increase_complexity_and_detail": evo_prompts.MUTATION_STRATEGY_INCREASE_COMPLEXITY,
+    }
 
     DEFAULT_POPULATION_SIZE = 30
     DEFAULT_NUM_GENERATIONS = 15
@@ -110,6 +139,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = DEFAULT_SEED,
         name: str | None = None,
+        prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = True,
         perfect_score: float = 0.95,
     ) -> None:
@@ -129,6 +159,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.population_size = population_size
         self.num_generations = num_generations
@@ -321,6 +352,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             model=self.model,
                             model_parameters=self.model_parameters,
                             verbose=self.verbose,
+                            prompts=self._prompts,
                         )
                     else:
                         c1_new, c2_new = crossover_ops.deap_crossover(
@@ -351,6 +383,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     diversity_threshold=DEFAULT_DIVERSITY_THRESHOLD,
                     optimization_id=self.current_optimization_id,
                     verbose=self.verbose,
+                    prompts=self._prompts,
                 )
                 offspring[i] = new_ind
                 del offspring[i].fitness.values
@@ -653,6 +686,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 model=self.model,
                 model_parameters=self.model_parameters,
                 verbose=self.verbose,
+                prompts=self._prompts,
             )
             if inferred_style:
                 effective_output_style_guidance = inferred_style
@@ -681,6 +715,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 optimization_id=self.current_optimization_id,
                 population_size=self.population_size,
                 verbose=self.verbose,
+                prompts=self._prompts,
             )
             prompt_variations[prompt_name] = variations
 
