@@ -14,6 +14,48 @@ from opik.integrations.litellm import track_completion
 from . import _throttle
 from . import utils as _utils
 
+
+def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove project_name from metadata["opik"] before passing to litellm.
+
+    This prevents double-passing of project_name to Opik tracing:
+    - track_completion(project_name=X) already sets the project for Opik
+    - If metadata["opik"]["project_name"] is also passed, it may conflict
+
+    The flow is:
+    1. Caller passes project_name= parameter to call_model/call_model_async
+    2. track_completion(project_name=X) wraps the litellm call for Opik tracing
+    3. _prepare_model_params may add project_name to metadata for consistency
+    4. This function strips it before the actual litellm call to avoid conflicts
+
+    Args:
+        params: Dict of parameters prepared for litellm.completion/acompletion
+
+    Returns:
+        New dict with metadata["opik"]["project_name"] removed (if present).
+        Original dict is not modified.
+    """
+    metadata = params.get("metadata")
+    if not isinstance(metadata, dict):
+        return params
+    opik_metadata = metadata.get("opik")
+    if not isinstance(opik_metadata, dict):
+        return params
+    if "project_name" not in opik_metadata:
+        return params
+    updated_params = {**params}
+    updated_metadata = {**metadata}
+    updated_opik = {**opik_metadata}
+    updated_opik.pop("project_name", None)
+    if updated_opik:
+        updated_metadata["opik"] = updated_opik
+    else:
+        updated_metadata.pop("opik", None)
+    updated_params["metadata"] = updated_metadata
+    return updated_params
+
+
 logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -64,6 +106,26 @@ def _increment_tool_counter_if_in_optimizer() -> None:
             optimizer_candidate._increment_tool_counter()
             break
         frame = frame.f_back
+
+
+def _get_project_name_from_optimizer() -> str | None:
+    """Return project_name from the nearest optimizer on the call stack."""
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return None
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return None
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            return getattr(optimizer_candidate, "project_name", None)
+        frame = frame.f_back
+    return None
 
 
 def _build_call_time_params(
@@ -261,6 +323,7 @@ def call_model(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    project_name: str | None = None,
 ) -> str: ...
 
 
@@ -280,6 +343,7 @@ def call_model(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    project_name: str | None = None,
 ) -> _T: ...
 
 
@@ -301,6 +365,7 @@ def call_model(
     # Optimizer-specific metadata (not passed to LiteLLM)
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    project_name: str | None = None,
 ) -> BaseModel | str:
     """
     Call the LLM model with optional structured output.
@@ -319,6 +384,7 @@ def call_model(
         frequency_penalty: Penalty for new tokens based on frequency
         optimization_id: Optional ID for optimization tracking (metadata only)
         metadata: Optional metadata dict for monitoring
+        project_name: Optional Opik project name override for tracing
 
     Returns:
         If response_model is provided, returns an instance of that model.
@@ -340,22 +406,34 @@ def call_model(
     if model_parameters is None:
         model_parameters = {}
 
+    effective_project_name = project_name or _get_project_name_from_optimizer()
+
     final_params_for_litellm = _prepare_model_params(
         model_parameters,
         call_time_params,
         response_model,
         is_reasoning,
         optimization_id,
+        effective_project_name,
     )
 
-    response = track_completion()(litellm.completion)(
+    tracked_completion = track_completion(project_name=effective_project_name)(
+        litellm.completion
+    )
+    logger.debug(
+        f"call_model: model={model} project={effective_project_name} "
+        f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
+    )
+    response = tracked_completion(
         model=model,
         messages=messages,
         seed=seed,
         num_retries=6,
-        **final_params_for_litellm,
+        **_strip_project_name(final_params_for_litellm),
     )
 
+    choices = getattr(response, "choices", None)
+    logger.debug(f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}")
     return _parse_response(response, response_model)
 
 
@@ -437,6 +515,7 @@ async def call_model_async(
         frequency_penalty: Penalty for new tokens based on frequency
         optimization_id: Optional ID for optimization tracking (metadata only)
         metadata: Optional metadata dict for monitoring
+        project_name: Optional Opik project name override for tracing
 
     Returns:
         If response_model is provided, returns an instance of that model.
@@ -458,21 +537,32 @@ async def call_model_async(
     if model_parameters is None:
         model_parameters = {}
 
+    effective_project_name = project_name or _get_project_name_from_optimizer()
+
     final_params_for_litellm = _prepare_model_params(
         model_parameters=model_parameters,
         call_time_params=call_time_params,
         response_model=response_model,
         is_reasoning=is_reasoning,
         optimization_id=optimization_id,
-        project_name=project_name,
+        project_name=effective_project_name,
     )
 
-    response = await litellm.acompletion(
+    tracked_completion = track_completion(project_name=effective_project_name)(
+        litellm.acompletion
+    )
+    logger.debug(
+        f"call_model_async: model={model} project={effective_project_name} "
+        f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
+    )
+    response = await tracked_completion(
         model=model,
         messages=messages,
         seed=seed,
         num_retries=6,
-        **final_params_for_litellm,
+        **_strip_project_name(final_params_for_litellm),
     )
 
+    choices = getattr(response, "choices", None)
+    logger.debug(f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}")
     return _parse_response(response, response_model)

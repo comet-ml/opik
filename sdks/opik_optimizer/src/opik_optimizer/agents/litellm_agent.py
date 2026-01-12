@@ -19,9 +19,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.project_name = project_name
-
         self.init_llm()
-        self.trace_metadata: dict[str, Any] = {}
 
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""

@@ -211,6 +211,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             seed=attempt_seed,
             model_parameters=self.reasoning_model_parameters,
             response_model=DynamicImprovedPromptsResponse,
+            project_name=self.project_name,
         )
 
         # Extract improved prompts from response

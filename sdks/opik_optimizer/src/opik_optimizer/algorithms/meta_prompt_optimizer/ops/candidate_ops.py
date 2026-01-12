@@ -296,14 +296,12 @@ def generate_candidate_prompts(
 
         try:
             # Prepare metadata for optimization algorithm call
-            metadata_for_call: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call["project_name"] = project_name
-                metadata_for_call["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call:
-                metadata_for_call["opik"]["optimization_id"] = optimization_id
-            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call["opik_call_type"] = "optimization_algorithm"
+            metadata_for_call: dict[str, Any] = {
+                "optimizer_name": optimizer.__class__.__name__,
+                "opik_call_type": "optimization_algorithm",
+            }
+            if optimization_id:
+                metadata_for_call["opik"] = {"optimization_id": optimization_id}
 
             content = _llm_calls.call_model(
                 messages=[
@@ -321,6 +319,7 @@ def generate_candidate_prompts(
                 model_parameters=optimizer.model_parameters,
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                project_name=project_name,
             )
             logger.debug(f"Raw response from reasoning model: {content}")
 
@@ -530,14 +529,12 @@ def generate_agent_bundle_candidates(
         )
 
         try:
-            metadata_for_call: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call["project_name"] = project_name
-                metadata_for_call["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call:
-                metadata_for_call["opik"]["optimization_id"] = optimization_id
-            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call["opik_call_type"] = "optimization_algorithm"
+            metadata_for_call: dict[str, Any] = {
+                "optimizer_name": optimizer.__class__.__name__,
+                "opik_call_type": "optimization_algorithm",
+            }
+            if optimization_id:
+                metadata_for_call["opik"] = {"optimization_id": optimization_id}
 
             response = _llm_calls.call_model(
                 messages=[
@@ -555,6 +552,7 @@ def generate_agent_bundle_candidates(
                 model_parameters=optimizer.model_parameters,
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                project_name=project_name,
                 response_model=AgentBundleCandidatesResponse,
             )
 
@@ -771,14 +769,12 @@ def generate_synthesis_prompts(
 
         try:
             # Prepare metadata for synthesis call
-            metadata_for_call: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call["project_name"] = project_name
-                metadata_for_call["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call:
-                metadata_for_call["opik"]["optimization_id"] = optimization_id
-            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call["opik_call_type"] = "optimization_algorithm_synthesis"
+            metadata_for_call: dict[str, Any] = {
+                "optimizer_name": optimizer.__class__.__name__,
+                "opik_call_type": "optimization_algorithm_synthesis",
+            }
+            if optimization_id:
+                metadata_for_call["opik"] = {"optimization_id": optimization_id}
 
             content = _llm_calls.call_model(
                 messages=[
@@ -789,6 +785,7 @@ def generate_synthesis_prompts(
                 model_parameters=optimizer.model_parameters,
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                project_name=project_name,
             )
 
             # Parse JSON response

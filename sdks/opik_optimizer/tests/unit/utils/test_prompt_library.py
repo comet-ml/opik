@@ -90,7 +90,9 @@ class TestPromptLibrary:
         """Should raise TypeError for invalid override types."""
         defaults = {"prompt1": "template"}
 
-        with pytest.raises(TypeError, match="prompt_overrides must be dict or callable"):
+        with pytest.raises(
+            TypeError, match="prompt_overrides must be dict or callable"
+        ):
             PromptLibrary(defaults, overrides="invalid")  # type: ignore
 
     def test_get_unknown_key_raises_error(self) -> None:
