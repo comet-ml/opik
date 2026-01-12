@@ -196,15 +196,11 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       : "Add provider"
     : "Add provider";
 
-  const customProviderName = useMemo(() => {
-    if (
-      selectedProviderType === PROVIDER_TYPE.CUSTOM ||
-      selectedProviderType === PROVIDER_TYPE.BEDROCK
-    ) {
-      return calculatedProviderKey?.provider_name || providerKey?.provider_name;
-    }
-    return undefined;
-  }, [selectedProviderType, calculatedProviderKey, providerKey]);
+  const customProviderName =
+    selectedProviderType === PROVIDER_TYPE.CUSTOM ||
+    selectedProviderType === PROVIDER_TYPE.BEDROCK
+      ? calculatedProviderKey?.provider_name || providerKey?.provider_name
+      : undefined;
 
   const resetSelectionState = useCallback(() => {
     setSelectedProviderId(undefined);
