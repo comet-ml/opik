@@ -24,6 +24,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -118,8 +119,12 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         .build())
                 .toList();
 
+        // Deduplicate usage: if a parent span's usage equals the sum of its children's usage,
+        // zero out the parent's usage to avoid double-counting
+        var deduplicatedSpans = deduplicateParentSpanUsage(opikSpans);
+
         // check if there spans without parentId: we will use them as a Trace too
-        return Flux.fromStream(opikSpans.stream().filter(span -> span.parentSpanId() == null))
+        return Flux.fromStream(deduplicatedSpans.stream().filter(span -> span.parentSpanId() == null))
                 .flatMap(rootSpan -> {
                     // Extract thread_id from root span metadata if present
                     String threadId = null;
@@ -146,13 +151,78 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
                 .then(Mono.defer(() -> {
-                    var spanBatch = SpanBatch.builder().spans(opikSpans).build();
+                    var spanBatch = SpanBatch.builder().spans(deduplicatedSpans).build();
 
                     log.info("Parsed OpenTelemetry span batch for project '{}' into {} spans", projectName,
-                            opikSpans.size());
+                            deduplicatedSpans.size());
 
                     return spanService.create(spanBatch);
                 }));
+    }
+
+    /**
+     * Deduplicates usage in parent spans when they exactly match the sum of their children's usage.
+     * This handles cases where instrumentation libraries (e.g., LangGraph wrapping Pydantic AI)
+     * aggregate child span usage into parent spans, causing double-counting.
+     *
+     * @param spans the list of spans to deduplicate
+     * @return the list of spans with deduplicated usage
+     */
+    private List<com.comet.opik.api.Span> deduplicateParentSpanUsage(List<com.comet.opik.api.Span> spans) {
+        // Build a map of span ID to span for quick lookup
+        var spanMap = spans.stream()
+                .collect(Collectors.toMap(com.comet.opik.api.Span::id, span -> span));
+
+        // Build a map of parent span ID to list of child spans
+        var childrenByParent = spans.stream()
+                .filter(span -> span.parentSpanId() != null)
+                .collect(Collectors.groupingBy(com.comet.opik.api.Span::parentSpanId));
+
+        // For each parent span, check if its usage equals the sum of its children's usage
+        return spans.stream()
+                .map(span -> {
+                    var children = childrenByParent.get(span.id());
+                    if (children == null || children.isEmpty()) {
+                        // No children, keep the span as is
+                        return span;
+                    }
+
+                    // Calculate the sum of children's usage
+                    Map<String, Integer> childrenUsageSum = new java.util.HashMap<>();
+                    for (var child : children) {
+                        if (child.usage() != null) {
+                            child.usage().forEach((key, value) -> childrenUsageSum.merge(key, value, Integer::sum));
+                        }
+                    }
+
+                    // If parent has no usage, keep it as is
+                    if (span.usage() == null || span.usage().isEmpty()) {
+                        return span;
+                    }
+
+                    // If children have no usage, keep parent as is
+                    if (childrenUsageSum.isEmpty()) {
+                        return span;
+                    }
+
+                    // Check if parent usage exactly matches children usage sum
+                    boolean usageMatches = span.usage().size() == childrenUsageSum.size() &&
+                            span.usage().entrySet().stream()
+                                    .allMatch(entry -> entry.getValue().equals(childrenUsageSum.get(entry.getKey())));
+
+                    if (usageMatches) {
+                        // Parent usage is just aggregated from children, zero it out
+                        log.info("Deduplicating usage for parent span '{}' (name: '{}') - usage matches sum of {} children",
+                                span.id(), span.name(), children.size());
+                        return span.toBuilder()
+                                .usage(null)
+                                .build();
+                    }
+
+                    // Parent has different usage, keep it as is
+                    return span;
+                })
+                .toList();
     }
 
     private Mono<Map<String, UUID>> otelToOpikTraceIdMapper(Map<ByteString, Long> otelTraceIds, UUID projectId,
