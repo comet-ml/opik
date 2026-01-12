@@ -638,6 +638,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 log.info("Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
                                         updatedCount, datasetId, baseVersionId);
 
+                                // Copy unchanged items (those NOT matching the filters)
+                                // Special case: empty filters list means "select all" - no unchanged items to copy
+                                if (batchUpdate.filters() != null && batchUpdate.filters().isEmpty()) {
+                                    // Empty filters means all items were updated - nothing to copy
+                                    log.info("Empty filters (select all) - skipping copy of unchanged items");
+                                    return createVersionMetadata(
+                                            datasetId, newVersionId, baseVersionId,
+                                            updatedCount, 0L, true,
+                                            workspaceId, userName);
+                                }
+
                                 // Copy unchanged items using copyVersionItems (exclude matching filters)
                                 return versionDao.copyVersionItems(datasetId, baseVersionId, newVersionId,
                                         batchUpdate.filters(), copyUuids)
