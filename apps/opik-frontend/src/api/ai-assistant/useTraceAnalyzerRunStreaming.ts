@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { isPlainObject, get, isString, isArray, compact } from "lodash";
+import { isPlainObject, isString, isArray, compact } from "lodash";
 import type {
   TraceAnalyzerRunStreamingArgs,
   TraceAnalyzerRunStreamingReturn,
@@ -38,19 +38,22 @@ const isValidStreamResponse = (payload: unknown): payload is StreamResponse => {
   if (!isRecord(payload)) return false;
 
   // Must have message_type
-  const messageType = get(payload, "message_type");
+  const messageType = payload.message_type;
   if (!isString(messageType)) return false;
 
   // Validate based on message type
   switch (messageType) {
     case "response": {
-      const content = get(payload, "content");
-      return isPlainObject(content) && isArray(get(content, "parts"));
+      const content = payload.content;
+      return (
+        isPlainObject(content) &&
+        isArray((content as Record<string, unknown>).parts)
+      );
     }
     case "tool_call":
-      return isPlainObject(get(payload, "tool_call"));
+      return isPlainObject(payload.tool_call);
     case "tool_complete":
-      return isPlainObject(get(payload, "tool_response"));
+      return isPlainObject(payload.tool_response);
     default:
       return false;
   }
@@ -58,7 +61,7 @@ const isValidStreamResponse = (payload: unknown): payload is StreamResponse => {
 
 const isErrorResponse = (payload: unknown): payload is StreamResponse => {
   if (!isRecord(payload)) return false;
-  const error = get(payload, "error");
+  const error = payload.error;
   return isString(error) && error.trim() !== "";
 };
 
@@ -71,7 +74,7 @@ const extractTextFromStreamPayload = (payload: StreamResponse): string => {
 };
 
 const extractErrorFromStreamPayload = (payload: StreamResponse): string =>
-  get(payload, "error", "");
+  payload.error ?? "";
 
 type UseTraceAnalyzerRunStreamingParams = {
   traceId: string;
