@@ -419,6 +419,39 @@ onlineScoring:
       pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
+# Configuration for Dataset Export
+datasetExport:
+  # Default: true
+  # Description: Whether dataset export feature is enabled
+  enabled: ${DATASET_EXPORT_ENABLED:-true}
+  # Default: dataset-export
+  # Description: Redis stream name for dataset export jobs
+  streamName: ${DATASET_EXPORT_STREAM_NAME:-'dataset-export'}
+  # Default: dataset-export-consumers
+  # Description: Consumer group name for dataset export job processing
+  consumerGroupName: ${DATASET_EXPORT_CONSUMER_GROUP_NAME:-'dataset-export-consumers'}
+  # Default: 10
+  # Description: Maximum number of export jobs to process in a single batch
+  consumerBatchSize: ${DATASET_EXPORT_CONSUMER_BATCH_SIZE:-10}
+  # Default: 1s
+  # Description: How often to poll Redis for new export jobs
+  poolingInterval: ${DATASET_EXPORT_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: ${DATASET_EXPORT_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed export jobs (1-10)
+  maxRetries: ${DATASET_EXPORT_MAX_RETRIES:-3}
+  # Default: 2
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${DATASET_EXPORT_CLAIM_INTERVAL_RATIO:-2}
+  # Default: 5m
+  # Description: Time before export job message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${DATASET_EXPORT_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 24h
+  # Description: Default time-to-live for exported CSV files before automatic cleanup
+  defaultTtl: ${DATASET_EXPORT_DEFAULT_TTL:-24h}
+
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
   # Default: true
