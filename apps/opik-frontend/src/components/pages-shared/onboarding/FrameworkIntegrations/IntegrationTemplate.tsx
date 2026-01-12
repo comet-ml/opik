@@ -4,9 +4,8 @@ import useAppStore from "@/store/AppStore";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
-import { useIsPhone } from "@/hooks/useIsPhone";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
-import { cn } from "@/lib/utils";
+import { useIsPhone } from "@/hooks/useIsPhone";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -18,6 +17,16 @@ type IntegrationTemplateProps = {
   withLineHighlights?: boolean;
   onRunCodeCallback?: () => void;
 };
+
+type SectionTitleProps = {
+  children: React.ReactNode;
+};
+
+const SectionTitle: React.FC<SectionTitleProps> = ({ children }) => (
+  <div className="comet-body-s-accented md:comet-body-s mb-3 overflow-x-auto whitespace-nowrap">
+    {children}
+  </div>
+);
 
 type CodeBlockWithHeaderProps = {
   title: string;
@@ -80,14 +89,6 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     apiKey &&
     Boolean(CODE_EXECUTOR_SERVICE_URL);
 
-  const getSectionTitleClassName = () =>
-    cn(
-      "mb-3",
-      isPhonePortrait
-        ? "comet-body-s-accented overflow-x-auto whitespace-nowrap"
-        : "comet-body-s",
-    );
-
   const renderCodeSection = () => {
     if (canExecuteCode) {
       return (
@@ -115,9 +116,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderInstallSection = () => (
     <div>
-      <div className={getSectionTitleClassName()}>
+      <SectionTitle>
         1. Install Opik using pip from the command line
-      </div>
+      </SectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader title="Terminal" copyText={CODE_BLOCK_1}>
           <CodeHighlighter data={CODE_BLOCK_1} />
@@ -132,9 +133,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderRunCodeSection = () => (
     <div>
-      <div className={getSectionTitleClassName()}>
-        2. Run the following code to get started
-      </div>
+      <SectionTitle>2. Run the following code to get started</SectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader
           title="Python"
@@ -149,12 +148,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   );
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-6",
-        !isPhonePortrait && "rounded-md border bg-background p-6",
-      )}
-    >
+    <div className="flex flex-col gap-6 md:rounded-md md:border md:bg-background md:p-6">
       {renderInstallSection()}
       {renderRunCodeSection()}
     </div>
