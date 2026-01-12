@@ -120,7 +120,16 @@ class Dataset:
 
     @property
     def dataset_items_count(self) -> Optional[int]:
-        """The total number of items in the dataset."""
+        """
+        The total number of items in the dataset.
+
+        If the count is not cached locally, it will be fetched from the backend.
+        """
+        if self._dataset_items_count is None:
+            dataset_info = self._rest_client.datasets.get_dataset_by_identifier(
+                dataset_name=self._name
+            )
+            self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
 
     def _insert_batch_with_retry(
@@ -174,11 +183,6 @@ class Dataset:
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._insert_batch_with_retry(batch)
 
-        if self._dataset_items_count is not None:
-            self._dataset_items_count += len(deduplicated_items)
-        else:
-            self._dataset_items_count = len(deduplicated_items)
-
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
         """
         Insert new items into the dataset.
@@ -192,6 +196,9 @@ class Dataset:
             for item in items
         ]
         self.__internal_api__insert_items_as_dataclasses__(dataset_items)
+
+        # Invalidate the cached count so it will be fetched from backend on next access
+        self._dataset_items_count = None
 
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
@@ -236,7 +243,6 @@ class Dataset:
             items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
-        deleted_count = 0
         for batch in batches:
             LOGGER.debug("Deleting dataset items batch: %s", batch)
             self._rest_client.datasets.delete_dataset_items(item_ids=batch)
@@ -246,12 +252,9 @@ class Dataset:
                     hash = self._id_to_hash[item_id]
                     self._hashes.discard(hash)
                     del self._id_to_hash[item_id]
-                    deleted_count += 1
 
-        if self._dataset_items_count is not None:
-            self._dataset_items_count = max(
-                0, self._dataset_items_count - deleted_count
-            )
+        # Invalidate the cached count so it will be fetched from backend on next access
+        self._dataset_items_count = None
 
     def clear(self) -> None:
         """
