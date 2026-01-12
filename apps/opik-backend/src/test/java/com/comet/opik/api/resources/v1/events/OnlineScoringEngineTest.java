@@ -573,6 +573,65 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("toReplacements should produce valid JSON for complex objects (Python evaluator path)")
+    void testToReplacementsProducesValidJsonForComplexObjects() throws JsonProcessingException {
+        // Given - a trace with a complex nested object in output (similar to the customer's sql_template case)
+        var complexOutput = """
+                {
+                    "sql_template": {
+                        "template": "SELECT * FROM table WHERE date >= '{start_date}'",
+                        "parameters": {
+                            "start_date": "2026-01-08",
+                            "end_date": "2026-01-09",
+                            "timezone": "UTC"
+                        }
+                    },
+                    "simple_field": "just a string"
+                }
+                """;
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .createdBy(USER_NAME)
+                .output(JsonUtils.getJsonNodeFromString(complexOutput))
+                .build();
+
+        // Variable mapping like a Python evaluator would use
+        var variables = Map.of(
+                "output", "output.sql_template",
+                "simple", "output.simple_field");
+
+        // When - toReplacements is called (this is what Python evaluators use directly)
+        var replacements = OnlineScoringEngine.toReplacements(variables, trace);
+
+        // Then - the complex object should be valid JSON that can be parsed
+        assertThat(replacements).containsKey("output");
+        assertThat(replacements).containsKey("simple");
+
+        // Simple string should remain as-is
+        assertThat(replacements.get("simple")).isEqualTo("just a string");
+
+        // Complex object should be valid JSON (not Java's toString format like {key=value})
+        var complexValue = replacements.get("output");
+        assertThat(complexValue)
+                .as("Complex object should be serialized as JSON, not Java toString()")
+                .startsWith("{")
+                .contains("\"template\"")
+                .contains("\"parameters\"")
+                .doesNotContain("template=") // Java toString format
+                .doesNotContain("parameters="); // Java toString format
+
+        // Verify it's actually parseable as JSON
+        var parsedJson = JsonUtils.getJsonNodeFromString(complexValue);
+        assertThat(parsedJson.has("template")).isTrue();
+        assertThat(parsedJson.has("parameters")).isTrue();
+        assertThat(parsedJson.get("parameters").has("start_date")).isTrue();
+        assertThat(parsedJson.get("parameters").get("timezone").asText()).isEqualTo("UTC");
+    }
+
+    @Test
     @DisplayName("render message templates with root object variables")
     void testRenderTemplateWithRootObjects() throws JsonProcessingException {
         // Given
