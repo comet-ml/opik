@@ -1431,9 +1431,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMap(result -> result.map((row, metadata) -> {
                         var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
                         var hash = row.get("data_hash", Long.class);
-                        var tags = Optional.ofNullable(row.get("tags", String[].class))
-                                .map(Arrays::asList)
-                                .orElse(List.of());
+                        Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
+                                .map(arr -> new HashSet<>(Arrays.asList(arr)))
+                                .orElseGet(HashSet::new);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
@@ -1937,7 +1937,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Early return ONLY if IDs are explicitly empty AND filters are null (not provided at all)
         // Note: empty filters list means "select all items", so we should NOT early return in that case
-        boolean hasIds = batchUpdate.ids() != null && !batchUpdate.ids().isEmpty();
+        boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
         boolean hasFilters = batchUpdate.filters() != null; // null means not provided, empty list means "select all"
 
         if (!hasIds && !hasFilters) {
