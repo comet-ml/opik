@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.CommentAssertionUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.ExperimentsTestUtils;
+import com.comet.opik.api.resources.utils.ListComparators;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -2050,27 +2051,13 @@ class ExperimentsResourceTest {
                                     .build()),
                     arguments(
                             Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
-                                    (list1, list2) -> {
-                                        int minSize = Math.min(list1.size(), list2.size());
-                                        for (int i = 0; i < minSize; i++) {
-                                            int cmp = list1.get(i).compareTo(list2.get(i));
-                                            if (cmp != 0) return cmp;
-                                        }
-                                        return Integer.compare(list1.size(), list2.size());
-                                    })
+                                    ListComparators.ascending())
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
                     arguments(
                             Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
-                                    (list1, list2) -> {
-                                        int minSize = Math.min(list1.size(), list2.size());
-                                        for (int i = 0; i < minSize; i++) {
-                                            int cmp = list2.get(i).compareTo(list1.get(i));
-                                            if (cmp != 0) return cmp;
-                                        }
-                                        return Integer.compare(list2.size(), list1.size());
-                                    })
+                                    ListComparators.descending())
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
