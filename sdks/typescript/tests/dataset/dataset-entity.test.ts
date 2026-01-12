@@ -87,7 +87,7 @@ describe("Dataset entity operations", () => {
             source: DatasetItemWriteSource.Sdk,
           }),
         ],
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
     });
 
@@ -115,11 +115,11 @@ describe("Dataset entity operations", () => {
             source: DatasetItemWriteSource.Sdk,
           }),
         ],
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
     });
 
-    it("should use same batchId for all batches in single insert", async () => {
+    it("should use same batchGroupId for all batches in single insert", async () => {
       // Create 2500 items (requires 3 batches)
       const items = Array.from({ length: 2500 }, (_, i) => ({
         id: `item-${i}`,
@@ -130,25 +130,25 @@ describe("Dataset entity operations", () => {
 
       expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(3);
 
-      const batchId1 = createOrUpdateDatasetItemsSpy.mock.calls[0][0].batchId;
-      const batchId2 = createOrUpdateDatasetItemsSpy.mock.calls[1][0].batchId;
-      const batchId3 = createOrUpdateDatasetItemsSpy.mock.calls[2][0].batchId;
+      const batchGroupId1 = createOrUpdateDatasetItemsSpy.mock.calls[0][0].batchGroupId;
+      const batchGroupId2 = createOrUpdateDatasetItemsSpy.mock.calls[1][0].batchGroupId;
+      const batchGroupId3 = createOrUpdateDatasetItemsSpy.mock.calls[2][0].batchGroupId;
 
-      expect(batchId1).toBeDefined();
-      expect(batchId1).toBe(batchId2);
-      expect(batchId2).toBe(batchId3);
+      expect(batchGroupId1).toBeDefined();
+      expect(batchGroupId1).toBe(batchGroupId2);
+      expect(batchGroupId2).toBe(batchGroupId3);
     });
 
-    it("should use different batchIds for separate insert calls", async () => {
+    it("should use different batchGroupIds for separate insert calls", async () => {
       await dataset.insert([{ id: "item-1", input: "input-1" }]);
       await dataset.insert([{ id: "item-2", input: "input-2" }]);
 
       expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(2);
 
-      const batchId1 = createOrUpdateDatasetItemsSpy.mock.calls[0][0].batchId;
-      const batchId2 = createOrUpdateDatasetItemsSpy.mock.calls[1][0].batchId;
+      const batchGroupId1 = createOrUpdateDatasetItemsSpy.mock.calls[0][0].batchGroupId;
+      const batchGroupId2 = createOrUpdateDatasetItemsSpy.mock.calls[1][0].batchGroupId;
 
-      expect(batchId1).not.toBe(batchId2);
+      expect(batchGroupId1).not.toBe(batchGroupId2);
     });
   });
 
@@ -181,7 +181,7 @@ describe("Dataset entity operations", () => {
             source: DatasetItemWriteSource.Sdk,
           }),
         ],
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
     });
 
@@ -210,7 +210,7 @@ describe("Dataset entity operations", () => {
 
       expect(deleteDatasetItemsSpy).toHaveBeenCalledWith({
         itemIds: ["item-1", "item-2"],
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
     });
 
@@ -237,42 +237,42 @@ describe("Dataset entity operations", () => {
       // First batch should have items 0-99
       expect(deleteDatasetItemsSpy).toHaveBeenNthCalledWith(1, {
         itemIds: expect.arrayContaining(["item-0", "item-99"]),
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
       expect(deleteDatasetItemsSpy.mock.calls[0][0].itemIds.length).toBe(100);
 
       // Second batch should have items 100-199
       expect(deleteDatasetItemsSpy).toHaveBeenNthCalledWith(2, {
         itemIds: expect.arrayContaining(["item-100", "item-199"]),
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
       expect(deleteDatasetItemsSpy.mock.calls[1][0].itemIds.length).toBe(100);
 
       // Third batch should have items 200-249
       expect(deleteDatasetItemsSpy).toHaveBeenNthCalledWith(3, {
         itemIds: expect.arrayContaining(["item-200", "item-249"]),
-        batchId: expect.any(String),
+        batchGroupId: expect.any(String),
       });
       expect(deleteDatasetItemsSpy.mock.calls[2][0].itemIds.length).toBe(50);
 
-      // All batches should have the same batchId
-      const batchId1 = deleteDatasetItemsSpy.mock.calls[0][0].batchId;
-      const batchId2 = deleteDatasetItemsSpy.mock.calls[1][0].batchId;
-      const batchId3 = deleteDatasetItemsSpy.mock.calls[2][0].batchId;
-      expect(batchId1).toBe(batchId2);
-      expect(batchId2).toBe(batchId3);
+      // All batches should have the same batchGroupId
+      const batchGroupId1 = deleteDatasetItemsSpy.mock.calls[0][0].batchGroupId;
+      const batchGroupId2 = deleteDatasetItemsSpy.mock.calls[1][0].batchGroupId;
+      const batchGroupId3 = deleteDatasetItemsSpy.mock.calls[2][0].batchGroupId;
+      expect(batchGroupId1).toBe(batchGroupId2);
+      expect(batchGroupId2).toBe(batchGroupId3);
     });
 
-    it("should use different batchIds for separate delete calls", async () => {
+    it("should use different batchGroupIds for separate delete calls", async () => {
       await dataset.delete(["item-1"]);
       await dataset.delete(["item-2"]);
 
       expect(deleteDatasetItemsSpy).toHaveBeenCalledTimes(2);
 
-      const batchId1 = deleteDatasetItemsSpy.mock.calls[0][0].batchId;
-      const batchId2 = deleteDatasetItemsSpy.mock.calls[1][0].batchId;
+      const batchGroupId1 = deleteDatasetItemsSpy.mock.calls[0][0].batchGroupId;
+      const batchGroupId2 = deleteDatasetItemsSpy.mock.calls[1][0].batchGroupId;
 
-      expect(batchId1).not.toBe(batchId2);
+      expect(batchGroupId1).not.toBe(batchGroupId2);
     });
   });
 
