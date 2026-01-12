@@ -2365,4 +2365,58 @@ class DatasetVersionResourceTest {
             assertThat(streamedItemsV2).hasSize(3);
         }
     }
+
+    @Nested
+    @DisplayName("Delete Versioned Dataset:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteVersionedDataset {
+
+        @Test
+        @DisplayName("Success: Delete dataset with versions and tags")
+        void deleteDataset__whenVersionedDatasetWithTags__thenReturnNoContent() {
+            // given - create a dataset with versions and tags
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+
+            // Create version 1 with items
+            createDatasetItems(datasetId, 2);
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Create version 2 with more items
+            createDatasetItems(datasetId, 1);
+            var version2 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version2.versionHash(),
+                    DatasetVersionTag.builder().tag("production").build(), API_KEY, TEST_WORKSPACE);
+
+            // Verify dataset and versions exist
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE, 1, 10);
+            assertThat(versions.content()).hasSize(2);
+
+            // when - delete the dataset
+            try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+                    .path(datasetId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .delete()) {
+
+                // then - should return 204 No Content
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            // Verify dataset is deleted
+            try (var getResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+                    .path(datasetId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(getResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+    }
 }
