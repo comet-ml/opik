@@ -1,0 +1,306 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import AnnotationView from "./AnnotationView";
+import { ReactNode } from "react";
+
+// Mock the SMEFlowContext
+const mockUseSMEFlow = vi.fn();
+vi.mock("../SMEFlowContext", () => ({
+  useSMEFlow: () => mockUseSMEFlow(),
+}));
+
+// Mock the child components
+vi.mock("./TraceDataViewer", () => ({
+  default: () => <div data-testid="trace-data-viewer" />,
+}));
+
+vi.mock("./ThreadDataViewer", () => ({
+  default: () => <div data-testid="thread-data-viewer" />,
+}));
+
+vi.mock("./CommentAndScoreViewer", () => ({
+  default: () => <div data-testid="comment-score-viewer" />,
+}));
+
+vi.mock("./ValidationAlert", () => ({
+  default: () => <div data-testid="validation-alert" />,
+}));
+
+vi.mock("../SMEFlowLayout", () => ({
+  default: ({
+    children,
+    footer,
+  }: {
+    children: ReactNode;
+    footer: ReactNode;
+  }) => (
+    <div>
+      <div data-testid="layout-children">{children}</div>
+      <div data-testid="layout-footer">{footer}</div>
+    </div>
+  ),
+}));
+
+vi.mock("../ReturnToAnnotationQueueButton", () => ({
+  default: () => <div data-testid="return-button" />,
+}));
+
+vi.mock("./AnnotationTreeStateContext", () => ({
+  AnnotationTreeStateProvider: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+// Mock react-hotkeys-hook
+vi.mock("react-hotkeys-hook", () => ({
+  useHotkeys: vi.fn(),
+}));
+
+describe("AnnotationView - Button Label Logic", () => {
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <TooltipProvider>{children}</TooltipProvider>
+  );
+
+  const defaultContextValue = {
+    annotationQueue: {
+      id: "queue-1",
+      name: "Test Queue",
+      scope: "TRACE",
+      feedback_definition_names: ["score1"],
+    },
+    currentIndex: 0,
+    queueItems: [
+      { id: "item-1", name: "Item 1" },
+      { id: "item-2", name: "Item 2" },
+      { id: "item-3", name: "Item 3" },
+    ],
+    validationState: {
+      canSubmit: true,
+      errors: [],
+    },
+    isLastUnprocessedItem: false,
+    isCurrentItemProcessed: false,
+    unprocessedItems: [
+      { id: "item-1", name: "Item 1" },
+      { id: "item-2", name: "Item 2" },
+    ],
+    hasCachedUnsavedChanges: false,
+    handleNext: vi.fn(),
+    handlePrevious: vi.fn(),
+    handleSubmit: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("Non-completed item scenarios", () => {
+    it('should show "Submit & next" when current item is not completed and there are other unprocessed items', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: false,
+        hasCachedUnsavedChanges: false,
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+    });
+
+    it('should show "Submit & complete" when current item is the last unprocessed and no cached changes', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: true,
+        hasCachedUnsavedChanges: false,
+        unprocessedItems: [{ id: "item-1", name: "Item 1" }],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Submit & complete")).toBeInTheDocument();
+    });
+
+    it('should show "Submit & next" when current item is last unprocessed BUT there are cached unsaved changes', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: true,
+        hasCachedUnsavedChanges: true, // User clicked Next on previous items without submitting
+        unprocessedItems: [{ id: "item-3", name: "Item 3" }],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      // Should NOT show "Submit & complete" because there are unsaved changes in other items
+      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
+      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+    });
+  });
+
+  describe("Completed item scenarios", () => {
+    it('should show "Item completed" when viewing a completed item with no changes', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: true,
+        validationState: {
+          canSubmit: false, // No unsaved changes
+          errors: [],
+        },
+        unprocessedItems: [{ id: "item-2", name: "Item 2" }],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Item completed")).toBeInTheDocument();
+      // Button should be disabled when canSubmit is false
+      const button = screen.getByText("Item completed");
+      expect(button).toBeDisabled();
+    });
+
+    it('should show "Update & next" when completed item has changes and there are other unprocessed items', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: true,
+        validationState: {
+          canSubmit: true, // Has unsaved changes
+          errors: [],
+        },
+        unprocessedItems: [{ id: "item-2", name: "Item 2" }],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Update & next")).toBeInTheDocument();
+    });
+
+    it('should show "Update & complete" when completed item has changes and no other unprocessed items', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: true,
+        validationState: {
+          canSubmit: true, // Has unsaved changes
+          errors: [],
+        },
+        unprocessedItems: [], // No other unprocessed items
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Update & complete")).toBeInTheDocument();
+    });
+  });
+
+  describe("Edge cases", () => {
+    it("should disable submit button when there are validation errors", () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        validationState: {
+          canSubmit: false,
+          errors: [{ type: "required", message: "Field is required" }],
+        },
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      const submitButton = screen.getByText("Submit & next");
+      expect(submitButton).toBeDisabled();
+    });
+
+    it("should disable Previous button when on first item", () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 0,
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      const previousButton = screen.getByText("Previous");
+      expect(previousButton).toBeDisabled();
+    });
+
+    it("should disable Next button when on last item", () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 2, // Last item (queueItems has 3 items)
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      const nextButton = screen.getByText("Next");
+      expect(nextButton).toBeDisabled();
+    });
+
+    it("should show validation alert when there are errors", () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        validationState: {
+          canSubmit: false,
+          errors: [{ type: "required", message: "Field is required" }],
+        },
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByTestId("validation-alert")).toBeInTheDocument();
+    });
+
+    it("should display correct item counter", () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 1, // Second item
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("2 of 3")).toBeInTheDocument();
+    });
+  });
+
+  describe("Real-world scenario: User clicks Next without submitting", () => {
+    it("should handle the scenario where user adds comments and clicks Next multiple times", () => {
+      // Scenario: User has 3 items
+      // - Item 1: User added comments, clicked Next (cached, not submitted)
+      // - Item 2: User added comments, clicked Next (cached, not submitted)
+      // - Item 3: Current item (last unprocessed)
+      // Expected: Button should show "Submit & next" NOT "Submit & complete"
+      // because there are cached unsaved changes in items 1 and 2
+
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 2, // On the last item
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: true, // This IS the last unprocessed item
+        hasCachedUnsavedChanges: true, // But there are cached changes from previous items
+        unprocessedItems: [{ id: "item-3", name: "Item 3" }],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      // Should show "Submit & next" because we can't complete until cached items are submitted
+      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
+    });
+
+    it("should show Submit & complete only when all items are truly processed or current is the only unsaved", () => {
+      // Scenario: All items have been submitted except the current one
+      // No cached changes exist
+      // Expected: "Submit & complete"
+
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 2,
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: true,
+        hasCachedUnsavedChanges: false, // No cached changes
+        unprocessedItems: [{ id: "item-3", name: "Item 3" }],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Submit & complete")).toBeInTheDocument();
+    });
+  });
+});
