@@ -90,6 +90,13 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     setStep("select");
   }, [form]);
 
+  const resetDialog = useCallback(() => {
+    form.reset();
+    setSelectedComposedProvider("");
+    setSelectedProviderType("");
+    setStep("select");
+  }, [form]);
+
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
       const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
@@ -161,15 +168,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         },
       );
     },
-    [createProviderKey, setOpen, onProviderAdded],
+    [createProviderKey, setOpen, onProviderAdded, resetDialog],
   );
-
-  const resetDialog = useCallback(() => {
-    form.reset();
-    setSelectedComposedProvider("");
-    setSelectedProviderType("");
-    setStep("select");
-  }, [form]);
 
   const handleCancel = useCallback(() => {
     setOpen(false);
