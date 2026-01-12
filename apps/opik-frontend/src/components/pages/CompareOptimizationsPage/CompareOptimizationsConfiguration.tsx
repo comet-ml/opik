@@ -41,11 +41,11 @@ const CompareOptimizationsConfiguration: React.FC<
   const messages = extractDisplayMessages(prompt?.messages);
 
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-2">
+    <Card className="flex size-full flex-col">
+      <CardHeader className="shrink-0 pb-2">
         <CardTitle className="text-sm">Configuration</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-1">
+      <CardContent className="flex shrink-0 flex-col gap-1">
         <ConfigItem label="Dataset" value={dataset_name} />
         <ConfigItem label="Model" value={llm_model?.model || "-"} />
         <ConfigItem
@@ -69,12 +69,12 @@ const CompareOptimizationsConfiguration: React.FC<
         )}
       </CardContent>
 
-      <Separator className="my-2" />
+      <Separator className="my-2 shrink-0" />
 
-      <CardHeader className="p-2">
+      <CardHeader className="shrink-0 p-2">
         <CardTitle className="text-sm">Initial prompt</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-h-0 flex-1 overflow-auto">
         {messages && messages.length > 0 ? (
           <MessagesList messages={messages} />
         ) : (

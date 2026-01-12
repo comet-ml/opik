@@ -22,7 +22,7 @@ const StickyTableWrapperWithBorder: React.FC<DataTableWrapperProps> = ({
 }) => {
   return (
     <div
-      className="comet-sticky-table comet-compare-optimizations-table overflow-x-auto overflow-y-hidden rounded-md"
+      className="comet-sticky-table comet-compare-optimizations-table h-full overflow-auto rounded-md"
       {...{
         [TABLE_WRAPPER_ATTRIBUTE]: "",
       }}

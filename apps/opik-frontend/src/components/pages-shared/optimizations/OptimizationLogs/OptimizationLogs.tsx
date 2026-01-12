@@ -1,10 +1,11 @@
-import React, { useMemo } from "react";
-import { RotateCw } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownToLine, Clock, ListEnd, RotateCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Optimization } from "@/types/optimizations";
 import useOptimizationStudioLogs from "@/api/optimizations/useOptimizationStudioLogs";
 import Loader from "@/components/shared/Loader/Loader";
+import { Spinner } from "@/components/ui/spinner";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +13,8 @@ import {
   OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
 } from "@/lib/optimizations";
 import { convertTerminalOutputToHtml } from "@/lib/terminalOutput";
+import { useChatScroll } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
+import { formatDate } from "@/lib/date";
 
 type OptimizationLogsProps = {
   optimization: Optimization | null;
@@ -20,7 +23,11 @@ type OptimizationLogsProps = {
 const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   optimization,
 }) => {
-  const { data, isPending, refetch } = useOptimizationStudioLogs(
+  const isInProgress =
+    optimization?.status &&
+    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
+  const { data, isPending, refetch, dataUpdatedAt } = useOptimizationStudioLogs(
     {
       optimizationId: optimization?.id ?? "",
     },
@@ -36,8 +43,37 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   );
 
   const logContent = data?.content ?? "";
+  const lastUpdatedAt = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toISOString()
+    : null;
+  const prevLogLengthRef = useRef<number>(0);
+  const [hasNewLogs, setHasNewLogs] = useState(false);
 
-  // Convert terminal output to HTML for Rich-formatted logs
+  const {
+    scrollContainerRef,
+    isAutoScrollEnabled,
+    handleScroll,
+    scrollToBottom,
+  } = useChatScroll({
+    contentLength: logContent.length,
+    isStreaming: Boolean(isInProgress),
+  });
+
+  useEffect(() => {
+    const currentLength = logContent.length;
+    const hasNewContent = currentLength > prevLogLengthRef.current;
+
+    if (hasNewContent && !isAutoScrollEnabled) {
+      setHasNewLogs(true);
+    }
+
+    if (isAutoScrollEnabled) {
+      setHasNewLogs(false);
+    }
+
+    prevLogLengthRef.current = currentLength;
+  }, [logContent.length, isAutoScrollEnabled]);
+
   const logHtml = useMemo(
     () => convertTerminalOutputToHtml(logContent),
     [logContent],
@@ -49,16 +85,18 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
 
   const renderContent = () => {
     if (isPending && !logContent) {
-      return <Loader />;
+      return (
+        <Loader
+          message={isInProgress ? "Waiting for logs..." : "Loading logs..."}
+          className="min-h-32"
+        />
+      );
     }
 
     if (!logContent) {
-      const isInProgress =
-        optimization?.status &&
-        IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
-
       return (
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-2">
+          {isInProgress && <Spinner size="small" />}
           <div className="comet-body-s text-muted-slate">
             {isInProgress ? "Logs will appear shortly" : "No logs available"}
           </div>
@@ -67,13 +105,28 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     }
 
     return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-auto rounded-sm border border-border bg-muted/50 p-3">
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-auto rounded-sm border border-border bg-muted/50 p-3"
+        >
           <pre
             className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed"
             dangerouslySetInnerHTML={{ __html: logHtml }}
           />
         </div>
+        {hasNewLogs && (
+          <Button
+            variant="special"
+            size="2xs"
+            onClick={scrollToBottom}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 gap-1.5 shadow-md"
+          >
+            <ArrowDownToLine className="size-3.5" />
+            New logs available
+          </Button>
+        )}
       </div>
     );
   };
@@ -82,19 +135,50 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     <Card className="size-full">
       <CardContent className="flex h-full flex-col p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="comet-body-s-accented">Logs</h3>
-          <TooltipWrapper content="Refresh logs">
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => refetch()}
-              disabled={isPending}
-            >
-              <RotateCw
-                className={cn("size-3.5", isPending && "animate-spin")}
-              />
-            </Button>
-          </TooltipWrapper>
+          <div className="flex items-center gap-2">
+            <h3 className="comet-body-s-accented">Logs</h3>
+            {lastUpdatedAt && (
+              <TooltipWrapper
+                content={`Last updated at ${formatDate(lastUpdatedAt, {
+                  includeSeconds: true,
+                })}`}
+              >
+                <Clock className="size-3.5 text-muted-slate" />
+              </TooltipWrapper>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {logContent && (
+              <TooltipWrapper
+                content={
+                  isAutoScrollEnabled
+                    ? "Auto-scroll enabled"
+                    : "Click to scroll to bottom"
+                }
+              >
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={scrollToBottom}
+                  className={cn(isAutoScrollEnabled && "text-primary")}
+                >
+                  <ListEnd className="size-3.5" />
+                </Button>
+              </TooltipWrapper>
+            )}
+            <TooltipWrapper content="Refresh logs">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => refetch()}
+                disabled={isPending}
+              >
+                <RotateCw
+                  className={cn("size-3.5", isPending && "animate-spin")}
+                />
+              </Button>
+            </TooltipWrapper>
+          </div>
         </div>
 
         {renderContent()}

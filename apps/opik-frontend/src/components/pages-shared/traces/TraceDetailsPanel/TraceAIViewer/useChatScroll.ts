@@ -1,46 +1,81 @@
-import { useEffect, useRef } from "react";
-import { TraceAnalyzerLLMMessage } from "@/types/ai-assistant";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const SCROLL_THRESHOLD = 50; // pixels from bottom to consider "at bottom"
 
 interface UseChatScrollProps {
-  messages: TraceAnalyzerLLMMessage[];
+  /**
+   * Content to track for changes - can be array length or string length
+   */
+  contentLength: number;
+  /**
+   * Whether content is actively being updated (streaming/loading)
+   */
   isStreaming: boolean;
+  /**
+   * Whether to use smooth scrolling animation (default: true)
+   */
+  smooth?: boolean;
 }
 
 export const useChatScroll = ({
-  messages,
+  contentLength,
   isStreaming,
+  smooth = true,
 }: UseChatScrollProps) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevMessagesLengthRef = useRef<number>(0);
+  const prevContentLengthRef = useRef<number>(0);
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
 
+    const prevContentLength = prevContentLengthRef.current;
+    const hasNewContent = contentLength > prevContentLength;
+    const hasContentChangedFromEmpty =
+      prevContentLength === 0 && contentLength > 0;
+    prevContentLengthRef.current = contentLength;
+
+    // Only scroll if there's new content and auto-scroll is enabled
+    if (!hasNewContent || !isAutoScrollEnabled) return;
+
+    // Use requestAnimationFrame to ensure DOM has updated
     requestAnimationFrame(() => {
       if (!scrollContainer) return;
-
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
-
-      const prevMessagesLength = prevMessagesLengthRef.current;
-      const hasMessagesChangedFromEmpty =
-        prevMessagesLength === 0 && messages.length > 0;
-
-      // Auto scroll to bottom if messages changed from empty to having content
-      // or if user is near bottom and new messages arrive
-      if (hasMessagesChangedFromEmpty || isNearBottom) {
-        scrollContainer.scrollTo({
-          top: scrollHeight,
-          behavior: hasMessagesChangedFromEmpty ? "auto" : "smooth",
-        });
-      }
-
-      prevMessagesLengthRef.current = messages.length;
+      // Use instant scroll when content first appears, smooth otherwise
+      const shouldUseSmooth = smooth && !hasContentChangedFromEmpty;
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior: shouldUseSmooth ? "smooth" : "auto",
+      });
     });
-  }, [messages, isStreaming]);
+  }, [contentLength, isStreaming, isAutoScrollEnabled, smooth]);
+
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } =
+      scrollContainerRef.current;
+    const isAtBottom =
+      scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
+
+    setIsAutoScrollEnabled(isAtBottom);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: smooth ? "smooth" : "auto",
+      });
+      setIsAutoScrollEnabled(true);
+    }
+  }, [smooth]);
 
   return {
     scrollContainerRef,
+    isAutoScrollEnabled,
+    handleScroll,
+    scrollToBottom,
   };
 };

@@ -114,8 +114,8 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
   }, [extractedPrompt, fallbackPrompt]);
 
   return (
-    <Card className="size-full">
-      <CardHeader className="gap-y-0.5 px-5">
+    <Card className="flex h-full flex-col">
+      <CardHeader className="shrink-0 gap-y-0.5 px-5">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="comet-body-s-accented">Best prompt</CardTitle>
@@ -147,8 +147,8 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-5 pb-4">
-        <div className="flex items-center justify-between">
+      <CardContent className="flex min-h-0 flex-1 flex-col px-5 pb-4">
+        <div className="flex shrink-0 items-center justify-between">
           <Link
             to="/$workspaceName/optimizations/$datasetId/$optimizationId/compare"
             params={{
@@ -206,7 +206,7 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
             </>
           )}
         </div>
-        <div>
+        <div className="min-h-0 flex-1 overflow-auto">
           {extractedPrompt ? (
             extractedPrompt.type === "single" ? (
               <MessagesList messages={extractedPrompt.data} />
