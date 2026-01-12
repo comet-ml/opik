@@ -58,7 +58,7 @@ class DatasetExportJobServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new DatasetExportJobServiceImpl(exportJobDAO, idGenerator, template);
+        service = new DatasetExportJobServiceImpl(idGenerator, template);
 
         // Setup common transaction template behavior - execute callbacks
         when(template.inTransaction(any(), any())).thenAnswer(invocation -> {

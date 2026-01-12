@@ -46,7 +46,6 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             DatasetExportStatus.PENDING,
             DatasetExportStatus.PROCESSING);
 
-    private final @NonNull DatasetExportJobDAO exportJobDAO;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
 
