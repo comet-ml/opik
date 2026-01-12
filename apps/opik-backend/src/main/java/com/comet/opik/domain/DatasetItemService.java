@@ -938,11 +938,36 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
             }
 
-            // New SDK with batch_group_id - for DELETE, batch_group_id is not used (only useful for INSERT)
-            // Each DELETE operation creates a new version
-            log.info("Deleting items for dataset '{}' (batch_group_id '{}' provided but not used for DELETE)",
-                    datasetId, batchGroupId);
-            return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
+            // New SDK with batch_group_id - need to resolve datasetId if not provided
+            Mono<UUID> datasetIdMono;
+            if (datasetId != null) {
+                datasetIdMono = Mono.just(datasetId);
+            } else if (ids != null && !ids.isEmpty()) {
+                // Resolve datasetId from first item
+                datasetIdMono = versionDao.resolveDatasetIdFromItemId(ids.iterator().next());
+            } else {
+                return Mono.error(new BadRequestException("Must provide either datasetId or itemIds"));
+            }
+
+            // Check if version exists for this batch_group_id
+            return datasetIdMono.flatMap(resolvedDatasetId -> Mono
+                    .fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, resolvedDatasetId, workspaceId))
+                    .flatMap(optionalVersion -> {
+                        if (optionalVersion.isPresent()) {
+                            // Version exists - this is a subsequent batch of deletions
+                            var existingVersion = optionalVersion.get();
+                            log.info("Deleting more items from existing version '{}' for batch_group_id '{}'",
+                                    existingVersion.id(), batchGroupId);
+                            return deleteItemsFromExistingVersion(ids, resolvedDatasetId, filters,
+                                    existingVersion.id(), workspaceId, userName);
+                        } else {
+                            // No version with this batch_group_id - create new version with deletions
+                            log.info("Creating new version with batch_group_id '{}' for dataset '{}' with deletions",
+                                    batchGroupId, resolvedDatasetId);
+                            return createVersionWithBatchGroupIdForDeletions(ids, resolvedDatasetId, filters,
+                                    batchGroupId, workspaceId, userName);
+                        }
+                    }));
         });
     }
 
@@ -1996,5 +2021,150 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         .id(uuids.get(i))
                         .build())
                 .toList();
+    }
+
+    /**
+     * Deletes items from an existing version (subsequent batches with same batch_group_id).
+     * Similar to appendItemsToVersion for inserts, but removes items instead.
+     */
+    private Mono<Void> deleteItemsFromExistingVersion(Set<UUID> ids, UUID datasetId,
+            List<DatasetItemFilter> filters, UUID versionId,
+            String workspaceId, String userName) {
+
+        log.info("Deleting items from existing version '{}' for dataset '{}'", versionId, datasetId);
+
+        return Mono.defer(() -> {
+            // Get current version to update counts
+            DatasetVersion currentVersion = versionService.getVersionById(workspaceId, datasetId, versionId);
+
+            // Get items to delete from this version
+            return versionDao.getItemIdsAndHashes(datasetId, versionId)
+                    .filter(item -> {
+                        // Filter by IDs if provided
+                        if (ids != null && !ids.isEmpty()) {
+                            return ids.contains(item.itemId());
+                        }
+                        // TODO: Apply filters if provided
+                        return true;
+                    })
+                    .map(DatasetItemIdAndHash::itemId)
+                    .collect(Collectors.toSet())
+                    .flatMap(itemsToDelete -> {
+                        if (itemsToDelete.isEmpty()) {
+                            log.info("No items to delete from version '{}'", versionId);
+                            return Mono.<Void>empty();
+                        }
+
+                        // Remove items from ClickHouse
+                        return versionDao.removeItemsFromVersion(datasetId, versionId, itemsToDelete, workspaceId)
+                                .flatMap(deletedCount -> {
+                                    // Update version counts in MySQL
+                                    return Mono.fromCallable(() -> {
+                                        int newTotal = currentVersion.itemsTotal() - deletedCount.intValue();
+                                        int newDeleted = currentVersion.itemsDeleted() + deletedCount.intValue();
+
+                                        template.inTransaction(WRITE, handle -> {
+                                            var dao = handle.attach(DatasetVersionDAO.class);
+                                            dao.updateCounts(versionId, newTotal, currentVersion.itemsAdded(),
+                                                    currentVersion.itemsModified(), newDeleted, workspaceId);
+                                            return null;
+                                        });
+
+                                        log.info("Deleted '{}' items from version '{}', new total '{}'",
+                                                deletedCount, versionId, newTotal);
+                                        return null;
+                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                                })
+                                .then();
+                    });
+        });
+    }
+
+    /**
+     * Creates a new version with deletions for a new batch_group_id.
+     * This is the first batch of deletions for this batch_group_id.
+     */
+    private Mono<Void> createVersionWithBatchGroupIdForDeletions(Set<UUID> ids, UUID datasetId,
+            List<DatasetItemFilter> filters, String batchGroupId,
+            String workspaceId, String userName) {
+
+        log.info("Creating new version with batch_group_id '{}' and deletions for dataset '{}'",
+                batchGroupId, datasetId);
+
+        return Mono.defer(() -> {
+            // Verify dataset exists
+            datasetService.findById(datasetId, workspaceId, null);
+
+            // Get the latest version to use as base
+            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
+
+            if (latestVersion.isEmpty()) {
+                log.warn("Cannot delete items from dataset '{}' - no versions exist", datasetId);
+                return Mono.empty();
+            }
+
+            UUID baseVersionId = latestVersion.get().id();
+            UUID newVersionId = idGenerator.generateId();
+
+            // Get all items from base version
+            return versionDao.getItemIdsAndHashes(datasetId, baseVersionId)
+                    .map(DatasetItemIdAndHash::itemId)
+                    .collectList()
+                    .flatMap(allItems -> {
+                        // Determine which items to delete
+                        Set<UUID> itemsToDelete = ids != null ? ids : Set.of();
+
+                        // Calculate unchanged items (items not being deleted)
+                        List<UUID> unchangedIds = allItems.stream()
+                                .filter(id -> !itemsToDelete.contains(id))
+                                .toList();
+
+                        log.info("Creating version from base '{}' with '{}' items, deleting '{}', keeping '{}'",
+                                baseVersionId, allItems.size(), itemsToDelete.size(), unchangedIds.size());
+
+                        // Apply delta: copy unchanged items, mark others as deleted
+                        return versionDao.applyDelta(
+                                datasetId,
+                                baseVersionId,
+                                newVersionId,
+                                List.of(), // no added items
+                                List.of(), // no edited items
+                                itemsToDelete, // deleted items
+                                unchangedIds) // unchanged items
+                                .flatMap(totalCount -> {
+                                    return Mono.fromCallable(() -> {
+                                        // Create version from delta
+                                        DatasetVersion version = versionService.createVersionFromDelta(
+                                                datasetId,
+                                                newVersionId,
+                                                totalCount.intValue(),
+                                                baseVersionId,
+                                                null, // No tags
+                                                "Auto-created from SDK batch delete operation",
+                                                workspaceId,
+                                                userName);
+
+                                        // Associate the batch_group_id with this version
+                                        template.inTransaction(WRITE, handle -> {
+                                            var dao = handle.attach(DatasetVersionDAO.class);
+                                            dao.updateBatchGroupId(newVersionId, batchGroupId, workspaceId);
+                                            // Set as latest
+                                            dao.deleteTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
+                                            dao.insertTag(datasetId, DatasetVersionService.LATEST_TAG, newVersionId,
+                                                    userName, workspaceId);
+                                            return null;
+                                        });
+
+                                        log.info("Created version '{}' with batch_group_id '{}' for dataset '{}', " +
+                                                "totalCount '{}', deleted '{}'",
+                                                newVersionId, batchGroupId, datasetId, totalCount,
+                                                itemsToDelete.size());
+
+                                        return null;
+                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                                })
+                                .then();
+                    });
+        });
     }
 }

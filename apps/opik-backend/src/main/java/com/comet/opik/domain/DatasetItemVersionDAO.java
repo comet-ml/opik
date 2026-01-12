@@ -167,6 +167,18 @@ public interface DatasetItemVersionDAO {
             String workspaceId, String userName);
 
     /**
+     * Removes items from an existing version in ClickHouse.
+     * This is used for batch delete operations where multiple batches share the same batch_group_id.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to remove items from
+     * @param itemIds the set of dataset_item_id values to remove
+     * @param workspaceId the workspace ID
+     * @return the number of items removed
+     */
+    Mono<Long> removeItemsFromVersion(UUID datasetId, UUID versionId, Set<UUID> itemIds, String workspaceId);
+
+    /**
      * Resolves which dataset contains the given item by looking across all versions.
      * This is used for initial lookup when only the item ID is known.
      *
@@ -2086,6 +2098,55 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnSuccess(count -> log.debug("Inserted '{}' items in batch", count))
                     .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
                             datasetId, newVersionId, e))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> removeItemsFromVersion(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull Set<UUID> itemIds, @NonNull String workspaceId) {
+
+        if (itemIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        log.info("Removing '{}' items from version '{}' for dataset '{}'", itemIds.size(), versionId, datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "remove_items_from_version");
+
+            // ClickHouse uses ALTER TABLE ... DELETE for lightweight deletes
+            // Build the DELETE query with IN clause for item IDs
+            String deleteQuery = """
+                    ALTER TABLE dataset_item_versions DELETE
+                    WHERE dataset_id = :dataset_id
+                      AND dataset_version_id = :version_id
+                      AND dataset_item_id IN (:item_ids)
+                      AND workspace_id = :workspace_id
+                    """;
+
+            var statement = connection.createStatement(deleteQuery)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            // Bind the item IDs array
+            String[] itemIdStrings = itemIds.stream()
+                    .map(UUID::toString)
+                    .toArray(String[]::new);
+            statement.bind("item_ids", itemIdStrings);
+
+            // Return the count of items we're deleting
+            long deletedCount = itemIds.size();
+
+            return Flux.from(statement.execute())
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum)
+                    .map(results -> deletedCount) // Return the count of items we deleted
+                    .doOnSuccess(count -> log.info("Removed '{}' items from version '{}'", count, versionId))
+                    .doOnError(e -> log.error("Failed to remove items from version '{}' for dataset '{}'",
+                            versionId, datasetId, e))
                     .doFinally(signalType -> endSegment(segment));
         });
     }
