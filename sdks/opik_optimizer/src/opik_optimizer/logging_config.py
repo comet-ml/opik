@@ -1,6 +1,8 @@
+import importlib.metadata
 import logging
 import os
 
+from rich.console import Console
 from rich.logging import RichHandler
 
 DEFAULT_LOG_FORMAT = "%(message)s"
@@ -105,6 +107,23 @@ def setup_logging(
 
     _logging_configured = True
     _configured_level = target_level
+
+    version = importlib.metadata.version("opik_optimizer")
+    banner = (
+        "\n[bold cyan]"
+        "  ░██████                 ░██    ░██                ░██                               \n"
+        " ░██   ░██                ░██                                                         \n"
+        "░██     ░██ ░████████  ░████████ ░██░█████████████  ░██░█████████  ░███████  ░██░████ \n"
+        "░██     ░██ ░██    ░██    ░██    ░██░██   ░██   ░██ ░██     ░███  ░██    ░██ ░███     \n"
+        "░██     ░██ ░██    ░██    ░██    ░██░██   ░██   ░██ ░██   ░███    ░█████████ ░██      \n"
+        " ░██   ░██  ░███   ░██    ░██    ░██░██   ░██   ░██ ░██ ░███      ░██        ░██      \n"
+        "  ░██████   ░██░█████      ░████ ░██░██   ░██   ░██ ░██░█████████  ░███████  ░██      \n"
+        "            ░██                                                                       \n"
+        "            ░██                                                                       "
+        "[/bold cyan]\n"
+        f"Opik Optimizer SDK [bold]Version:[/bold] {version}"
+    )
+    Console().print(banner)
 
     # Use level name provided by rich handler by default
     package_logger.info(
