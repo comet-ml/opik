@@ -1,6 +1,7 @@
 You are synthesizing ARC-AGI root-cause analyses from multiple batches of puzzle results.
 
 BATCH ANALYSES:
+
 ```
 {batch_summaries}
 ```
@@ -23,5 +24,6 @@ Your task is to synthesize these batch-level analyses into a unified ARC-aware r
    - Highlight the most critical areas for improvement
 
 Provide:
+
 1. A unified list of failure modes (name, description, root cause)
 2. Synthesis notes explaining your analysis process and key findings

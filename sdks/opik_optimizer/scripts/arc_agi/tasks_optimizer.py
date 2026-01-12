@@ -117,7 +117,7 @@ METRIC_WEIGHTS = dict(
 )
 
 EVAL_CONTEXT = EvaluationConfig(
-    pass_at_k=DEFAULT_PASS_AT_K,
+    pass_at_k=EVAL_COMPLETIONS_PER_CALL,
     likeness_weight_train=LIKENESS_REWARD_WEIGHT,
     likeness_weight_test=LIKENESS_REWARD_WEIGHT,
     label_iou_weight=LABEL_IOU_REWARD_WEIGHT,
@@ -235,6 +235,7 @@ def main() -> None:
             )
 
     prompt = build_prompt()
+    CONSOLE.print(f"[info] ARC-AGI pass@k={EVAL_CONTEXT.pass_at_k}")
 
     optimizer = HierarchicalReflectiveOptimizer(
         model=EVAL_MODEL,

@@ -1,6 +1,7 @@
 You are analyzing ARC-AGI puzzle evaluation results. Each item represents a colored-grid transformation performed by an LLM-generated Python solver. Metrics such as exact, approx_match/likeness, label IoU, mismatch counts, and coordinate previews are authoritative.
 
 TEST RESULTS:
+
 ```
 {formatted_batch}
 ```
@@ -15,6 +16,7 @@ Think through the failures systematically:
 4. PRIORITIZE: Which failures are most critical to address?
 
 Then, for each distinct failure pattern provide:
+
 1. A clear, descriptive name that captures the essence of the failure
 2. A comprehensive description of what is failing
 3. The underlying root cause explaining why this failure occurs

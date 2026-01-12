@@ -26,10 +26,10 @@ signals that describe different notions of success:
     whitespace from the equation so geometry/palette mistakes count more.
 
 The optimizer typically samples *k* candidate programs and evaluates each one.
-We default to ``pass@k = 2`` to mirror Poetiq’s harness and to keep evaluation
-costs low while still providing a notion of retry budget.  Keep ``DEFAULT_PASS_AT_K``
-in sync with :class:`EvaluationConfig` to ensure the scoring reason text matches
-the reward weighting.
+We default to ``pass@k = 6`` to align with the default completion count used in
+the ARC-AGI HRPO entrypoint. Keep ``DEFAULT_PASS_AT_K`` in sync with
+:class:`EvaluationConfig` to ensure the scoring reason text matches the reward
+weighting.
 
 :func:`build_multi_metric_objective` wires all of the above into
 :class:`opik_optimizer.MultiMetricObjective` so callers can simply request
@@ -181,7 +181,7 @@ DEFAULT_METRIC_SEQUENCE: tuple[str, ...] = (
     "arc_agi2_label_iou",
     "arc_agi2_foreground_match",
 )
-DEFAULT_PASS_AT_K: int = 2
+DEFAULT_PASS_AT_K: int = 6
 LIKENESS_REWARD_WEIGHT: float = METRIC_DEFINITIONS["arc_agi2_approx_match"].weight
 LABEL_IOU_REWARD_WEIGHT: float = METRIC_DEFINITIONS["arc_agi2_label_iou"].weight
 FOREGROUND_REWARD_WEIGHT: float = METRIC_DEFINITIONS["arc_agi2_foreground_match"].weight

@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from .logging_utils import CONSOLE, debug_print
+from rich.panel import Panel
 from .metrics import approx_match_score, label_iou, foreground_match_score
 from .visualization import print_grid_triplet, render_grid
 
@@ -194,10 +195,19 @@ def _evaluate_code_candidate(
 ) -> dict[str, Any]:
     """Run a candidate transform across train/test grids and collect stats."""
     snippet = code.splitlines()
-    preview = "\n".join(snippet[: min(8, len(snippet))])
-    debug_print(
-        f"Candidate preview (lines={len(snippet)}):\n{preview}", config.debug_log
+    preview_lines = snippet[: min(12, len(snippet))]
+    preview = "\n".join(preview_lines)
+    if len(snippet) > len(preview_lines):
+        preview += "\n..."
+    panel = Panel(
+        preview,
+        title=f"Candidate {cand_idx} (n={cand_idx - 1}) code preview",
+        subtitle=f"lines={len(snippet)}",
+        border_style="cyan",
+        width=100,
     )
+    CONSOLE.print(panel)
+    CONSOLE.print("")
 
     train_feedback: list[str] = []
     exact_scores: list[float] = []
@@ -258,6 +268,73 @@ def _evaluate_code_candidate(
         "test_errors": test_errors,
         "code": code,
     }
+
+
+def _score_candidate_outputs(
+    outputs: list[list[list[int]]],
+    gold_outputs: list[list[list[int]]],
+    foreground_colors: set[int],
+) -> dict[str, float]:
+    """Compute aggregate test metrics for a single candidate."""
+    if not gold_outputs:
+        return {
+            "exact": 0.0,
+            "likeness": 0.0,
+            "label_iou": 0.0,
+            "foreground": 0.0,
+        }
+    exact_scores: list[float] = []
+    likeness_scores: list[float] = []
+    iou_scores: list[float] = []
+    foreground_scores: list[float] = []
+    for gold, pred in zip(gold_outputs, outputs, strict=False):
+        if not pred:
+            exact_scores.append(0.0)
+            likeness_scores.append(0.0)
+            iou_scores.append(0.0)
+            foreground_scores.append(0.0)
+            continue
+        gold_arr = np.array(gold, dtype=int)
+        pred_arr = np.array(pred, dtype=int)
+        if pred_arr.shape != gold_arr.shape:
+            exact_scores.append(0.0)
+            likeness_scores.append(0.0)
+            iou_scores.append(0.0)
+            foreground_scores.append(0.0)
+            continue
+        exact_scores.append(1.0 if np.array_equal(pred_arr, gold_arr) else 0.0)
+        likeness_scores.append(approx_match_score(pred_arr, gold_arr))
+        iou_scores.append(label_iou(pred_arr, gold_arr))
+        foreground_scores.append(
+            foreground_match_score(pred_arr, gold_arr, foreground_colors)
+        )
+    return {
+        "exact": sum(exact_scores) / len(exact_scores) if exact_scores else 0.0,
+        "likeness": sum(likeness_scores) / len(likeness_scores)
+        if likeness_scores
+        else 0.0,
+        "label_iou": sum(iou_scores) / len(iou_scores) if iou_scores else 0.0,
+        "foreground": sum(foreground_scores) / len(foreground_scores)
+        if foreground_scores
+        else 0.0,
+    }
+
+
+def _composite_score(
+    *,
+    exact: float,
+    likeness: float,
+    label_iou_value: float,
+    foreground: float,
+    train_soft: float,
+    config: EvaluationConfig,
+) -> float:
+    """Compute composite value using the same weighting logic as the evaluator."""
+    likeness_reward = likeness * config.likeness_weight_test
+    iou_reward = label_iou_value * config.label_iou_weight
+    foreground_reward = foreground * config.foreground_weight_test
+    train_reward = train_soft * config.likeness_weight_train
+    return max(exact, likeness_reward, iou_reward, foreground_reward, train_reward)
 
 
 def _select_attempts_by_test(
@@ -360,6 +437,42 @@ def evaluate_arc_response(
         candidates, key=lambda c: (c["train_exact"], c["train_soft"]), reverse=True
     )
     best = candidates_sorted[0]
+    ranked_candidates = candidates_sorted[
+        : min(config.pass_at_k, len(candidates_sorted))
+    ]
+    candidate_rows: list[tuple[int, dict[str, Any], dict[str, float], float]] = []
+    for idx, cand in enumerate(ranked_candidates, 1):
+        metrics = _score_candidate_outputs(
+            cand.get("test_outputs") or [], gold_outputs, foreground_colors
+        )
+        composite = _composite_score(
+            exact=metrics["exact"],
+            likeness=metrics["likeness"],
+            label_iou_value=metrics["label_iou"],
+            foreground=metrics["foreground"],
+            train_soft=cand["train_soft"],
+            config=config,
+        )
+        candidate_rows.append((idx, cand, metrics, composite))
+
+    best_row = max(candidate_rows, key=lambda row: row[3]) if candidate_rows else None
+    best_idx = best_row[0] if best_row else None
+
+    if config.debug_log and gold_outputs:
+        CONSOLE.print("")
+        CONSOLE.print("[bold]Candidate score summary (train-ranked):[/bold]")
+        for idx, cand, metrics, composite in candidate_rows:
+            style = "bold green" if best_idx and idx == best_idx else ""
+            line = (
+                f"{idx}. n={idx - 1} train_exact={cand['train_exact']:.2f} "
+                f"train_likeness={cand['train_soft']:.2f} "
+                f"test_exact={metrics['exact']:.2f} "
+                f"test_likeness={metrics['likeness']:.2f} "
+                f"test_iou={metrics['label_iou']:.2f} "
+                f"test_foreground={metrics['foreground']:.2f} "
+                f"composite={composite:.3f}"
+            )
+            CONSOLE.print(line, style=style)
     reason_parts = [
         f"code_blocks={len(code_blocks)}",
         f"best_train_exact={best['train_exact']:.2f}",
@@ -499,11 +612,33 @@ def evaluate_arc_response(
             ):
                 preds = cand.get("test_outputs") or []
                 if preds and preds[0]:
+                    metrics = _score_candidate_outputs(
+                        preds, gold_outputs, foreground_colors
+                    )
+                    composite = _composite_score(
+                        exact=metrics["exact"],
+                        likeness=metrics["likeness"],
+                        label_iou_value=metrics["label_iou"],
+                        foreground=metrics["foreground"],
+                        train_soft=cand["train_soft"],
+                        config=config,
+                    )
+                    is_best = best_row and (cand_idx + 1) == best_row[0]
+                    border_style = "yellow" if is_best else "white"
                     print_grid_triplet(
                         test_inputs[0],
                         gold_outputs[0],
                         preds[0],
-                        label=f"Candidate {cand_idx + 1} preview on test[0] (input | expected | predicted):",
+                        label=(
+                            f"Candidate {cand_idx + 1} (n={cand_idx}) "
+                            f"(composite={composite:.3f}, "
+                            f"exact={metrics['exact']:.2f}, "
+                            f"likeness={metrics['likeness']:.2f}, "
+                            f"iou={metrics['label_iou']:.2f}, "
+                            f"foreground={metrics['foreground']:.2f})"
+                            " preview on test[0] (input | expected | predicted):"
+                        ),
+                        border_style=border_style,
                     )
         except Exception:
             pass

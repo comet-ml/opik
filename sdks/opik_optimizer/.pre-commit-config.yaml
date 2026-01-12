@@ -54,7 +54,7 @@ repos:
     hooks:
       - id: markdownlint
         files: ^sdks/opik_optimizer/.*\.md$
-        exclude: '^sdks/opik_optimizer/scripts/arc_agi/prompts/(system_prompt|user_prompt)\.md$'
+        exclude: '^sdks/opik_optimizer/scripts/arc_agi/prompts/.*\.md$'
         args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
 
   - repo: https://github.com/codespell-project/codespell

@@ -43,8 +43,7 @@ def dict_overrides_example() -> None:
     replace and you want a static replacement string.
     """
     custom_synonyms_prompt = (
-        "Given a word, return ONE synonym with the same meaning. "
-        "Return only the word."
+        "Given a word, return ONE synonym with the same meaning. Return only the word."
     )
     optimizer = EvolutionaryOptimizer(
         model="openai/gpt-5-mini",
@@ -60,6 +59,7 @@ def callable_overrides_example() -> None:
     Callable overrides are best when you need conditional logic, want to reuse
     the existing template, or need to update multiple templates at once.
     """
+
     def add_prefix(prompts: PromptLibrary) -> None:
         """Prepend a short instruction to the reasoning template.
 

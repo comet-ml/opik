@@ -42,9 +42,14 @@ def render_grid(grid: Sequence[Sequence[int]]) -> Text:
     return text
 
 
-def grid_panel(grid: Sequence[Sequence[int]], title: str) -> Panel:
+def grid_panel(
+    grid: Sequence[Sequence[int]],
+    title: str,
+    *,
+    border_style: str = "white",
+) -> Panel:
     """Wrap ``render_grid`` output inside a Rich ``Panel`` with a title."""
-    return Panel(render_grid(grid), title=title, border_style="white")
+    return Panel(render_grid(grid), title=title, border_style=border_style)
 
 
 def print_task_preview(
@@ -78,12 +83,13 @@ def print_grid_triplet(
     predicted_grid: Sequence[Sequence[int]],
     *,
     label: str | None = None,
+    border_style: str = "white",
 ) -> None:
     """Show input/expected/predicted grids side by side."""
     panels = [
-        grid_panel(input_grid, "input"),
-        grid_panel(expected_grid, "expected"),
-        grid_panel(predicted_grid, "predicted"),
+        grid_panel(input_grid, "input", border_style=border_style),
+        grid_panel(expected_grid, "expected", border_style=border_style),
+        grid_panel(predicted_grid, "predicted", border_style=border_style),
     ]
     header = (
         label
