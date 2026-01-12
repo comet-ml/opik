@@ -168,7 +168,7 @@ class Dataset:
 
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
         """
-        Insert new items into the dataset.
+        Insert new items into the dataset. A new dataset version will be created.
 
         Args:
             items: List of dicts (which will be converted to dataset items)
@@ -235,7 +235,7 @@ class Dataset:
 
     def delete(self, items_ids: List[str]) -> None:
         """
-        Delete items from the dataset.
+        Delete items from the dataset. A new dataset version will be created.
 
         Args:
             items_ids: List of item ids to delete.
@@ -258,7 +258,7 @@ class Dataset:
 
     def clear(self) -> None:
         """
-        Delete all items from the given dataset.
+        Delete all items from the given dataset. A new dataset version will be created.
         """
         all_items = self.__internal_api__get_items_as_dataclasses__()
         item_ids = [item.id for item in all_items if item.id is not None]
