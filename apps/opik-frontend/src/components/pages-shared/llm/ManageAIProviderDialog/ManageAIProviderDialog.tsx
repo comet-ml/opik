@@ -206,6 +206,24 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     return undefined;
   }, [selectedProviderType, calculatedProviderKey, providerKey]);
 
+  const resetSelectionState = useCallback(() => {
+    setSelectedProviderId(undefined);
+    setSelectedComposedProvider("");
+    setSelectedProviderType("");
+    form.reset({
+      provider: undefined,
+      composedProviderType: "",
+      id: undefined,
+      apiKey: "",
+      location: "",
+      url: "",
+      providerName: "",
+      models: "",
+      headers: [],
+    });
+    setStep("select");
+  }, [form]);
+
   const handleProviderSelect = useCallback(
     (
       composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -253,22 +271,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   );
 
   const handleBack = useCallback(() => {
-    setSelectedProviderId(undefined);
-    setSelectedComposedProvider("");
-    setSelectedProviderType("");
-    form.reset({
-      provider: undefined,
-      composedProviderType: "",
-      id: undefined,
-      apiKey: "",
-      location: "",
-      url: "",
-      providerName: "",
-      models: "",
-      headers: [],
-    });
-    setStep("select");
-  }, [form]);
+    resetSelectionState();
+  }, [resetSelectionState]);
 
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
@@ -352,43 +356,34 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               onDeleteProvider(calculatedProviderKey.ui_composed_provider);
             }
 
-            form.reset({
-              provider: undefined,
-              composedProviderType: "",
-              id: undefined,
-              apiKey: "",
-              location: "",
-              url: "",
-              providerName: "",
-              models: "",
-            });
-            setSelectedProviderId(undefined);
-            setSelectedComposedProvider("");
-            setSelectedProviderType("");
-            setStep("select");
+            resetSelectionState();
             setConfirmOpen(false);
           },
         },
       );
     }
-  }, [calculatedProviderKey, onDeleteProvider, deleteMutate, form]);
+  }, [
+    calculatedProviderKey,
+    onDeleteProvider,
+    deleteMutate,
+    resetSelectionState,
+  ]);
 
   const handleCancel = useCallback(() => {
     setOpen(false);
-  }, [setOpen]);
+    if (!providerKey) {
+      resetSelectionState();
+    }
+  }, [setOpen, providerKey, resetSelectionState]);
 
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       setOpen(isOpen);
       if (!isOpen && !providerKey) {
-        setStep("select");
-        setSelectedProviderId(undefined);
-        setSelectedComposedProvider("");
-        setSelectedProviderType("");
-        form.reset();
+        resetSelectionState();
       }
     },
-    [setOpen, providerKey, form],
+    [setOpen, providerKey, resetSelectionState],
   );
 
   return (
