@@ -8,7 +8,64 @@ alwaysApply: false
 
 This document provides clear guidelines on when to use **Tailwind CSS breakpoints** vs the **`useIsPhone` JavaScript hook** for responsive design.
 
+## ⚠️ When to Add Phone/Mobile Support
+
+**Phone responsiveness is NOT required by default.** Only add mobile support when:
+
+1. **Explicitly requested in the Jira ticket** - The ticket specifically mentions phone/mobile support
+2. **Explicitly requested by the user in a prompt** - The user asks for phone/mobile support in their message
+3. **Working on a component that already has phone support** - Maintain consistency with existing responsive behavior
+
+**Do NOT proactively add phone support** to features unless the ticket explicitly requires it. Most Opik features are desktop-first and don't need mobile optimization.
+
+```tsx
+// ❌ DON'T: Add phone support "just in case"
+const { isPhonePortrait } = useIsPhone(); // Only if explicitly requested!
+
+// ✅ DO: Only add when explicitly requested
+// - Jira ticket: "OPIK-1234: Add mobile responsiveness for Log a trace SideDialog"
+// - User prompt: "Make this dialog work on mobile" or "Add phone support"
+```
+
+---
+
+## Key Concept: Mobile-First & Breakpoint Mapping
+
+### Tailwind is Mobile-First
+
+Tailwind CSS uses a **mobile-first** approach:
+- **No prefix** = Applies to **all sizes** (including mobile/phone)
+- **`md:` prefix** = Applies at **768px and above** (tablet/desktop only)
+
+### Mapping Between Tailwind and `useIsPhone`
+
+| Tailwind | `useIsPhone` equivalent | Applies to |
+|----------|-------------------------|------------|
+| No prefix (base) | `isPhonePortrait === true` | Phone/mobile (default) |
+| `md:` | `isPhonePortrait === false` | Tablet and desktop |
+
+**Important**: `md:` is effectively the **opposite** of `isPhonePortrait`:
+- When `isPhonePortrait` is `true` → `md:` styles do NOT apply
+- When `isPhonePortrait` is `false` → `md:` styles DO apply
+
+```tsx
+// These are equivalent approaches:
+
+// Tailwind (preferred for styling)
+<div className="w-full px-4 md:w-[468px] md:px-0">
+  {/* w-full px-4 = phone styles (isPhonePortrait === true) */}
+  {/* md:w-[468px] md:px-0 = desktop styles (isPhonePortrait === false) */}
+</div>
+
+// JavaScript (only when structural changes needed)
+<div className={isPhonePortrait ? "w-full px-4" : "w-[468px] px-0"}>
+```
+
+---
+
 ## Decision Framework
+
+**Once phone support IS required**, use this framework to choose the right approach:
 
 ### Use Tailwind CSS Breakpoints When:
 
