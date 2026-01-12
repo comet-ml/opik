@@ -1486,6 +1486,51 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Success: Tagging items creates new version with modified count in change summary")
+        void batchUpdate__whenTaggingItems__thenChangeSummaryShowsModified() {
+            // Given - Create dataset with items (no tags initially)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            // Get items to update
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Select 1 item to tag (using row ID)
+            var itemToTag = Set.of(v1Items.get(0).id());
+
+            // When - Batch update to add tags to one item
+            var newTags = Set.of("important");
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(itemToTag)
+                    .update(DatasetItemUpdate.builder().tags(newTags).build())
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify new version was created with correct change summary
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.id()).isNotEqualTo(version1.id());
+            assertThat(version2.itemsTotal()).isEqualTo(3);
+            assertThat(version2.itemsModified()).as("Tagged item should be counted as modified").isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify the tagged item has the new tag
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            var taggedItem = v2Items.stream()
+                    .filter(item -> item.datasetItemId().equals(v1Items.get(0).datasetItemId()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(taggedItem.tags()).containsExactly("important");
+        }
+
+        @Test
         @DisplayName("Success: Batch update creates new version with edits")
         void batchUpdate__whenVersioningEnabled__thenCreateNewVersionWithEdits() {
             // Given - Create dataset with items
