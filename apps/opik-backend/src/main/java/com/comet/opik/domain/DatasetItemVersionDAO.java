@@ -32,6 +32,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -1416,9 +1417,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMap(result -> result.map((row, metadata) -> {
                         var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
                         var hash = row.get("data_hash", Long.class);
-                        var tags = Optional.ofNullable(row.get("tags", String[].class))
-                                .map(arr -> Set.of(arr))
-                                .orElse(Set.of());
+                        Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
+                                .map(arr -> new HashSet<>(Arrays.asList(arr)))
+                                .orElseGet(HashSet::new);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
