@@ -234,7 +234,6 @@ interface SMEFlowContextValue {
   totalCount: number;
   canStartAnnotation: boolean;
   unprocessedItems: (Trace | Thread)[];
-  hasCachedUnsavedChanges: boolean;
 
   // Annotation state
   currentAnnotationState: AnnotationState;
@@ -480,10 +479,6 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     const feedbackScoreNames = annotationQueue.feedback_definition_names ?? [];
     return isItemProcessed(currentItem, feedbackScoreNames, currentUserName);
   }, [currentItem, annotationQueue, currentUserName]);
-
-  const hasCachedUnsavedChanges = useMemo(() => {
-    return Object.keys(cachedAnnotationStates).length > 0;
-  }, [cachedAnnotationStates]);
 
   const handleNextUnprocessed = useCallback(() => {
     const nextIndex = getNextUnprocessedIndex(currentIndex);
@@ -797,7 +792,6 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     totalCount,
     canStartAnnotation,
     unprocessedItems,
-    hasCachedUnsavedChanges,
 
     // Annotation state
     currentAnnotationState,

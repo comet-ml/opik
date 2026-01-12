@@ -32,7 +32,6 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     isLastUnprocessedItem,
     isCurrentItemProcessed,
     unprocessedItems,
-    hasCachedUnsavedChanges,
     handleNext,
     handlePrevious,
     handleSubmit,
@@ -44,20 +43,22 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   // Determine button label based on item completion status
   const getButtonLabel = () => {
     if (isCurrentItemProcessed) {
-      // Viewing a completed item
+      // Viewing a completed item (current item is NOT in unprocessedItems)
       if (!validationState.canSubmit) {
         return "Item completed";
       }
-      // Check if there are other unprocessed items (not counting current)
+      // Check if there are OTHER unprocessed items
+      // Since current item is already processed, it's not in unprocessedItems
       const hasOtherUnprocessedItems = unprocessedItems.length > 0;
       return hasOtherUnprocessedItems ? "Update & next" : "Update & complete";
     } else {
-      // Viewing a non-completed item
+      // Viewing a non-completed item (current item IS in unprocessedItems)
       // Show "Submit & complete" only if this is the last unprocessed item
-      // AND there are no other items with cached unsaved changes
-      const shouldShowComplete =
-        isLastUnprocessedItem && !hasCachedUnsavedChanges;
-      return shouldShowComplete ? "Submit & complete" : "Submit & next";
+      // AND there are no other unprocessed items
+      // Note: unprocessedItems includes items with cached unsaved changes
+      return isLastUnprocessedItem && unprocessedItems.length === 1
+        ? "Submit & complete"
+        : "Submit & next";
     }
   };
 

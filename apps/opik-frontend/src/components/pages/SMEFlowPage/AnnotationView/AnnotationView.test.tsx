@@ -85,7 +85,6 @@ describe("AnnotationView - Button Label Logic", () => {
       { id: "item-1", name: "Item 1" },
       { id: "item-2", name: "Item 2" },
     ],
-    hasCachedUnsavedChanges: false,
     handleNext: vi.fn(),
     handlePrevious: vi.fn(),
     handleSubmit: vi.fn(),
@@ -101,7 +100,10 @@ describe("AnnotationView - Button Label Logic", () => {
         ...defaultContextValue,
         isCurrentItemProcessed: false,
         isLastUnprocessedItem: false,
-        hasCachedUnsavedChanges: false,
+        unprocessedItems: [
+          { id: "item-1", name: "Item 1" },
+          { id: "item-2", name: "Item 2" },
+        ], // 2 unprocessed items
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
@@ -109,13 +111,12 @@ describe("AnnotationView - Button Label Logic", () => {
       expect(screen.getByText("Submit & next")).toBeInTheDocument();
     });
 
-    it('should show "Submit & complete" when current item is the last unprocessed and no cached changes', () => {
+    it('should show "Submit & complete" when current item is the ONLY unprocessed item', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
         isLastUnprocessedItem: true,
-        hasCachedUnsavedChanges: false,
-        unprocessedItems: [{ id: "item-1", name: "Item 1" }],
+        unprocessedItems: [{ id: "item-1", name: "Item 1" }], // Only 1 unprocessed item
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
@@ -123,18 +124,39 @@ describe("AnnotationView - Button Label Logic", () => {
       expect(screen.getByText("Submit & complete")).toBeInTheDocument();
     });
 
-    it('should show "Submit & next" when current item is last unprocessed BUT there are cached unsaved changes', () => {
+    it('should show "Submit & next" when there are multiple unprocessed items (including cached changes)', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
         isLastUnprocessedItem: true,
-        hasCachedUnsavedChanges: true, // User clicked Next on previous items without submitting
-        unprocessedItems: [{ id: "item-3", name: "Item 3" }],
+        unprocessedItems: [
+          { id: "item-1", name: "Item 1" }, // Has cached changes, still unprocessed
+          { id: "item-2", name: "Item 2" }, // Has cached changes, still unprocessed
+          { id: "item-3", name: "Item 3" }, // Current item
+        ], // 3 unprocessed items (cached items are still unprocessed)
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      // Should NOT show "Submit & complete" because there are unsaved changes in other items
+      // Should show "Submit & next" because there are other unprocessed items
+      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
+      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+    });
+
+    it('should show "Submit & next" when there are 2 unprocessed items', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: false,
+        unprocessedItems: [
+          { id: "item-1", name: "Item 1" },
+          { id: "item-2", name: "Item 2" },
+        ], // 2 unprocessed items
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      // Should show "Submit & next" because there are still other unprocessed items
       expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
       expect(screen.getByText("Submit & next")).toBeInTheDocument();
     });
@@ -262,31 +284,34 @@ describe("AnnotationView - Button Label Logic", () => {
   describe("Real-world scenario: User clicks Next without submitting", () => {
     it("should handle the scenario where user adds comments and clicks Next multiple times", () => {
       // Scenario: User has 3 items
-      // - Item 1: User added comments, clicked Next (cached, not submitted)
-      // - Item 2: User added comments, clicked Next (cached, not submitted)
-      // - Item 3: Current item (last unprocessed)
+      // - Item 1: User added comments, clicked Next (cached, STILL UNPROCESSED)
+      // - Item 2: User added comments, clicked Next (cached, STILL UNPROCESSED)
+      // - Item 3: Current item (also unprocessed)
       // Expected: Button should show "Submit & next" NOT "Submit & complete"
-      // because there are cached unsaved changes in items 1 and 2
+      // because unprocessedItems.length = 3 (all items are still unprocessed)
 
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         currentIndex: 2, // On the last item
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: true, // This IS the last unprocessed item
-        hasCachedUnsavedChanges: true, // But there are cached changes from previous items
-        unprocessedItems: [{ id: "item-3", name: "Item 3" }],
+        isLastUnprocessedItem: true,
+        unprocessedItems: [
+          { id: "item-1", name: "Item 1" }, // Cached, still unprocessed
+          { id: "item-2", name: "Item 2" }, // Cached, still unprocessed
+          { id: "item-3", name: "Item 3" }, // Current item
+        ], // 3 unprocessed items
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      // Should show "Submit & next" because we can't complete until cached items are submitted
+      // Should show "Submit & next" because unprocessedItems.length = 3
       expect(screen.getByText("Submit & next")).toBeInTheDocument();
       expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
     });
 
-    it("should show Submit & complete only when all items are truly processed or current is the only unsaved", () => {
-      // Scenario: All items have been submitted except the current one
-      // No cached changes exist
+    it("should show Submit & complete only when current is the ONLY unprocessed item", () => {
+      // Scenario: All other items have been submitted (saved to backend)
+      // Current item is the only unprocessed item
       // Expected: "Submit & complete"
 
       mockUseSMEFlow.mockReturnValue({
@@ -294,13 +319,34 @@ describe("AnnotationView - Button Label Logic", () => {
         currentIndex: 2,
         isCurrentItemProcessed: false,
         isLastUnprocessedItem: true,
-        hasCachedUnsavedChanges: false, // No cached changes
-        unprocessedItems: [{ id: "item-3", name: "Item 3" }],
+        unprocessedItems: [{ id: "item-3", name: "Item 3" }], // Only 1 unprocessed
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
       expect(screen.getByText("Submit & complete")).toBeInTheDocument();
+    });
+
+    it("should show Submit & next when there are 2 unprocessed items", () => {
+      // Scenario: Items 1 and 2 are not processed yet
+      // User is on item 1
+      // Expected: "Submit & next" because item 2 still needs to be processed
+
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 0,
+        isCurrentItemProcessed: false,
+        isLastUnprocessedItem: false,
+        unprocessedItems: [
+          { id: "item-1", name: "Item 1" },
+          { id: "item-2", name: "Item 2" },
+        ], // 2 unprocessed items
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
     });
   });
 });
