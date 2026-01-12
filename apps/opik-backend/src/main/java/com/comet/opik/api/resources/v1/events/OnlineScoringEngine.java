@@ -440,15 +440,39 @@ public class OnlineScoringEngine {
 
         try {
             var value = JsonPath.parse(forcedObject).read(path);
-            return value != null ? value.toString() : null;
+            return value != null ? serializeToJsonString(value) : null;
         } catch (Exception e) {
             log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
             return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
-                    .map(Object::toString)
+                    .map(OnlineScoringEngine::serializeToJsonString)
                     .orElseGet(() -> {
                         log.info("couldn't find flat or nested path in json, path={}, json={}", path, json);
                         return null;
                     });
+        }
+    }
+
+    /**
+     * Serialize a value to a JSON string. For simple types (String, Number, Boolean),
+     * returns the value directly as a string. For complex types (Map, List), serializes to JSON.
+     */
+    private static String serializeToJsonString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        // For simple types, return as-is to preserve backward compatibility
+        if (value instanceof String) {
+            return (String) value;
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return value.toString();
+        }
+        // For complex types (Map, List, etc.), serialize to proper JSON
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize value to JSON, falling back to toString(), value={}", value, e);
+            return value.toString();
         }
     }
 
