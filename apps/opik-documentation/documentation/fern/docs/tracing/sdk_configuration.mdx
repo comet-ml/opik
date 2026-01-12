@@ -100,21 +100,22 @@ Both SDKs support multiple configuration approaches with different precedence or
 
 Both SDKs support environment variables for configuration. Here's a comparison of available options:
 
-| Configuration    | Python Env Variable          | TypeScript Env Variable | Description                                    |
-| ---------------- | ---------------------------- | ----------------------- | ---------------------------------------------- |
-| API Key          | `OPIK_API_KEY`               | `OPIK_API_KEY`          | API key for Opik Cloud                         |
-| URL Override     | `OPIK_URL_OVERRIDE`          | `OPIK_URL_OVERRIDE`     | Opik server URL                                |
-| Project Name     | `OPIK_PROJECT_NAME`          | `OPIK_PROJECT_NAME`     | Project name                                   |
-| Workspace        | `OPIK_WORKSPACE`             | `OPIK_WORKSPACE`        | Workspace name                                 |
-| Config Path      | `OPIK_CONFIG_PATH`           | `OPIK_CONFIG_PATH`      | Custom config file location                    |
-| Track Disable    | `OPIK_TRACK_DISABLE`         | N/A                     | Disable tracking (Python only)                 |
-| Flush Timeout    | `OPIK_DEFAULT_FLUSH_TIMEOUT` | N/A                     | Default flush timeout (Python only)            |
-| TLS Certificate  | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
-| Batch Delay      | N/A                          | `OPIK_BATCH_DELAY_MS`   | Batching delay in ms (TypeScript only)         |
-| Hold Until Flush | N/A                          | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush (TypeScript only) |
-| Console Log Level| `OPIK_CONSOLE_LOGGING_LEVEL` | N/A                     | Console log level (Python only)                |
-| File Log Level   | `OPIK_FILE_LOGGING_LEVEL`    | N/A                     | File log level (Python only)                   |
-| Log Level        | N/A                          | `OPIK_LOG_LEVEL`        | Logging level (TypeScript only)                |
+| Configuration       | Python Env Variable          | TypeScript Env Variable | Description                                    |
+| ------------------- | ---------------------------- | ----------------------- | ---------------------------------------------- |
+| API Key             | `OPIK_API_KEY`               | `OPIK_API_KEY`          | API key for Opik Cloud                         |
+| URL Override        | `OPIK_URL_OVERRIDE`          | `OPIK_URL_OVERRIDE`     | Opik server URL                                |
+| Project Name        | `OPIK_PROJECT_NAME`          | `OPIK_PROJECT_NAME`     | Project name                                   |
+| Workspace           | `OPIK_WORKSPACE`             | `OPIK_WORKSPACE`        | Workspace name                                 |
+| Config Path         | `OPIK_CONFIG_PATH`           | `OPIK_CONFIG_PATH`      | Custom config file location                    |
+| Track Disable       | `OPIK_TRACK_DISABLE`         | N/A                     | Disable tracking (Python only)                 |
+| Flush Timeout       | `OPIK_DEFAULT_FLUSH_TIMEOUT` | N/A                     | Default flush timeout (Python only)            |
+| TLS Certificate     | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
+| Batch Delay         | N/A                          | `OPIK_BATCH_DELAY_MS`   | Batching delay in ms (TypeScript only)         |
+| Hold Until Flush    | N/A                          | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush (TypeScript only) |
+| Console Log Level   | `OPIK_CONSOLE_LOGGING_LEVEL` | N/A                     | Console log level (Python only)                |
+| File Log Level      | `OPIK_FILE_LOGGING_LEVEL`    | N/A                     | File log level (Python only)                   |
+| Optimizer Log Level | `OPIK_OPTIMIZER_LOG_LEVEL`   | N/A                     | Opik Optimizer SDK log level (Python only)     |
+| Log Level           | N/A                          | `OPIK_LOG_LEVEL`        | Logging level (TypeScript only)                |
 
 ### Using .env Files
 
@@ -491,6 +492,12 @@ Enable debug logging to troubleshoot issues:
 
 ```bash
 export OPIK_LOG_LEVEL="DEBUG"
+```
+
+If you are using the Opik Optimizer SDK, you can also enable optimizer-side debug logs:
+
+```bash
+export OPIK_OPTIMIZER_LOG_LEVEL="DEBUG"
 ```
 
 Or programmatically:
