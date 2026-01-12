@@ -450,6 +450,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     baseVersionId,
                                                     null, // No tags
                                                     "Updated 1 item",
+                                                    null, // No batch group ID
                                                     workspaceId,
                                                     userName);
 
@@ -724,6 +725,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 baseVersionId,
                 null, // No tags
                 changeDescription,
+                null, // No batch group ID
                 workspaceId,
                 userName);
 
@@ -1061,6 +1063,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             changeDescription,
+                            null, // No batch group ID
                             workspaceId,
                             userName);
 
@@ -1149,14 +1152,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 datasetId, datasetItemIds.size());
 
         return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, datasetItemIds,
-                baseVersionItemCount, workspaceId, userName);
+                baseVersionItemCount, null, workspaceId, userName);
     }
 
     /**
      * Creates a new version with the specified items deleted (excluded from the new version).
      */
     private Mono<Void> createVersionWithDeletion(UUID datasetId, UUID baseVersionId, UUID newVersionId,
-            Set<UUID> deletedIds, int baseVersionItemCount, String workspaceId, String userName) {
+            Set<UUID> deletedIds, int baseVersionItemCount, String batchGroupId,
+            String workspaceId, String userName) {
 
         // Generate UUIDs for unchanged items
         List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
@@ -1178,6 +1182,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             null, // No change description (auto-generated)
+                            batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
 
@@ -1433,6 +1438,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             baseVersionId,
                                             changes.tags(),
                                             changes.changeDescription(),
+                                            null, // No batch group ID
                                             workspaceId,
                                             userName);
 
@@ -1695,7 +1701,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                                         // Fetch updated version
                                         return versionService.getVersionById(workspaceId, datasetId, versionId);
-                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                                    }).subscribeOn(Schedulers.boundedElastic());
                                 });
                     }));
         });
@@ -1727,33 +1733,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     // Get the latest version to determine if this is the first version
                     Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
 
-                    // Delegate to existing version creation logic
-                    Mono<DatasetVersion> versionMono;
+                    // Delegate to existing methods with batchGroupId
                     if (latestVersion.isEmpty()) {
-                        // No versions exist - use existing first version creation logic
-                        versionMono = createFirstVersion(datasetId, validatedItems, workspaceId, userName);
+                        return createFirstVersion(datasetId, validatedItems, batchGroupId, workspaceId, userName);
                     } else {
-                        // Versions exist - use existing delta creation logic
                         UUID baseVersionId = latestVersion.get().id();
-                        versionMono = createVersionWithDelta(datasetId, baseVersionId, validatedItems, workspaceId,
-                                userName);
+                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, batchGroupId,
+                                workspaceId, userName);
                     }
-
-                    // After version is created, associate it with the batch_group_id
-                    return versionMono.flatMap(version -> {
-                        return Mono.fromCallable(() -> {
-                            template.inTransaction(WRITE, handle -> {
-                                var dao = handle.attach(DatasetVersionDAO.class);
-                                dao.updateBatchGroupId(version.id(), batchGroupId, workspaceId);
-                                return null;
-                            });
-
-                            log.info("Associated version '{}' with batch_group_id '{}' for dataset '{}'",
-                                    version.id(), batchGroupId, datasetId);
-
-                            return version;
-                        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-                    });
                 }));
     }
 
@@ -1798,18 +1785,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         if (latestVersion.isEmpty()) {
                             // No versions exist yet - create the first version with all items as "added"
-                            return createFirstVersion(datasetId, validatedItems, workspaceId, userName);
+                            return createFirstVersion(datasetId, validatedItems, null, workspaceId, userName);
                         }
 
                         // Versions exist - apply delta on top of the latest
                         UUID baseVersionId = latestVersion.get().id();
-                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, workspaceId, userName);
+                        return createVersionWithDelta(datasetId, baseVersionId, validatedItems, null, workspaceId,
+                                userName);
                     }));
         });
     }
 
     private Mono<DatasetVersion> createFirstVersion(UUID datasetId, List<DatasetItem> items,
-            String workspaceId, String userName) {
+            String batchGroupId, String workspaceId, String userName) {
         log.info("Creating first version for dataset '{}' with '{}' items", datasetId, items.size());
 
         UUID newVersionId = idGenerator.generateId();
@@ -1832,6 +1820,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .map(itemsTotal -> {
                     log.info("Inserted '{}' items for first version of dataset '{}'", itemsTotal, datasetId);
 
+                    // Determine change description based on whether this is a batch operation
+                    String changeDescription = batchGroupId != null
+                            ? "Auto-created from SDK batch operation"
+                            : null;
+
                     // Create version metadata (first version - all items are "added")
                     DatasetVersion version = versionService.createVersionFromDelta(
                             datasetId,
@@ -1839,7 +1832,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             itemsTotal.intValue(),
                             null, // No base version for first version
                             null, // No tags
-                            null, // No change description
+                            changeDescription,
+                            batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
 
@@ -1850,7 +1844,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private Mono<DatasetVersion> createVersionWithDelta(UUID datasetId, UUID baseVersionId,
-            List<DatasetItem> items, String workspaceId, String userName) {
+            List<DatasetItem> items, String batchGroupId, String workspaceId, String userName) {
         log.info("Creating version with delta for dataset '{}', baseVersion '{}', itemCount '{}'",
                 datasetId, baseVersionId, items.size());
 
@@ -1906,6 +1900,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             .map(itemsTotal -> {
                                 log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
+                                // Determine change description based on whether this is a batch operation
+                                String changeDescription = batchGroupId != null
+                                        ? "Auto-created from SDK batch operation"
+                                        : null;
+
                                 // Create version metadata
                                 DatasetVersion version = versionService.createVersionFromDelta(
                                         datasetId,
@@ -1913,7 +1912,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         itemsTotal.intValue(),
                                         baseVersionId,
                                         null, // No tags
-                                        null, // No change description
+                                        changeDescription,
+                                        batchGroupId, // Include batch group ID if provided
                                         workspaceId,
                                         userName);
 
@@ -2001,7 +2001,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         log.info("Deleted '{}' items from version '{}', new total '{}'",
                                                 deletedCount, versionId, newTotal);
                                         return null;
-                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                                    }).subscribeOn(Schedulers.boundedElastic());
                                 })
                                 .then();
                     });
@@ -2040,23 +2040,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int baseVersionItemCount = latestVersion.get().itemsTotal();
             UUID newVersionId = idGenerator.generateId();
 
-            // Reuse existing deletion logic
+            // Delegate to existing deletion logic with batch_group_id
             return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, ids,
-                    baseVersionItemCount, workspaceId, userName)
-                    .then(Mono.fromCallable(() -> {
-                        // After version is created, associate it with the batch_group_id
-                        template.inTransaction(WRITE, handle -> {
-                            var dao = handle.attach(DatasetVersionDAO.class);
-                            dao.updateBatchGroupId(newVersionId, batchGroupId, workspaceId);
-                            return null;
-                        });
-
-                        log.info("Associated version '{}' with batch_group_id '{}' for dataset '{}'",
-                                newVersionId, batchGroupId, datasetId);
-
-                        return null;
-                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()))
-                    .then();
+                    baseVersionItemCount, batchGroupId, workspaceId, userName);
         });
     }
 }
