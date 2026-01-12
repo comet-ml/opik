@@ -2047,7 +2047,33 @@ class ExperimentsResourceTest {
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field("duration.p50").direction(Direction.DESC)
-                                    .build()));
+                                    .build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
+                                    (list1, list2) -> {
+                                        int minSize = Math.min(list1.size(), list2.size());
+                                        for (int i = 0; i < minSize; i++) {
+                                            int cmp = list1.get(i).compareTo(list2.get(i));
+                                            if (cmp != 0) return cmp;
+                                        }
+                                        return Integer.compare(list1.size(), list2.size());
+                                    })
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
+                                    (list1, list2) -> {
+                                        int minSize = Math.min(list1.size(), list2.size());
+                                        for (int i = 0; i < minSize; i++) {
+                                            int cmp = list2.get(i).compareTo(list1.get(i));
+                                            if (cmp != 0) return cmp;
+                                        }
+                                        return Integer.compare(list2.size(), list1.size());
+                                    })
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
