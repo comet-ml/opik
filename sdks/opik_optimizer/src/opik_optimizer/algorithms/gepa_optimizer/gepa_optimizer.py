@@ -19,7 +19,9 @@ from ...utils import (
     optimization_context,
     unique_ordered_by_key,
 )
+from ...utils.prompt_library import PromptOverrides
 from . import reporting as gepa_reporting
+from . import prompts as gepa_prompts
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,10 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        prompt_overrides: Accepted for API parity, but ignored (GEPA does not expose prompt hooks).
     """
+
+    DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
 
     def __init__(
         self,
@@ -53,6 +58,7 @@ class GepaOptimizer(BaseOptimizer):
         name: str | None = None,
         skip_perfect_score: bool = True,
         perfect_score: float = 0.95,
+        prompt_overrides: PromptOverrides = None,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -81,6 +87,7 @@ class GepaOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
+            prompt_overrides=None,
         )
         self.n_threads = n_threads
         self._gepa_live_metric_calls = 0
@@ -92,6 +99,10 @@ class GepaOptimizer(BaseOptimizer):
                 "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
                 "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
+            )
+        if prompt_overrides is not None:
+            logger.warning(
+                "GEPA prompt overrides are not supported yet and will be ignored."
             )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
