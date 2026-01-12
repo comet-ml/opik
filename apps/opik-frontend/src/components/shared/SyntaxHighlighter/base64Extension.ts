@@ -1,10 +1,6 @@
 import { Extension } from "@codemirror/state";
 import { EditorView, ViewUpdate } from "@codemirror/view";
-import {
-  foldService,
-  foldState,
-  foldEffect,
-} from "@codemirror/language";
+import { foldService, foldState, foldEffect } from "@codemirror/language";
 import { isBase64DataUrl } from "@/lib/base64";
 
 // Minimal pattern to find potential base64 data URIs (validated with isBase64DataUrl)
@@ -77,9 +73,13 @@ export const createBase64ExpandExtension = (): Extension => {
       // Only auto-fold when document content actually changes (not on search/decorations)
       const currentDoc = update.view.state.doc.toString();
       const isInitialLoad = lastDocContent === "";
-      const hasContentChanged = update.docChanged && currentDoc !== lastDocContent;
+      const hasContentChanged =
+        update.docChanged && currentDoc !== lastDocContent;
 
-      if ((isInitialLoad || hasContentChanged) && update.view.state.field(foldState)) {
+      if (
+        (isInitialLoad || hasContentChanged) &&
+        update.view.state.field(foldState)
+      ) {
         lastDocContent = currentDoc;
         foldAllBase64(update.view);
       }
