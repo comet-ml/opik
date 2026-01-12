@@ -1701,131 +1701,59 @@ class DatasetItemServiceImpl implements DatasetItemService {
         });
     }
 
+    /**
+     * Creates a new version with batch_group_id by reusing existing version creation logic.
+     * This delegates to either createFirstVersion or createVersionWithDelta, then associates
+     * the batch_group_id with the created version.
+     */
     private Mono<DatasetVersion> createVersionWithBatchGroupId(
             UUID datasetId, String batchGroupId, List<DatasetItem> items,
             String workspaceId, String userName) {
 
-        // Validate items and generate IDs
+        log.info("Creating new version with batch_group_id '{}' for dataset '{}', itemCount '{}'",
+                batchGroupId, datasetId, items.size());
+
+        // Validate items and generate IDs (reuse existing logic)
         List<DatasetItem> validatedItems = addIdIfAbsent(
                 DatasetItemBatch.builder().datasetId(datasetId).items(items).build());
 
-        // Generate datasetItemId for items that don't have one
-        List<DatasetItem> itemsWithStableIds = validatedItems.stream()
-                .map(item -> {
-                    if (item.datasetItemId() == null) {
-                        return item.toBuilder()
-                                .datasetItemId(idGenerator.generateId())
-                                .build();
-                    }
-                    return item;
-                })
-                .toList();
-
         // Validate spans and traces
-        return validateSpans(workspaceId, itemsWithStableIds)
-                .then(validateTraces(workspaceId, itemsWithStableIds))
+        return validateSpans(workspaceId, validatedItems)
+                .then(validateTraces(workspaceId, validatedItems))
                 .then(Mono.defer(() -> {
                     // Verify dataset exists
                     datasetService.findById(datasetId, workspaceId, null);
 
-                    // Get the latest version (if exists) to use as base
+                    // Get the latest version to determine if this is the first version
                     Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
-                    UUID baseVersionId = latestVersion.map(DatasetVersion::id).orElse(null);
 
-                    // Generate version ID
-                    UUID versionId = idGenerator.generateId();
-
-                    // If there's a base version, use applyDelta to copy existing items and add new ones
-                    if (baseVersionId != null) {
-                        // Get all item IDs from the base version to mark as unchanged
-                        return versionDao.getItemIdsAndHashes(datasetId, baseVersionId)
-                                .map(DatasetItemIdAndHash::itemId)
-                                .collectList()
-                                .flatMap(unchangedIds -> {
-                                    // Apply delta: all base items unchanged + new items added
-                                    return versionDao.applyDelta(
-                                            datasetId,
-                                            baseVersionId,
-                                            versionId,
-                                            itemsWithStableIds, // added items
-                                            List.of(), // no edited items
-                                            Set.of(), // no deleted items
-                                            unchangedIds) // all base items unchanged
-                                            .flatMap(totalCount -> {
-                                                return Mono.fromCallable(() -> {
-                                                    // Create version from delta with base version
-                                                    DatasetVersion version = versionService.createVersionFromDelta(
-                                                            datasetId,
-                                                            versionId,
-                                                            totalCount.intValue(),
-                                                            baseVersionId,
-                                                            null, // No tags
-                                                            "Auto-created from SDK batch operation",
-                                                            workspaceId,
-                                                            userName);
-
-                                                    // Now associate the batch_group_id with this version
-                                                    template.inTransaction(WRITE, handle -> {
-                                                        var dao = handle.attach(DatasetVersionDAO.class);
-                                                        // Update the version to set batch_group_id
-                                                        dao.updateBatchGroupId(versionId, batchGroupId, workspaceId);
-                                                        // Set as latest
-                                                        dao.deleteTag(datasetId, DatasetVersionService.LATEST_TAG,
-                                                                workspaceId);
-                                                        dao.insertTag(datasetId, DatasetVersionService.LATEST_TAG,
-                                                                versionId,
-                                                                userName,
-                                                                workspaceId);
-                                                        return null;
-                                                    });
-
-                                                    log.info(
-                                                            "Created version '{}' with batch_group_id '{}' for dataset '{}', totalCount '{}'",
-                                                            versionId, batchGroupId, datasetId, totalCount);
-
-                                                    return version.toBuilder().batchGroupId(batchGroupId).build();
-                                                }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-                                            });
-                                });
+                    // Delegate to existing version creation logic
+                    Mono<DatasetVersion> versionMono;
+                    if (latestVersion.isEmpty()) {
+                        // No versions exist - use existing first version creation logic
+                        versionMono = createFirstVersion(datasetId, validatedItems, workspaceId, userName);
                     } else {
-                        // No base version - this is the first version
-                        return versionDao.insertItems(datasetId, versionId, itemsWithStableIds,
-                                workspaceId, userName)
-                                .flatMap(itemCount -> {
-                                    // Create version record with correct item counts
-                                    return Mono.fromCallable(() -> {
-                                        // Create version from delta (no base version for first batch)
-                                        DatasetVersion version = versionService.createVersionFromDelta(
-                                                datasetId,
-                                                versionId,
-                                                itemCount.intValue(),
-                                                null, // No base version
-                                                null, // No tags
-                                                "Auto-created from SDK batch operation",
-                                                workspaceId,
-                                                userName);
-
-                                        // Now associate the batch_group_id with this version
-                                        template.inTransaction(WRITE, handle -> {
-                                            var dao = handle.attach(DatasetVersionDAO.class);
-                                            // Update the version to set batch_group_id
-                                            dao.updateBatchGroupId(versionId, batchGroupId, workspaceId);
-                                            // Set as latest
-                                            dao.deleteTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
-                                            dao.insertTag(datasetId, DatasetVersionService.LATEST_TAG, versionId,
-                                                    userName,
-                                                    workspaceId);
-                                            return null;
-                                        });
-
-                                        log.info(
-                                                "Created version '{}' with batch_group_id '{}' for dataset '{}', itemCount '{}'",
-                                                versionId, batchGroupId, datasetId, itemCount);
-
-                                        return version.toBuilder().batchGroupId(batchGroupId).build();
-                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-                                });
+                        // Versions exist - use existing delta creation logic
+                        UUID baseVersionId = latestVersion.get().id();
+                        versionMono = createVersionWithDelta(datasetId, baseVersionId, validatedItems, workspaceId,
+                                userName);
                     }
+
+                    // After version is created, associate it with the batch_group_id
+                    return versionMono.flatMap(version -> {
+                        return Mono.fromCallable(() -> {
+                            template.inTransaction(WRITE, handle -> {
+                                var dao = handle.attach(DatasetVersionDAO.class);
+                                dao.updateBatchGroupId(version.id(), batchGroupId, workspaceId);
+                                return null;
+                            });
+
+                            log.info("Associated version '{}' with batch_group_id '{}' for dataset '{}'",
+                                    version.id(), batchGroupId, datasetId);
+
+                            return version.toBuilder().batchGroupId(batchGroupId).build();
+                        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+                    });
                 }));
     }
 
@@ -2084,6 +2012,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Creates a new version with deletions for a new batch_group_id.
      * This is the first batch of deletions for this batch_group_id.
      */
+    /**
+     * Creates a new version with batch_group_id for delete operations by reusing existing deletion logic.
+     * This delegates to the existing createVersionWithDeletion method, then associates
+     * the batch_group_id with the created version.
+     */
     private Mono<Void> createVersionWithBatchGroupIdForDeletions(Set<UUID> ids, UUID datasetId,
             List<DatasetItemFilter> filters, String batchGroupId,
             String workspaceId, String userName) {
@@ -2104,67 +2037,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
             }
 
             UUID baseVersionId = latestVersion.get().id();
+            int baseVersionItemCount = latestVersion.get().itemsTotal();
             UUID newVersionId = idGenerator.generateId();
 
-            // Get all items from base version
-            return versionDao.getItemIdsAndHashes(datasetId, baseVersionId)
-                    .map(DatasetItemIdAndHash::itemId)
-                    .collectList()
-                    .flatMap(allItems -> {
-                        // Determine which items to delete
-                        Set<UUID> itemsToDelete = ids != null ? ids : Set.of();
+            // Reuse existing deletion logic
+            return createVersionWithDeletion(datasetId, baseVersionId, newVersionId, ids,
+                    baseVersionItemCount, workspaceId, userName)
+                    .then(Mono.fromCallable(() -> {
+                        // After version is created, associate it with the batch_group_id
+                        template.inTransaction(WRITE, handle -> {
+                            var dao = handle.attach(DatasetVersionDAO.class);
+                            dao.updateBatchGroupId(newVersionId, batchGroupId, workspaceId);
+                            return null;
+                        });
 
-                        // Calculate unchanged items (items not being deleted)
-                        List<UUID> unchangedIds = allItems.stream()
-                                .filter(id -> !itemsToDelete.contains(id))
-                                .toList();
+                        log.info("Associated version '{}' with batch_group_id '{}' for dataset '{}'",
+                                newVersionId, batchGroupId, datasetId);
 
-                        log.info("Creating version from base '{}' with '{}' items, deleting '{}', keeping '{}'",
-                                baseVersionId, allItems.size(), itemsToDelete.size(), unchangedIds.size());
-
-                        // Apply delta: copy unchanged items, mark others as deleted
-                        return versionDao.applyDelta(
-                                datasetId,
-                                baseVersionId,
-                                newVersionId,
-                                List.of(), // no added items
-                                List.of(), // no edited items
-                                itemsToDelete, // deleted items
-                                unchangedIds) // unchanged items
-                                .flatMap(totalCount -> {
-                                    return Mono.fromCallable(() -> {
-                                        // Create version from delta
-                                        DatasetVersion version = versionService.createVersionFromDelta(
-                                                datasetId,
-                                                newVersionId,
-                                                totalCount.intValue(),
-                                                baseVersionId,
-                                                null, // No tags
-                                                "Auto-created from SDK batch delete operation",
-                                                workspaceId,
-                                                userName);
-
-                                        // Associate the batch_group_id with this version
-                                        template.inTransaction(WRITE, handle -> {
-                                            var dao = handle.attach(DatasetVersionDAO.class);
-                                            dao.updateBatchGroupId(newVersionId, batchGroupId, workspaceId);
-                                            // Set as latest
-                                            dao.deleteTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
-                                            dao.insertTag(datasetId, DatasetVersionService.LATEST_TAG, newVersionId,
-                                                    userName, workspaceId);
-                                            return null;
-                                        });
-
-                                        log.info("Created version '{}' with batch_group_id '{}' for dataset '{}', " +
-                                                "totalCount '{}', deleted '{}'",
-                                                newVersionId, batchGroupId, datasetId, totalCount,
-                                                itemsToDelete.size());
-
-                                        return null;
-                                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-                                })
-                                .then();
-                    });
+                        return null;
+                    }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()))
+                    .then();
         });
     }
 }
