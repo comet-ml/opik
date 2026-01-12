@@ -53,10 +53,9 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
       return hasOtherUnprocessedItems ? "Update & next" : "Update & complete";
     } else {
       // Viewing a non-completed item (current item IS in unprocessedItems)
-      // Show "Submit & complete" only if this is the last unprocessed item
-      // AND there are no other unprocessed items
+      // Show "Submit & complete" only if this is the ONLY unprocessed item
       // Note: unprocessedItems includes items with cached unsaved changes
-      return isLastUnprocessedItem && unprocessedItems.length === 1
+      return unprocessedItems.length === 1
         ? "Submit & complete"
         : "Submit & next";
     }
