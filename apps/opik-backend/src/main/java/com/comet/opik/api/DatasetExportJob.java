@@ -31,7 +31,9 @@ public record DatasetExportJob(
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant expiresAt,
         @JsonView({
-                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy){
+                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
+        @JsonView({
+                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
 
     public static class View {
         public static class Public {
