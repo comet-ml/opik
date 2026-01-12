@@ -108,39 +108,38 @@ class RqWorkerManager:
         logger.info(f"  Max concurrent jobs: {self.max_concurrent_jobs}")
 
     def _cleanup_stale_workers(self) -> None:
-        """Clean up ALL worker registrations from this host on startup.
+        """Clean up stale worker registrations from this process on startup.
 
         When containers restart without graceful shutdown, old worker registrations
-        remain in Redis. Since we're starting fresh, we clean up ALL workers from
-        this hostname - they're all stale by definition (we haven't started any yet).
+        remain in Redis. This method only cleans up workers that belong to our
+        hostname AND our PID - avoiding interference with other processes.
         """
         try:
             redis_client = redis_utils.get_redis_client()
             hostname = socket.gethostname()
+            current_pid = os.getpid()
+            our_prefix = f"{hostname}-{current_pid}-"
 
             # Get all registered workers
             all_workers = Worker.all(connection=redis_client)
-            our_workers = []
-
-            for worker in all_workers:
-                # Check if this worker belongs to our hostname
-                # Since we're just starting up, ANY worker with our hostname is stale
-                if worker.name and worker.name.startswith(f"{hostname}-"):
-                    our_workers.append(worker)
+            our_workers = [
+                w for w in all_workers if w.name and w.name.startswith(our_prefix)
+            ]
 
             if our_workers:
                 logger.info(
-                    f"Found {len(our_workers)} existing worker registrations from {hostname}, cleaning up before starting new workers..."
+                    f"Found {len(our_workers)} stale worker registrations for {our_prefix}*, cleaning up..."
                 )
                 for worker in our_workers:
                     try:
-                        # Unregister the stale worker from Redis
                         worker.register_death()
-                        logger.info(f"Cleaned up worker: {worker.name}")
+                        logger.info(f"Cleaned up stale worker: {worker.name}")
                     except Exception as e:
                         logger.warning(f"Failed to clean up worker {worker.name}: {e}")
             else:
-                logger.debug(f"No existing workers found for hostname {hostname}")
+                logger.debug(
+                    f"No stale workers found for prefix {our_prefix}"
+                )
 
         except Exception as e:
             logger.warning(f"Failed to cleanup stale workers: {e}")
