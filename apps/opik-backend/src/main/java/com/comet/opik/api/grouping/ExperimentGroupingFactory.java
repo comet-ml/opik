@@ -31,8 +31,8 @@ public class ExperimentGroupingFactory extends GroupingFactory {
                 }
                 break;
             case TAGS :
-                // tags is Array(String), can use either LIST or STRING type
-                if (group.type() != FieldType.LIST && group.type() != FieldType.STRING) {
+                // tags is Array(String), only LIST type is valid
+                if (group.type() != FieldType.LIST) {
                     throw new BadRequestException(formattedErrorMessage);
                 }
                 break;
