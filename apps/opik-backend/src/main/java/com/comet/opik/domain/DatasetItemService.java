@@ -926,20 +926,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             }
 
             if (batchId == null) {
-                // Old SDK without batch_id - check rate limit
-                return checkRateLimitForOldSdk(datasetId, workspaceId)
-                        .flatMap(allowed -> {
-                            if (!allowed) {
-                                return Mono.error(new jakarta.ws.rs.ClientErrorException(
-                                        "Multiple rapid dataset deletes detected within 60 seconds. " +
-                                                "This operation requires SDK version >= 1.x.x that supports batched operations. "
-                                                +
-                                                "Please upgrade your Opik SDK.",
-                                        Response.Status.TOO_MANY_REQUESTS));
-                            }
-                            // Allow single delete for old SDK
-                            return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
-                        });
+                // Old SDK without batch_id - use legacy behavior
+                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName);
             }
 
             // New SDK with batch_id - for DELETE, batch_id is not used (only useful for INSERT)
@@ -1598,20 +1586,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
 
             if (batchId == null) {
-                // Old SDK without batch_id - check rate limit
-                return checkRateLimitForOldSdk(datasetId, workspaceId)
-                        .flatMap(allowed -> {
-                            if (!allowed) {
-                                return Mono.error(new jakarta.ws.rs.ClientErrorException(
-                                        "Multiple rapid dataset inserts detected within 60 seconds. " +
-                                                "This operation requires SDK version >= 1.x.x that supports batched operations. "
-                                                +
-                                                "Please upgrade your Opik SDK. See: https://docs.opik.ai/upgrade",
-                                        Response.Status.TOO_MANY_REQUESTS));
-                            }
-                            // Allow single insert for old SDK
-                            return saveItemsWithVersion(batch, datasetId);
-                        })
+                // Old SDK without batch_id - use legacy behavior
+                return saveItemsWithVersion(batch, datasetId)
                         .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                                 .put(RequestContext.USER_NAME, userName));
             }
@@ -1633,24 +1609,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName));
         });
-    }
-
-    private Mono<Boolean> checkRateLimitForOldSdk(UUID datasetId, String workspaceId) {
-        // Check if another insert happened within the last 60 seconds (configurable)
-        return Mono.fromCallable(() -> {
-            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
-            if (latestVersion.isEmpty()) {
-                return true; // No versions yet - allow
-            }
-
-            java.time.Instant now = java.time.Instant.now();
-            java.time.Instant versionCreated = latestVersion.get().createdAt();
-            long secondsSinceLastInsert = java.time.Duration.between(versionCreated, now).getSeconds();
-
-            // Configurable threshold (default 60 seconds)
-            long rateLimitSeconds = 60; // TODO: Make this configurable via FeatureFlags
-            return secondsSinceLastInsert >= rateLimitSeconds;
-        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     private Mono<DatasetVersion> appendItemsToVersion(UUID datasetId, UUID versionId, List<DatasetItem> items,
