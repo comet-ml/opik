@@ -8,6 +8,7 @@ export type ProviderApiKeyPublicProvider =
     | "gemini"
     | "openrouter"
     | "vertex-ai"
+    | "bedrock"
     | "custom-llm"
     | "opik-free";
 export const ProviderApiKeyPublicProvider = {
@@ -16,6 +17,7 @@ export const ProviderApiKeyPublicProvider = {
     Gemini: "gemini",
     Openrouter: "openrouter",
     VertexAi: "vertex-ai",
+    Bedrock: "bedrock",
     CustomLlm: "custom-llm",
     OpikFree: "opik-free",
 } as const;

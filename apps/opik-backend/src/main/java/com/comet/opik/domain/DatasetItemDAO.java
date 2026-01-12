@@ -71,8 +71,6 @@ public interface DatasetItemDAO {
 
     Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
-
-    Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
 }
 
 @Singleton
@@ -867,17 +865,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
-            """;
-
-    private static final String SELECT_DRAFT_ITEM_IDS_AND_HASHES = """
-            SELECT
-                id,
-                data_hash
-            FROM dataset_items
-            WHERE dataset_id = :datasetId
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
@@ -1681,25 +1668,5 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
-    }
-
-    @Override
-    @WithSpan
-    public Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(@NonNull UUID datasetId) {
-
-        log.info("Fetching draft item IDs and hashes for dataset='{}'", datasetId);
-
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_item_ids_and_hashes");
-
-        return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(SELECT_DRAFT_ITEM_IDS_AND_HASHES)
-                    .bind("datasetId", datasetId.toString());
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map((row, metadata) -> DatasetItemIdAndHash.builder()
-                            .itemId(UUID.fromString(row.get("id", String.class)))
-                            .dataHash(row.get("data_hash", Long.class))
-                            .build()));
-        }).doFinally(signalType -> endSegment(segment));
     }
 }

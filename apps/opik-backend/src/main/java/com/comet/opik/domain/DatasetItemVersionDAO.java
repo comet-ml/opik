@@ -32,6 +32,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -231,7 +232,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
                 dataset_item_id,
-                data_hash
+                data_hash,
+                tags
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -1415,10 +1417,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMap(result -> result.map((row, metadata) -> {
                         var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
                         var hash = row.get("data_hash", Long.class);
-                        log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}'", datasetItemId, hash);
+                        var tags = Optional.ofNullable(row.get("tags", String[].class))
+                                .map(Arrays::asList)
+                                .orElse(List.of());
+                        log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
+                                datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
                                 .itemId(datasetItemId)
                                 .dataHash(hash)
+                                .tags(tags)
                                 .build();
                     }))
                     .collectList()
@@ -1919,9 +1926,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> batchUpdateItems(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull DatasetItemBatchUpdate batchUpdate, @NonNull List<UUID> uuids) {
 
-        // Early return if no IDs or filters provided
-        if ((batchUpdate.ids() == null || batchUpdate.ids().isEmpty())
-                && (batchUpdate.filters() == null || batchUpdate.filters().isEmpty())) {
+        // Early return ONLY if IDs are explicitly empty AND filters are null (not provided at all)
+        // Note: empty filters list means "select all items", so we should NOT early return in that case
+        boolean hasIds = batchUpdate.ids() != null && !batchUpdate.ids().isEmpty();
+        boolean hasFilters = batchUpdate.filters() != null; // null means not provided, empty list means "select all"
+
+        if (!hasIds && !hasFilters) {
+            // Neither IDs nor filters provided - nothing to update
             return Mono.just(0L);
         }
 

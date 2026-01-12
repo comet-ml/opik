@@ -45,7 +45,6 @@ import SidebarMenuItem, {
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
@@ -78,7 +77,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: ChartLine,
         label: "Dashboards",
         count: "dashboards",
-        featureFlag: FeatureToggleKeys.DASHBOARDS_ENABLED,
       },
     ],
   },
@@ -200,9 +198,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
-  const isDashboardsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DASHBOARDS_ENABLED,
-  );
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -326,7 +321,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded && isDashboardsEnabled,
+      enabled: expanded,
     },
   );
 

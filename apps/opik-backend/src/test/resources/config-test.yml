@@ -113,8 +113,6 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
-  # Disable retries for faster test execution
-  retryAttempts: 0
 
 openTelemetry:
   # Default: 3h
@@ -434,9 +432,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
-  # Default: true
-  # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: "false"
@@ -458,6 +453,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Vertex AI provider is enabled
   vertexaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Bedrock provider is enabled
+  bedrockProviderEnabled: "true"
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"
@@ -559,6 +557,7 @@ webhook:
   poolingInterval: 1s
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  # Note: In tests, set this <= poolingInterval to avoid backpressure drops
   longPollingDuration: 500ms
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
