@@ -414,7 +414,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                                 // Generate UUIDs for items
                                 // The edited item is excluded from the copy, so we need baseItemsCount - 1 UUIDs for unchanged items
-                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseItemsCount - 1);
+                                // Use Math.max to handle edge case where baseItemsCount could be 0 or 1
+                                int unchangedCount = Math.max(0, baseItemsCount - 1);
+                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(unchangedCount);
 
                                 DatasetItem patchedItemWithId = patchedItem.toBuilder()
                                         .id(existingItem.id()) // Preserve the original row ID
