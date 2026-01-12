@@ -47,7 +47,8 @@ def _get_synonym(
             model_parameters=model_parameters,
             is_reasoning=True,
         )
-        return response.strip()
+        response_item = response[0] if isinstance(response, list) else response
+        return response_item.strip()
     except Exception as e:
         logger.warning(f"Error getting synonym for '{word}': {e}")
         return word
@@ -78,7 +79,8 @@ def _modify_phrase(
             model_parameters=model_parameters,
             is_reasoning=True,
         )
-        return response.strip()
+        response_item = response[0] if isinstance(response, list) else response
+        return response_item.strip()
     except Exception as e:
         logger.warning(f"Error modifying phrase '{phrase}': {e}")
         return phrase
@@ -285,12 +287,13 @@ def _semantic_mutation(
             is_reasoning=True,
         )
 
+        response_item = response[0] if isinstance(response, list) else response
         try:
-            messages = utils.json_to_dict(response.strip())
+            messages = utils.json_to_dict(response_item.strip())
         except Exception as parse_exc:
             raise RuntimeError(
                 f"Error parsing semantic mutation response as JSON. "
-                f"Response: {response!r}\nOriginal error: {parse_exc}"
+                f"Response: {response_item!r}\nOriginal error: {parse_exc}"
             ) from parse_exc
         return chat_prompt.ChatPrompt(
             messages=messages,
@@ -342,14 +345,15 @@ def _radical_innovation_mutation(
             model_parameters=model_parameters,
             is_reasoning=True,
         )
-        logger.info(
-            f"Radical innovation LLM result (truncated): {new_prompt_str[:200]}"
+        response_item = (
+            new_prompt_str[0] if isinstance(new_prompt_str, list) else new_prompt_str
         )
+        logger.info(f"Radical innovation LLM result (truncated): {response_item[:200]}")
         try:
-            new_messages = utils.json_to_dict(new_prompt_str)
+            new_messages = utils.json_to_dict(response_item)
         except Exception as parse_exc:
             logger.warning(
-                f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {new_prompt_str[:200]}. Error: {parse_exc}. Returning original."
+                f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."
             )
             return prompt
         return chat_prompt.ChatPrompt(

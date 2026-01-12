@@ -715,10 +715,69 @@ class BaseOptimizer(ABC):
             else:
                 prompts_dict = {prompt.name: prompt}
 
-            raw_model_output = agent.invoke_agent(
-                prompts=prompts_dict, dataset_item=dataset_item
+            # Only the active prompt's model_kwargs control pass@k for single-prompt runs.
+            prompt_config = (
+                list(prompts_dict.values())[0].model_kwargs
+                if len(prompts_dict) == 1
+                else {}
             )
-            cleaned_model_output = raw_model_output.strip()
+            # Normalize n to an int so pass@k selection logic stays predictable.
+            requested_n = int(prompt_config.get("n", 1) or 1)
+
+            if requested_n > 1 and hasattr(agent, "invoke_agent_candidates"):
+                candidates = agent.invoke_agent_candidates(
+                    prompts=prompts_dict, dataset_item=dataset_item
+                )
+                if not candidates:
+                    raw_model_output = agent.invoke_agent(
+                        prompts=prompts_dict, dataset_item=dataset_item
+                    )
+                    cleaned_model_output = raw_model_output.strip()
+                else:
+                    scored_candidates: list[tuple[str, float]] = []
+                    for candidate in candidates:
+                        try:
+                            metric_val = metric(
+                                dataset_item=dataset_item, llm_output=candidate
+                            )
+                            if isinstance(metric_val, list):
+                                metric_score = max(
+                                    (score.value for score in metric_val), default=0.0
+                                )
+                            elif hasattr(metric_val, "value"):
+                                metric_score = float(metric_val.value)
+                            else:
+                                metric_score = float(metric_val)
+                        except Exception:
+                            metric_score = 0.0
+                        scored_candidates.append((candidate, metric_score))
+
+                    best_idx, (best_output, _) = max(
+                        enumerate(scored_candidates), key=lambda item: item[1][1]
+                    )
+
+                    try:
+                        opik_context.update_current_trace(
+                            metadata={
+                                "opik_optimizer": {
+                                    "n_requested": requested_n,
+                                    "candidates_scored": len(scored_candidates),
+                                    "candidate_scores": [
+                                        score for _, score in scored_candidates
+                                    ],
+                                    "chosen_index": best_idx,
+                                }
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                    cleaned_model_output = best_output.strip()
+            else:
+                raw_model_output = agent.invoke_agent(
+                    prompts=prompts_dict, dataset_item=dataset_item
+                )
+                cleaned_model_output = raw_model_output.strip()
 
             # Add tags to trace for optimization tracking
             if self.current_optimization_id:

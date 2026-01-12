@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn
 from opik.evaluation.evaluation_result import EvaluationResult
@@ -152,12 +152,17 @@ Scores:
             model_parameters=self.model_parameters,
             response_model=RootCauseAnalysis,
         )
+        if isinstance(root_cause_response, list):
+            root_cause = root_cause_response[0]
+        else:
+            root_cause = root_cause_response
+        root_cause = cast(RootCauseAnalysis, root_cause)
 
         return BatchAnalysis(
             batch_number=batch_number,
             start_index=batch_start,
             end_index=actual_end,
-            failure_modes=root_cause_response.failure_modes,
+            failure_modes=root_cause.failure_modes,
         )
 
     async def _synthesize_batch_analyses_async(
@@ -210,7 +215,11 @@ Scores:
             response_model=HierarchicalRootCauseAnalysis,
         )
 
-        return synthesis_response
+        if isinstance(synthesis_response, list):
+            synthesis = synthesis_response[0]
+        else:
+            synthesis = synthesis_response
+        return cast(HierarchicalRootCauseAnalysis, synthesis)
 
     def _validate_reasons_present(self, test_results: list[Any]) -> None:
         """

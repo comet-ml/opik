@@ -159,7 +159,10 @@ class PromptHallOfFame:
             )
 
             # Parse extracted patterns
-            patterns = self._parse_pattern_response(response)
+            responses = response if isinstance(response, list) else [response]
+            patterns: list[str] = []
+            for response_item in responses:
+                patterns.extend(self._parse_pattern_response(response_item))
 
             if patterns:
                 logger.debug(f"Extracted {len(patterns)} patterns from hall of fame")

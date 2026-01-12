@@ -210,7 +210,9 @@ class ParameterOptimizer(BaseOptimizer):
         local_search_scale_override = local_search_scale
 
         # Set model defaults and build base model kwargs
+        # Parameter optimization evaluates a single candidate per trial, so drop n.
         base_model_kwargs = copy.deepcopy(self.model_parameters or {})
+        base_model_kwargs.pop("n", None)
 
         # Build base prompts dict with model defaults
         base_prompts: dict[str, chat_prompt.ChatPrompt] = {}
@@ -221,6 +223,8 @@ class ParameterOptimizer(BaseOptimizer):
                 **base_model_kwargs,
                 **copy.deepcopy(p.model_kwargs or {}),
             }
+            # Keep per-trial evaluation single-choice until multi-candidate selection is added.
+            merged_kwargs.pop("n", None)
             base_p.model_kwargs = merged_kwargs
             base_prompts[name] = base_p
 

@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 
 import logging
 import opik
@@ -63,21 +63,21 @@ def infer_output_style_from_dataset(
         )
 
         try:
-            inferred_style_response = cast(
-                StyleInferenceResponse,
-                _llm_calls.call_model(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": prompts.get("infer_style_system_prompt"),
-                        },
-                        {"role": "user", "content": user_prompt_for_style_inference},
-                    ],
-                    model=model,
-                    model_parameters=model_parameters,
-                    is_reasoning=True,
-                    response_model=StyleInferenceResponse,
-                ),
+            response = _llm_calls.call_model(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": prompts.get("infer_style_system_prompt"),
+                    },
+                    {"role": "user", "content": user_prompt_for_style_inference},
+                ],
+                model=model,
+                model_parameters=model_parameters,
+                is_reasoning=True,
+                response_model=StyleInferenceResponse,
+            )
+            inferred_style_response = (
+                response[0] if isinstance(response, list) else response
             )
             inferred_style = inferred_style_response.style.strip()
             if inferred_style:

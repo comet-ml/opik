@@ -1,3 +1,11 @@
+"""
+LiteLLM-backed agent implementation with Opik trace metadata and tool support.
+
+This agent is the default execution layer for optimizers: it renders ChatPrompt
+messages, calls LiteLLM for completions, and forwards usage/cost metadata to any
+owning optimizer for telemetry and budgeting.
+"""
+
 from ..api_objects import chat_prompt
 from .. import _llm_calls, _throttle
 import os
@@ -13,6 +21,8 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
 class LiteLLMAgent(optimizable_agent.OptimizableAgent):
+    """Concrete OptimizableAgent that delegates execution to LiteLLM."""
+
     def __init__(
         self,
         project_name: str,
@@ -108,6 +118,9 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             pass
 
         if allow_tool_use and prompt.tools:
+            if (prompt.model_kwargs or {}).get("n", 1) != 1:
+                # TODO: Support multi-choice tool execution by selecting a single candidate.
+                prompt.model_kwargs["n"] = 1
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
             count = 0
@@ -182,6 +195,63 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             else:
                 result = ""
         return result
+
+    def invoke_agent_candidates(
+        self,
+        prompts: dict[str, "chat_prompt.ChatPrompt"],
+        dataset_item: dict[str, Any],
+        allow_tool_use: bool = False,
+        seed: int | None = None,
+    ) -> list[str]:
+        """
+        Return one output per LiteLLM choice for pass@k evaluation.
+
+        When the prompt requests n>1 completions and tool calls are disabled, this
+        surfaces each choice as its own candidate so the optimizer can score and
+        select the best output. If tools are enabled, the method falls back to a
+        single candidate because tool execution currently assumes n=1.
+        """
+        if len(prompts.keys()) > 1:
+            raise ValueError(
+                "To optimize multiple prompts, you will need to define a specific agent class."
+            )
+        prompt = list(prompts.values())[0]
+
+        if allow_tool_use and prompt.tools:
+            if (prompt.model_kwargs or {}).get("n", 1) != 1:
+                # TODO: Support multi-choice tool execution by selecting a single candidate.
+                prompt.model_kwargs["n"] = 1
+            return [self.invoke_agent(prompts, dataset_item, allow_tool_use, seed)]
+
+        messages = prompt.get_messages(dataset_item)
+        all_messages: list[dict[str, Any]] = []
+        if messages is not None:
+            all_messages.extend(messages)
+
+        all_messages = self._prepare_messages(all_messages, dataset_item)
+
+        try:
+            opik_context.update_current_trace(metadata=self.trace_metadata)
+        except Exception:
+            pass
+
+        response = self._llm_complete(
+            model=prompt.model,
+            messages=all_messages,
+            tools=None,
+            seed=seed,
+            model_kwargs=prompt.model_kwargs,
+        )
+        _llm_calls._increment_llm_counter_if_in_optimizer()
+        self._apply_cost_usage_to_owner(response)
+
+        choices = response.choices or []
+        outputs = [
+            ch.message.content
+            for ch in choices
+            if hasattr(ch, "message") and getattr(ch, "message").content
+        ]
+        return outputs if outputs else [""]
 
     def _prepare_messages(
         self, messages: list[dict[str, Any]], dataset_item: dict[str, Any] | None

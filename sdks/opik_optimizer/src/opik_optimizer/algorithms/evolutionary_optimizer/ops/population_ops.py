@@ -135,42 +135,45 @@ def initialize_population(
                     is_reasoning=True,
                 )
 
+                response_items = (
+                    response_content
+                    if isinstance(response_content, list)
+                    else [response_content]
+                )
                 logger.debug(
-                    f"Raw LLM response for fresh start prompts: {response_content}"
+                    "Raw LLM response for fresh start prompts: %s", response_items
                 )
 
-                fresh_prompts = utils.json_to_dict(response_content)
-                if isinstance(fresh_prompts, list):
-                    if all(isinstance(p, dict) for p in fresh_prompts) and all(
-                        p.get("role") is not None for p in fresh_prompts
-                    ):
-                        population.append(
+                # Collect prompt lists from each n-choice response to expand candidates.
+                parsed_prompts: list[list[dict[str, Any]]] = []
+                for response_item in response_items:
+                    fresh_prompts = utils.json_to_dict(response_item)
+                    if isinstance(fresh_prompts, list):
+                        if all(isinstance(p, dict) for p in fresh_prompts) and all(
+                            p.get("role") is not None for p in fresh_prompts
+                        ):
+                            parsed_prompts.append(fresh_prompts)
+                        elif all(isinstance(p, list) for p in fresh_prompts):
+                            parsed_prompts.extend(fresh_prompts)
+
+                if parsed_prompts:
+                    prompts_to_use = parsed_prompts[:num_fresh_starts]
+                    population.extend(
+                        [
                             chat_prompt.ChatPrompt(
-                                messages=fresh_prompts,
+                                messages=p,
                                 tools=prompt.tools,
                                 function_map=prompt.function_map,
                             )
-                        )
-                        init_pop_report.success_fresh_prompts(1)
-                    elif all(isinstance(p, list) for p in fresh_prompts):
-                        population.extend(
-                            [
-                                chat_prompt.ChatPrompt(
-                                    messages=p,
-                                    tools=prompt.tools,
-                                    function_map=prompt.function_map,
-                                )
-                                for p in fresh_prompts[:num_fresh_starts]
-                            ]
-                        )
-                        init_pop_report.success_fresh_prompts(
-                            len(fresh_prompts[:num_fresh_starts])
-                        )
-                    else:
-                        init_pop_report.failed_fresh_prompts(
-                            num_fresh_starts,
-                            f"LLM response for fresh starts was not a valid list of strings or was empty: {response_content}. Skipping fresh start prompts.",
-                        )
+                            for p in prompts_to_use
+                        ]
+                    )
+                    init_pop_report.success_fresh_prompts(len(prompts_to_use))
+                else:
+                    init_pop_report.failed_fresh_prompts(
+                        num_fresh_starts,
+                        "LLM response for fresh starts was not a valid list of prompts. Skipping fresh start prompts.",
+                    )
             except json.JSONDecodeError as e_json:
                 init_pop_report.failed_fresh_prompts(
                     num_fresh_starts,
@@ -208,19 +211,28 @@ def initialize_population(
                     model_parameters=model_parameters,
                     is_reasoning=True,
                 )
-                logger.debug(
-                    f"Raw response for population variations: {response_content_variations}"
+                response_items = (
+                    response_content_variations
+                    if isinstance(response_content_variations, list)
+                    else [response_content_variations]
                 )
-                json_response_variations = json.loads(response_content_variations)
-                generated_prompts_variations = [
-                    p["prompt"]
-                    for p in json_response_variations.get("prompts", [])
-                    if isinstance(p, dict) and "prompt" in p
-                ]
+                logger.debug(
+                    "Raw response for population variations: %s", response_items
+                )
+                generated_prompts_variations: list[list[dict[str, Any]]] = []
+                for response_item in response_items:
+                    json_response_variations = json.loads(response_item)
+                    generated_prompts_variations.extend(
+                        [
+                            p["prompt"]
+                            for p in json_response_variations.get("prompts", [])
+                            if isinstance(p, dict) and "prompt" in p
+                        ]
+                    )
 
                 if generated_prompts_variations:
                     init_pop_report.success_variations(
-                        len(generated_prompts_variations[:num_variations_on_initial])
+                        len(generated_prompts_variations)
                     )
                     population.extend(
                         [
@@ -229,9 +241,7 @@ def initialize_population(
                                 tools=prompt.tools,
                                 function_map=prompt.function_map,
                             )
-                            for p in generated_prompts_variations[
-                                :num_variations_on_initial
-                            ]
+                            for p in generated_prompts_variations
                         ]
                     )
                 else:

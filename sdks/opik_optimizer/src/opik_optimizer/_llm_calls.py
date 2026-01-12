@@ -235,7 +235,8 @@ class StructuredOutputParsingError(Exception):
 def _parse_response(
     response: Any,
     response_model: type[BaseModel] | None = None,
-) -> BaseModel | str:
+    return_all: bool = False,
+) -> BaseModel | str | list[BaseModel] | list[str]:
     """
     Parse LiteLLM response, with optional structured output parsing.
 
@@ -244,12 +245,19 @@ def _parse_response(
         response_model: Optional Pydantic model for structured output
 
     Returns:
-        If response_model is provided, returns an instance of that model.
-        Otherwise, returns the raw string response.
+        If response_model is provided, returns an instance of that model (or a list when
+        return_all=True). Otherwise, returns the raw string response (or list of strings).
     """
-    content = response.choices[0].message.content
+    choices = getattr(response, "choices", None) or []
+    if return_all and choices:
+        contents = []
+        for choice in choices:
+            contents.append(choice.message.content)
+        return _parse_response_list(contents, response_model)
 
-    finish_reason = getattr(response.choices[0], "finish_reason", None)
+    content = choices[0].message.content if choices else ""
+
+    finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
     # When the model was truncated due to max_tokens we raise a BadRequest so downstream sees the OpenAI error.
     # Empty string responses with a truncation finish reason mean the model hit max_tokens.
     if (
@@ -306,6 +314,51 @@ def _parse_response(
     return content
 
 
+def _parse_response_list(
+    contents: list[str],
+    response_model: type[BaseModel] | None,
+) -> list[BaseModel] | list[str]:
+    """
+    Parse multiple LLM responses into a list of strings or Pydantic models.
+
+    This helper is used when the LLM returns multiple choices (n>1) or when
+    return_all=True. Each raw choice content is parsed independently so callers
+    can score or select candidates without concatenating them into a single
+    response. When response_model is provided, each content string is validated
+    into that model, with a JSON-cleanup fallback that mirrors _parse_response.
+
+    Args:
+        contents: Raw choice contents (one string per LLM choice).
+        response_model: Optional Pydantic model to validate each choice.
+
+    Returns:
+        List of strings when response_model is None, otherwise a list of parsed
+        Pydantic model instances (one per choice).
+    """
+    if response_model is None:
+        return contents
+
+    parsed: list[BaseModel] = []
+    for content in contents:
+        try:
+            parsed.append(response_model.model_validate_json(content))
+        except PydanticValidationError as exc:
+            try:
+                cleaned = _utils.json_to_dict(content)
+                if cleaned is not None:
+                    parsed.append(response_model.model_validate(cleaned))
+                    continue
+            except (
+                json.JSONDecodeError,
+                SyntaxError,
+                TypeError,
+                ValueError,
+            ):
+                pass
+            raise StructuredOutputParsingError(content=content, error=exc) from exc
+    return parsed
+
+
 # Overloads for call_model to provide precise return types
 @overload
 def call_model(
@@ -324,7 +377,8 @@ def call_model(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
-) -> str: ...
+    return_all: bool = False,
+) -> str | list[str]: ...
 
 
 @overload
@@ -344,7 +398,8 @@ def call_model(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
-) -> _T: ...
+    return_all: bool = False,
+) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited(_limiter)
@@ -366,6 +421,7 @@ def call_model(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
+    return_all: bool = False,
 ) -> BaseModel | str:
     """
     Call the LLM model with optional structured output.
@@ -436,7 +492,8 @@ def call_model(
     logger.debug(
         f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
     )
-    return _parse_response(response, response_model)
+    wants_all = return_all or (final_params_for_litellm.get("n", 1) or 1) > 1
+    return _parse_response(response, response_model, wants_all)
 
 
 # Overloads for call_model_async to provide precise return types
@@ -457,7 +514,8 @@ async def call_model_async(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> str: ...
+    return_all: bool = False,
+) -> str | list[str]: ...
 
 
 @overload
@@ -477,7 +535,8 @@ async def call_model_async(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> _T: ...
+    return_all: bool = False,
+) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited_async(_limiter)
@@ -499,6 +558,7 @@ async def call_model_async(
     # Optimizer-specific metadata (not passed to LiteLLM)
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    return_all: bool = False,
 ) -> BaseModel | str:
     """
     Async version of _call_model using litellm.acompletion.
@@ -569,4 +629,5 @@ async def call_model_async(
     logger.debug(
         f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
     )
-    return _parse_response(response, response_model)
+    wants_all = return_all or (final_params_for_litellm.get("n", 1) or 1) > 1
+    return _parse_response(response, response_model, wants_all)

@@ -203,13 +203,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
+        # Few-shot prompt synthesis expects a single structured response.
+        model_parameters = dict(self.model_parameters)
+        model_parameters.pop("n", None)
         response_content = _llm_calls.call_model(
             messages=messages,
             model=model,
             seed=self.seed,
-            model_parameters=self.model_parameters,
+            model_parameters=model_parameters,
             response_model=DynamicFewShotPromptMessages,
         )
+        if isinstance(response_content, list):
+            response_content = response_content[0]
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
         new_prompts: dict[str, chat_prompt.ChatPrompt] = {}

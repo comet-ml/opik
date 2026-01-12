@@ -345,6 +345,30 @@ class TestLiteLLMAgentMultipleChoices:
             assert "Choice 1" in result
             assert "Choice 2" in result
 
+    def test_invoke_candidates_returns_all_choices(
+        self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
+    ) -> None:
+        """Test invoke_agent_candidates returns each choice separately."""
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(),
+            MagicMock(),
+        ]
+        mock_response.choices[0].message = MagicMock()
+        mock_response.choices[0].message.content = "Choice A"
+        mock_response.choices[1].message = MagicMock()
+        mock_response.choices[1].message.content = "Choice B"
+        mock_response.cost = None
+        mock_response.usage = None
+
+        with patch.object(agent, "_llm_complete", return_value=mock_response):
+            result = agent.invoke_agent_candidates(
+                prompts={"test": simple_prompt},
+                dataset_item={"input": "test"},
+            )
+
+            assert result == ["Choice A", "Choice B"]
+
     def test_invoke_with_empty_choices(
         self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
     ) -> None:

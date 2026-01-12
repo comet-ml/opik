@@ -19,6 +19,7 @@ from typing import Any, TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+from opik_optimizer.api_objects import chat_prompt
 
 if TYPE_CHECKING:
     from opik import Dataset
@@ -231,6 +232,83 @@ class TestSkipAndResultHelpers:
         assert result.initial_score == 0.75
         assert result.history == []
         assert result.details["stopped_early"] is True
+
+
+def test_evaluate_prompt_selects_best_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Choose the highest-scoring candidate when pass@k returns multiple outputs."""
+    optimizer = ConcreteOptimizer(model="gpt-4")
+
+    class CandidateAgent(MagicMock):
+        def invoke_agent_candidates(
+            self, prompts, dataset_item, allow_tool_use=False, seed=None
+        ):
+            _ = allow_tool_use, seed
+            return ["bad", "good"]
+
+        def invoke_agent(self, prompts, dataset_item, allow_tool_use=False, seed=None):
+            _ = allow_tool_use, seed
+            return "bad"
+
+    agent = CandidateAgent()
+
+    def metric(dataset_item, llm_output):
+        _ = dataset_item
+        return 1.0 if llm_output == "good" else 0.0
+
+    prompt = chat_prompt.ChatPrompt(
+        name="p",
+        messages=[{"role": "user", "content": "{input}"}],
+        model_parameters={"n": 2},
+    )
+
+    def fake_evaluate(
+        dataset,
+        evaluated_task,
+        metric,
+        num_threads,
+        optimization_id=None,
+        dataset_item_ids=None,
+        project_name=None,
+        n_samples=None,
+        experiment_config=None,
+        verbose=1,
+        return_evaluation_result=False,
+    ):
+        _ = (
+            dataset,
+            metric,
+            num_threads,
+            optimization_id,
+            dataset_item_ids,
+            project_name,
+            n_samples,
+            experiment_config,
+            verbose,
+            return_evaluation_result,
+        )
+        output = evaluated_task({"id": "1", "input": "x"})
+        assert output["llm_output"] == "good"
+        return 1.0
+
+    monkeypatch.setattr(
+        "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
+    )
+
+    dataset = MagicMock()
+    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
+
+    score = optimizer.evaluate_prompt(
+        prompt=prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        n_threads=1,
+        verbose=0,
+    )
+
+    assert score == 1.0
 
 
 class TestDeepMergeDicts:

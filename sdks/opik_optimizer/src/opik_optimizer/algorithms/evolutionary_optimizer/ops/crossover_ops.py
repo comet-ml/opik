@@ -194,9 +194,11 @@ def _llm_crossover_messages(
         is_reasoning=True,
     )
 
+    response_item = response[0] if isinstance(response, list) else response
+
     # Convert Pydantic models to dicts
-    first_child_messages = [msg.model_dump() for msg in response.child_1]
-    second_child_messages = [msg.model_dump() for msg in response.child_2]
+    first_child_messages = [msg.model_dump() for msg in response_item.child_1]
+    second_child_messages = [msg.model_dump() for msg in response_item.child_2]
 
     return first_child_messages, second_child_messages
 
