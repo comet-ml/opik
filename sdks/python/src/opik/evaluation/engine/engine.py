@@ -27,6 +27,28 @@ LOGGER = logging.getLogger(__name__)
 EVALUATION_TASK_NAME = "evaluation_task"
 
 
+def _calculate_total_items(
+    dataset: dataset.Dataset,
+    nb_samples: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+) -> Optional[int]:
+    """
+    Calculate the total number of items that will be evaluated.
+
+    Returns None if the total cannot be determined (e.g., when using a sampler).
+    """
+    if dataset_item_ids is not None:
+        return len(dataset_item_ids)
+
+    # If nb_samples is specified and smaller than dataset size, use it
+    if nb_samples is not None:
+        if dataset.dataset_items_count is not None:
+            return min(nb_samples, dataset.dataset_items_count)
+        return nb_samples
+
+    return dataset.dataset_items_count
+
+
 class EvaluationEngine:
     def __init__(
         self,
@@ -47,28 +69,6 @@ class EvaluationEngine:
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=scoring_key_mapping,
         )
-
-    def _calculate_total_items(
-        self,
-        dataset_: dataset.Dataset,
-        nb_samples: Optional[int],
-        dataset_item_ids: Optional[List[str]],
-    ) -> Optional[int]:
-        """
-        Calculate the total number of items that will be evaluated.
-
-        Returns None if the total cannot be determined (e.g., when using a sampler).
-        """
-        if dataset_item_ids is not None:
-            return len(dataset_item_ids)
-
-        # If nb_samples is specified and smaller than dataset size, use it
-        if nb_samples is not None:
-            if dataset_.dataset_items_count is not None:
-                return min(nb_samples, dataset_.dataset_items_count)
-            return nb_samples
-
-        return dataset_.dataset_items_count
 
     @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _compute_test_result_for_test_case(
@@ -355,8 +355,8 @@ class EvaluationEngine:
             dataset_items_iter = iter(dataset_items_list)
 
         # Calculate total items for progress bar
-        total_items = self._calculate_total_items(
-            dataset_=dataset_,
+        total_items = _calculate_total_items(
+            dataset=dataset_,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
         )
