@@ -6,9 +6,12 @@ import jakarta.ws.rs.BadRequestException;
 import java.util.List;
 
 public class ExperimentGroupingFactory extends GroupingFactory {
+
+    private static final List<String> SUPPORTED_FIELDS = List.of(METADATA, DATASET_ID, TAGS);
+
     @Override
     public List<String> getSupportedFields() {
-        return List.of(METADATA, DATASET_ID, TAGS);
+        return SUPPORTED_FIELDS;
     }
 
     @Override
