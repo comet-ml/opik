@@ -29,7 +29,6 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     currentIndex,
     queueItems,
     validationState,
-    isLastUnprocessedItem,
     isCurrentItemProcessed,
     unprocessedItems,
     handleNext,

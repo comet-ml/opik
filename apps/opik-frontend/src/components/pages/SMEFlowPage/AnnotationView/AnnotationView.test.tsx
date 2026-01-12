@@ -79,7 +79,6 @@ describe("AnnotationView - Button Label Logic", () => {
       canSubmit: true,
       errors: [],
     },
-    isLastUnprocessedItem: false,
     isCurrentItemProcessed: false,
     unprocessedItems: [
       { id: "item-1", name: "Item 1" },
@@ -99,7 +98,6 @@ describe("AnnotationView - Button Label Logic", () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: false,
         unprocessedItems: [
           { id: "item-1", name: "Item 1" },
           { id: "item-2", name: "Item 2" },
@@ -115,7 +113,6 @@ describe("AnnotationView - Button Label Logic", () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: true,
         unprocessedItems: [{ id: "item-1", name: "Item 1" }], // Only 1 unprocessed item
       });
 
@@ -128,7 +125,6 @@ describe("AnnotationView - Button Label Logic", () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: true,
         unprocessedItems: [
           { id: "item-1", name: "Item 1" }, // Has cached changes, still unprocessed
           { id: "item-2", name: "Item 2" }, // Has cached changes, still unprocessed
@@ -147,7 +143,6 @@ describe("AnnotationView - Button Label Logic", () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: false,
         unprocessedItems: [
           { id: "item-1", name: "Item 1" },
           { id: "item-2", name: "Item 2" },
@@ -294,7 +289,6 @@ describe("AnnotationView - Button Label Logic", () => {
         ...defaultContextValue,
         currentIndex: 2, // On the last item
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: true,
         unprocessedItems: [
           { id: "item-1", name: "Item 1" }, // Cached, still unprocessed
           { id: "item-2", name: "Item 2" }, // Cached, still unprocessed
@@ -318,7 +312,6 @@ describe("AnnotationView - Button Label Logic", () => {
         ...defaultContextValue,
         currentIndex: 2,
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: true,
         unprocessedItems: [{ id: "item-3", name: "Item 3" }], // Only 1 unprocessed
       });
 
@@ -336,7 +329,6 @@ describe("AnnotationView - Button Label Logic", () => {
         ...defaultContextValue,
         currentIndex: 0,
         isCurrentItemProcessed: false,
-        isLastUnprocessedItem: false,
         unprocessedItems: [
           { id: "item-1", name: "Item 1" },
           { id: "item-2", name: "Item 2" },
