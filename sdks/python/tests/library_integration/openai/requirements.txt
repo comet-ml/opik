@@ -1,3 +1,2 @@
 openai
 openai-agents
-eval-type-backport  # to support Python 3.9  TypeError: Unable to evaluate type annotation 'str | None'.
