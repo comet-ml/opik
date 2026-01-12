@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -6,25 +6,25 @@ import {
   Dialog,
   DialogAutoScrollBody,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
-import ProviderGrid from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
-import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
-import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
-import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
-import BedrockProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
+import ProviderSelectionStep from "./ProviderSelectionStep";
+import ProviderConfigurationStep from "./ProviderConfigurationStep";
 import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import { convertCustomProviderModels } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { ChevronLeft } from "lucide-react";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -32,16 +32,18 @@ interface SetupProviderDialogProps {
   onProviderAdded?: () => void;
 }
 
+type Step = "select" | "configure";
+
 const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   open,
   setOpen,
   onProviderAdded,
 }) => {
-  // Get provider options with "Add new" options for Bedrock and Custom
   const providerOptions = useProviderOptions({
     includeAddNewOptions: true,
   });
 
+  const [step, setStep] = useState<Step>("select");
   const [selectedComposedProvider, setSelectedComposedProvider] = useState<
     COMPOSED_PROVIDER_TYPE | ""
   >("");
@@ -65,17 +67,6 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     } as AIProviderFormType,
   });
 
-  // Auto-select first available provider when options change
-  useEffect(() => {
-    if (!selectedComposedProvider && providerOptions.length > 0) {
-      const firstOption = providerOptions[0];
-      setSelectedComposedProvider(firstOption.value);
-      setSelectedProviderType(firstOption.providerType);
-      form.setValue("provider", firstOption.providerType);
-      form.setValue("composedProviderType", firstOption.value);
-    }
-  }, [providerOptions, selectedComposedProvider, form]);
-
   const handleProviderSelect = useCallback(
     (
       composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -87,9 +78,17 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       form.setValue("composedProviderType", composedProviderType);
       form.setValue("apiKey", "");
       form.clearErrors();
+      setStep("configure");
     },
     [form],
   );
+
+  const handleBack = useCallback(() => {
+    setSelectedComposedProvider("");
+    setSelectedProviderType("");
+    form.reset();
+    setStep("select");
+  }, [form]);
 
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
@@ -156,93 +155,89 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         {
           onSuccess: () => {
             setOpen(false);
-            form.reset();
-            setSelectedComposedProvider("");
-            setSelectedProviderType("");
-
+            resetDialog();
             onProviderAdded?.();
           },
         },
       );
     },
-    [createProviderKey, setOpen, form, onProviderAdded],
+    [createProviderKey, setOpen, onProviderAdded],
   );
 
-  const handleCancel = useCallback(() => {
-    setOpen(false);
+  const resetDialog = useCallback(() => {
     form.reset();
     setSelectedComposedProvider("");
     setSelectedProviderType("");
-  }, [setOpen, form]);
+    setStep("select");
+  }, [form]);
 
-  const renderContent = () => {
-    if (providerOptions.length === 0) {
-      return (
-        <div className="comet-body-s text-muted-foreground">
-          No providers available for this environment
-        </div>
-      );
-    }
+  const handleCancel = useCallback(() => {
+    setOpen(false);
+    resetDialog();
+  }, [setOpen, resetDialog]);
 
-    return (
-      <DialogAutoScrollBody className="flex flex-col pr-6">
-        <p className="comet-body-s mb-4 text-muted-foreground">
-          To use the Playground, select an AI provider and enter your API key
-        </p>
-
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="flex flex-col gap-4"
-          >
-            <ProviderGrid
-              options={providerOptions}
-              selectedProvider={selectedComposedProvider}
-              onSelectProvider={handleProviderSelect}
-            />
-
-            {selectedProviderType && (
-              <>
-                {selectedProviderType === PROVIDER_TYPE.CUSTOM ? (
-                  <CustomProviderDetails form={form} />
-                ) : selectedProviderType === PROVIDER_TYPE.BEDROCK ? (
-                  <BedrockProviderDetails form={form} />
-                ) : selectedProviderType === PROVIDER_TYPE.VERTEX_AI ? (
-                  <VertexAIProviderDetails form={form} />
-                ) : (
-                  <CloudAIProviderDetails
-                    provider={selectedProviderType}
-                    form={form}
-                  />
-                )}
-              </>
-            )}
-          </form>
-        </Form>
-      </DialogAutoScrollBody>
-    );
-  };
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      setOpen(isOpen);
+      if (!isOpen) {
+        resetDialog();
+      }
+    },
+    [setOpen, resetDialog],
+  );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg sm:max-w-[720px]">
         <DialogHeader>
-          <DialogTitle>Add an AI provider</DialogTitle>
+          <DialogTitle>Add provider configuration</DialogTitle>
+          <DialogDescription>
+            <ExplainerDescription
+              {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
+            />
+          </DialogDescription>
         </DialogHeader>
 
-        {renderContent()}
+        <DialogAutoScrollBody className="flex flex-col pr-6">
+          {step === "select" ? (
+            <ProviderSelectionStep
+              providerOptions={providerOptions}
+              selectedComposedProvider={selectedComposedProvider}
+              onSelectProvider={handleProviderSelect}
+            />
+          ) : (
+            selectedProviderType && (
+              <ProviderConfigurationStep
+                selectedProviderType={selectedProviderType}
+                form={form}
+                onSubmit={handleSubmit}
+              />
+            )
+          )}
+        </DialogAutoScrollBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel} type="button">
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={!selectedProviderType}
-            onClick={form.handleSubmit(handleSubmit)}
-          >
-            Done
-          </Button>
+          {step === "select" ? null : (
+            <div className="flex w-full justify-between">
+              <Button
+                variant="ghost"
+                onClick={handleBack}
+                type="button"
+                className="p-0"
+              >
+                <ChevronLeft className="mr-1 size-4" />
+                Back
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleCancel} type="button">
+                  Cancel
+                </Button>
+                <Button type="submit" onClick={form.handleSubmit(handleSubmit)}>
+                  Add provider
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
