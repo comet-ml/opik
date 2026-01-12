@@ -2333,6 +2333,11 @@ class ExperimentsResourceTest {
                     "{\"provider\":\"anthropic\",\"model\":\"claude-3\"}",
                     "{\"provider\":\"openai\",\"model\":\"gpt-3.5\"}");
 
+            List<Set<String>> tagsList = List.of(
+                    Set.of("production", "v1"),
+                    Set.of("staging", "v2"),
+                    Set.of("production", "v2"));
+
             Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
             List<Trace> tracesAll = new ArrayList<>();
             Map<UUID, List<Span>> traceToSpans = new HashMap<>();
@@ -2353,6 +2358,7 @@ class ExperimentsResourceTest {
                                 .promptVersions(List.of(versionLink))
                                 .metadata(JsonUtils
                                         .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2481,7 +2487,35 @@ class ExperimentsResourceTest {
                                     .value(experiment.promptVersion().promptId().toString())
                                     .build(),
                             (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
-                                    .equals(experiment.promptVersion())));
+                                    .equals(experiment.promptVersion())),
+                    // Test grouping by TAGS without filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            null, null),
+                    // Test grouping by TAGS with DATASET_ID, no filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            null, null),
+                    // Test grouping by TAGS with filter on TAGS using CONTAINS
+                    Arguments.of(true, List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().stream().sorted().findFirst().orElse(""))
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
+                                    && exp.tags().contains(experiment.tags().stream().sorted().findFirst().orElse(""))),
+                    // Test grouping by DATASET_ID and TAGS with filter on TAGS using CONTAINS
+                    Arguments.of(true,
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().stream().sorted().findFirst().orElse(""))
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
+                                    && exp.tags()
+                                            .contains(experiment.tags().stream().sorted().findFirst().orElse(""))));
         }
 
         @ParameterizedTest
@@ -2503,7 +2537,8 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
         }
 
         @Test

@@ -15,6 +15,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.domain.ExperimentResponseBuilder;
 import com.comet.opik.utils.JsonUtils;
@@ -40,6 +41,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 
 @UtilityClass
 public class ExperimentsTestUtils {
@@ -96,11 +98,17 @@ public class ExperimentsTestUtils {
             Map<UUID, List<Span>> traceToSpans,
             List<Trace> traces) {
 
-        // Group experiments by extracting values for each GroupBy criterion
-        Map<List<String>, List<Experiment>> experimentGroups = experiments.stream()
-                .collect(Collectors.groupingBy(experiment -> extractGroupValues(experiment, groups)));
+        // Explode experiments by LIST fields (like arrayJoin in ClickHouse)
+        // Each experiment with LIST fields will appear in multiple groups
+        List<ExperimentWithGroupValues> explodedExperiments = explodeExperimentsByListFields(experiments, groups);
 
-        // Convert to ExperimentGroupAggregationItem format (similar to what comes from database)
+        // Group experiments by extracting values for each GroupBy criterion
+        Map<List<String>, List<Experiment>> experimentGroups = explodedExperiments.stream()
+                .collect(Collectors.groupingBy(
+                        ExperimentWithGroupValues::groupValues,
+                        Collectors.mapping(ExperimentWithGroupValues::experiment, Collectors.toList())));
+
+        // Convert to ExperimentGroupAggregationItem format (similar to what comes from a database)
         List<ExperimentGroupAggregationItem> groupItems = experimentGroups.entrySet().stream()
                 .map(entry -> {
                     AggregationData aggregations = calculateAggregations(
@@ -360,6 +368,97 @@ public class ExperimentsTestUtils {
     }
 
     /**
+     * Explode experiments by LIST fields (simulating arrayJoin in ClickHouse).
+     * For experiments with LIST fields in grouping criteria, create multiple entries
+     * (one for each value in the LIST field).
+     */
+    private static List<ExperimentWithGroupValues> explodeExperimentsByListFields(
+            List<Experiment> experiments,
+            List<GroupBy> groups) {
+
+        // Check if any grouping field is of type LIST
+        boolean hasListField = groups.stream()
+                .anyMatch(g -> g.type() == FieldType.LIST);
+
+        if (!hasListField) {
+            // No LIST fields, just extract group values normally
+            return experiments.stream()
+                    .map(exp -> new ExperimentWithGroupValues(exp, extractGroupValues(exp, groups)))
+                    .toList();
+        }
+
+        // We have LIST fields - need to explode
+        List<ExperimentWithGroupValues> result = new ArrayList<>();
+
+        for (Experiment experiment : experiments) {
+            // Generate all combinations of group values for this experiment
+            List<List<String>> allCombinations = generateGroupValueCombinations(experiment, groups, 0);
+
+            for (List<String> groupValues : allCombinations) {
+                result.add(new ExperimentWithGroupValues(experiment, groupValues));
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Recursively generate all combinations of group values for an experiment,
+     * expanding LIST fields into individual values (like arrayJoin).
+     */
+    private static List<List<String>> generateGroupValueCombinations(
+            Experiment experiment,
+            List<GroupBy> groups,
+            int groupIndex) {
+
+        if (groupIndex >= groups.size()) {
+            // Base case: return an empty list
+            List<List<String>> result = new ArrayList<>();
+            result.add(new ArrayList<>());
+            return result;
+        }
+
+        GroupBy currentGroup = groups.get(groupIndex);
+        List<List<String>> nextCombinations = generateGroupValueCombinations(experiment, groups, groupIndex + 1);
+        List<List<String>> result = new ArrayList<>();
+
+        if (currentGroup.type() == FieldType.LIST && currentGroup.field().equals(TAGS)) {
+            // LIST field - explode each tag
+            var tags = experiment.tags();
+            if (tags == null || tags.isEmpty()) {
+                // No tags - use empty string
+                for (List<String> nextCombo : nextCombinations) {
+                    List<String> combo = new ArrayList<>();
+                    combo.add("");
+                    combo.addAll(nextCombo);
+                    result.add(combo);
+                }
+            } else {
+                // Create one combination for each tag
+                for (String tag : tags.stream().sorted().toList()) {
+                    for (List<String> nextCombo : nextCombinations) {
+                        List<String> combo = new ArrayList<>();
+                        combo.add(tag);
+                        combo.addAll(nextCombo);
+                        result.add(combo);
+                    }
+                }
+            }
+        } else {
+            // Non-LIST field - extract single value
+            String value = extractFieldValue(experiment, currentGroup);
+            for (List<String> nextCombo : nextCombinations) {
+                List<String> combo = new ArrayList<>();
+                combo.add(value);
+                combo.addAll(nextCombo);
+                result.add(combo);
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Extract grouping values from an experiment based on GroupBy criteria.
      */
     private static List<String> extractGroupValues(Experiment experiment, List<GroupBy> groups) {
@@ -369,12 +468,22 @@ public class ExperimentsTestUtils {
     }
 
     /**
+     * Helper record to hold an experiment with its associated group values.
+     * Used when exploding experiments by LIST fields.
+     */
+    private record ExperimentWithGroupValues(Experiment experiment, List<String> groupValues) {
+    }
+
+    /**
      * Extract a single field value from an experiment based on a GroupBy criterion.
+     * Note: This should not be called for LIST fields when they are being exploded.
      */
     private static String extractFieldValue(Experiment experiment, GroupBy group) {
         return switch (group.field()) {
             case DATASET_ID -> experiment.datasetId().toString();
             case METADATA -> extractFromJsonMetadata(experiment.metadata(), group.key());
+            case TAGS -> throw new IllegalArgumentException(
+                    "TAGS field should be handled by explodeExperimentsByListFields, not extractFieldValue");
             default -> throw new IllegalArgumentException("Unsupported grouping field: " + group.field());
         };
     }
