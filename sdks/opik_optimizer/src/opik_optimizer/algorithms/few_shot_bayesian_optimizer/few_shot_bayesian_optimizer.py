@@ -184,7 +184,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Get templates from prompt library (allows for overrides)
         system_template = self.get_prompt("system_prompt_template")
-        example_placeholder = self.get_prompt("example_placeholder")
+        example_placeholder = str(self.get_prompt("example_placeholder"))
 
         messages: list[dict[str, str]] = [
             {
@@ -880,7 +880,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         reporting.display_few_shot_prompt_template(
             prompts_with_placeholder=prompts_with_placeholder,
             fewshot_template=fewshot_template,
-            placeholder=self.get_prompt("example_placeholder"),
+            placeholder=str(self.get_prompt("example_placeholder")),
             verbose=self.verbose,
         )
 
@@ -922,12 +922,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 Dictionary containing the LLM's response
             """
             prompts_with_examples = {}
+            example_placeholder = str(self.get_prompt("example_placeholder"))
 
             for key, prompt in prompts.items():
                 new_prompt = prompt.copy()
                 new_messages = new_prompt.replace_in_messages(
                     new_prompt.get_messages(),
-                    self.get_prompt("example_placeholder"),
+                    example_placeholder,
                     few_shot_examples,
                 )
                 new_prompt.set_messages(new_messages)
@@ -1010,11 +1011,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Fill in the placeholder in each prompt
         result_prompts = {}
+        example_placeholder = str(self.get_prompt("example_placeholder"))
         for key, prompt in prompts_with_placeholder.items():
             new_prompt = prompt.copy()
             new_messages = new_prompt.replace_in_messages(
                 new_prompt.get_messages(),
-                self.get_prompt("example_placeholder"),
+                example_placeholder,
                 few_shot_examples,
             )
             new_prompt.set_messages(new_messages)

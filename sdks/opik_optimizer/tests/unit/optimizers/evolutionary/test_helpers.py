@@ -150,3 +150,5 @@ class TestCalculatePopulationDiversity:
         # Both should be valid floats
         assert isinstance(similar_diversity, float)
         assert isinstance(diverse_diversity, float)
+        assert diverse_diversity > similar_diversity
+        assert similar_diversity < 0.2
