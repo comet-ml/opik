@@ -923,6 +923,8 @@ class OnlineScoringEngineTest {
     }
 
     private static Stream<Arguments> testExtractFromJsonWithDifferentValueTypes() {
+        // Note: After Mustache rendering, double quotes in JSON become HTML-encoded as &quot;
+        // Complex objects and arrays are now serialized as proper JSON strings (not Java toString())
         return Stream.of(
                 // ===== TOP-LEVEL KEYS =====
                 // JSON scalars: Strings, Numbers (Integers and Decimals), Booleans, Null
@@ -931,20 +933,20 @@ class OnlineScoringEngineTest {
                 arguments("key", "{\"key\":1.23}", "1.23"),
                 arguments("key", "{\"key\":true}", "true"),
                 arguments("key", "{\"key\":null}", ""),
-                // JSON objects
-                arguments("key", "{\"key\":{\"object\":\"text\"}}", "{object&#61;text}"),
-                arguments("key", "{\"key\":{\"object\":123}}", "{object&#61;123}"),
-                arguments("key", "{\"key\":{\"object\":1.23}}", "{object&#61;1.23}"),
-                arguments("key", "{\"key\":{\"object\":true}}", "{object&#61;true}"),
-                arguments("key", "{\"key\":{\"object\":null}}", "{object&#61;null}"),
-                arguments("key", "{\"key\":{\"a\":1,\"b\":2}}", "{a&#61;1, b&#61;2}"),
+                // JSON objects - now serialized as proper JSON (with HTML-encoded quotes)
+                arguments("key", "{\"key\":{\"object\":\"text\"}}", "{&quot;object&quot;:&quot;text&quot;}"),
+                arguments("key", "{\"key\":{\"object\":123}}", "{&quot;object&quot;:123}"),
+                arguments("key", "{\"key\":{\"object\":1.23}}", "{&quot;object&quot;:1.23}"),
+                arguments("key", "{\"key\":{\"object\":true}}", "{&quot;object&quot;:true}"),
+                arguments("key", "{\"key\":{\"object\":null}}", "{}"),
+                arguments("key", "{\"key\":{\"a\":1,\"b\":2}}", "{&quot;a&quot;:1,&quot;b&quot;:2}"),
                 arguments("key", "{\"key\":{}}", "{}"),
-                // JSON Arrays
-                arguments("key", "{\"key\":[\"a\",\"b\"]}", "[a, b]"),
-                arguments("key", "{\"key\":[1,2]}", "[1, 2]"),
-                arguments("key", "{\"key\":[1.2,3.4]}", "[1.2, 3.4]"),
-                arguments("key", "{\"key\":[true,false]}", "[true, false]"),
-                arguments("key", "{\"key\":[null,null]}", "[null, null]"),
+                // JSON Arrays - now serialized as proper JSON
+                arguments("key", "{\"key\":[\"a\",\"b\"]}", "[&quot;a&quot;,&quot;b&quot;]"),
+                arguments("key", "{\"key\":[1,2]}", "[1,2]"),
+                arguments("key", "{\"key\":[1.2,3.4]}", "[1.2,3.4]"),
+                arguments("key", "{\"key\":[true,false]}", "[true,false]"),
+                arguments("key", "{\"key\":[null,null]}", "[null,null]"),
                 arguments("key", "{\"key\":[]}", "[]"),
 
                 // ===== NESTED KEYS =====
@@ -955,20 +957,22 @@ class OnlineScoringEngineTest {
                 arguments("nested.key", "{\"nested\":{\"key\":1.23}}", "1.23"),
                 arguments("nested.key", "{\"nested\":{\"key\":true}}", "true"),
                 arguments("nested.key", "{\"nested\":{\"key\":null}}", ""),
-                // Objects (with all scalar types inside)
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":\"text\"}}}", "{object&#61;text}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":123}}}", "{object&#61;123}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":1.23}}}", "{object&#61;1.23}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":true}}}", "{object&#61;true}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":null}}}", "{object&#61;null}"),
-                arguments("nested.key", "{\"nested\":{\"key\":{\"x\":10,\"y\":20}}}", "{x&#61;10, y&#61;20}"),
+                // Objects (with all scalar types inside) - now serialized as proper JSON
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":\"text\"}}}",
+                        "{&quot;object&quot;:&quot;text&quot;}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":123}}}", "{&quot;object&quot;:123}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":1.23}}}", "{&quot;object&quot;:1.23}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":true}}}", "{&quot;object&quot;:true}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":null}}}", "{}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"x\":10,\"y\":20}}}",
+                        "{&quot;x&quot;:10,&quot;y&quot;:20}"),
                 arguments("nested.key", "{\"nested\":{\"key\":{}}}", "{}"),
-                // Arrays (with all scalar types)
-                arguments("nested.key", "{\"nested\":{\"key\":[\"a\",\"b\"]}}", "[a, b]"),
-                arguments("nested.key", "{\"nested\":{\"key\":[1,2]}}", "[1, 2]"),
-                arguments("nested.key", "{\"nested\":{\"key\":[1.2,3.4]}}", "[1.2, 3.4]"),
-                arguments("nested.key", "{\"nested\":{\"key\":[true,false]}}", "[true, false]"),
-                arguments("nested.key", "{\"nested\":{\"key\":[null,null]}}", "[null, null]"),
+                // Arrays (with all scalar types) - now serialized as proper JSON
+                arguments("nested.key", "{\"nested\":{\"key\":[\"a\",\"b\"]}}", "[&quot;a&quot;,&quot;b&quot;]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[1,2]}}", "[1,2]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[1.2,3.4]}}", "[1.2,3.4]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[true,false]}}", "[true,false]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[null,null]}}", "[null,null]"),
                 arguments("nested.key", "{\"nested\":{\"key\":[]}}", "[]"));
     }
 
