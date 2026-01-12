@@ -1,5 +1,5 @@
 from concurrent import futures
-from typing import Any, List, TypeVar, Generic
+from typing import Any, List, Optional, TypeVar, Generic
 
 from ...environment import get_tqdm_for_current_environment
 from .types import EvaluationTask
@@ -17,10 +17,17 @@ class StreamingExecutor(Generic[T]):
     for streaming behavior regardless of the number of workers configured.
     """
 
-    def __init__(self, workers: int, verbose: int, desc: str = "Evaluation"):
+    def __init__(
+        self,
+        workers: int,
+        verbose: int,
+        desc: str = "Evaluation",
+        total: Optional[int] = None,
+    ):
         self._workers = workers
         self._verbose = verbose
         self._desc = desc
+        self._total = total
         self._task_count = 0
         self._pool: futures.ThreadPoolExecutor
         self._submitted_futures: List[futures.Future[T]] = []
@@ -42,11 +49,12 @@ class StreamingExecutor(Generic[T]):
     def get_results(self) -> List[T]:
         """Collect results from futures as they complete with progress bar."""
         results: List[T] = []
+        progress_total = self._total if self._total is not None else self._task_count
         for future in _tqdm(
             futures.as_completed(self._submitted_futures),
             disable=(self._verbose < 1),
             desc=self._desc,
-            total=self._task_count,
+            total=progress_total,
         ):
             results.append(future.result())
         return results
@@ -71,7 +79,9 @@ def execute(
 
         return test_results
 
-    with StreamingExecutor[T](workers=workers, verbose=verbose, desc=desc) as executor:
+    with StreamingExecutor[T](
+        workers=workers, verbose=verbose, desc=desc, total=len(evaluation_tasks)
+    ) as executor:
         for evaluation_task in evaluation_tasks:
             executor.submit(evaluation_task)
         return executor.get_results()

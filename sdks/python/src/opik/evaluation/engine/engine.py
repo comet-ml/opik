@@ -48,6 +48,28 @@ class EvaluationEngine:
             scoring_key_mapping=scoring_key_mapping,
         )
 
+    def _calculate_total_items(
+        self,
+        dataset_: dataset.Dataset,
+        nb_samples: Optional[int],
+        dataset_item_ids: Optional[List[str]],
+    ) -> Optional[int]:
+        """
+        Calculate the total number of items that will be evaluated.
+
+        Returns None if the total cannot be determined (e.g., when using a sampler).
+        """
+        if dataset_item_ids is not None:
+            return len(dataset_item_ids)
+
+        # If nb_samples is specified and smaller than dataset size, use it
+        if nb_samples is not None:
+            if dataset_.dataset_items_count is not None:
+                return min(nb_samples, dataset_.dataset_items_count)
+            return nb_samples
+
+        return dataset_.dataset_items_count
+
     @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _compute_test_result_for_test_case(
         self,
@@ -162,6 +184,7 @@ class EvaluationEngine:
         experiment_: Optional[experiment.Experiment],
         trial_count: int,
         description: str,
+        total_items: Optional[int] = None,
     ) -> List[test_result.TestResult]:
         test_results: List[test_result.TestResult] = []
 
@@ -178,6 +201,7 @@ class EvaluationEngine:
                 workers=self._workers,
                 verbose=self._verbose,
                 desc=desc,
+                total=total_items,
             )
             with executor:
                 # For first trial, consume from iterator and cache items
@@ -330,6 +354,13 @@ class EvaluationEngine:
             # Convert list to iterator
             dataset_items_iter = iter(dataset_items_list)
 
+        # Calculate total items for progress bar
+        total_items = self._calculate_total_items(
+            dataset_=dataset_,
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+        )
+
         if not self._metrics_evaluator.has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
                 dataset_items=dataset_items_iter,
@@ -337,6 +368,7 @@ class EvaluationEngine:
                 experiment_=experiment_,
                 trial_count=trial_count,
                 description="Evaluation",
+                total_items=total_items,
             )
 
         LOGGER.debug(
@@ -351,6 +383,7 @@ class EvaluationEngine:
                 experiment_=experiment_,
                 trial_count=trial_count,
                 description="Evaluation",
+                total_items=total_items,
             )
             self._update_test_results_with_task_span_metrics(
                 test_results=test_results,
@@ -394,6 +427,7 @@ class EvaluationEngine:
                 experiment_=None,
                 trial_count=1,
                 description="Items evaluation",
+                total_items=len(items),
             )
 
         LOGGER.debug(
@@ -408,6 +442,7 @@ class EvaluationEngine:
                 experiment_=None,
                 trial_count=1,
                 description="Items evaluation",
+                total_items=len(items),
             )
             self._update_test_results_with_task_span_metrics(
                 test_results=test_results,

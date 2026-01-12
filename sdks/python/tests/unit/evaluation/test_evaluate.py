@@ -25,9 +25,14 @@ def test_evaluate__happyflow(
     fake_backend,
 ):
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -250,9 +255,14 @@ def test_evaluate_with_scoring_key_mapping(
     fake_backend,
 ):
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -488,9 +498,14 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
     # evaluate should raise an exception right after the first attempt
     # to compute Equals metric score.
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -537,9 +552,14 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
     fake_backend,
 ):
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -639,9 +659,14 @@ def test_evaluate__with_random_sampler__happy_flow(
     # Creates a dataset with 5 items and then evaluates it using a random dataset sampler with 3 samples limit.
     # Checks that only three samples are selected and that the metrics are computed for the three samples.
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     # When dataset_sampler is provided, streaming is used but exhausted to a list
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -780,9 +805,14 @@ def test_evaluate_prompt_happyflow(
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -977,9 +1007,14 @@ def test_evaluate__aggregated_metric__happy_flow(
     fake_backend,
 ):
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -1305,9 +1340,14 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     # When dataset_sampler is provided, streaming is used but exhausted to a list
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -1427,9 +1467,14 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
     fake_backend,
 ):
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -1570,9 +1615,14 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
     fake_backend,
 ):
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -1727,9 +1777,15 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
 def test_evaluate__with_experiment_scores(fake_backend):
     """Test that experiment_scores are computed and stored correctly."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "name",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "test-dataset"
+    mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -1815,9 +1871,15 @@ def test_evaluate__with_experiment_scores(fake_backend):
 def test_evaluate__with_experiment_scores_empty_results(fake_backend):
     """Test that experiment_scores handle empty test results gracefully."""
     mock_dataset = mock.MagicMock(
-        spec=["__internal_api__stream_items_as_dataclasses__", "id", "name"]
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "name",
+            "dataset_items_count",
+        ]
     )
     mock_dataset.name = "test-dataset"
+    mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter([])
 
@@ -2131,9 +2193,11 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
         spec=[
             "__internal_api__stream_items_as_dataclasses__",
             "id",
+            "dataset_items_count",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
 
     # Mock the streaming method to return an iterator
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -2183,9 +2247,11 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
         spec=[
             "__internal_api__stream_items_as_dataclasses__",
             "id",
+            "dataset_items_count",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -2234,9 +2300,11 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
         spec=[
             "__internal_api__stream_items_as_dataclasses__",
             "id",
+            "dataset_items_count",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -2294,9 +2362,11 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
             "__internal_api__stream_items_as_dataclasses__",
             "id",
             "name",
+            "dataset_items_count",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.dataset_items_count = None
 
     # Mock the streaming method to return an iterator with limited items
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(

@@ -88,6 +88,7 @@ class Dataset:
         name: str,
         description: Optional[str],
         rest_client: rest_api_client.OpikApi,
+        dataset_items_count: Optional[int] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -95,6 +96,7 @@ class Dataset:
         self._name = name
         self._description = description
         self._rest_client = rest_client
+        self._dataset_items_count = dataset_items_count
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
@@ -115,6 +117,11 @@ class Dataset:
     def description(self) -> Optional[str]:
         """The description of the dataset."""
         return self._description
+
+    @property
+    def dataset_items_count(self) -> Optional[int]:
+        """The total number of items in the dataset."""
+        return self._dataset_items_count
 
     def _insert_batch_with_retry(
         self, batch: List[rest_dataset_item.DatasetItemWrite]
@@ -166,6 +173,11 @@ class Dataset:
         for batch in batches:
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._insert_batch_with_retry(batch)
+
+        if self._dataset_items_count is not None:
+            self._dataset_items_count += len(deduplicated_items)
+        else:
+            self._dataset_items_count = len(deduplicated_items)
 
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
         """
@@ -224,6 +236,7 @@ class Dataset:
             items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
+        deleted_count = 0
         for batch in batches:
             LOGGER.debug("Deleting dataset items batch: %s", batch)
             self._rest_client.datasets.delete_dataset_items(item_ids=batch)
@@ -233,6 +246,12 @@ class Dataset:
                     hash = self._id_to_hash[item_id]
                     self._hashes.discard(hash)
                     del self._id_to_hash[item_id]
+                    deleted_count += 1
+
+        if self._dataset_items_count is not None:
+            self._dataset_items_count = max(
+                0, self._dataset_items_count - deleted_count
+            )
 
     def clear(self) -> None:
         """
