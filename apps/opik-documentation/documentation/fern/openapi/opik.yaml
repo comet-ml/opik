@@ -11993,6 +11993,7 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - bedrock
           - custom-llm
           - opik-free
         api_key:
@@ -12005,10 +12006,11 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - required for custom LLM providers to uniquely\
-            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
-            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
-            \ etc.). This requirement is conditional and validation is enforced programmatically."
+          description: "Provider name - required for custom LLM and Bedrock providers\
+            \ to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1').\
+            \ Must not be blank for custom and Bedrock providers. Should not be set\
+            \ for standard providers (OpenAI, Anthropic, etc.). This requirement is\
+            \ conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -12057,6 +12059,7 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - bedrock
           - custom-llm
           - opik-free
         api_key:
@@ -12069,10 +12072,11 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - required for custom LLM providers to uniquely\
-            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
-            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
-            \ etc.). This requirement is conditional and validation is enforced programmatically."
+          description: "Provider name - required for custom LLM and Bedrock providers\
+            \ to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1').\
+            \ Must not be blank for custom and Bedrock providers. Should not be set\
+            \ for standard providers (OpenAI, Anthropic, etc.). This requirement is\
+            \ conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -12117,6 +12121,7 @@ components:
           - gemini
           - openrouter
           - vertex-ai
+          - bedrock
           - custom-llm
           - opik-free
         api_key:
@@ -12129,10 +12134,11 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - required for custom LLM providers to uniquely\
-            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
-            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
-            \ etc.). This requirement is conditional and validation is enforced programmatically."
+          description: "Provider name - required for custom LLM and Bedrock providers\
+            \ to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1').\
+            \ Must not be blank for custom and Bedrock providers. Should not be set\
+            \ for standard providers (OpenAI, Anthropic, etc.). This requirement is\
+            \ conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -12158,9 +12164,9 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - can be set to migrate legacy custom LLM providers\
-            \ to the new multi-provider format. Once set, it cannot be changed. Should\
-            \ only be set for custom LLM providers."
+          description: "Provider name - can be set to migrate legacy custom LLM or\
+            \ Bedrock providers to the new multi-provider format. Once set, it cannot\
+            \ be changed. Should only be set for custom LLM and Bedrock providers."
           example: ollama
         headers:
           type: object
@@ -13624,10 +13630,10 @@ components:
       required:
       - alertsEnabled
       - anthropicProviderEnabled
+      - bedrockProviderEnabled
       - collaboratorsTabEnabled
       - csvUploadEnabled
       - customllmProviderEnabled
-      - dashboardsEnabled
       - datasetVersioningEnabled
       - exportEnabled
       - geminiProviderEnabled
@@ -13666,8 +13672,6 @@ components:
           type: boolean
         optimizationStudioEnabled:
           type: boolean
-        dashboardsEnabled:
-          type: boolean
         datasetVersioningEnabled:
           type: boolean
         openaiProviderEnabled:
@@ -13679,6 +13683,8 @@ components:
         openrouterProviderEnabled:
           type: boolean
         vertexaiProviderEnabled:
+          type: boolean
+        bedrockProviderEnabled:
           type: boolean
         customllmProviderEnabled:
           type: boolean
