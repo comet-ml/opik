@@ -35,10 +35,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
     3. Metadata contains video_seconds and video_size for cost calculation
     4. Model and provider are correctly populated
     5. Tags are applied correctly
-    6. Download span is created when video is completed
-
-    Note: Video generation may return status="failed" due to content moderation.
-    In that case, we skip the download test.
+    6. Download and write_to_file spans are created
     """
     client = openai.OpenAI()
     wrapped_client = track_openai(openai_client=client)
@@ -52,28 +49,29 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
         size=VIDEO_SIZE_FOR_TESTS,
     )
 
-    # If video completed successfully, test download
-    video_completed = video.status == "completed"
-    if video_completed:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_path = os.path.join(temp_dir, "test_video.mp4")
-            content = wrapped_client.videos.download_content(video_id=video.id)
-            content.write_to_file(output_path)
+    # Assume video generation succeeds
+    assert video.status == "completed", f"Video generation failed: {video.error}"
 
-            # Verify file was created
-            assert os.path.exists(output_path)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_path = os.path.join(temp_dir, "test_video.mp4")
+        content = wrapped_client.videos.download_content(video_id=video.id)
+        content.write_to_file(output_path)
+
+        # Verify file was created
+        assert os.path.exists(output_path)
 
     opik.flush_tracker()
 
-    # Build expected spans based on whether download happened
-    expected_create_and_poll_span = SpanModel(
+    # Three traces: create_and_poll, download_content, write_to_file
+    assert len(fake_backend.trace_trees) == 3
+
+    EXPECTED_CREATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        type="general",
         name="videos_create_and_poll",
         input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
         output={
             "id": ANY_BUT_NONE,
-            "status": ANY_STRING,
+            "status": "completed",
             "prompt": prompt,
             "seconds": "4",
             "size": VIDEO_SIZE_FOR_TESTS,
@@ -81,24 +79,16 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
             "error": ANY,
         },
         tags=["openai"],
-        metadata=ANY_DICT.containing(
-            {
-                "created_from": "openai",
-                "type": "openai_videos",
-                "video_seconds": 4,
-            }
-        ),
-        usage=None,
+        metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=OPIK_PROJECT_DEFAULT_NAME,
-        model=VIDEO_MODEL_FOR_TESTS,
-        provider="openai",
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                type="llm",
-                name="videos_create",
+                type="general",
+                name="videos_create_and_poll",
                 input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
                 output={
                     "id": ANY_BUT_NONE,
@@ -123,14 +113,91 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 model=VIDEO_MODEL_FOR_TESTS,
                 provider="openai",
-                spans=[],
-            ),
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="videos_create",
+                        input={
+                            "prompt": prompt,
+                            "seconds": "4",
+                            "size": VIDEO_SIZE_FOR_TESTS,
+                        },
+                        output={
+                            "id": ANY_BUT_NONE,
+                            "status": ANY_STRING,
+                            "prompt": prompt,
+                            "seconds": "4",
+                            "size": VIDEO_SIZE_FOR_TESTS,
+                            "progress": ANY,
+                            "error": ANY,
+                        },
+                        tags=["openai"],
+                        metadata=ANY_DICT.containing(
+                            {
+                                "created_from": "openai",
+                                "type": "openai_videos",
+                                "video_seconds": 4,
+                            }
+                        ),
+                        usage=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=OPIK_PROJECT_DEFAULT_NAME,
+                        model=VIDEO_MODEL_FOR_TESTS,
+                        provider="openai",
+                        spans=[],
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="general",
+                        name="videos_poll",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        tags=["openai"],
+                        metadata=ANY_DICT.containing(
+                            {
+                                "created_from": "openai",
+                                "type": "openai_videos",
+                            }
+                        ),
+                        usage=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=OPIK_PROJECT_DEFAULT_NAME,
+                        model=ANY,
+                        provider="openai",
+                        spans=[],
+                    ),
+                ],
+            )
+        ],
+    )
+
+    EXPECTED_DOWNLOAD_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="videos_download_content",
+        input={"video_id": video.id},
+        output={
+            "message": "Video content ready for download",
+            "content_type": "video/mp4",
+        },
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=OPIK_PROJECT_DEFAULT_NAME,
+        spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_poll",
-                input=ANY_DICT,
-                output=ANY_DICT,
+                name="videos_download_content",
+                input={"video_id": video.id},
+                output={
+                    "message": "Video content ready for download",
+                    "content_type": "video/mp4",
+                },
                 tags=["openai"],
                 metadata=ANY_DICT.containing(
                     {
@@ -142,119 +209,63 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
-                model=ANY,
+                model=None,
                 provider="openai",
                 spans=[],
-            ),
+            )
         ],
     )
 
-    expected_download_span = SpanModel(
+    EXPECTED_WRITE_TO_FILE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        type="general",
-        name="videos_download_content",
-        input={"video_id": video.id},
-        output={
-            "message": "Video content ready for download",
-            "content_type": "video/mp4",
-        },
+        name="videos_write_to_file",
+        input={"file": ANY_BUT_NONE},
+        output=None,
         tags=["openai"],
-        metadata=ANY_DICT.containing(
-            {
-                "created_from": "openai",
-                "type": "openai_videos",
-            }
-        ),
-        usage=None,
+        metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=OPIK_PROJECT_DEFAULT_NAME,
-        model=None,
-        provider="openai",
-        spans=[],
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="general",
+                name="videos_write_to_file",
+                input={"file": ANY_BUT_NONE},
+                output=None,
+                tags=["openai"],
+                metadata=ANY_DICT.containing(
+                    {
+                        "created_from": "openai",
+                        "type": "openai_videos",
+                    }
+                ),
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                model=None,
+                provider="openai",
+                spans=[],
+            )
+        ],
     )
 
-    if video_completed:
-        # Two traces: one for create_and_poll, one for download
-        assert len(fake_backend.trace_trees) == 2
+    # Find traces by name
+    create_trace = next(
+        t for t in fake_backend.trace_trees if t.name == "videos_create_and_poll"
+    )
+    download_trace = next(
+        t for t in fake_backend.trace_trees if t.name == "videos_download_content"
+    )
+    write_to_file_trace = next(
+        t for t in fake_backend.trace_trees if t.name == "videos_write_to_file"
+    )
 
-        EXPECTED_CREATE_TRACE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="videos_create_and_poll",
-            input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
-            output={
-                "id": ANY_BUT_NONE,
-                "status": "completed",
-                "prompt": prompt,
-                "seconds": "4",
-                "size": VIDEO_SIZE_FOR_TESTS,
-                "progress": ANY,
-                "error": ANY,
-            },
-            tags=["openai"],
-            metadata=ANY_DICT,
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            last_updated_at=ANY_BUT_NONE,
-            project_name=OPIK_PROJECT_DEFAULT_NAME,
-            spans=[expected_create_and_poll_span],
-        )
-
-        EXPECTED_DOWNLOAD_TRACE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="videos_download_content",
-            input={"video_id": video.id},
-            output={
-                "message": "Video content ready for download",
-                "content_type": "video/mp4",
-            },
-            tags=["openai"],
-            metadata=ANY_DICT,
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            last_updated_at=ANY_BUT_NONE,
-            project_name=OPIK_PROJECT_DEFAULT_NAME,
-            spans=[expected_download_span],
-        )
-
-        # Find traces by name
-        create_trace = next(
-            t for t in fake_backend.trace_trees if t.name == "videos_create_and_poll"
-        )
-        download_trace = next(
-            t for t in fake_backend.trace_trees if t.name == "videos_download_content"
-        )
-
-        assert_equal(EXPECTED_CREATE_TRACE, create_trace)
-        assert_equal(EXPECTED_DOWNLOAD_TRACE, download_trace)
-    else:
-        # Only one trace for create_and_poll (video failed)
-        assert len(fake_backend.trace_trees) == 1
-        trace_tree = fake_backend.trace_trees[0]
-
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="videos_create_and_poll",
-            input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
-            output={
-                "id": ANY_BUT_NONE,
-                "status": "failed",
-                "prompt": prompt,
-                "seconds": "4",
-                "size": VIDEO_SIZE_FOR_TESTS,
-                "progress": ANY,
-                "error": ANY,
-            },
-            tags=["openai"],
-            metadata=ANY_DICT,
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            last_updated_at=ANY_BUT_NONE,
-            project_name=OPIK_PROJECT_DEFAULT_NAME,
-            spans=[expected_create_and_poll_span],
-        )
-
-        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+    assert_equal(EXPECTED_CREATE_TRACE, create_trace)
+    assert_equal(EXPECTED_DOWNLOAD_TRACE, download_trace)
+    assert_equal(EXPECTED_WRITE_TO_FILE_TRACE, write_to_file_trace)
 
 
 def test_openai_client_videos_create_and_poll__error_handling(fake_backend):

@@ -12,23 +12,22 @@ from typing import (
     Tuple,
 )
 
+from openai._legacy_response import HttpxBinaryResponseContent
 from typing_extensions import override
 
-import opik.dict_utils as dict_utils
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+from . import binary_response_write_to_file_decorator
 
 LOGGER = logging.getLogger(__name__)
-
-# Input parameters to log for video download
-VIDEO_DOWNLOAD_KWARGS_KEYS_TO_LOG_AS_INPUTS = [
-    "video_id",
-]
 
 
 class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
     Decorator for tracking OpenAI videos.download_content method.
+
+    Also patches the returned HttpxBinaryResponseContent instance's write_to_file
+    method to create a tracked span when the video is actually downloaded.
     """
 
     def __init__(self) -> None:
@@ -49,10 +48,6 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
-        input_data, new_metadata = dict_utils.split_dict_by_keys(
-            kwargs, keys=VIDEO_DOWNLOAD_KWARGS_KEYS_TO_LOG_AS_INPUTS
-        )
-        metadata = dict_utils.deepmerge(metadata, new_metadata)
         metadata.update(
             {
                 "created_from": "openai",
@@ -64,7 +59,7 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         result = arguments_helpers.StartSpanParameters(
             name=name,
-            input=input_data,
+            input=kwargs,
             type=track_options.type,
             tags=tags,
             metadata=metadata,
@@ -82,6 +77,10 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
+        # Patch write_to_file on the returned instance
+        if output is not None:
+            _track_instance_write_to_file(output, current_span_data.project_name)
+
         output_data = {
             "message": "Video content ready for download",
             "content_type": "video/mp4",
@@ -106,3 +105,14 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> Optional[Any]:
         NOT_A_STREAM = None
         return NOT_A_STREAM
+
+
+def _track_instance_write_to_file(
+    instance: HttpxBinaryResponseContent,
+    project_name: Optional[str],
+) -> None:
+    """Patch write_to_file on this specific instance to track the download."""
+    decorator = binary_response_write_to_file_decorator.create_write_to_file_decorator(
+        project_name=project_name,
+    )
+    instance.write_to_file = decorator(instance.write_to_file)  # type: ignore[method-assign]

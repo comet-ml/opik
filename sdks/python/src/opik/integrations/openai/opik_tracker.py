@@ -155,7 +155,6 @@ def _patch_openai_videos(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
 ) -> None:
-    from .videos import video_content_patcher
     from .videos import (
         VideosCreateTrackDecorator,
         VideosDownloadTrackDecorator,
@@ -230,11 +229,9 @@ def _patch_openai_videos(
         )
         openai_client.videos.delete = decorator(openai_client.videos.delete)
 
-    # Patch videos.download_content - download video content with attachment support
-    # Patch write_to_file to attach video when called
+    # Patch download_content - also patches write_to_file on returned instances
+    # download_content returns a lazy response object, write_to_file does the actual download
     if hasattr(openai_client.videos, "download_content"):
-        video_content_patcher.patch_HttpxBinaryResponseContent_write_to_file()
-
         decorator = download_decorator_factory.track(
             type="general",
             name="videos_download_content",
