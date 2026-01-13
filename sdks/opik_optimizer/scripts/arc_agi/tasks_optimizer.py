@@ -299,13 +299,30 @@ def main() -> None:
 
     _maybe_log_baseline_reason(baseline_eval)
 
-    if baseline_score >= 0.999:
+    if optimizer.skip_perfect_score and baseline_score >= optimizer.perfect_score:
         _print_run_summary(
             context="ARC-AGI run summary (baseline perfect)",
             score=baseline_score,
             trials=0,
             llm_calls=getattr(optimizer, "llm_call_counter", None),
         )
+        persist_run_summary(
+            task_id=first_item.get("task_id"),
+            composite_name=COMPOSITE_METRIC_NAME,
+            baseline_score=baseline_score,
+            baseline_eval=baseline_eval,
+            final_score=baseline_score,
+            trials_used=0,
+            llm_calls=getattr(optimizer, "llm_call_counter", None),
+            model=EVAL_MODEL,
+            reasoning_model=REASONING_MODEL,
+            pass_at_k=DEFAULT_PASS_AT_K,
+            n_samples=N_SAMPLES_PER_TRIAL,
+            include_images=INCLUDE_IMAGES,
+            include_images_hrpo_eval=INCLUDE_IMAGES_HRPO_EVAL,
+            final_cost=getattr(baseline_eval, "cost", None),
+        )
+        return
     persist_run_summary(
         task_id=first_item.get("task_id"),
         composite_name=COMPOSITE_METRIC_NAME,
