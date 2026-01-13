@@ -19,7 +19,8 @@ traces_bp = Blueprint("traces", __name__)
 def resolve_attachment_path(relative_path: str) -> str:
     """Resolve attachment path relative to tests_end_to_end directory."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    tests_end_to_end_dir = os.path.join(current_dir, "..", "..", "..")
+    # routes/ -> test-helper-service/ -> tests_end_to_end/
+    tests_end_to_end_dir = os.path.join(current_dir, "..", "..")
     full_path = os.path.join(tests_end_to_end_dir, relative_path)
     return os.path.abspath(full_path)
 
