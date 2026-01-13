@@ -96,7 +96,7 @@ describe("AnnotationView - Button Label Logic", () => {
   });
 
   describe("Non-completed item scenarios", () => {
-    it('should show "Submit & next" when current item is not completed and there are other unprocessed items', () => {
+    it('should show "Submit + next" when current item is not completed and there are other unprocessed items', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
@@ -108,10 +108,10 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+      expect(screen.getByText("Submit + next")).toBeInTheDocument();
     });
 
-    it('should show "Submit & complete" when current item is the ONLY unprocessed item', () => {
+    it('should show "Submit + complete" when current item is the ONLY unprocessed item', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
@@ -120,10 +120,10 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Submit & complete")).toBeInTheDocument();
+      expect(screen.getByText("Submit + complete")).toBeInTheDocument();
     });
 
-    it('should show "Submit & next" when there are multiple unprocessed items (including cached changes)', () => {
+    it('should show "Submit + next" when there are multiple unprocessed items (including cached changes)', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
@@ -136,12 +136,12 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      // Should show "Submit & next" because there are other unprocessed items
-      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
-      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+      // Should show "Submit + next" because there are other unprocessed items
+      expect(screen.queryByText("Submit + complete")).not.toBeInTheDocument();
+      expect(screen.getByText("Submit + next")).toBeInTheDocument();
     });
 
-    it('should show "Submit & next" when there are 2 unprocessed items', () => {
+    it('should show "Submit + next" when there are 2 unprocessed items', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: false,
@@ -153,14 +153,14 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      // Should show "Submit & next" because there are still other unprocessed items
-      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
-      expect(screen.getByText("Submit & next")).toBeInTheDocument();
+      // Should show "Submit + next" because there are still other unprocessed items
+      expect(screen.queryByText("Submit + complete")).not.toBeInTheDocument();
+      expect(screen.getByText("Submit + next")).toBeInTheDocument();
     });
   });
 
   describe("Completed item scenarios", () => {
-    it('should show "Update & next" when viewing a completed item with no changes and other unprocessed items exist', () => {
+    it('should show "Update + next" when viewing a completed item with no changes and other unprocessed items exist', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: true,
@@ -173,13 +173,13 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Update & next")).toBeInTheDocument();
+      expect(screen.getByText("Update + next")).toBeInTheDocument();
       // Button should be disabled when canSubmit is false
-      const button = screen.getByText("Update & next").closest("button");
+      const button = screen.getByText("Update + next").closest("button");
       expect(button).toBeDisabled();
     });
 
-    it('should show "Update & next" when completed item has changes and there are other unprocessed items', () => {
+    it('should show "Update + next" when completed item has changes and there are other unprocessed items', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: true,
@@ -192,10 +192,10 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Update & next")).toBeInTheDocument();
+      expect(screen.getByText("Update + next")).toBeInTheDocument();
     });
 
-    it('should show "Update & complete" when completed item has changes and no other unprocessed items', () => {
+    it('should show "Update + complete" when completed item has changes and no other unprocessed items', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: true,
@@ -208,7 +208,7 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Update & complete")).toBeInTheDocument();
+      expect(screen.getByText("Update + complete")).toBeInTheDocument();
     });
   });
 
@@ -224,7 +224,7 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      const submitButton = screen.getByText("Submit & next").closest("button");
+      const submitButton = screen.getByText("Submit + next").closest("button");
       expect(submitButton).toBeDisabled();
     });
 
@@ -302,7 +302,7 @@ describe("AnnotationView - Button Label Logic", () => {
       // - Item 1: User added comments, clicked Next (cached, STILL UNPROCESSED)
       // - Item 2: User added comments, clicked Next (cached, STILL UNPROCESSED)
       // - Item 3: Current item (also unprocessed)
-      // Expected: Button should show "Submit & next" NOT "Submit & complete"
+      // Expected: Button should show "Submit + next" NOT "Submit + complete"
       // because unprocessedItems.length = 3 (all items are still unprocessed)
 
       mockUseSMEFlow.mockReturnValue({
@@ -318,15 +318,15 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      // Should show "Submit & next" because unprocessedItems.length = 3
-      expect(screen.getByText("Submit & next")).toBeInTheDocument();
-      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
+      // Should show "Submit + next" because unprocessedItems.length = 3
+      expect(screen.getByText("Submit + next")).toBeInTheDocument();
+      expect(screen.queryByText("Submit + complete")).not.toBeInTheDocument();
     });
 
-    it("should show Submit & complete only when current is the ONLY unprocessed item", () => {
+    it("should show Submit + complete only when current is the ONLY unprocessed item", () => {
       // Scenario: All other items have been submitted (saved to backend)
       // Current item is the only unprocessed item
-      // Expected: "Submit & complete"
+      // Expected: "Submit + complete"
 
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
@@ -337,13 +337,13 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Submit & complete")).toBeInTheDocument();
+      expect(screen.getByText("Submit + complete")).toBeInTheDocument();
     });
 
-    it("should show Submit & next when there are 2 unprocessed items", () => {
+    it("should show Submit + next when there are 2 unprocessed items", () => {
       // Scenario: Items 1 and 2 are not processed yet
       // User is on item 1
-      // Expected: "Submit & next" because item 2 still needs to be processed
+      // Expected: "Submit + next" because item 2 still needs to be processed
 
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
@@ -357,8 +357,8 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Submit & next")).toBeInTheDocument();
-      expect(screen.queryByText("Submit & complete")).not.toBeInTheDocument();
+      expect(screen.getByText("Submit + next")).toBeInTheDocument();
+      expect(screen.queryByText("Submit + complete")).not.toBeInTheDocument();
     });
   });
 });

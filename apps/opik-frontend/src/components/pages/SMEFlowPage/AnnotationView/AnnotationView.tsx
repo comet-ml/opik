@@ -49,14 +49,14 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
       // Check if there are OTHER unprocessed items
       // Since current item is already processed, it's not in unprocessedItems
       const hasOtherUnprocessedItems = unprocessedItems.length > 0;
-      return hasOtherUnprocessedItems ? "Update & next" : "Update & complete";
+      return hasOtherUnprocessedItems ? "Update + next" : "Update + complete";
     } else {
       // Viewing a non-completed item (current item IS in unprocessedItems)
-      // Show "Submit & complete" only if this is the ONLY unprocessed item
+      // Show "Submit + complete" only if this is the ONLY unprocessed item
       // Note: unprocessedItems includes items with cached unsaved changes
       return unprocessedItems.length === 1
-        ? "Submit & complete"
-        : "Submit & next";
+        ? "Submit + complete"
+        : "Submit + next";
     }
   };
 
