@@ -74,12 +74,26 @@ jobs:
           run: |
             # Set file modification times based on git commit history
             # This is important because helm repo index uses file mtime to set the 'created' field
+            
+            # 1. Set timestamp for the newly packaged chart from source repo tag
+            NEW_CHART_FILE="opik-${{inputs.version}}.tgz"
+            if [ -f "$NEW_CHART_FILE" ]; then
+              NEW_CHART_TIME=$(cd ../src && git log -1 --format="%cI" ${{inputs.version}})
+              if [ -n "$NEW_CHART_TIME" ]; then
+                touch -d "$NEW_CHART_TIME" "$NEW_CHART_FILE"
+                echo "Set $NEW_CHART_FILE mtime to $NEW_CHART_TIME (from source tag)"
+              fi
+            fi
+            
+            # 2. Restore timestamps for existing files from gh-pages git history
             echo "Restoring file timestamps from git history..."
             git ls-files -z | while read -d $'\0' file; do
               if [ -f "$file" ]; then
                 TIME=$(git log -1 --format="%cI" -- "$file")
-                touch -d "$TIME" "$file"
-                echo "Set $file mtime to $TIME"
+                if [ -n "$TIME" ]; then
+                  touch -d "$TIME" "$file"
+                  echo "Set $file mtime to $TIME"
+                fi
               fi
             done
             echo "File timestamps restored."
