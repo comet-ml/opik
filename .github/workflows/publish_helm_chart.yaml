@@ -24,6 +24,8 @@ jobs:
 
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VERSION: ${{inputs.version}}
     steps:
 
         - name: Install Helm
@@ -32,6 +34,18 @@ jobs:
           uses: azure/setup-helm@4eee2cd0ed812d5867834b7c6a7c6ac458ef4821
           with:
             version: v3.19.4
+
+        - name: Validate version input
+          shell: bash
+          run: |
+            set -e
+            # Validate version input to prevent command injection
+            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
+              echo "ERROR: Invalid version format: $VERSION"
+              echo "Expected SemVer format (e.g., v1.2.3, 1.2.3-alpha, 1.2.3+build)"
+              exit 1
+            fi
+            echo "Version validated: $VERSION"
 
         - name: Checkout
           uses: actions/checkout@v4
@@ -65,14 +79,6 @@ jobs:
           working-directory: src
           run: |
             set -e
-            # Validate version input to prevent command injection
-            VERSION="${{inputs.version}}"
-            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
-              echo "ERROR: Invalid version format: $VERSION"
-              echo "Expected SemVer format (e.g., v1.2.3, 1.2.3-alpha, 1.2.3+build)"
-              exit 1
-            fi
-            
             cd deployment/helm_chart
             helm package --version "$VERSION" --app-version "$VERSION" opik/ -u -d ../../../dest
             cd -
@@ -87,18 +93,10 @@ jobs:
             # Set file modification times based on git commit history
             # This is important because helm repo index uses file mtime to set the 'created' field
             
-            # Validate version input to prevent command injection
-            VERSION="${{inputs.version}}"
-            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
-              echo "ERROR: Invalid version format: $VERSION"
-              echo "Expected SemVer format (e.g., v1.2.3, 1.2.3-alpha, 1.2.3+build)"
-              exit 1
-            fi
-            
             # 1. Set timestamp for the newly packaged chart from source repo tag
             NEW_CHART_FILE="opik-${VERSION}.tgz"
             if [ -f "$NEW_CHART_FILE" ]; then
-              NEW_CHART_TIME=$(cd ../src && git log -1 --format="%cI" -- "$VERSION")
+              NEW_CHART_TIME=$(cd ../src && git log -1 --format="%cI" "$VERSION")
               if [ -n "$NEW_CHART_TIME" ]; then
                 touch -d "$NEW_CHART_TIME" "$NEW_CHART_FILE"
                 echo "Set $NEW_CHART_FILE mtime to $NEW_CHART_TIME (from source tag)"
@@ -125,14 +123,6 @@ jobs:
             INDEX_FILE: index.yaml
           run: |
             set -e
-            # Validate version input to prevent command injection
-            VERSION="${{inputs.version}}"
-            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
-              echo "ERROR: Invalid version format: $VERSION"
-              echo "Expected SemVer format (e.g., v1.2.3, 1.2.3-alpha, 1.2.3+build)"
-              exit 1
-            fi
-            
             # Run helm repo index which will overwrite created timestamps
             helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge "${INDEX_FILE}"
             
@@ -159,7 +149,6 @@ jobs:
 
         - name: Summary
           run: |
-            VERSION="${{inputs.version}}"
             echo "Helm chart is published, version is : $VERSION" >> $GITHUB_STEP_SUMMARY
 
 
