@@ -131,6 +131,31 @@ class TestOptimizationResultInitialization:
         assert result.optimization_id == "opt-123"
         assert result.initial_score == 0.60
         assert result.llm_cost_total == 5.50
+        assert result.details.get("schema_version") == "1"
+        assert result.details.get("trials_completed") == 3
+        assert result.details.get("rounds_completed") == 3
+        assert result.details.get("stop_reason_details") is None
+
+    def test_details_schema_maps_iterations(self) -> None:
+        result = OptimizationResult(
+            prompt=ChatPrompt(system="Test", user="Query"),
+            score=0.5,
+            metric_name="accuracy",
+            details={"iterations_completed": 3, "trials_used": 4},
+        )
+        assert result.details.get("rounds_completed") == 3
+        assert result.details.get("trials_completed") == 4
+
+    def test_stop_reason_details_are_populated(self) -> None:
+        result = OptimizationResult(
+            prompt=ChatPrompt(system="Test", user="Query"),
+            score=0.25,
+            metric_name="accuracy",
+            details={"stop_reason": "error", "error": "boom"},
+        )
+        stop_details = result.details.get("stop_reason_details") or {}
+        assert stop_details.get("best_score") == 0.25
+        assert stop_details.get("error") == "boom"
 
     def test_creates_with_dict_of_prompts(self) -> None:
         prompts = {
@@ -298,7 +323,7 @@ class TestOptimizationResultStr:
             details={"rounds": [1, 2, 3]},
         )
         output = str(result)
-        assert "Rounds Completed: 3" in output
+        assert "Trials Completed: 3" in output
 
     def test_str_contains_parameter_summary(self) -> None:
         result = OptimizationResult(

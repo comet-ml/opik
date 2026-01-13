@@ -426,7 +426,8 @@ class GepaOptimizer(BaseOptimizer):
                         "skip_perfect_score": skip_perfect_score,
                         "perfect_score": perfect_score,
                         "stopped_early": True,
-                        "stopped_early_reason": "baseline_score_met_threshold",
+                        "stop_reason": "baseline_score_met_threshold",
+                        "stop_reason_details": {"best_score": initial_score},
                         "iterations_completed": 0,
                         "trials_used": 0,
                     },
@@ -675,6 +676,19 @@ class GepaOptimizer(BaseOptimizer):
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
             "dataset_item_ids": [item.get("id") for item in train_items],
+            "trials_requested": max_metric_calls,
+            "trials_completed": getattr(gepa_result, "total_metric_calls", None),
+            "rounds_completed": None,
+            "stopped_early": (
+                getattr(gepa_result, "total_metric_calls", 0) < max_metric_calls
+                if isinstance(max_metric_calls, int)
+                else None
+            ),
+            "stop_reason": "max_metric_calls"
+            if isinstance(max_metric_calls, int)
+            and getattr(gepa_result, "total_metric_calls", 0) >= max_metric_calls
+            else None,
+            "stop_reason_details": {"best_score": best_score},
         }
         if best_matches_seed:
             details["final_evaluation_reused_baseline"] = True

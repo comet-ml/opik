@@ -686,6 +686,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             result_best_prompts = best_prompts
             result_initial_prompts = original_prompts
 
+        trials_requested = n_trials
+        trials_completed = len(optuna_history_processed)
+        stopped_early = trials_completed < trials_requested
+        stop_reason = "max_trials" if not stopped_early else None
+        stop_reason_details = {"best_score": best_score}
+
         return optimization_result.OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=result_best_prompts,
@@ -701,7 +707,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "total_trials": n_trials,
                 "total_rounds": n_trials,
                 "rounds": [],
-                "stopped_early": False,
+                "trials_requested": trials_requested,
+                "trials_completed": trials_completed,
+                "rounds_completed": None,
+                "stopped_early": stopped_early,
+                "stop_reason": stop_reason,
+                "stop_reason_details": stop_reason_details,
                 "model": self.model,
                 "temperature": self.model_parameters.get("temperature"),
             },
@@ -858,7 +869,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "total_rounds": 0,
                     "rounds": [],
                     "stopped_early": True,
-                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "stop_reason": "baseline_score_met_threshold",
+                    "stop_reason_details": {"best_score": baseline_score},
                     "perfect_score": self.perfect_score,
                     "skip_perfect_score": self.skip_perfect_score,
                     "model": self.model,

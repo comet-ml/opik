@@ -484,7 +484,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "total_rounds": 0,
                     "metric_name": metric.__name__,
                     "stopped_early": True,
-                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "stop_reason": "baseline_score_met_threshold",
+                    "stop_reason_details": {"best_score": initial_score},
                     "perfect_score": self.perfect_score,
                     "skip_perfect_score": self.skip_perfect_score,
                 },
@@ -734,6 +735,16 @@ class MetaPromptOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
+        trials_requested = max_trials
+        trials_completed = trials_used
+        stopped_early = (
+            trials_requested is not None and trials_completed < trials_requested
+        )
+        stop_reason = "max_trials" if not stopped_early else None
+        stop_reason_details = {"best_score": best_score}
+        if stopped_early:
+            stop_reason_details["best_score"] = best_score
+
         return result_ops.create_result(
             optimizer_class_name=self.__class__.__name__,
             metric=metric,
@@ -742,10 +753,17 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
+            trials_requested=trials_requested,
+            trials_completed=trials_completed,
             dataset_id=dataset_id,
             optimization_id=optimization_id,
             llm_call_counter=self.llm_call_counter,
-            tool_call_counter=self.llm_calls_tools_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
+            model=self.model,
+            temperature=self.model_parameters.get("temperature"),
+            stopped_early=stopped_early,
+            stop_reason=stop_reason,
+            stop_reason_details=stop_reason_details,
         )
 
     def _create_round_data(

@@ -108,10 +108,17 @@ def create_result(
     best_score: float,
     initial_score: float,
     rounds: list[OptimizationRound],
+    trials_requested: int | None,
+    trials_completed: int | None,
     dataset_id: str | None,
     optimization_id: str | None,
     llm_call_counter: int,
-    tool_call_counter: int,
+    llm_calls_tools: int,
+    model: str | None = None,
+    temperature: float | None = None,
+    stopped_early: bool | None = None,
+    stop_reason: str | None = None,
+    stop_reason_details: dict[str, Any] | None = None,
 ) -> OptimizationResult:
     """
     Create the final OptimizationResult object.
@@ -128,7 +135,7 @@ def create_result(
         optimization_id: Optional optimization ID
         best_tools: Optional list of tools
         llm_call_counter: Count of LLM calls
-        tool_call_counter: Count of tool calls
+        llm_calls_tools: Count of tool calls
 
     Returns:
         OptimizationResult object
@@ -137,6 +144,14 @@ def create_result(
         "rounds": rounds,
         "total_rounds": len(rounds),
         "metric_name": metric.__name__,
+        "model": model,
+        "temperature": temperature,
+        "trials_requested": trials_requested,
+        "trials_completed": trials_completed,
+        "rounds_completed": len(rounds),
+        "stopped_early": stopped_early,
+        "stop_reason": stop_reason,
+        "stop_reason_details": stop_reason_details,
     }
 
     return OptimizationResult(
@@ -148,7 +163,7 @@ def create_result(
         metric_name=metric.__name__,
         details=details,
         llm_calls=llm_call_counter,
-        llm_calls_tools=tool_call_counter,
+        llm_calls_tools=llm_calls_tools,
         dataset_id=dataset_id,
         optimization_id=optimization_id,
     )

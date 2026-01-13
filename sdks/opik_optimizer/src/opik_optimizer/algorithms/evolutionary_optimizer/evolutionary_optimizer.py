@@ -655,7 +655,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "final_prompts": optimizable_prompts,
                 "final_score": initial_primary_score,
                 "stopped_early": True,
-                "stopped_early_reason": "baseline_score_met_threshold",
+                "stop_reason": "baseline_score_met_threshold",
+                "stop_reason_details": {"best_score": initial_primary_score},
                 "perfect_score": self.perfect_score,
                 "skip_perfect_score": self.skip_perfect_score,
                 "trials_used": 0,
@@ -1048,6 +1049,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "final_effective_output_style_guidance": effective_output_style_guidance,
                 "infer_output_style": self.infer_output_style,
                 "trials_used": trials_used[0],
+                "trials_requested": max_trials,
+                "trials_completed": trials_used[0],
+                "rounds_completed": len(self.get_history()),
+                "stop_reason": "max_trials" if trials_used[0] >= max_trials else None,
+                "stop_reason_details": {"best_score": final_primary_score},
             }
         )
 

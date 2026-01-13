@@ -60,9 +60,108 @@ def _format_prompt_for_plaintext(
         return "\n".join(parts)
 
 
+DETAILS_SCHEMA_VERSION = "1"
+DETAILS_RESERVED_KEYS = {
+    "schema_version",
+    "trials_requested",
+    "trials_completed",
+    "rounds_completed",
+    "stopped_early",
+    "stop_reason",
+    "stop_reason_details",
+    "model",
+    "temperature",
+    "trial_history",
+    "round_history",
+    "optimizer_details",
+}
+
+
+def _normalize_details(
+    details: dict[str, Any], *, default_best_score: float | None
+) -> dict[str, Any]:
+    """Normalize details to the shared OptimizationResult schema."""
+    normalized = dict(details)
+    normalized.setdefault("schema_version", DETAILS_SCHEMA_VERSION)
+
+    round_history = normalized.get("round_history")
+    if round_history is None and isinstance(normalized.get("rounds"), list):
+        round_history = normalized.get("rounds")
+        normalized["round_history"] = round_history
+
+    trial_history = normalized.get("trial_history")
+    if trial_history is None and isinstance(normalized.get("trials"), list):
+        trial_history = normalized.get("trials")
+        normalized["trial_history"] = trial_history
+
+    if normalized.get("rounds_completed") is None:
+        iterations_completed = normalized.get("iterations_completed")
+        if isinstance(iterations_completed, int):
+            normalized["rounds_completed"] = iterations_completed
+        elif isinstance(round_history, list):
+            normalized["rounds_completed"] = len(round_history)
+
+    if normalized.get("trials_requested") is None:
+        for key in ("total_trials", "n_trials", "max_trials", "total_rounds"):
+            value = normalized.get(key)
+            if isinstance(value, int):
+                normalized["trials_requested"] = value
+                break
+
+    if normalized.get("trials_completed") is None:
+        trials_used = normalized.get("trials_used")
+        if isinstance(trials_used, int):
+            normalized["trials_completed"] = trials_used
+        elif isinstance(trial_history, list):
+            normalized["trials_completed"] = len(trial_history)
+        elif isinstance(normalized.get("rounds_completed"), int):
+            normalized["trials_completed"] = normalized.get("rounds_completed")
+
+    normalized.setdefault("stopped_early", None)
+    if normalized.get("stop_reason") is None:
+        stopped_early_reason = normalized.get("stopped_early_reason")
+        if isinstance(stopped_early_reason, str):
+            normalized["stop_reason"] = stopped_early_reason
+    normalized.setdefault("stop_reason", None)
+    stop_details = normalized.get("stop_reason_details")
+    if stop_details is None and normalized.get("stop_reason") is not None:
+        stop_details = {"best_score": default_best_score}
+        error_value = normalized.get("error") or normalized.get("exception")
+        if error_value is not None:
+            stop_details["error"] = str(error_value)
+    normalized["stop_reason_details"] = stop_details
+    normalized.setdefault("model", None)
+    normalized.setdefault("temperature", None)
+
+    if normalized.get("optimizer_details") is None:
+        optimizer_details = {
+            key: value
+            for key, value in normalized.items()
+            if key not in DETAILS_RESERVED_KEYS
+        }
+        normalized["optimizer_details"] = optimizer_details
+
+    return normalized
+
+
+def _resolve_rounds_ran(details: dict[str, Any]) -> int:
+    """Resolve a reasonable rounds-completed count from optimizer details."""
+    rounds = details.get("rounds")
+    if isinstance(rounds, list):
+        return len(rounds)
+    iterations_completed = details.get("iterations_completed")
+    if isinstance(iterations_completed, int):
+        return iterations_completed
+    total_rounds = details.get("total_rounds")
+    if isinstance(total_rounds, int):
+        return total_rounds
+    return 0
+
+
 class OptimizationResult(pydantic.BaseModel):
     """Result oan optimization run."""
 
+    details_version: str = DETAILS_SCHEMA_VERSION
     optimizer: str = "Optimizer"
 
     prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
@@ -86,6 +185,9 @@ class OptimizationResult(pydantic.BaseModel):
     llm_token_usage_total: dict[str, int] | None = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    def model_post_init(self, _context: Any) -> None:
+        self.details = _normalize_details(self.details, default_best_score=self.score)
 
     def get_run_link(self) -> str:
         return get_optimization_run_url_by_id(
@@ -150,7 +252,8 @@ class OptimizationResult(pydantic.BaseModel):
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
-        rounds_ran = len(self.details.get("rounds", []))
+        rounds_ran = _resolve_rounds_ran(self.details)
+        trials_completed = self.details.get("trials_completed")
         initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "N/A"
@@ -185,7 +288,7 @@ class OptimizationResult(pydantic.BaseModel):
             f"Initial Score:    {initial_score_str}",
             f"Final Best Score: {final_score_str}",
             f"Total Improvement:{improvement_str.rjust(max(0, 18 - len('Total Improvement:')))}",
-            f"Rounds Completed: {rounds_ran}",
+            f"Trials Completed: {trials_completed if isinstance(trials_completed, int) else rounds_ran}",
         ]
 
         optimized_params = self.details.get("optimized_parameters") or {}
@@ -282,7 +385,8 @@ class OptimizationResult(pydantic.BaseModel):
     def __rich__(self) -> rich.panel.Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()
-        rounds_ran = len(self.details.get("rounds", []))
+        rounds_ran = _resolve_rounds_ran(self.details)
+        trials_completed = self.details.get("trials_completed")
         initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}"
@@ -306,7 +410,12 @@ class OptimizationResult(pydantic.BaseModel):
         table.add_row("Initial Score:", initial_score_str)
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
-        table.add_row("Rounds Completed:", str(rounds_ran))
+        display_trials = (
+            str(trials_completed)
+            if isinstance(trials_completed, int)
+            else str(rounds_ran)
+        )
+        table.add_row("Trials Completed:", display_trials)
         table.add_row(
             "Optimization run link:",
             get_link_text(

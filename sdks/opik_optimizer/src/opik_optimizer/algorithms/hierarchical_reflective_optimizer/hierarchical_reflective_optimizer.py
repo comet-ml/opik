@@ -539,7 +539,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 "iterations_completed": 0,
                 "trials_used": 0,
                 "stopped_early": True,
-                "stopped_early_reason": "baseline_score_met_threshold",
+                "stop_reason": "baseline_score_met_threshold",
+                "stop_reason_details": {"best_score": best_score},
                 "perfect_score": self.perfect_score,
                 "skip_perfect_score": self.skip_perfect_score,
             }
@@ -797,6 +798,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
             "trials_used": trials_used,
+            "trials_requested": max_trials,
+            "trials_completed": trials_used,
+            "rounds_completed": iteration,
+            "stopped_early": trials_used < max_trials,
+            "stop_reason": "max_trials" if trials_used >= max_trials else None,
+            "stop_reason_details": {"best_score": best_score},
             "llm_cost_total": getattr(self, "llm_cost_total", None),
             "llm_token_usage_total": getattr(self, "llm_token_usage_total", None),
         }

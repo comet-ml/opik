@@ -56,7 +56,7 @@ def _make_dataset() -> MagicMock:
 
 def _assert_early_stop(result: Any) -> None:
     assert result.details["stopped_early"] is True
-    assert result.details["stopped_early_reason"] == "baseline_score_met_threshold"
+    assert result.details["stop_reason"] == "baseline_score_met_threshold"
     assert result.details["perfect_score"] == 0.95
     assert result.details["skip_perfect_score"] is True
     assert result.initial_score == result.score
