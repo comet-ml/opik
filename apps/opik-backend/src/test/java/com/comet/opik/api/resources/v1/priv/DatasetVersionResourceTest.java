@@ -1455,6 +1455,66 @@ class DatasetVersionResourceTest {
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
             assertThat(versions.content()).isEmpty();
         }
+
+        @Test
+        @DisplayName("Success: Update items without batch_group_id mutates latest version (no duplicates)")
+        void insertItems__whenUpdatingSameItemsWithoutBatchGroupId__thenMutateLatestVersionNoDuplicates() {
+            // Given - Create dataset with initial items (creates v1)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(5);
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    // No batchGroupId - mutates latest version
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(5);
+
+            // Get the items to preserve their IDs
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(5);
+
+            // When - Update the same items with new data (same IDs, different data)
+            var updatedItems = v1Items.stream()
+                    .map(item -> DatasetItem.builder()
+                            .id(item.id()) // Preserve the ID
+                            .datasetItemId(item.datasetItemId()) // Preserve stable ID
+                            .source(item.source())
+                            .data(Map.of("updated", JsonUtils.getJsonNodeFromString("true"),
+                                    "newField", JsonUtils.getJsonNodeFromString("\"new value\"")))
+                            .build())
+                    .toList();
+
+            var updatedBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(updatedItems)
+                    // No batchGroupId - mutates latest version
+                    .build();
+            datasetResourceClient.createDatasetItems(updatedBatch, TEST_WORKSPACE, API_KEY);
+
+            // Then - Verify still only 1 version (mutated, not new version)
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(1);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id()); // Same version ID
+            assertThat(latestVersion.itemsTotal()).isEqualTo(5); // Still 5 items (no duplicates)
+
+            // Verify the items have the updated data
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, latestVersion.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(5); // No duplicates
+
+            // Verify all items have the updated data
+            for (var item : latestItems) {
+                assertThat(item.data()).containsKey("updated");
+                assertThat(item.data()).containsKey("newField");
+            }
+        }
     }
 
     @Nested
