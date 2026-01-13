@@ -106,9 +106,12 @@ jobs:
           env:
             INDEX_FILE: index.yaml
           run: |
-            # Run helm repo index which will overwrite created timestamps
-            helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge "${INDEX_FILE}"
-            
+            # Run helm repo index; merge with existing index if present
+            if [ -f "${INDEX_FILE}" ]; then
+              helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge "${INDEX_FILE}"
+            else
+              helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/
+            fi
             # Fix timestamps again - helm repo index overwrites them based on file mtime
             echo "=== Fixing timestamps based on file modification times ==="
             CHARTS=$(yq eval '.entries[] | .[] | .urls[0]' "${INDEX_FILE}")
