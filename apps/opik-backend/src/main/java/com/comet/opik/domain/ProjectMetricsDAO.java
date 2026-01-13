@@ -668,7 +668,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SELECT <bucket> AS bucket,
                     name,
                     nullIf(sum(value), 0) AS value
-            FROM spans_dedup
+            FROM spans_usage
             GROUP BY name, bucket
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
