@@ -290,9 +290,9 @@ describe("AnnotationView - Button Label Logic", () => {
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
       expect(screen.getByText("2/3")).toBeInTheDocument();
-      // Check that the counter container has the success color class
+      // Check that the counter container has the special button color class
       const counterContainer = screen.getByText("2/3").closest("div");
-      expect(counterContainer).toHaveClass("text-success");
+      expect(counterContainer).toHaveClass("text-[var(--special-button)]");
     });
   });
 
