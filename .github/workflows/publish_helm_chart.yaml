@@ -80,7 +80,7 @@ jobs:
               TIME=$(git log -1 --format="%cI" -- "$file")
               touch -d "$TIME" "$file"
             done
-
+            yq --version
             # 1. Get a list of all chart filenames mentioned in the index
             # We use yq to extract the 'urls' which usually contain the filename
             CHARTS=$(yq eval '.entries[] | .[] | .urls[0]' "${INDEX_FILE}")
@@ -110,10 +110,10 @@ jobs:
           shell: bash
           working-directory: dest
           run: |
-            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head
-            ls -la . | head
+            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head || true
+            ls -la . | head || true
             helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
-            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head
+            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head || true
             git diff -- index.yaml
             git config user.name "Helm Updater"
             git config user.email "actions@users.noreply.github.com"
