@@ -1,7 +1,8 @@
 import React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import TraceDataViewer from "./TraceDataViewer";
 import SMEFlowLayout from "../SMEFlowLayout";
 import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
@@ -29,7 +30,10 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     currentIndex,
     queueItems,
     validationState,
-    isLastUnprocessedItem,
+    isCurrentItemProcessed,
+    unprocessedItems,
+    processedCount,
+    totalCount,
     handleNext,
     handlePrevious,
     handleSubmit,
@@ -37,6 +41,26 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
 
   const isLastItem = currentIndex === queueItems.length - 1;
   const isFirstItem = currentIndex === 0;
+
+  // Determine button label based on item completion status
+  const getButtonLabel = () => {
+    if (isCurrentItemProcessed) {
+      // Viewing a completed item (current item is NOT in unprocessedItems)
+      // Check if there are OTHER unprocessed items
+      // Since current item is already processed, it's not in unprocessedItems
+      const hasOtherUnprocessedItems = unprocessedItems.length > 0;
+      return hasOtherUnprocessedItems ? "Update + next" : "Update + complete";
+    } else {
+      // Viewing a non-completed item (current item IS in unprocessedItems)
+      // Show "Submit + complete" only if this is the ONLY unprocessed item
+      // Note: unprocessedItems includes items with cached unsaved changes
+      return unprocessedItems.length === 1
+        ? "Submit + complete"
+        : "Submit + next";
+    }
+  };
+
+  const buttonLabel = getButtonLabel();
 
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.PREVIOUS].key,
@@ -81,8 +105,16 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
           <>
             <ReturnToAnnotationQueueButton />
             <div className="flex items-center gap-2">
-              <div className="comet-body-s flex items-center text-light-slate">
-                {currentIndex + 1} of {queueItems.length}
+              <div
+                className={cn(
+                  "comet-body-s flex items-center",
+                  isCurrentItemProcessed
+                    ? "text-[var(--special-button)]"
+                    : "text-light-slate",
+                )}
+              >
+                {isCurrentItemProcessed && <Check className="mr-1 size-4" />}
+                {processedCount}/{totalCount}
               </div>
               <TooltipWrapper
                 content="Previous item"
@@ -130,9 +162,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                   onClick={handleSubmit}
                   disabled={!validationState.canSubmit}
                 >
-                  {isLastUnprocessedItem
-                    ? "Submit & Complete"
-                    : "Submit + Next"}
+                  {buttonLabel}
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.DONE].display}
                     size="sm"
