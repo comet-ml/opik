@@ -83,9 +83,9 @@ const LineChart: React.FunctionComponent<LineChartProps> = ({
 
   const defaultTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const xValue = payload?.[0]?.payload?.[xAxisKey];
+      const name = payload?.[0]?.payload?.[xAxisKey];
       return (
-        <div className="comet-body-xs mb-1 text-light-slate">{xValue}</div>
+        <div className="comet-body-xs-accented truncate pb-1.5">{name}</div>
       );
     },
     [xAxisKey],
