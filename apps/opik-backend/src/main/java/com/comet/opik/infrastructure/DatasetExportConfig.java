@@ -25,10 +25,10 @@ public class DatasetExportConfig implements StreamConfiguration {
     private boolean enabled = true;
 
     @Valid @NotBlank @JsonProperty
-    private String streamName = "dataset-export";
+    private String streamName;
 
     @Valid @NotBlank @JsonProperty
-    private String consumerGroupName = "dataset-export-consumers";
+    private String consumerGroupName;
 
     @Valid @JsonProperty
     @Min(1) @Max(100) private int consumerBatchSize = 10;
@@ -55,6 +55,31 @@ public class DatasetExportConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS)
     private Duration defaultTtl = Duration.hours(24);
+
+    /**
+     * Minimum part size for S3 multipart upload (in bytes).
+     * S3 requires minimum 5MB for all parts except the last one.
+     * Default: 5MB (5 * 1024 * 1024 = 5242880 bytes)
+     */
+    @JsonProperty
+    @Min(5 * 1024 * 1024) // S3 minimum is 5MB
+    private int minPartSize = 5 * 1024 * 1024;
+
+    /**
+     * Maximum part size for S3 multipart upload (in bytes).
+     * S3 allows up to 5GB per part, but we limit to avoid memory issues.
+     * Default: 100MB (100 * 1024 * 1024 = 104857600 bytes)
+     */
+    @JsonProperty
+    @Min(5 * 1024 * 1024) @Max(500 * 1024 * 1024) // Cap at 500MB to avoid memory issues
+    private int maxPartSize = 100 * 1024 * 1024;
+
+    /**
+     * Number of items to fetch per batch when streaming dataset items.
+     * Default: 1000
+     */
+    @JsonProperty
+    @Min(100) @Max(10000) private int itemBatchSize = 100;
 
     // lazy codec creation to ensure it picks up the configured JsonUtils mapper
     @Override

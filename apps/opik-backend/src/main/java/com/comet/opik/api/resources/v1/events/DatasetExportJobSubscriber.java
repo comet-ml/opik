@@ -78,15 +78,29 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 .then()
                 .onErrorResume(throwable -> {
                     log.error("Failed to process dataset export job: jobId='{}'", message.jobId(), throwable);
-                    String errorMessage = throwable.getMessage();
-                    if (errorMessage != null && errorMessage.length() > 255) {
-                        errorMessage = errorMessage.substring(0, 252) + "...";
-                    }
+                    String errorMessage = truncateErrorMessage(throwable.getMessage(), 255);
                     return jobService.updateJobToFailed(message.jobId(), errorMessage)
                             .then(Mono.error(throwable)); // Re-throw to prevent ACK
                 })
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER)); // System user for async processing
+    }
+
+    /**
+     * Truncates error message to specified maximum length, appending "..." if truncated.
+     *
+     * @param message    the error message to truncate
+     * @param maxLength  the maximum length allowed
+     * @return truncated message or null if input is null
+     */
+    private String truncateErrorMessage(String message, int maxLength) {
+        if (message == null) {
+            return null;
+        }
+        if (message.length() <= maxLength) {
+            return message;
+        }
+        return message.substring(0, maxLength - 3) + "...";
     }
 }
