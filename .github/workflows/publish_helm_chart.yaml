@@ -110,13 +110,14 @@ jobs:
           shell: bash
           working-directory: dest
           run: |
-            yq '.entries.opik[].created' index.yaml
+            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head
+            ls -la . | head
             helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
+            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head
             git diff -- index.yaml
             git config user.name "Helm Updater"
             git config user.email "actions@users.noreply.github.com"
-            git config advice.addEmptyPathspec false
-            git ls-files -o --exclude-standard -z | xargs -0 git add
+            git ls-files -o --exclude-standard -z | xargs -0 -r git add
             git add index.yaml README.md
             git commit -m "Release Opik helm chart ${{inputs.version}}"
             git push   
