@@ -27,6 +27,9 @@ import {
   GetPromptOptions,
   PromptType,
 } from "@/prompt";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
+import type { CreateChatPromptOptions } from "@/prompt/types";
+import { PromptTemplateStructureMismatch } from "@/prompt/errors";
 import {
   fetchLatestPromptVersion,
   shouldCreateNewVersion,
@@ -602,6 +605,7 @@ export class OpikClient {
               template: options.prompt,
               metadata: options.metadata,
               type: normalizedType,
+              templateStructure: "text",
             },
           },
           this.api.requestOptions
@@ -643,10 +647,132 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a prompt by name and optional version.
+   * Creates a new chat prompt or returns existing one if identical.
+   * Chat prompts use message arrays instead of string templates.
+   * Idempotent: returns existing version if messages, metadata, and type match.
+   *
+   * @param options - Chat prompt configuration with messages array
+   * @returns Promise resolving to ChatPrompt instance
+   * @throws PromptTemplateStructureMismatch if a text prompt with same name exists
+   *
+   * @example
+   * ```typescript
+   * const chatPrompt = await client.createChatPrompt({
+   *   name: "assistant-prompt",
+   *   messages: [
+   *     { role: "system", content: "You are a helpful assistant" },
+   *     { role: "user", content: "Help me with {{task}}" }
+   *   ],
+   *   type: "mustache"
+   * });
+   * ```
+   */
+  public createChatPrompt = async (
+    options: CreateChatPromptOptions
+  ): Promise<ChatPrompt> => {
+    logger.debug("Creating chat prompt", { name: options.name });
+
+    try {
+      // Serialize messages to JSON for backend storage
+      const messagesJson = JSON.stringify(options.messages);
+
+      // Fetch latest version (returns null if prompt doesn't exist yet)
+      const latestPromptVersion = await fetchLatestPromptVersion(
+        this.api.prompts,
+        options.name,
+        this.api.requestOptions
+      );
+
+      // Check for template structure mismatch
+      if (
+        latestPromptVersion &&
+        latestPromptVersion.templateStructure &&
+        latestPromptVersion.templateStructure !== "chat"
+      ) {
+        throw new PromptTemplateStructureMismatch(
+          options.name,
+          latestPromptVersion.templateStructure,
+          "chat"
+        );
+      }
+
+      // Determine if we need to create a new version
+      const normalizedType = options.type ?? PromptType.MUSTACHE;
+      const needsNewVersion = shouldCreateNewVersion(
+        { ...options, prompt: messagesJson },
+        latestPromptVersion,
+        normalizedType
+      );
+
+      let promptVersionResponse: OpikApi.PromptVersionDetail;
+
+      if (needsNewVersion) {
+        // Create new version
+        logger.debug("Creating new chat prompt version", {
+          name: options.name,
+        });
+        promptVersionResponse = await this.api.prompts.createPromptVersion(
+          {
+            name: options.name,
+            version: {
+              template: messagesJson,
+              metadata: options.metadata,
+              type: normalizedType,
+              templateStructure: "chat",
+            },
+          },
+          this.api.requestOptions
+        );
+      } else {
+        // Return existing version (idempotent)
+        logger.debug("Returning existing chat prompt version", {
+          name: options.name,
+        });
+        promptVersionResponse = latestPromptVersion!;
+      }
+
+      // Fetch full prompt data and create ChatPrompt instance
+      if (!promptVersionResponse.promptId) {
+        throw new Error("Invalid API response: missing promptId");
+      }
+
+      const promptData = await this.api.prompts.getPromptById(
+        promptVersionResponse.promptId,
+        this.api.requestOptions
+      );
+
+      const chatPrompt = ChatPrompt.fromApiResponse(
+        promptData,
+        promptVersionResponse,
+        this
+      );
+
+      logger.debug("Chat prompt created", { name: options.name });
+
+      if (options.description || options.tags) {
+        return await chatPrompt.updateProperties({
+          description: options.description,
+          tags: options.tags,
+        });
+      }
+
+      return chatPrompt;
+    } catch (error) {
+      logger.error("Failed to create chat prompt", {
+        name: options.name,
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves a text prompt by name and optional version.
+   * Throws PromptTemplateStructureMismatch if the prompt is a chat prompt.
    *
    * @param options - Prompt name and optional commit hash
    * @returns Promise resolving to Prompt or null if not found
+   * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
    */
   public getPrompt = async (
     options: GetPromptOptions
@@ -677,13 +803,92 @@ export class OpikClient {
         this.api.requestOptions
       );
 
-      // Step 3: Create the Prompt object with metadata
+      // Step 3: Validate template structure
+      const templateStructure = versionData.templateStructure;
+      if (templateStructure && templateStructure !== "text") {
+        throw new PromptTemplateStructureMismatch(
+          options.name,
+          templateStructure,
+          "text"
+        );
+      }
+
+      // Step 4: Create the Prompt object with metadata
       return Prompt.fromApiResponse(promptData, versionData, this);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         return null;
       }
       logger.error("Failed to get prompt", { name: options.name, error });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves a chat prompt by name and optional version.
+   * Throws PromptTemplateStructureMismatch if the prompt is a text prompt.
+   *
+   * @param options - Prompt name and optional commit hash
+   * @returns Promise resolving to ChatPrompt or null if not found
+   * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
+   *
+   * @example
+   * ```typescript
+   * const chatPrompt = await client.getChatPrompt({ name: "assistant-prompt" });
+   * if (chatPrompt) {
+   *   const messages = chatPrompt.format({ task: "coding" });
+   * }
+   * ```
+   */
+  public getChatPrompt = async (
+    options: GetPromptOptions
+  ): Promise<ChatPrompt | null> => {
+    logger.debug("Getting chat prompt", options);
+
+    try {
+      // Step 1: Search for the prompt by name to get tags and description
+      const searchResponse = await this.api.prompts.getPrompts(
+        {
+          filters: JSON.stringify([
+            { field: "name", operator: "=", value: options.name },
+          ]),
+          size: 1,
+        },
+        this.api.requestOptions
+      );
+
+      const promptData = searchResponse.content?.[0];
+      if (!promptData) {
+        logger.debug("Chat prompt not found", { name: options.name });
+        return null;
+      }
+
+      // Step 2: Get the version (latest if no commit specified)
+      const versionData = await this.api.prompts.retrievePromptVersion(
+        options,
+        this.api.requestOptions
+      );
+
+      // Step 3: Validate template structure
+      const templateStructure = versionData.templateStructure;
+      if (templateStructure && templateStructure !== "chat") {
+        throw new PromptTemplateStructureMismatch(
+          options.name,
+          templateStructure,
+          "chat"
+        );
+      }
+
+      // Step 4: Create the ChatPrompt object with metadata
+      return ChatPrompt.fromApiResponse(promptData, versionData, this);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return null;
+      }
+      logger.error("Failed to get chat prompt", {
+        name: options.name,
+        error,
+      });
       throw error;
     }
   };
@@ -726,7 +931,9 @@ export class OpikClient {
    * const prompts = await client.searchPrompts('created_by = "user@example.com"');
    * ```
    */
-  public searchPrompts = async (filterString?: string): Promise<Prompt[]> => {
+  public searchPrompts = async (
+    filterString?: string
+  ): Promise<(Prompt | ChatPrompt)[]> => {
     logger.debug("Searching prompts", { filterString });
 
     try {
@@ -750,7 +957,7 @@ export class OpikClient {
 
       const prompts = response.content ?? [];
 
-      // Map each prompt to get its latest version
+      // Map each prompt to get its latest version and create appropriate instance
       const promptsWithVersions = await Promise.all(
         prompts.map(async (promptData: OpikApi.PromptPublic) => {
           if (!promptData.name) {
@@ -763,8 +970,21 @@ export class OpikClient {
                 { name: promptData.name },
                 this.api.requestOptions
               );
-            // Pass description and tags from PromptPublic
-            return Prompt.fromApiResponse(promptData, versionResponse, this);
+
+            const templateStructure = versionResponse.templateStructure;
+
+            // Default to text for backwards compatibility
+            if (!templateStructure || templateStructure === "text") {
+              return Prompt.fromApiResponse(promptData, versionResponse, this);
+            } else if (templateStructure === "chat") {
+              return ChatPrompt.fromApiResponse(
+                promptData,
+                versionResponse,
+                this
+              );
+            }
+
+            return null;
           } catch (error) {
             logger.debug("Failed to get version for prompt", {
               name: promptData.name,
@@ -776,7 +996,7 @@ export class OpikClient {
       );
 
       return promptsWithVersions.filter(
-        (p: Prompt | null): p is Prompt => p !== null
+        (p: Prompt | ChatPrompt | null): p is Prompt | ChatPrompt => p !== null
       );
     } catch (error) {
       logger.error("Failed to search prompts", { error });

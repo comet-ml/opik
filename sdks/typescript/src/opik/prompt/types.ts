@@ -63,3 +63,109 @@ export interface PromptVersionData {
   createdAt?: Date;
   createdBy?: string;
 }
+
+// Chat prompt types
+
+/**
+ * Content part for multimodal chat messages
+ */
+export interface ContentPart {
+  type: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Text content part
+ */
+export interface TextContentPart extends ContentPart {
+  type: "text";
+  text: string;
+}
+
+/**
+ * Image URL content part
+ */
+export interface ImageUrlContentPart extends ContentPart {
+  type: "image_url";
+  image_url: {
+    url: string;
+    detail?: string;
+  };
+}
+
+/**
+ * Video URL content part
+ */
+export interface VideoUrlContentPart extends ContentPart {
+  type: "video_url";
+  video_url: {
+    url: string;
+    mime_type?: string;
+    duration?: number;
+    format?: string;
+    detail?: string;
+  };
+}
+
+/**
+ * Message content can be a string or array of content parts
+ */
+export type MessageContent = string | ContentPart[];
+
+/**
+ * Chat message with role and content
+ */
+export interface ChatMessage {
+  role: string;
+  content: MessageContent;
+}
+
+/**
+ * Modality name for supported content types
+ */
+export type ModalityName = "vision" | "video";
+
+/**
+ * Mapping of modalities to whether they are supported
+ */
+export type SupportedModalities = Partial<Record<ModalityName, boolean>>;
+
+/**
+ * Configuration options for creating a new chat prompt
+ */
+export interface CreateChatPromptOptions {
+  /** Name of the prompt (unique identifier) */
+  name: string;
+  /** Array of chat messages with role and content */
+  messages: ChatMessage[];
+  /** Optional prompt ID (generated if not provided) */
+  promptId?: string;
+  /** Optional description for the prompt */
+  description?: string;
+  /** Optional metadata for tracking and filtering */
+  metadata?: OpikApi.JsonNodeWrite;
+  /** Optional change description for version tracking */
+  changeDescription?: string;
+  /** Template engine type, defaults to mustache */
+  type?: PromptType;
+  /** Optional tags for categorization */
+  tags?: string[];
+  /** Whether to validate template placeholders */
+  validatePlaceholders?: boolean;
+}
+
+/**
+ * Data structure for creating a ChatPrompt instance
+ */
+export interface ChatPromptData {
+  promptId: string;
+  versionId: string;
+  name: string;
+  messages: ChatMessage[];
+  commit?: string;
+  metadata?: OpikApi.JsonNode;
+  type?: PromptType;
+  changeDescription?: string;
+  description?: string;
+  tags?: string[];
+}
