@@ -1,0 +1,31 @@
+# Node modules
+node_modules/
+
+# Test results and artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+allure-results/
+
+# Auth state files
+.auth/
+
+# Environment variables
+.env
+
+# Build output
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*

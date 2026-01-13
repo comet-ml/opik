@@ -1,0 +1,5 @@
+Flask>=3.0.0
+flask-cors>=4.0.0
+opik>=0.1.0
+requests
+types-requests
