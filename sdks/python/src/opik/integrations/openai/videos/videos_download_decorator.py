@@ -82,7 +82,7 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
             _track_instance_write_to_file(output, current_span_data.project_name)
 
         result = arguments_helpers.EndSpanParameters(
-            output=output,
+            output={"output": output} if not isinstance(output, dict) else output,
             usage=None,
             metadata={},
             model=None,
