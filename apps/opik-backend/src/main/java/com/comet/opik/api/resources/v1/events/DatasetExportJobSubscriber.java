@@ -78,7 +78,8 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 .then()
                 .onErrorResume(throwable -> {
                     log.error("Failed to process dataset export job: jobId='{}'", message.jobId(), throwable);
-                    String errorMessage = truncateErrorMessage(throwable.getMessage(), 255);
+                    String rawMessage = throwable.getMessage() != null ? throwable.getMessage() : throwable.toString();
+                    String errorMessage = truncateErrorMessage(rawMessage, 255);
                     return jobService.updateJobToFailed(message.jobId(), errorMessage)
                             .then(Mono.error(throwable)); // Re-throw to prevent ACK
                 })

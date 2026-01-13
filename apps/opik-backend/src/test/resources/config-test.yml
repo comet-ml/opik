@@ -319,7 +319,7 @@ onlineScoring:
       maxRetries: # Empty - will use global default
 
 datasetExport:
-  enabled: false
+  enabled: true
   streamName: 'dataset-export-test'
   consumerGroupName: 'dataset_export_consumers_test'
   consumerBatchSize: 10

@@ -1728,7 +1728,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         return columns != null ? columns : new HashMap<String, List<String>>();
                     }));
 
-            return resultFlux.next();
+            return resultFlux.defaultIfEmpty(new HashMap<String, List<String>>()).next();
         })
                 .doFinally(signalType -> endSegment(segment));
     }

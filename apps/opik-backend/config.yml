@@ -451,8 +451,8 @@ datasetExport:
   # Default: 24h
   # Description: Default time-to-live for exported CSV files before automatic cleanup
   defaultTtl: ${DATASET_EXPORT_DEFAULT_TTL:-24h}
-  # Default: 5MB
-  # Description: Minimum part size for S3 multipart upload (in bytes)
+  # Default: 5MB (5242880 bytes - S3 minimum for non-final parts)
+  # Description: Minimum part size for S3 multipart upload (in bytes). Must be >= 5242880 bytes.
   minPartSize: ${DATASET_EXPORT_MIN_PART_SIZE:-5242880}
   # Default: 10MB (10 * 1024 * 1024 = 10485760 bytes)
   # Description: Maximum part size for S3 multipart upload (in bytes)

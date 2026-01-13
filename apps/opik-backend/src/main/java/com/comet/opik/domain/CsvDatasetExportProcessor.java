@@ -61,6 +61,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
     private final @NonNull @Config("datasetExport") DatasetExportConfig exportConfig;
 
     private static final String CSV_CONTENT_TYPE = "text/csv";
+    private static final int S3_MIN_PART_SIZE = 5242880; // 5 MB - S3 requirement for non-final parts
 
     @Override
     public Mono<String> generateAndUploadCsv(@NonNull UUID datasetId) {
@@ -112,7 +113,15 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
      */
     private Mono<String> generateAndUploadCsvStreaming(@NonNull UUID datasetId, @NonNull Set<String> columns,
             @NonNull String workspaceId) {
-        int minPartSize = exportConfig.getMinPartSize();
+        // Validate and clamp minPartSize to S3 minimum
+        int configuredMinPartSize = exportConfig.getMinPartSize();
+        int minPartSize = Math.max(configuredMinPartSize, S3_MIN_PART_SIZE);
+
+        if (configuredMinPartSize < S3_MIN_PART_SIZE) {
+            log.warn("Configured minPartSize '{}' is below S3 minimum '{}', clamping to S3 minimum",
+                    configuredMinPartSize, S3_MIN_PART_SIZE);
+        }
+
         int maxPartSize = exportConfig.getMaxPartSize();
         int itemBatchSize = exportConfig.getItemBatchSize();
 
@@ -151,6 +160,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                             .buffer(itemBatchSize)
                             .concatMap(rows -> {
                                 ByteArrayOutputStream currentBuffer = bufferRef.get();
+                                List<Mono<Void>> uploadMonos = new ArrayList<>();
 
                                 // Accumulate rows into buffer
                                 for (String row : rows) {
@@ -162,13 +172,21 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                         byte[] partData = currentBuffer.toByteArray();
                                         int currentPartNumber = partNumber.getAndIncrement();
 
-                                        // Create new buffer for next part - old buffer will be GC'd
-                                        bufferRef.set(createNewBuffer(null, maxPartSize));
+                                        // Create upload Mono and add to list
+                                        Mono<Void> uploadMono = uploadPartAndCollect(filePath, uploadId,
+                                                currentPartNumber, partData,
+                                                uploadedParts, totalPartsUploaded);
+                                        uploadMonos.add(uploadMono);
 
-                                        return uploadPartAndCollect(filePath, uploadId, currentPartNumber, partData,
-                                                uploadedParts, totalPartsUploaded)
-                                                .thenReturn(true);
+                                        // Create new buffer for next part - old buffer will be GC'd
+                                        currentBuffer = createNewBuffer(null, maxPartSize);
+                                        bufferRef.set(currentBuffer);
                                     }
+                                }
+
+                                // If we have uploads to perform, execute them sequentially
+                                if (!uploadMonos.isEmpty()) {
+                                    return Flux.concat(uploadMonos).then(Mono.just(true));
                                 }
 
                                 // Check if buffer is ready for upload (>= minPartSize)
@@ -235,7 +253,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                         "Failed to generate and upload CSV for dataset '{}', aborting multipart upload",
                                         datasetId, error);
                                 return abortMultipartUpload(filePath, uploadId)
-                                        .then(Mono.error(new RuntimeException("Failed to generate and upload CSV",
+                                        .then(Mono.error(new IllegalStateException("Failed to generate and upload CSV",
                                                 error)));
                             });
                 });
@@ -285,11 +303,33 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     /**
      * Streams all dataset items using cursor-based pagination.
+     * Repeatedly fetches pages until an empty page or partial page is returned.
      */
     private Flux<DatasetItem> streamAllItems(UUID datasetId, AtomicReference<UUID> lastRetrievedId, int batchSize) {
-        return Flux.defer(() -> datasetItemDao.getItems(datasetId, batchSize, lastRetrievedId.get()))
-                .doOnNext(item -> lastRetrievedId.set(item.id()))
-                .repeatWhen(flux -> flux.takeWhile(count -> count > 0));
+        return Flux.defer(() -> {
+            return datasetItemDao.getItems(datasetId, batchSize, lastRetrievedId.get())
+                    .collectList()
+                    .flatMapMany(items -> {
+                        if (items.isEmpty()) {
+                            // No more items, stop pagination
+                            return Flux.empty();
+                        }
+
+                        // Update cursor to last item
+                        lastRetrievedId.set(items.get(items.size() - 1).id());
+
+                        // Emit all items from this page
+                        Flux<DatasetItem> pageFlux = Flux.fromIterable(items);
+
+                        // If we got a full page, there might be more data - recurse
+                        if (items.size() == batchSize) {
+                            return pageFlux.concatWith(streamAllItems(datasetId, lastRetrievedId, batchSize));
+                        }
+
+                        // Partial page means this is the last page
+                        return pageFlux;
+                    });
+        });
     }
 
     /**
@@ -381,8 +421,9 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
      */
     private Mono<Void> abortMultipartUpload(String filePath, String uploadId) {
         return Mono.fromRunnable(() -> {
-            log.warn("Aborting multipart upload for key: '{}', uploadId: '{}'", filePath, uploadId);
-            // TODO: Implement abort multipart upload in FileService
+            if (uploadId != null && !uploadId.isEmpty()) {
+                fileService.abortMultipartUpload(filePath, uploadId);
+            }
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 

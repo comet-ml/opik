@@ -14,6 +14,7 @@ import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
@@ -45,6 +46,8 @@ public interface FileService {
 
     CompleteMultipartUploadResponse completeMultipartUpload(String key, String uploadId,
             List<MultipartUploadPart> parts);
+
+    void abortMultipartUpload(String key, String uploadId);
 
     PutObjectResponse upload(String key, byte[] data, String contentType);
 
@@ -127,6 +130,26 @@ class FileServiceImpl implements FileService {
                 .multipartUpload(completedMultipartUpload).build();
 
         return s3Client.completeMultipartUpload(request);
+    }
+
+    @Override
+    @WithSpan
+    public void abortMultipartUpload(@NonNull String key, @NonNull String uploadId) {
+        log.warn("Aborting multipart upload for key: '{}', uploadId: '{}'", key, uploadId);
+
+        try {
+            AbortMultipartUploadRequest request = AbortMultipartUploadRequest.builder()
+                    .bucket(s3Config.getS3BucketName())
+                    .key(key)
+                    .uploadId(uploadId)
+                    .build();
+
+            s3Client.abortMultipartUpload(request);
+            log.info("Successfully aborted multipart upload for key: '{}', uploadId: '{}'", key, uploadId);
+        } catch (Exception exception) {
+            log.error("Failed to abort multipart upload for key: '{}', uploadId: '{}'", key, uploadId, exception);
+            // Don't rethrow - abort is best-effort cleanup
+        }
     }
 
     @Override
