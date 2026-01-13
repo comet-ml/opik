@@ -113,24 +113,9 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
      */
     private Mono<String> generateAndUploadCsvStreaming(@NonNull UUID datasetId, @NonNull Set<String> columns,
             @NonNull String workspaceId) {
-        // Validate and clamp minPartSize to S3 minimum
-        int configuredMinPartSize = exportConfig.getMinPartSize();
-        int minPartSize = Math.max(configuredMinPartSize, S3_MIN_PART_SIZE);
-
-        if (configuredMinPartSize < S3_MIN_PART_SIZE) {
-            log.warn("Configured minPartSize '{}' is below S3 minimum '{}', clamping to S3 minimum",
-                    configuredMinPartSize, S3_MIN_PART_SIZE);
-        }
-
-        // Validate and clamp maxPartSize to be at least minPartSize
-        int configuredMaxPartSize = exportConfig.getMaxPartSize();
-        int maxPartSize = Math.max(configuredMaxPartSize, minPartSize);
-
-        if (configuredMaxPartSize < minPartSize) {
-            log.warn("Configured maxPartSize '{}' is below minPartSize '{}', clamping to minPartSize",
-                    configuredMaxPartSize, minPartSize);
-        }
-
+        // Enforce S3's hard minimum of 5MB for non-final parts
+        int minPartSize = Math.max(exportConfig.getMinPartSize(), S3_MIN_PART_SIZE);
+        int maxPartSize = Math.max(exportConfig.getMaxPartSize(), minPartSize);
         int itemBatchSize = exportConfig.getItemBatchSize();
 
         log.debug("Generating and uploading CSV for dataset '{}' with '{}' columns using multipart upload. " +
