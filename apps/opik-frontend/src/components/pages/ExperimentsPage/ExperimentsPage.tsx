@@ -23,6 +23,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
@@ -291,6 +292,13 @@ const ExperimentsPage: React.FC = () => {
         label: "Comments",
         type: COLUMN_TYPE.string,
         cell: CommentsCell as never,
+      },
+      {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
+        cell: ListCell as never,
       },
       {
         id: COLUMN_METADATA_ID,
