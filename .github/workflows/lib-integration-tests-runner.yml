@@ -32,6 +32,11 @@ on:
           - bedrock
           - litellm
           - harbor
+      run_expensive_tests:
+        description: "Run expensive tests (e.g., video generation). Enabled by default on scheduled runs."
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -89,6 +94,8 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["openai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-openai-tests.yml
+    with:
+      run_expensive_tests: ${{ github.event_name == 'schedule' || github.event.inputs.run_expensive_tests == 'true' }}
     secrets: inherit
   
   langchain_tests:

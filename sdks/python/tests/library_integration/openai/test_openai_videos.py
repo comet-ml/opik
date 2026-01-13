@@ -19,12 +19,21 @@ from ...testlib import (
     assert_equal,
 )
 
+# Video tests are slow and expensive, skip unless explicitly enabled
+# Use OPIK_TEST_EXPENSIVE env var (set by CI on scheduled runs or manually)
+SKIP_EXPENSIVE_TESTS = not os.environ.get("OPIK_TEST_EXPENSIVE", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
 
 @pytest.fixture(autouse=True)
 def check_openai_configured(ensure_openai_configured):
     pass
 
 
+@pytest.mark.skipif(SKIP_EXPENSIVE_TESTS, reason="Expensive tests disabled. Set OPIK_TEST_EXPENSIVE=1 to enable.")
 def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backend):
     """
     Test videos.create_and_poll and download_content - the main video generation workflow.
@@ -364,6 +373,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
 
+@pytest.mark.skipif(SKIP_EXPENSIVE_TESTS, reason="Expensive tests disabled. Set OPIK_TEST_EXPENSIVE=1 to enable.")
 @pytest.mark.asyncio
 async def test_openai_async_client_videos_create_and_poll_and_download__happyflow(
     fake_backend,
