@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Iterable
+import random
 
 import logging
 
@@ -13,6 +14,7 @@ from ... import helpers, task_evaluator
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
+from ...utils.candidate_selection import select_candidate
 
 
 logger = logging.getLogger(__name__)
@@ -163,26 +165,52 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             scores: list[float] = []
             trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
 
+            def _score_candidates(
+                dataset_item: dict[str, Any], candidates: list[str]
+            ) -> tuple[str, float]:
+                """Pick the best candidate using the optimizer metric for pass@k evaluation."""
+                # FIXME: Align this selection with GEPA's Pareto/multi-metric scoring once integrated.
+                selection = select_candidate(
+                    candidates=candidates,
+                    policy="best_by_metric",
+                    metric=lambda item, output: self._metric(item, output),
+                    dataset_item=dataset_item,
+                    candidate_logprobs=None,
+                    rng=random.Random(0),
+                )
+                if (
+                    selection.candidate_scores is not None
+                    and selection.chosen_index is not None
+                ):
+                    best_score = selection.candidate_scores[selection.chosen_index]
+                else:
+                    metric_result = self._metric(dataset_item, selection.output)
+                    if hasattr(metric_result, "value"):
+                        best_score = float(metric_result.value)  # type: ignore[arg-type]
+                    elif hasattr(metric_result, "score"):
+                        best_score = float(metric_result.score)  # type: ignore[arg-type]
+                    else:
+                        best_score = float(metric_result)  # type: ignore[arg-type]
+                return selection.output, best_score
+
             for inst in batch:
                 dataset_item = inst.opik_item
                 # Use agent.invoke_agent with dict of prompts
-                raw_output = self._agent.invoke_agent(
-                    prompts=prompt_variants,
-                    dataset_item=dataset_item,
-                )
-                raw_output = (
-                    raw_output.strip()
-                    if isinstance(raw_output, str)
-                    else str(raw_output).strip()
-                )
-
-                metric_result = self._metric(dataset_item, raw_output)
-                if hasattr(metric_result, "value"):
-                    score = float(metric_result.value)  # type: ignore[arg-type]
-                elif hasattr(metric_result, "score"):
-                    score = float(metric_result.score)  # type: ignore[arg-type]
+                # Select best candidate per item when n>1 to support pass@k evaluation.
+                if hasattr(self._agent, "invoke_agent_candidates"):
+                    candidates = self._agent.invoke_agent_candidates(
+                        prompts=prompt_variants,
+                        dataset_item=dataset_item,
+                    )
                 else:
-                    score = float(metric_result)  # type: ignore[arg-type]
+                    candidates = [
+                        self._agent.invoke_agent(
+                            prompts=prompt_variants,
+                            dataset_item=dataset_item,
+                        )
+                    ]
+                candidates = [str(c).strip() for c in candidates if c is not None]
+                raw_output, score = _score_candidates(dataset_item, candidates)
 
                 outputs.append({"output": raw_output})
                 scores.append(score)
@@ -213,16 +241,36 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             return _local_evaluation()
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-            raw_output = self._agent.invoke_agent(
-                prompts=prompt_variants,
-                dataset_item=dataset_item,
-            )
-            raw_output = (
-                raw_output.strip()
-                if isinstance(raw_output, str)
-                else str(raw_output).strip()
-            )
-            return {"llm_output": raw_output}
+            # Choose the best candidate output before passing into Opik evaluation.
+            if hasattr(self._agent, "invoke_agent_candidates"):
+                candidates = self._agent.invoke_agent_candidates(
+                    prompts=prompt_variants,
+                    dataset_item=dataset_item,
+                )
+            else:
+                candidates = [
+                    self._agent.invoke_agent(
+                        prompts=prompt_variants,
+                        dataset_item=dataset_item,
+                    )
+                ]
+            candidates = [str(c).strip() for c in candidates if c is not None]
+
+            best_output = candidates[0]
+            best_score = float("-inf")
+            for candidate in candidates:
+                metric_result = self._metric(dataset_item, candidate)
+                if hasattr(metric_result, "value"):
+                    score = float(metric_result.value)  # type: ignore[arg-type]
+                elif hasattr(metric_result, "score"):
+                    score = float(metric_result.score)  # type: ignore[arg-type]
+                else:
+                    score = float(metric_result)  # type: ignore[arg-type]
+                if score > best_score:
+                    best_score = score
+                    best_output = candidate
+
+            return {"llm_output": best_output}
 
         try:
             _, eval_result = task_evaluator.evaluate_with_result(

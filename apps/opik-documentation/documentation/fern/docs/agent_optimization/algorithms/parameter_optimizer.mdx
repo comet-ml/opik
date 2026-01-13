@@ -272,11 +272,11 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 
 ### Targeting Nested Parameters
 
-You can optimize nested parameters in `model_kwargs`:
+You can optimize nested parameters in `model_parameters`:
 
 ```python
 {
-    "name": "model_kwargs.response_format.type",
+    "name": "model_parameters.response_format.type",
     "distribution": "categorical",
     "choices": ["text", "json_object"]
 }

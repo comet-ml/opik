@@ -2,6 +2,7 @@ import pytest
 from typing import Any
 from unittest.mock import Mock
 
+from opik.evaluation.metrics import base_metric
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.message_processing.emulation.models import SpanModel
 from opik_optimizer.metrics.multi_metric_objective import (
@@ -309,7 +310,6 @@ class TestMultiMetricObjective:
     def test_metric_with_task_span_signature__needs_task_span_is_true(self) -> None:
         """Test that needs_task_span property is True when at least one metric needs it"""
 
-        # Arrange
         def metric_with_task_span(
             dataset_item: dict[str, Any], llm_output: str, task_span: SpanModel | None
         ) -> ScoreResult:
@@ -318,43 +318,34 @@ class TestMultiMetricObjective:
         metrics: list[MetricType] = [metric_with_task_span]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
-        # Act & Assert
-        # The needs_task_span property should be True
         assert multi_metric.needs_task_span is True, (
             "MultiMetricObjective with task_span metrics should have needs_task_span=True"
         )
 
-        # Should work with task_span provided
         mock_span = Mock(spec=SpanModel)
         result = multi_metric(dataset_item={}, llm_output="test", task_span=mock_span)
         assert result.value == 0.5
 
     def test_metric_without_task_span_signature__needs_task_span_is_false(self) -> None:
         """Test that needs_task_span property is False when no metric needs it"""
-        # Arrange
         metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
-        # Act & Assert
-        # The needs_task_span property should be False
         assert multi_metric.needs_task_span is False, (
             "MultiMetricObjective without task_span metrics should have needs_task_span=False"
         )
 
-        # Should work without task_span (it's optional)
         result = multi_metric(dataset_item={}, llm_output="test")
         assert result.value == pytest.approx(0.35)
 
-        # Should also work with task_span=None
         result2 = multi_metric(dataset_item={}, llm_output="test", task_span=None)
         assert result2.value == pytest.approx(0.35)
 
     def test_mixed_metrics_with_and_without_task_span(self) -> None:
         """Test that MultiMetricObjective works with mix of metrics with/without task_span"""
-        # Arrange
         received_spans = []
 
         def metric_with_task_span(
@@ -375,32 +366,127 @@ class TestMultiMetricObjective:
         weights = [0.5, 0.5]
         multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
 
-        # Act
         mock_span = Mock(spec=SpanModel)
         result = multi_metric(dataset_item={}, llm_output="test", task_span=mock_span)
 
-        # Assert
-        # Should have needs_task_span=True since at least one metric needs it
         assert multi_metric.needs_task_span is True, (
             "MultiMetricObjective with mixed metrics should have needs_task_span=True"
         )
 
-        # Expected: (0.4 * 0.5) + (0.6 * 0.5) = 0.2 + 0.3 = 0.5
         expected_value = 0.5
         assert result.value == pytest.approx(expected_value), (
             f"Expected weighted score {expected_value}, got {result.value}"
         )
 
-        # Verify task_span was passed to metric that needs it
         assert len(received_spans) == 1, (
             "Metric with task_span should have been called once"
         )
         assert received_spans[0] is mock_span, "Task span should be passed through"
 
-        # Verify both metrics are in metadata
         raw_scores = result.metadata["raw_score_results"]
         assert len(raw_scores) == 2, "Should have both metrics in metadata"
         assert raw_scores[0].name == "metric_with_task_span"
         assert raw_scores[0].value == 0.4
         assert raw_scores[1].name == "metric_without_task_span"
         assert raw_scores[1].value == 0.6
+
+    def test_default_reason_is_generated(self) -> None:
+        """Test that a default reason is generated when none is provided"""
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+        multi_metric = MultiMetricObjective(metrics=metrics)
+
+        result = multi_metric(dataset_item={}, llm_output="test output")
+
+        assert result.reason == (
+            "metric_returning_0_5=0.500 (w=0.50) | metric_returning_0_2=0.200 (w=0.50)"
+        )
+
+    def test_reason_override_takes_precedence(self) -> None:
+        """Test that reason overrides are respected"""
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+        multi_metric = MultiMetricObjective(metrics=metrics, reason="static reason")
+
+        result_static = multi_metric(dataset_item={}, llm_output="test output")
+        result_override = multi_metric(
+            dataset_item={}, llm_output="test output", reason="call reason"
+        )
+
+        assert result_static.reason == "static reason"
+        assert result_override.reason == "call reason"
+
+    def test_reason_builder_overrides_default(self) -> None:
+        """Test that reason_builder can customize the reason"""
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+
+        def build_reason(
+            score_results: list[ScoreResult],
+            weights: list[float],
+            total: float,
+        ) -> str:
+            return f"total={total:.2f}"
+
+        multi_metric = MultiMetricObjective(
+            metrics=metrics, reason_builder=build_reason
+        )
+
+        result = multi_metric(dataset_item={}, llm_output="test output")
+
+        assert result.reason == "total=0.35"
+
+    def test_float_metric_is_wrapped_in_score_result(self) -> None:
+        """Test that float metric results are normalized to ScoreResult"""
+
+        def metric_returning_float(
+            dataset_item: dict[str, Any], llm_output: str
+        ) -> float:
+            return 0.7
+
+        multi_metric = MultiMetricObjective(metrics=[metric_returning_float])
+
+        result = multi_metric(dataset_item={}, llm_output="test output")
+
+        raw_scores = result.metadata["raw_score_results"]
+        assert len(raw_scores) == 1
+        assert raw_scores[0].name == "metric_returning_float"
+        assert raw_scores[0].value == pytest.approx(0.7)
+
+    def test_base_metric_is_supported(self) -> None:
+        """Test that BaseMetric instances can be used directly"""
+
+        class DummyMetric(base_metric.BaseMetric):
+            def __init__(self) -> None:
+                super().__init__(name="dummy_metric", track=False)
+
+            def score(self, output: str, expected: str, **kwargs: Any) -> ScoreResult:
+                value = 1.0 if output == expected else 0.0
+                return ScoreResult(name=self.name, value=value)
+
+        multi_metric = MultiMetricObjective(metrics=[DummyMetric()])
+        result = multi_metric(dataset_item={"expected": "ok"}, llm_output="ok")
+
+        assert result.value == pytest.approx(1.0)
+
+    def test_list_returning_metric_raises(self) -> None:
+        """Test that list-returning metrics raise when multiple results are returned"""
+
+        def metric_returning_list(
+            dataset_item: dict[str, Any], llm_output: str
+        ) -> list[ScoreResult]:
+            return [
+                ScoreResult(name="first", value=0.1),
+                ScoreResult(name="second", value=0.2),
+            ]
+
+        multi_metric = MultiMetricObjective(metrics=[metric_returning_list])
+
+        with pytest.raises(ValueError, match="single ScoreResult"):
+            multi_metric(dataset_item={}, llm_output="test output")

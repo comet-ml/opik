@@ -13,6 +13,7 @@ DATASET_SIZES = {
     "tiny_test": 5,
     "gsm8k": 300,
     "ai2_arc": 300,
+    "arc_agi2": 200,
     "truthful_qa": 300,
     "cnn_dailymail": 100,
     "ragbench_sentence_relevance": 300,

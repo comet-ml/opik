@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+import base64
+import os
+from io import BytesIO
+from typing import Any
+
+
+def _is_safe_relative_path(path: str) -> bool:
+    if os.path.isabs(path):
+        return False
+    normalized = os.path.normpath(path)
+    parts = normalized.split(os.sep)
+    return ".." not in parts
+
+
+def encode_image_to_base64_uri(
+    image: Any,
+    *,
+    image_format: str,
+    quality: int | None = None,
+) -> str | None:
+    """Convert common image payloads into a data URI.
+
+    Accepts raw bytes, a dict with ``bytes`` or ``path`` keys, or objects that
+    implement ``save`` (PIL-like). Returns ``None`` when the payload cannot be
+    encoded.
+    """
+    if image is None:
+        return None
+    if isinstance(image, str) and image.startswith("data:image/"):
+        return image
+
+    payload: bytes | None = None
+    format_hint = image_format
+    if isinstance(image, bytes):
+        payload = image
+    elif isinstance(image, dict):
+        raw = image.get("bytes")
+        if isinstance(raw, bytes):
+            payload = raw
+        else:
+            path = image.get("path")
+            if isinstance(path, str) and _is_safe_relative_path(path):
+                if os.path.exists(path) and os.path.isfile(path):
+                    with open(path, "rb") as handle:
+                        payload = handle.read()
+            elif path:
+                return None
+    elif hasattr(image, "save"):
+        buffer = BytesIO()
+        fmt = getattr(image, "format", None)
+        format_hint = fmt or image_format
+        save_kwargs: dict[str, Any] = {"format": format_hint}
+        if format_hint.upper() in {"JPG", "JPEG"} and quality is not None:
+            save_kwargs["quality"] = quality
+            save_kwargs["optimize"] = True
+        image.save(buffer, **save_kwargs)
+        payload = buffer.getvalue()
+
+    if payload is None:
+        return None
+
+    mime = "image/png"
+    if format_hint.upper() in {"JPG", "JPEG"}:
+        mime = "image/jpeg"
+    encoded = base64.b64encode(payload).decode("utf-8")
+    return f"data:{mime};base64,{encoded}"
+
+
+__all__ = ["encode_image_to_base64_uri"]

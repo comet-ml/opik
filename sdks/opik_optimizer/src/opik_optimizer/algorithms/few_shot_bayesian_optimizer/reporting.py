@@ -24,7 +24,9 @@ console = get_console()
 
 @contextmanager
 def display_evaluation(
-    message: str = "First we will establish the baseline performance:", verbose: int = 1
+    message: str = "First we will establish the baseline performance:",
+    verbose: int = 1,
+    selection_summary: str | None = None,
 ) -> Any:
     """Context manager to display messages during an evaluation phase."""
     score = None
@@ -32,6 +34,10 @@ def display_evaluation(
     # Entry point
     if verbose >= 1:
         console.print(Text(f"> {message}"))
+        if selection_summary:
+            console.print(
+                Text(f"  Evaluation settings: {selection_summary}", style="dim")
+            )
 
     # Create a simple object with a method to set the score
     class Reporter:
@@ -61,6 +67,7 @@ def display_evaluation(
 def display_few_shot_prompt_template(
     prompts_with_placeholder: dict[str, "ChatPrompt"],
     fewshot_template: str,
+    placeholder: str,
     verbose: int = 1,
 ) -> None:
     """Display the few-shot prompt template creation results."""
@@ -78,9 +85,7 @@ def display_few_shot_prompt_template(
         display_messages(prompt.get_messages(), prefix="│    ")
         console.print(Text("│"))
 
-    console.print(
-        Text("│\n│   With the FEW_SHOT_EXAMPLE_PLACEHOLDER following the format:")
-    )
+    console.print(Text(f"│\n│   With the {placeholder} following the format:"))
 
     panel = Panel(
         Text(fewshot_template),
@@ -113,6 +118,7 @@ def display_trial_start(
     total_trials: int,
     messages: list[dict[str, str]],
     verbose: int = 1,
+    selection_summary: str | None = None,
 ) -> None:
     """Display the start of an optimization trial."""
     if verbose < 1:
@@ -121,6 +127,10 @@ def display_trial_start(
     console.print(
         Text(f"│ - Starting optimization round {trial_number + 1} of {total_trials}")
     )
+    if selection_summary:
+        console.print(
+            Text(f"│   Evaluation settings: {selection_summary}", style="dim")
+        )
     console.print(Text("│"))
     display_messages(messages, prefix="│    ")
     console.print("│")

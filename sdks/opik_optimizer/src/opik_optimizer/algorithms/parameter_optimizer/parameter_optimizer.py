@@ -18,6 +18,7 @@ from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
+from ... import reporting_utils
 from .parameter_search_space import ParameterSearchSpace
 from .search_space_types import ParameterType
 from .sensitivity_analysis import compute_sensitivity_from_trials
@@ -59,6 +60,8 @@ class ParameterOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
             model=model,
@@ -66,6 +69,8 @@ class ParameterOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
         )
         self.default_n_trials = default_n_trials
         self.n_threads = n_threads
@@ -157,6 +162,7 @@ class ParameterOptimizer(BaseOptimizer):
         """
         # Set project name
         self.project_name = project_name
+        self._reset_counters()
 
         # Create agent if not provided
         if agent is None:
@@ -205,7 +211,9 @@ class ParameterOptimizer(BaseOptimizer):
         local_search_scale_override = local_search_scale
 
         # Set model defaults and build base model kwargs
+        # Parameter optimization evaluates a single candidate per trial, so drop n.
         base_model_kwargs = copy.deepcopy(self.model_parameters or {})
+        base_model_kwargs.pop("n", None)
 
         # Build base prompts dict with model defaults
         base_prompts: dict[str, chat_prompt.ChatPrompt] = {}
@@ -216,6 +224,8 @@ class ParameterOptimizer(BaseOptimizer):
                 **base_model_kwargs,
                 **copy.deepcopy(p.model_kwargs or {}),
             }
+            # Keep per-trial evaluation single-choice until multi-candidate selection is added.
+            merged_kwargs.pop("n", None)
             base_p.model_kwargs = merged_kwargs
             base_prompts[name] = base_p
 
@@ -262,7 +272,10 @@ class ParameterOptimizer(BaseOptimizer):
         )
 
         # Evaluate baseline with reporting
-        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+        with reporting.display_evaluation(
+            verbose=self.verbose,
+            selection_summary=reporting_utils.summarize_selection_policy(base_prompts),
+        ) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompts,
                 agent=agent,
@@ -274,6 +287,67 @@ class ParameterOptimizer(BaseOptimizer):
                 n_samples=n_samples,
             )
             baseline_reporter.set_score(baseline_score)
+
+        if self._should_skip_optimization(baseline_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping parameter optimization.",
+                baseline_score,
+                self.perfect_score,
+            )
+            display_prompt = (
+                list(base_prompts.values())[0]
+                if is_single_prompt_optimization
+                else base_prompts
+            )
+            reporting.display_result(
+                initial_score=baseline_score,
+                best_score=baseline_score,
+                prompt=display_prompt,
+                verbose=self.verbose,
+            )
+
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=base_prompts,
+                initial_prompts=base_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=baseline_score,
+                metric_name=metric.__name__,
+                details={
+                    "initial_score": baseline_score,
+                    "optimized_parameters": {},
+                    "optimized_model_kwargs": base_model_kwargs,
+                    "optimized_model": list(base_prompts.values())[0].model,
+                    "trials": [],
+                    "parameter_space": expanded_parameter_space.model_dump(
+                        by_alias=True
+                    ),
+                    "n_trials": 0,
+                    "model": list(base_prompts.values())[0].model,
+                    "rounds": [],
+                    "baseline_parameters": base_model_kwargs,
+                    "local_trials": 0,
+                    "global_trials": 0,
+                    "search_stages": [],
+                    "search_ranges": {},
+                    "parameter_importance": {},
+                    "parameter_precision": 6,
+                    "stopped_early": True,
+                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                },
+                history=[],
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                optimization_id=optimization.id,
+                dataset_id=dataset.id,
+            )
 
         # Use first prompt for model info in history
         first_prompt = list(base_prompts.values())[0]
@@ -343,6 +417,9 @@ class ParameterOptimizer(BaseOptimizer):
                 stage=current_stage,
                 parameters=sampled_values,
                 verbose=self.verbose,
+                selection_summary=reporting_utils.summarize_selection_policy(
+                    tuned_prompts
+                ),
             ) as trial_reporter:
                 score = self.evaluate_prompt(
                     prompt=tuned_prompts,
@@ -615,16 +692,11 @@ class ParameterOptimizer(BaseOptimizer):
         }
 
         # Prepare result prompt based on single vs multi-prompt optimization
-        if is_single_prompt_optimization:
-            result_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(best_tuned_prompts.values())[0]
-            initial_prompt_result: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(base_prompts.values())[0]
-        else:
-            result_prompt = best_tuned_prompts
-            initial_prompt_result = base_prompts
+        result_prompt, initial_prompt_result = self._select_result_prompts(
+            best_prompts=best_tuned_prompts,
+            initial_prompts=base_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -636,7 +708,7 @@ class ParameterOptimizer(BaseOptimizer):
             details=details,
             history=history,
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
             optimization_id=optimization.id,
             dataset_id=dataset.id,
         )

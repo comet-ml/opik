@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import opik
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
 
 ELECTION_QUESTIONS_SPEC = DatasetSpec(
     name="election_questions",
@@ -43,6 +43,7 @@ def election_questions(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Anthropic election question classification slices."""
     return _ELECTION_QUESTIONS_HANDLE.load(
@@ -53,4 +54,5 @@ def election_questions(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

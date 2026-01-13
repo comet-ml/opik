@@ -7,8 +7,9 @@ Tests cover:
 - AgentBundleCandidate: Dataclass behavior
 """
 
-import pytest
 from typing import Any
+
+import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
@@ -17,6 +18,8 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
     AgentBundleCandidate,
     AgentMetadata,
 )
+
+pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
 
 class TestSanitizeGeneratedPrompts:

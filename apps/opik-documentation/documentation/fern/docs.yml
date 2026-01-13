@@ -766,6 +766,14 @@ navigation:
             icon: fa-regular fa-sliders
             path: docs/agent_optimization/advanced/custom_metrics.mdx
             slug: custom_metrics
+          - page: Custom optimizer prompts
+            icon: fa-regular fa-pen-to-square
+            path: docs/agent_optimization/advanced/prompt_customization.mdx
+            slug: prompt_customization
+          - page: Multiple completions (n)
+            icon: fa-regular fa-clone
+            path: docs/agent_optimization/advanced/n_samples.mdx
+            slug: n_samples
           - page: Chaining optimizers
             icon: fa-regular fa-objects-align-bottom
             path: docs/agent_optimization/advanced/chaining_optimizers.mdx

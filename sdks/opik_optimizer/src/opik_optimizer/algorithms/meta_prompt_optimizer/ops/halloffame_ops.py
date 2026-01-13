@@ -12,10 +12,8 @@ from collections import Counter
 import re
 import logging
 
-from ..prompts import (
-    build_pattern_extraction_system_prompt,
-    build_pattern_extraction_user_prompt,
-)
+from .. import prompts as meta_prompts
+from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +42,19 @@ class PromptHallOfFame:
     4. Learn what makes prompts effective over time
     """
 
-    def __init__(self, max_size: int = 10, pattern_extraction_interval: int = 5):
+    def __init__(
+        self,
+        max_size: int = 10,
+        pattern_extraction_interval: int = 5,
+        prompts: PromptLibrary | None = None,
+    ):
         """
         Initialize the Hall of Fame.
 
         Args:
             max_size: Maximum number of prompts to keep
             pattern_extraction_interval: Extract patterns every N trials
+            prompts: PromptLibrary instance for accessing prompt templates
         """
         self.max_size = max_size
         self.pattern_extraction_interval = pattern_extraction_interval
@@ -58,6 +62,7 @@ class PromptHallOfFame:
         self.extracted_patterns: list[str] = []
         self.pattern_usage_count: Counter = Counter()
         self._last_extraction_trial: int = 0
+        self.prompts = prompts
 
     def add(self, entry: HallOfFameEntry) -> bool:
         """
@@ -133,22 +138,32 @@ class PromptHallOfFame:
 
         from .... import _llm_calls
 
+        # Get system prompt from prompts library or use default
+        if self.prompts is not None:
+            system_prompt = self.prompts.get("pattern_extraction_system")
+        else:
+            system_prompt = meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE
+
         try:
             response = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_pattern_extraction_system_prompt(),
+                        "content": system_prompt,
                     },
                     {"role": "user", "content": prompt_analysis},
                 ],
                 model=model,
                 model_parameters=model_parameters,
                 is_reasoning=True,
+                return_all=_llm_calls.requested_multiple_candidates(model_parameters),
             )
 
             # Parse extracted patterns
-            patterns = self._parse_pattern_response(response)
+            responses = response if isinstance(response, list) else [response]
+            patterns: list[str] = []
+            for response_item in responses:
+                patterns.extend(self._parse_pattern_response(response_item))
 
             if patterns:
                 logger.debug(f"Extracted {len(patterns)} patterns from hall of fame")
@@ -226,7 +241,14 @@ class PromptHallOfFame:
             prompt_scorecard += json.dumps(entry.prompt_messages, indent=2)
             prompt_scorecard += "\n"
 
-        return build_pattern_extraction_user_prompt(
+        # Get user prompt template from prompts library or use default
+        if self.prompts is not None:
+            template = self.prompts.get("pattern_extraction_user")
+        else:
+            template = meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE
+
+        return meta_prompts.build_pattern_extraction_user_prompt(
+            template=template,
             top_prompts_scorecard=prompt_scorecard,
             metric_name=metric_name,
         )

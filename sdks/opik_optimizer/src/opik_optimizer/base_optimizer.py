@@ -1,5 +1,4 @@
 from typing import Any, cast, overload, Literal
-
 import copy
 import inspect
 import logging
@@ -21,6 +20,8 @@ from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from . import task_evaluator, helpers
+from .utils.prompt_library import PromptLibrary, PromptOverrides
+from .utils.candidate_selection import select_candidate
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -48,13 +49,21 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer(ABC):
+    # Subclasses define their prompts here
+    DEFAULT_PROMPTS: dict[str, str] = {}
+
     def __init__(
         self,
         model: str,
         verbose: int = 1,
         seed: int = 42,
         model_parameters: dict[str, Any] | None = None,
+        reasoning_model: str | None = None,
+        reasoning_model_parameters: dict[str, Any] | None = None,
         name: str | None = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
+        prompt_overrides: PromptOverrides = None,
     ) -> None:
         """
         Base class for optimizers.
@@ -67,27 +76,82 @@ class BaseOptimizer(ABC):
                Common params: temperature, max_tokens, max_completion_tokens, top_p,
                presence_penalty, frequency_penalty.
                See: https://docs.litellm.ai/docs/completion/input
-               Note: These params control the optimizer's reasoning model, NOT the prompt evaluation.
+               Note: These params control the optimizer's default reasoning model, NOT the prompt evaluation.
+           reasoning_model: Optional override for the optimizer's reasoning/analysis model. Falls back to ``model``.
+           reasoning_model_parameters: Optional LiteLLM params for the reasoning model. Falls back to ``model_parameters``.
            name: Optional name for the optimizer instance. This will be used when creating optimizations.
+           skip_perfect_score: Whether to short-circuit optimization when baseline is strong.
+           perfect_score: Score threshold treated as "good enough" for short-circuiting.
+           prompt_overrides: Optional dict or callable to customize internal prompts.
+               Dict: {"prompt_key": "new_template"} to override specific prompts.
+               Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
         """
         self.model = model
-        self.reasoning_model = model
         self.model_parameters = model_parameters or {}
+        self.reasoning_model = reasoning_model or model
+        self.reasoning_model_parameters = (
+            reasoning_model_parameters or self.model_parameters
+        )
         self.verbose = verbose
         self.seed = seed
         self.name = name
+        self.skip_perfect_score = skip_perfect_score
+        self.perfect_score = perfect_score
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
+        # Counters for usage/cost; tool_call_counter kept for backward compat
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+        self.llm_calls_tools_counter = 0
+        self.llm_cost_total: float = 0.0
+        self.llm_token_usage_total: dict[str, int] = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
+
+        # Initialize prompt library with overrides
+        self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
+
+    @property
+    def prompts(self) -> PromptLibrary:
+        """Access the prompt library for this optimizer."""
+        return self._prompts
+
+    def _should_skip_optimization(
+        self,
+        baseline_score: float | None,
+        *,
+        skip_perfect_score: bool | None = None,
+        perfect_score: float | None = None,
+    ) -> bool:
+        """Return True if the baseline score is already good enough."""
+        if baseline_score is None:
+            return False
+        effective_skip = (
+            self.skip_perfect_score
+            if skip_perfect_score is None
+            else skip_perfect_score
+        )
+        if not effective_skip:
+            return False
+        threshold = self.perfect_score if perfect_score is None else perfect_score
+        return baseline_score >= threshold
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+        self.llm_calls_tools_counter = 0
+        self.llm_cost_total = 0.0
+        self.llm_token_usage_total = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
     def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
@@ -96,6 +160,100 @@ class BaseOptimizer(ABC):
     def _increment_tool_counter(self) -> None:
         """Increment the tool call counter."""
         self.tool_call_counter += 1
+        self.llm_calls_tools_counter += 1
+
+    def _add_llm_cost(self, cost: float | None) -> None:
+        """Accumulate cost across optimizer calls."""
+        if cost is None:
+            return
+        self.llm_cost_total += float(cost)
+
+    def _add_llm_usage(self, usage: dict[str, Any] | None) -> None:
+        """Accumulate token usage across optimizer calls."""
+        if not usage:
+            return
+        self.llm_token_usage_total["prompt_tokens"] += int(
+            usage.get("prompt_tokens", 0)
+        )
+        self.llm_token_usage_total["completion_tokens"] += int(
+            usage.get("completion_tokens", 0)
+        )
+        self.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
+
+    def get_prompt(self, key: str, **fmt: Any) -> str:
+        """Get a prompt template, optionally formatted with kwargs.
+
+        Args:
+            key: The prompt key to retrieve
+            **fmt: Optional format kwargs to apply to the template
+
+        Returns:
+            The prompt template, formatted if kwargs provided
+
+        Raises:
+            KeyError: If key is not a valid prompt key
+        """
+        return self._prompts.get(key, **fmt)
+
+    def list_prompts(self) -> list[str]:
+        """List available prompt keys.
+
+        Returns:
+            Sorted list of prompt keys
+        """
+        return self._prompts.keys()
+
+    def get_default_prompt(self, key: str) -> str:
+        """Get the original default prompt (before overrides).
+
+        Args:
+            key: The prompt key to retrieve
+
+        Returns:
+            The original default template
+
+        Raises:
+            KeyError: If key is not a valid prompt key
+        """
+        return self._prompts.get_default(key)
+
+    def _attach_agent_owner(self, agent: Any) -> None:
+        """Attach this optimizer to the agent so it can push counters/cost."""
+        try:
+            setattr(agent, "_optimizer_owner", self)
+        except Exception:
+            pass
+
+    def _select_result_prompts(self, **kwargs: Any) -> tuple[Any, Any]:
+        """Return the result prompt(s) and initial prompt(s) for output."""
+        best_prompts = kwargs["best_prompts"]
+        initial_prompts = kwargs["initial_prompts"]
+        is_single_prompt_optimization = kwargs["is_single_prompt_optimization"]
+        if is_single_prompt_optimization:
+            return list(best_prompts.values())[0], list(initial_prompts.values())[0]
+        return best_prompts, initial_prompts
+
+    def _build_early_result(
+        self, **kwargs: Any
+    ) -> optimization_result.OptimizationResult:
+        """Build a baseline-only OptimizationResult when skipping optimization."""
+        score = kwargs["score"]
+        return optimization_result.OptimizationResult(
+            optimizer=kwargs["optimizer_name"],
+            prompt=kwargs["prompt"],
+            score=score,
+            metric_name=kwargs["metric_name"],
+            initial_prompt=kwargs["initial_prompt"],
+            initial_score=score,
+            details=kwargs["details"],
+            history=kwargs.get("history", []) or [],
+            llm_calls=kwargs.get("llm_calls"),
+            llm_calls_tools=kwargs.get("llm_calls_tools"),
+            llm_cost_total=kwargs.get("llm_cost_total"),
+            llm_token_usage_total=kwargs.get("llm_token_usage_total"),
+            dataset_id=kwargs.get("dataset_id"),
+            optimization_id=kwargs.get("optimization_id"),
+        )
 
     def cleanup(self) -> None:
         """
@@ -621,6 +779,8 @@ class BaseOptimizer(ABC):
             agent = LiteLLMAgent(project_name=self.project_name)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
+            # Let the agent push usage/cost counters back into this optimizer.
+            self._attach_agent_owner(agent)
             # Wrap single prompt in dict for invoke_agent
             prompts_dict: dict[str, chat_prompt.ChatPrompt]
             if isinstance(prompt, dict):
@@ -628,10 +788,73 @@ class BaseOptimizer(ABC):
             else:
                 prompts_dict = {prompt.name: prompt}
 
-            raw_model_output = agent.invoke_agent(
-                prompts=prompts_dict, dataset_item=dataset_item
+            # Only the active prompt's model_kwargs control pass@k for single-prompt runs.
+            prompt_config = (
+                list(prompts_dict.values())[0].model_kwargs
+                if len(prompts_dict) == 1
+                else {}
             )
-            cleaned_model_output = raw_model_output.strip()
+            # Normalize n to an int so pass@k selection logic stays predictable.
+            requested_n = int(prompt_config.get("n", 1) or 1)
+            selection_policy = (
+                prompt_config.get("selection_policy", "best_by_metric")
+                if isinstance(prompt_config, dict)
+                else "best_by_metric"
+            )
+            selection_policy = str(selection_policy or "best_by_metric").lower()
+
+            if requested_n > 1 and hasattr(agent, "invoke_agent_candidates"):
+                candidates = agent.invoke_agent_candidates(
+                    prompts=prompts_dict, dataset_item=dataset_item
+                )
+                if not candidates:
+                    raw_model_output = agent.invoke_agent(
+                        prompts=prompts_dict, dataset_item=dataset_item
+                    )
+                    cleaned_model_output = raw_model_output.strip()
+                else:
+                    selection_result = select_candidate(
+                        candidates=candidates,
+                        policy=selection_policy,
+                        metric=metric,
+                        dataset_item=dataset_item,
+                        candidate_logprobs=getattr(
+                            agent, "_last_candidate_logprobs", None
+                        ),
+                        rng=random,
+                    )
+                    cleaned_model_output = selection_result.output.strip()
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Pass@k selection: n=%s policy=%s candidates=%d chosen=%s scores=%s logprobs=%s",
+                            requested_n,
+                            selection_result.policy,
+                            len(candidates),
+                            selection_result.chosen_index,
+                            selection_result.candidate_scores,
+                            selection_result.candidate_logprobs,
+                        )
+
+                    try:
+                        opik_context.update_current_trace(
+                            metadata={
+                                "opik_optimizer": {
+                                    "selection_policy": selection_result.policy,
+                                    "n_requested": requested_n,
+                                    "candidates_scored": len(candidates),
+                                    "candidate_scores": selection_result.candidate_scores,
+                                    "candidate_logprobs": selection_result.candidate_logprobs,
+                                    "chosen_index": selection_result.chosen_index,
+                                }
+                            }
+                        )
+                    except Exception:
+                        pass
+            else:
+                raw_model_output = agent.invoke_agent(
+                    prompts=prompts_dict, dataset_item=dataset_item
+                )
+                cleaned_model_output = raw_model_output.strip()
 
             # Add tags to trace for optimization tracking
             if self.current_optimization_id:

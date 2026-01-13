@@ -3,18 +3,21 @@ from typing import Any, cast
 
 from opik import Dataset
 from ...base_optimizer import BaseOptimizer, OptimizationRound
+from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ... import _throttle
 from . import reporting
+from ... import reporting_utils
 from .ops.halloffame_ops import PromptHallOfFame
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
 
 # Import ops modules
 from .ops import candidate_ops, context_ops, result_ops
+from . import prompts as meta_prompts
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -53,7 +56,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
         prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
+        prompt_overrides: Optional dict or callable to customize internal prompts.
+            Dict: {"prompt_key": "new_template"} to override specific prompts.
+            Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    # Prompt templates for this optimizer
+    # Keys match what ops files expect (e.g., optimizer.get_prompt("reasoning_system"))
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "reasoning_system": meta_prompts.REASONING_SYSTEM_PROMPT_TEMPLATE,
+        "candidate_generation": meta_prompts.CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE,
+        "agent_bundle_user": meta_prompts.AGENT_BUNDLE_USER_PROMPT_TEMPLATE,
+        "pattern_extraction_system": meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE,
+        "pattern_extraction_user": meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE,
+        "synthesis": meta_prompts.SYNTHESIS_PROMPT_TEMPLATE,
+    }
 
     # --- Constants for Default Configuration ---
     DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
@@ -89,6 +106,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         name: str | None = None,
         use_hall_of_fame: bool = True,
         prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
+        prompt_overrides: PromptOverrides = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
             model=model,
@@ -96,6 +116,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.prompts_per_round = prompts_per_round
         self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
@@ -121,11 +144,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
         self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
         self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
+
         self.hall_of_fame: PromptHallOfFame | None = None
         if self.use_hall_of_fame:
             self.hall_of_fame = PromptHallOfFame(
                 max_size=self.hall_of_fame_size,
                 pattern_extraction_interval=self.pattern_extraction_interval,
+                prompts=self._prompts,
             )
             logger.debug(
                 f"Hall of Fame enabled: size={self.hall_of_fame_size}, "
@@ -385,7 +410,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset
-        self.prompts = prompts
         self._reset_counters()  # Reset counters for run
         initial_prompts = prompts
         is_bundle = True
@@ -430,6 +454,46 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             baseline_reporter.set_score(initial_score)
 
+        if self._should_skip_optimization(initial_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping meta-prompt optimization.",
+                initial_score,
+                self.perfect_score,
+            )
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=best_prompts,
+                initial_prompts=initial_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            reporting.display_result(
+                initial_score=initial_score,
+                best_score=initial_score,
+                prompt=early_result_prompt,
+                verbose=self.verbose,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=initial_score,
+                metric_name=metric.__name__,
+                details={
+                    "rounds": [],
+                    "total_rounds": 0,
+                    "metric_name": metric.__name__,
+                    "stopped_early": True,
+                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                },
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset_id,
+                optimization_id=optimization_id,
+            )
+
         reporting.display_optimization_start_message(verbose=self.verbose)
 
         # Calculate the maximum number of rounds, we will stop early if we hit the
@@ -468,23 +532,90 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 try:
-                    bundle_candidates = candidate_ops.generate_agent_bundle_candidates(
-                        optimizer=self,
-                        current_prompts=best_prompts,
-                        best_score=best_score,
-                        round_num=round_num,
-                        previous_rounds=rounds,
-                        metric=metric,
-                        optimization_id=optimization_id,
-                        project_name=self.project_name,
-                        build_history_context_fn=self._build_history_context,
-                        get_task_context_fn=self._get_task_context,
-                    )
-                    # Extract prompts from bundle candidates and limit to prompts_this_round
-                    candidate_prompts = [
-                        bundle.prompts
-                        for bundle in bundle_candidates[:prompts_this_round]
-                    ]
+                    if is_single_prompt_optimization:
+                        single_candidates = candidate_ops.generate_candidate_prompts(
+                            optimizer=self,
+                            current_prompt=list(best_prompts.values())[0],
+                            best_score=best_score,
+                            round_num=round_num,
+                            previous_rounds=rounds,
+                            metric=metric,
+                            optimization_id=optimization_id,
+                            project_name=self.project_name,
+                            build_history_context_fn=self._build_history_context,
+                            get_task_context_fn=self._get_task_context,
+                            winning_patterns=(
+                                self.hall_of_fame.get_patterns_for_injection()
+                                if self.hall_of_fame
+                                else None
+                            ),
+                        )
+                        prompt_key = next(iter(best_prompts.keys()))
+                        candidate_prompts = [
+                            {prompt_key: prompt}
+                            for prompt in single_candidates[:prompts_this_round]
+                        ]
+                    else:
+                        bundle_candidates = (
+                            candidate_ops.generate_agent_bundle_candidates(
+                                optimizer=self,
+                                current_prompts=best_prompts,
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=rounds,
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                project_name=self.project_name,
+                                build_history_context_fn=self._build_history_context,
+                                get_task_context_fn=self._get_task_context,
+                            )
+                        )
+                        # Extract prompts from bundle candidates and limit to prompts_this_round
+                        candidate_prompts = [
+                            bundle.prompts
+                            for bundle in bundle_candidates[:prompts_this_round]
+                        ]
+
+                    synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+                    if (
+                        is_single_prompt_optimization
+                        and self.synthesis_prompts_per_round > 0
+                        and round_num >= self.synthesis_start_round
+                        and self.synthesis_round_interval > 0
+                        and (round_num - self.synthesis_start_round)
+                        % self.synthesis_round_interval
+                        == 0
+                    ):
+                        try:
+                            synthesis_prompts = (
+                                candidate_ops.generate_synthesis_prompts(
+                                    optimizer=self,
+                                    current_prompt=list(best_prompts.values())[0],
+                                    best_score=best_score,
+                                    previous_rounds=rounds,
+                                    metric=metric,
+                                    get_task_context_fn=self._get_task_context,
+                                    optimization_id=optimization_id,
+                                    project_name=self.project_name,
+                                )
+                            )
+                            prompt_key = next(iter(best_prompts.keys()))
+                            synthesis_candidates = [
+                                {prompt_key: prompt} for prompt in synthesis_prompts
+                            ]
+                        except Exception as synth_exc:
+                            if isinstance(
+                                synth_exc,
+                                (BadRequestError, StructuredOutputParsingError),
+                            ):
+                                raise
+                            logger.warning(
+                                "Synthesis prompt generation failed: %s", synth_exc
+                            )
+
+                    if synthesis_candidates:
+                        candidate_prompts = synthesis_candidates + candidate_prompts
+                        candidate_prompts = candidate_prompts[:prompts_this_round]
 
                 except Exception as e:
                     if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
@@ -501,7 +632,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
                 for candidate_count, prompts in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
-                        verbose=self.verbose
+                        verbose=self.verbose,
+                        selection_summary=reporting_utils.summarize_selection_policy(
+                            prompts
+                        ),
                     ) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompts)
 
@@ -587,16 +721,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                 round_num += 1
 
         # Prepare result prompts based on single vs multi-prompt mode
-        result_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompt: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_prompt, result_initial_prompt = self._select_result_prompts(
+            best_prompts=best_prompts,
+            initial_prompts=initial_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
         )
-        if is_single_prompt_optimization:
-            result_prompt = list(best_prompts.values())[0]
-            result_initial_prompt = list(initial_prompts.values())[0]
-        else:
-            result_prompt = best_prompts
-            result_initial_prompt = initial_prompts
 
         reporting.display_result(
             initial_score=initial_score,
@@ -616,7 +745,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             dataset_id=dataset_id,
             optimization_id=optimization_id,
             llm_call_counter=self.llm_call_counter,
-            tool_call_counter=self.tool_call_counter,
+            tool_call_counter=self.llm_calls_tools_counter,
         )
 
     def _create_round_data(
@@ -661,28 +790,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             max_tokens=self.max_context_tokens,
             model=self.model,
             extract_metric_understanding=self.extract_metric_understanding,
-        )
-
-    def _generate_synthesis_prompts(
-        self,
-        current_prompt: chat_prompt.ChatPrompt,
-        best_score: float,
-        round_num: int,
-        previous_rounds: list[OptimizationRound],
-        metric: MetricFunction,
-        optimization_id: str | None = None,
-        project_name: str | None = None,
-    ) -> list[chat_prompt.ChatPrompt]:
-        """Generate synthesis prompts that combine top performers."""
-        return candidate_ops.generate_synthesis_prompts(
-            optimizer=self,
-            current_prompt=current_prompt,
-            best_score=best_score,
-            previous_rounds=previous_rounds,
-            metric=metric,
-            get_task_context_fn=self._get_task_context,
-            optimization_id=optimization_id,
-            project_name=project_name,
         )
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:

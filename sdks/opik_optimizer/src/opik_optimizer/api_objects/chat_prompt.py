@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
 from pydantic import BaseModel, ConfigDict
@@ -8,20 +9,13 @@ from opik import track
 from . import types
 
 
+logger = logging.getLogger(__name__)
+
+
 class ModelParameters(BaseModel):
     """Wrapper for model parameters that allows arbitrary key-value pairs."""
 
     model_config = ConfigDict(extra="allow")
-
-
-class ChatPromptObject(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    messages: list[types.Message]
-    model: str
-    tools: list[types.Tool]
-    model_parameters: ModelParameters
 
 
 class ChatPrompt:
@@ -51,7 +45,25 @@ class ChatPrompt:
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",
         model_parameters: dict[str, Any] | None = None,
+        model_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
+        if "model_kwdargs" in kwargs:
+            if model_kwargs is not None:
+                logger.warning(
+                    "ChatPrompt received both model_kwargs and model_kwdargs; "
+                    "ignoring model_kwdargs."
+                )
+            else:
+                model_kwargs = kwargs["model_kwdargs"]
+                logger.warning(
+                    "ChatPrompt received model_kwdargs; remapping to model_parameters."
+                )
+            kwargs.pop("model_kwdargs", None)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword argument(s): {unexpected}")
+
         if system is None and user is None and messages is None:
             raise ValueError(
                 "At least one of `system`, `user`, or `messages` must be provided"
@@ -96,6 +108,18 @@ class ChatPrompt:
 
         # These are used for the LiteLLMAgent class:
         self.model = model
+        if model_kwargs is not None:
+            if model_parameters is not None:
+                logger.warning(
+                    "ChatPrompt received model_kwargs and model_parameters; "
+                    "using model_parameters."
+                )
+            else:
+                logger.warning(
+                    "ChatPrompt received model_kwargs; remapping to model_parameters."
+                )
+                model_parameters = model_kwargs
+
         self.model_kwargs = model_parameters or {}
 
     @staticmethod
@@ -168,27 +192,6 @@ class ChatPrompt:
                 types.Tool.model_validate(tool)
 
     @staticmethod
-    def _merge_messages(
-        system: str | None, user: str | None, messages: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        merged_messages = []
-        if system is not None:
-            merged_messages.append({"role": "system", "content": system})
-        if user is not None:
-            merged_messages.append({"role": "user", "content": user})
-        if messages is not None:
-            merged_messages.extend(messages)
-        return merged_messages
-
-    def _has_content_parts(self) -> bool:
-        messages = self._standardize_prompts()
-
-        for message in messages:
-            if isinstance(message["content"], list):
-                return True
-        return False
-
-    @staticmethod
     def _update_string_content(content: str, label: str, value: str) -> str:
         """
         Update string content by replacing label with value.
@@ -233,6 +236,14 @@ class ChatPrompt:
                     url = image_url_data.get("url", "")
                     if isinstance(url, str) and label in url:
                         image_url_data["url"] = url.replace(label, value)
+                    sanitized_url = image_url_data.get("url", "")
+                    if (
+                        isinstance(sanitized_url, str)
+                        and sanitized_url.startswith("{data:image/")
+                        and sanitized_url.endswith("}")
+                    ):
+                        # Some datasets pass data URIs wrapped in braces; strip them to keep URLs valid.
+                        image_url_data["url"] = sanitized_url[1:-1]
 
     def replace_in_messages(
         self, messages: list[dict[str, Any]], label: str, value: str
@@ -247,6 +258,10 @@ class ChatPrompt:
                 self._update_content_parts(content, label, str(value))
 
         return messages
+
+    def _has_content_parts(self) -> bool:
+        messages = self._standardize_prompts()
+        return any(isinstance(message.get("content"), list) for message in messages)
 
     def get_messages(
         self,

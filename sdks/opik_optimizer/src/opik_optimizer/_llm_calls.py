@@ -14,7 +14,57 @@ from . import _throttle
 from . import utils as _utils
 
 
+def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove project_name from metadata["opik"] before passing to litellm.
+
+    This prevents double-passing of project_name to Opik tracing:
+    - track_completion(project_name=X) already sets the project for Opik
+    - If metadata["opik"]["project_name"] is also passed, it may conflict
+
+    The flow is:
+    1. Caller passes project_name= parameter to call_model/call_model_async
+    2. track_completion(project_name=X) wraps the litellm call for Opik tracing
+    3. _prepare_model_params may add project_name to metadata for consistency
+    4. This function strips it before the actual litellm call to avoid conflicts
+
+    Args:
+        params: Dict of parameters prepared for litellm.completion/acompletion
+
+    Returns:
+        New dict with metadata["opik"]["project_name"] removed (if present).
+        Original dict is not modified.
+    """
+    metadata = params.get("metadata")
+    if not isinstance(metadata, dict):
+        return params
+    opik_metadata = metadata.get("opik")
+    if not isinstance(opik_metadata, dict):
+        return params
+    if "project_name" not in opik_metadata:
+        return params
+    updated_params = {**params}
+    updated_metadata = {**metadata}
+    updated_opik = {**opik_metadata}
+    updated_opik.pop("project_name", None)
+    if updated_opik:
+        updated_metadata["opik"] = updated_opik
+    else:
+        updated_metadata.pop("opik", None)
+    updated_params["metadata"] = updated_metadata
+    return updated_params
+
 logger = logging.getLogger(__name__)
+
+
+def requested_multiple_candidates(model_parameters: dict[str, Any] | None) -> bool:
+    """Return True when model parameters request multiple completions (n > 1)."""
+    n_value = (model_parameters or {}).get("n", 1) or 1
+    try:
+        return int(n_value) > 1
+    except (TypeError, ValueError):
+        return False
+
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -64,6 +114,26 @@ def _increment_tool_counter_if_in_optimizer() -> None:
             optimizer_candidate._increment_tool_counter()
             break
         frame = frame.f_back
+
+
+def _get_project_name_from_optimizer() -> str | None:
+    """Return project_name from the nearest optimizer on the call stack."""
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return None
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return None
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            return getattr(optimizer_candidate, "project_name", None)
+        frame = frame.f_back
+    return None
 
 
 def _build_call_time_params(
@@ -170,7 +240,8 @@ class StructuredOutputParsingError(Exception):
 def _parse_response(
     response: Any,
     response_model: type[BaseModel] | None = None,
-) -> BaseModel | str:
+    return_all: bool = False,
+) -> BaseModel | str | list[BaseModel] | list[str]:
     """
     Parse LiteLLM response, with optional structured output parsing.
 
@@ -179,12 +250,19 @@ def _parse_response(
         response_model: Optional Pydantic model for structured output
 
     Returns:
-        If response_model is provided, returns an instance of that model.
-        Otherwise, returns the raw string response.
+        If response_model is provided, returns an instance of that model (or a list when
+        return_all=True). Otherwise, returns the raw string response (or list of strings).
     """
-    content = response.choices[0].message.content
+    choices = getattr(response, "choices", None) or []
+    if return_all and choices:
+        contents = []
+        for choice in choices:
+            contents.append(choice.message.content)
+        return _parse_response_list(contents, response_model)
 
-    finish_reason = getattr(response.choices[0], "finish_reason", None)
+    content = choices[0].message.content if choices else ""
+
+    finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
     # When the model was truncated due to max_tokens we raise a BadRequest so downstream sees the OpenAI error.
     # Empty string responses with a truncation finish reason mean the model hit max_tokens.
     if (
@@ -241,6 +319,51 @@ def _parse_response(
     return content
 
 
+def _parse_response_list(
+    contents: list[str],
+    response_model: type[BaseModel] | None,
+) -> list[BaseModel] | list[str]:
+    """
+    Parse multiple LLM responses into a list of strings or Pydantic models.
+
+    This helper is used when the LLM returns multiple choices (n>1) or when
+    return_all=True. Each raw choice content is parsed independently so callers
+    can score or select candidates without concatenating them into a single
+    response. When response_model is provided, each content string is validated
+    into that model, with a JSON-cleanup fallback that mirrors _parse_response.
+
+    Args:
+        contents: Raw choice contents (one string per LLM choice).
+        response_model: Optional Pydantic model to validate each choice.
+
+    Returns:
+        List of strings when response_model is None, otherwise a list of parsed
+        Pydantic model instances (one per choice).
+    """
+    if response_model is None:
+        return contents
+
+    parsed: list[BaseModel] = []
+    for content in contents:
+        try:
+            parsed.append(response_model.model_validate_json(content))
+        except PydanticValidationError as exc:
+            try:
+                cleaned = _utils.json_to_dict(content)
+                if cleaned is not None:
+                    parsed.append(response_model.model_validate(cleaned))
+                    continue
+            except (
+                json.JSONDecodeError,
+                SyntaxError,
+                TypeError,
+                ValueError,
+            ):
+                pass
+            raise StructuredOutputParsingError(content=content, error=exc) from exc
+    return parsed
+
+
 # Overloads for call_model to provide precise return types
 @overload
 def call_model(
@@ -258,7 +381,9 @@ def call_model(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> str: ...
+    project_name: str | None = None,
+    return_all: bool = False,
+) -> str | list[str]: ...
 
 
 @overload
@@ -277,7 +402,9 @@ def call_model(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> _T: ...
+    project_name: str | None = None,
+    return_all: bool = False,
+) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited(_limiter)
@@ -298,6 +425,8 @@ def call_model(
     # Optimizer-specific metadata (not passed to LiteLLM)
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    return_all: bool = False,
 ) -> BaseModel | str:
     """
     Call the LLM model with optional structured output.
@@ -316,6 +445,7 @@ def call_model(
         frequency_penalty: Penalty for new tokens based on frequency
         optimization_id: Optional ID for optimization tracking (metadata only)
         metadata: Optional metadata dict for monitoring
+        project_name: Optional Opik project name override for tracing
 
     Returns:
         If response_model is provided, returns an instance of that model.
@@ -337,23 +467,38 @@ def call_model(
     if model_parameters is None:
         model_parameters = {}
 
+    effective_project_name = project_name or _get_project_name_from_optimizer()
+
     final_params_for_litellm = _prepare_model_params(
         model_parameters,
         call_time_params,
         response_model,
         is_reasoning,
         optimization_id,
+        effective_project_name,
     )
 
-    response = track_completion()(litellm.completion)(
+    tracked_completion = track_completion(project_name=effective_project_name)(
+        litellm.completion
+    )
+    logger.debug(
+        f"call_model: model={model} project={effective_project_name} "
+        f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
+    )
+    response = tracked_completion(
         model=model,
         messages=messages,
         seed=seed,
         num_retries=6,
-        **final_params_for_litellm,
+        **_strip_project_name(final_params_for_litellm),
     )
 
-    return _parse_response(response, response_model)
+    choices = getattr(response, "choices", None)
+    logger.debug(
+        f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+    )
+    wants_all = return_all
+    return _parse_response(response, response_model, wants_all)
 
 
 # Overloads for call_model_async to provide precise return types
@@ -374,7 +519,8 @@ async def call_model_async(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> str: ...
+    return_all: bool = False,
+) -> str | list[str]: ...
 
 
 @overload
@@ -394,7 +540,8 @@ async def call_model_async(
     frequency_penalty: float | None = None,
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> _T: ...
+    return_all: bool = False,
+) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited_async(_limiter)
@@ -416,6 +563,7 @@ async def call_model_async(
     # Optimizer-specific metadata (not passed to LiteLLM)
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    return_all: bool = False,
 ) -> BaseModel | str:
     """
     Async version of _call_model using litellm.acompletion.
@@ -434,6 +582,7 @@ async def call_model_async(
         frequency_penalty: Penalty for new tokens based on frequency
         optimization_id: Optional ID for optimization tracking (metadata only)
         metadata: Optional metadata dict for monitoring
+        project_name: Optional Opik project name override for tracing
 
     Returns:
         If response_model is provided, returns an instance of that model.
@@ -455,21 +604,35 @@ async def call_model_async(
     if model_parameters is None:
         model_parameters = {}
 
+    effective_project_name = project_name or _get_project_name_from_optimizer()
+
     final_params_for_litellm = _prepare_model_params(
         model_parameters=model_parameters,
         call_time_params=call_time_params,
         response_model=response_model,
         is_reasoning=is_reasoning,
         optimization_id=optimization_id,
-        project_name=project_name,
+        project_name=effective_project_name,
     )
 
-    response = await litellm.acompletion(
+    tracked_completion = track_completion(project_name=effective_project_name)(
+        litellm.acompletion
+    )
+    logger.debug(
+        f"call_model_async: model={model} project={effective_project_name} "
+        f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
+    )
+    response = await tracked_completion(
         model=model,
         messages=messages,
         seed=seed,
         num_retries=6,
-        **final_params_for_litellm,
+        **_strip_project_name(final_params_for_litellm),
     )
 
-    return _parse_response(response, response_model)
+    choices = getattr(response, "choices", None)
+    logger.debug(
+        f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+    )
+    wants_all = return_all
+    return _parse_response(response, response_model, wants_all)

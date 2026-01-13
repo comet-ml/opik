@@ -8,6 +8,7 @@ Tests cover:
 
 import pytest
 import random
+from typing import Any
 
 from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
     _deap_crossover_chunking_strategy,
@@ -216,3 +217,362 @@ class TestCrossoverIntegration:
         w1, w2 = _deap_crossover_word_level(msg1_words, msg2_words)
         assert w1 and w2
         assert isinstance(w1, str) and isinstance(w2, str)
+
+
+class TestCrossoverMessages:
+    """Tests for _crossover_messages function."""
+
+    def test_crossover_string_content(self) -> None:
+        """Should perform crossover on string content messages."""
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            _crossover_messages,
+        )
+
+        random.seed(42)
+
+        messages1 = [
+            {"role": "system", "content": "First sentence. Second sentence."},
+            {"role": "user", "content": "Question one. Question two."},
+        ]
+        messages2 = [
+            {"role": "system", "content": "Alpha sentence. Beta sentence."},
+            {"role": "user", "content": "Query one. Query two."},
+        ]
+
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+
+        assert len(child1_msgs) == 2
+        assert len(child2_msgs) == 2
+        assert child1_msgs[0]["role"] == "system"
+        assert child1_msgs[1]["role"] == "user"
+
+    def test_crossover_preserves_content_parts(self) -> None:
+        """Should preserve non-text content parts (like images)."""
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            _crossover_messages,
+        )
+
+        random.seed(42)
+
+        messages1 = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "First part. Second part."},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,abc"},
+                    },
+                ],
+            }
+        ]
+        messages2 = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Alpha part. Beta part."},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,xyz"},
+                    },
+                ],
+            }
+        ]
+
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+
+        assert len(child1_msgs) == 1
+        # Should preserve structure
+        assert isinstance(child1_msgs[0]["content"], list)
+
+    def test_crossover_different_roles_unchanged(self) -> None:
+        """Messages with different roles at same index should not be crossed."""
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            _crossover_messages,
+        )
+
+        random.seed(42)
+
+        messages1 = [
+            {"role": "system", "content": "System content. More content."},
+        ]
+        messages2 = [
+            {"role": "user", "content": "User content. More user content."},
+        ]
+
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+
+        # Should return deep copies since roles don't match
+        assert len(child1_msgs) == 1
+        assert child1_msgs[0]["role"] == "system"
+
+    def test_crossover_handles_mismatched_lengths(self) -> None:
+        """Should handle messages lists of different lengths."""
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            _crossover_messages,
+        )
+
+        random.seed(42)
+
+        messages1 = [
+            {"role": "system", "content": "System content. More content."},
+            {"role": "user", "content": "User content. User question."},
+            {"role": "assistant", "content": "Assistant reply. More reply."},
+        ]
+        messages2 = [
+            {"role": "system", "content": "Alpha system. Beta system."},
+        ]
+
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+
+        # Should handle shorter second list
+        assert len(child1_msgs) == 3
+        assert len(child2_msgs) == 1
+
+
+class TestDeapCrossover:
+    """Tests for deap_crossover function."""
+
+    def test_crossover_dict_individuals(self) -> None:
+        """Should perform crossover on dict-based individuals."""
+        from deap import creator
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            deap_crossover,
+        )
+
+        if not hasattr(creator, "Individual"):
+            creator.create("Individual", dict, fitness=None)
+
+        random.seed(42)
+
+        ind1 = creator.Individual(
+            {
+                "main": [
+                    {"role": "system", "content": "First prompt. Second sentence."},
+                    {"role": "user", "content": "Question here. Another question."},
+                ]
+            }
+        )
+        ind2 = creator.Individual(
+            {
+                "main": [
+                    {"role": "system", "content": "Alpha prompt. Beta sentence."},
+                    {"role": "user", "content": "Query here. Another query."},
+                ]
+            }
+        )
+
+        child1, child2 = deap_crossover(ind1, ind2, verbose=0)
+
+        assert "main" in child1
+        assert "main" in child2
+        assert len(child1["main"]) == 2
+        assert len(child2["main"]) == 2
+
+    def test_crossover_preserves_metadata(self) -> None:
+        """Should preserve prompts_metadata from parents."""
+        from deap import creator
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            deap_crossover,
+        )
+
+        if not hasattr(creator, "Individual"):
+            creator.create("Individual", dict, fitness=None)
+
+        random.seed(42)
+
+        ind1 = creator.Individual(
+            {"main": [{"role": "system", "content": "Content. More."}]}
+        )
+        setattr(ind1, "prompts_metadata", {"main": {"name": "main_prompt"}})
+
+        ind2 = creator.Individual(
+            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
+        )
+        setattr(ind2, "prompts_metadata", {"main": {"name": "main_prompt_v2"}})
+
+        child1, child2 = deap_crossover(ind1, ind2, verbose=0)
+
+        assert hasattr(child1, "prompts_metadata")
+        assert hasattr(child2, "prompts_metadata")
+
+    def test_crossover_handles_disjoint_prompts(self) -> None:
+        """Should handle individuals with different prompt keys."""
+        from deap import creator
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            deap_crossover,
+        )
+
+        if not hasattr(creator, "Individual"):
+            creator.create("Individual", dict, fitness=None)
+
+        random.seed(42)
+
+        ind1 = creator.Individual(
+            {"prompt_a": [{"role": "system", "content": "A content. More A."}]}
+        )
+        ind2 = creator.Individual(
+            {"prompt_b": [{"role": "system", "content": "B content. More B."}]}
+        )
+
+        child1, child2 = deap_crossover(ind1, ind2, verbose=0)
+
+        # Both children should have both keys
+        assert "prompt_a" in child1
+        assert "prompt_b" in child1
+        assert "prompt_a" in child2
+        assert "prompt_b" in child2
+
+
+class TestLLMCrossoverMessages:
+    """Tests for _llm_crossover_messages function."""
+
+    def test_llm_crossover_success(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
+        """Should return children from LLM crossover."""
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            _llm_crossover_messages,
+            CrossoverResponse,
+        )
+
+        mock_response = CrossoverResponse(
+            child_1=[
+                {"role": "system", "content": "Blended system prompt"},
+                {"role": "user", "content": "Blended user prompt"},
+            ],
+            child_2=[
+                {"role": "system", "content": "Alternative system prompt"},
+                {"role": "user", "content": "Alternative user prompt"},
+            ],
+        )
+
+        def fake_call_model(**kwargs: Any) -> CrossoverResponse:
+            return mock_response
+
+        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+
+        messages1 = [
+            {"role": "system", "content": "System A"},
+            {"role": "user", "content": "User A"},
+        ]
+        messages2 = [
+            {"role": "system", "content": "System B"},
+            {"role": "user", "content": "User B"},
+        ]
+
+        child1, child2 = _llm_crossover_messages(
+            messages1,
+            messages2,
+            output_style_guidance="Be concise",
+            model="gpt-4",
+            model_parameters={},
+            prompts=evo_prompts,
+        )
+
+        assert len(child1) == 2
+        assert len(child2) == 2
+        assert child1[0]["content"] == "Blended system prompt"
+
+
+class TestLLMDeapCrossover:
+    """Tests for llm_deap_crossover function."""
+
+    def test_llm_crossover_fallback_on_error(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
+        """Should fall back to DEAP crossover on LLM error."""
+        from deap import creator
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            llm_deap_crossover,
+        )
+
+        if not hasattr(creator, "Individual"):
+            creator.create("Individual", dict, fitness=None)
+
+        def fake_call_model(**kwargs: Any) -> None:
+            raise Exception("LLM API error")
+
+        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+
+        def fake_display_message(msg: str, verbose: int) -> None:
+            pass
+
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
+            fake_display_message,
+        )
+
+        random.seed(42)
+
+        ind1 = creator.Individual(
+            {"main": [{"role": "system", "content": "First. Second."}]}
+        )
+        ind2 = creator.Individual(
+            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
+        )
+
+        child1, child2 = llm_deap_crossover(
+            ind1,
+            ind2,
+            output_style_guidance="Be concise",
+            model="gpt-4",
+            model_parameters={},
+            prompts=evo_prompts,
+            verbose=0,
+        )
+
+        # Should still produce valid children via fallback
+        assert "main" in child1
+        assert "main" in child2
+
+    def test_llm_crossover_success(
+        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    ) -> None:
+        """Should use LLM crossover when it succeeds."""
+        from deap import creator
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            llm_deap_crossover,
+            CrossoverResponse,
+        )
+
+        if not hasattr(creator, "Individual"):
+            creator.create("Individual", dict, fitness=None)
+
+        mock_response = CrossoverResponse(
+            child_1=[{"role": "system", "content": "LLM generated 1"}],
+            child_2=[{"role": "system", "content": "LLM generated 2"}],
+        )
+
+        def fake_call_model(**kwargs: Any) -> CrossoverResponse:
+            return mock_response
+
+        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+
+        def fake_display_message(msg: str, verbose: int) -> None:
+            pass
+
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
+            fake_display_message,
+        )
+
+        ind1 = creator.Individual(
+            {"main": [{"role": "system", "content": "Original 1"}]}
+        )
+        ind2 = creator.Individual(
+            {"main": [{"role": "system", "content": "Original 2"}]}
+        )
+
+        child1, child2 = llm_deap_crossover(
+            ind1,
+            ind2,
+            output_style_guidance="Be concise",
+            model="gpt-4",
+            model_parameters={},
+            prompts=evo_prompts,
+            verbose=0,
+        )
+
+        assert child1["main"][0]["content"] == "LLM generated 1"
+        assert child2["main"][0]["content"] == "LLM generated 2"

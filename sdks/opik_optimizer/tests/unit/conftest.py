@@ -15,6 +15,7 @@ Usage:
 """
 
 import pytest
+import logging
 from unittest.mock import MagicMock
 from typing import Any
 
@@ -162,6 +163,18 @@ def mock_llm_sequence(monkeypatch: pytest.MonkeyPatch):
         return call_count
 
     return _configure
+
+
+@pytest.fixture
+def suppress_expected_optimizer_warnings(caplog: pytest.LogCaptureFixture) -> None:
+    loggers = [
+        "opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops",
+        "opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops",
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops",
+        "opik_optimizer.utils.tools.wikipedia",
+    ]
+    for name in loggers:
+        caplog.set_level(logging.ERROR, logger=name)
 
 
 @pytest.fixture
@@ -557,6 +570,24 @@ def sample_metric_with_reason():
 
     accuracy_with_reason.__name__ = "accuracy_with_reason"
     return accuracy_with_reason
+
+
+# ============================================================
+# Prompt Library Fixtures
+# ============================================================
+
+
+@pytest.fixture
+def evo_prompts():
+    """
+    PromptLibrary for evolutionary optimizer tests.
+
+    Provides the default prompts used by the EvolutionaryOptimizer.
+    """
+    from opik_optimizer.algorithms.evolutionary_optimizer import EvolutionaryOptimizer
+    from opik_optimizer.utils.prompt_library import PromptLibrary
+
+    return PromptLibrary(EvolutionaryOptimizer.DEFAULT_PROMPTS)
 
 
 # ============================================================

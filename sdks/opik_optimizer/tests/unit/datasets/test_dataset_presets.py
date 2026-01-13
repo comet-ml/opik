@@ -19,6 +19,7 @@ CURATED_DATASETS = [
     ("rag_hallucinations", "train", 150),
     ("tiny_test", "train", 5),
     ("halu_eval_300", "train", 150),
+    ("arc_agi2", "train", 200),
 ]
 
 

@@ -9,11 +9,12 @@ from collections.abc import Callable
 from rich import box
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
-from rich.progress import track
+from rich.progress import Progress
 from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
 from .api_objects import chat_prompt
+from .utils.candidate_selection import DEFAULT_SELECTION_POLICY
 
 PANEL_WIDTH = 70
 
@@ -74,11 +75,55 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
     """Context manager to convert tqdm to rich progress bars."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
-    def _tqdm_to_track(iterable: Any, desc: str, disable: bool, total: int) -> Any:
-        disable = verbose == 0
-        return track(
-            iterable, description=description or desc, disable=disable, total=total
-        )
+    class _TqdmAdapter:
+        """Minimal tqdm-like adapter backed by rich.Progress for Opik evaluators."""
+
+        def __init__(
+            self,
+            iterable: Any | None,
+            desc: str | None,
+            total: int | None,
+            disable: bool,
+        ) -> None:
+            self._iterable = iterable
+            self._progress = Progress(transient=True, disable=disable)
+            self._progress.start()
+            self._task_id = self._progress.add_task(desc or "", total=total)
+
+        def __iter__(self) -> Any:
+            if self._iterable is None:
+                self.close()
+                return iter(())
+            try:
+                for item in self._iterable:
+                    yield item
+                    self.update(1)
+            finally:
+                self.close()
+
+        def update(self, advance: int = 1) -> None:
+            self._progress.advance(self._task_id, advance)
+
+        @property
+        def total(self) -> float | None:
+            task = self._progress.tasks[self._task_id]
+            return task.total
+
+        @total.setter
+        def total(self, value: int | None) -> None:
+            self._progress.update(self._task_id, total=value)
+
+        def close(self) -> None:
+            self._progress.stop()
+
+    def _tqdm_to_track(iterable: Any | None = None, *args: Any, **kwargs: Any) -> Any:
+        desc = kwargs.get("desc")
+        total = kwargs.get("total")
+        disable = kwargs.get("disable", False) or verbose == 0
+        if iterable is None and args:
+            iterable = args[0]
+        desc_value = description or (desc if isinstance(desc, str) else None) or ""
+        return _TqdmAdapter(iterable, desc_value, total, disable)
 
     original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
     opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track  # type: ignore[assignment]
@@ -127,6 +172,31 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     if len(normalized) > max_length:
         return normalized[:max_length] + "…"
     return normalized
+
+
+def summarize_selection_policy(
+    prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Return a compact n/policy summary for prompt evaluation reporting."""
+    prompts_list = list(prompts.values()) if isinstance(prompts, dict) else [prompts]
+    summaries = []
+    for prompt in prompts_list:
+        model_parameters = prompt.model_kwargs or {}
+        n_value = model_parameters.get("n", 1) or 1
+        try:
+            n_value = int(n_value)
+        except (TypeError, ValueError):
+            n_value = 1
+        policy = str(
+            model_parameters.get("selection_policy", DEFAULT_SELECTION_POLICY)
+            or DEFAULT_SELECTION_POLICY
+        ).lower()
+        summaries.append(f"n={n_value} policy={policy}")
+
+    unique = sorted(set(summaries))
+    if len(unique) == 1:
+        return unique[0]
+    return "mixed (" + ", ".join(unique) + ")"
 
 
 def _format_message_content(content: str | list[dict[str, Any]]) -> Text:
@@ -530,10 +600,16 @@ def display_configuration(
         display_messages(messages)
         _display_tools(tools)
 
+    selection_summary = None
+    if isinstance(messages, (chat_prompt.ChatPrompt, dict)):
+        selection_summary = summarize_selection_policy(messages)
+
     # Panel for configuration
     console.print(
         Text(f"\nUsing {optimizer_config['optimizer']} with the parameters: ")
     )
+    if selection_summary:
+        console.print(Text(f"  - evaluation: {selection_summary}", style="dim"))
 
     for key, value in optimizer_config.items():
         if key == "optimizer":  # Already displayed in the introductory text

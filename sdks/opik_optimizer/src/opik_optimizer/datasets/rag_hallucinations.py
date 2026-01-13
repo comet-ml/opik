@@ -3,7 +3,7 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, add_record_index
+from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy, add_record_index
 
 
 RAG_HALLU_SPEC = DatasetSpec(
@@ -46,6 +46,7 @@ def rag_hallucinations(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """RAG Hallucinations dataset slices (context, question, answer, label)."""
     return _RAG_HALLU_HANDLE.load(
@@ -56,4 +57,5 @@ def rag_hallucinations(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

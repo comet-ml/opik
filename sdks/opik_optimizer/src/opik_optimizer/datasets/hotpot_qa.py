@@ -3,10 +3,18 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, warn_deprecated_dataset
+from opik_optimizer.utils.dataset_utils import (
+    DatasetHandle,
+    FilterBy,
+    warn_deprecated_dataset,
+)
 
 
-def hotpot_300(test_mode: bool = False) -> opik.Dataset:
+def hotpot_300(
+    test_mode: bool = False,
+    *,
+    filter_by: FilterBy | None = None,
+) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the HotpotQA dataset.
     """
@@ -18,10 +26,15 @@ def hotpot_300(test_mode: bool = False) -> opik.Dataset:
         count=300,
         dataset_name=dataset_name,
         test_mode=test_mode,
+        filter_by=filter_by,
     )
 
 
-def hotpot_500(test_mode: bool = False) -> opik.Dataset:
+def hotpot_500(
+    test_mode: bool = False,
+    *,
+    filter_by: FilterBy | None = None,
+) -> opik.Dataset:
     """
     Dataset containing the first 500 samples of the HotpotQA dataset.
     """
@@ -33,6 +46,7 @@ def hotpot_500(test_mode: bool = False) -> opik.Dataset:
         count=500,
         dataset_name=dataset_name,
         test_mode=test_mode,
+        filter_by=filter_by,
     )
 
 
@@ -75,6 +89,7 @@ def hotpot(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """General-purpose HotpotQA loader."""
     return _HOT_POT_HANDLE.load(
@@ -85,5 +100,6 @@ def hotpot(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
-        prefer_presets=split is not None,
+        prefer_presets=split is not None and filter_by is None,
+        filter_by=filter_by,
     )

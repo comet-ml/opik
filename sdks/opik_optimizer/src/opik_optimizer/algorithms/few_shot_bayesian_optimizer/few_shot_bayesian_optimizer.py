@@ -1,10 +1,10 @@
 from typing import Any
-from collections.abc import Callable
 
 import copy
 import hashlib
 import json
 import logging
+import warnings
 import random
 from datetime import datetime
 
@@ -18,10 +18,12 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import LiteLLMAgent, OptimizableAgent
-from ... import _throttle, optimization_result, task_evaluator
+from ... import _throttle, optimization_result, task_evaluator, reporting_utils
+from ...utils.prompt_library import PromptOverrides
 from . import reporting, types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
+from collections.abc import Callable
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -53,7 +55,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         enable_columnar_selection: Toggle column-aware example grouping (categorical Optuna params)
         enable_multivariate_tpe: Enable Optuna's multivariate TPE sampler (default: True)
         enable_optuna_pruning: Enable Optuna pruner for early stopping (default: True)
+        prompt_overrides: Optional dict or callable to override/customize prompt templates.
+            If a dict, keys should match DEFAULT_PROMPTS keys.
+            If a callable, receives the PromptLibrary instance for in-place modification.
     """
+
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "example_placeholder": few_shot_prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER,
+        "system_prompt_template": few_shot_prompts.SYSTEM_PROMPT_TEMPLATE,
+    }
 
     _MAX_UNIQUE_COLUMN_VALUES = 25
     _MAX_COLUMN_VALUE_LENGTH = 120
@@ -73,9 +83,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         enable_diversity: bool = True,
         enable_multivariate_tpe: bool = True,
         enable_optuna_pruning: bool = True,
+        prompt_overrides: PromptOverrides = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
-            model, verbose, seed=seed, model_parameters=model_parameters, name=name
+            model,
+            verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.min_examples = min_examples
         self.max_examples = max_examples
@@ -112,6 +132,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         derived_seed = int.from_bytes(digest[:8], "big")
         return random.Random(derived_seed)
 
+    # FIXME: Dead code, should be wired or removed
     def _split_dataset(
         self, dataset: list[dict[str, Any]], train_ratio: float
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -161,8 +182,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "examples": few_shot_examples,
         }
 
+        # Get templates from prompt library (allows for overrides)
+        system_template = self.get_prompt("system_prompt_template")
+        example_placeholder = str(self.get_prompt("example_placeholder"))
+
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": few_shot_prompts.SYSTEM_PROMPT_TEMPLATE},
+            {
+                "role": "system",
+                "content": few_shot_prompts.build_system_prompt_template(
+                    template=system_template,
+                    placeholder=example_placeholder,
+                ),
+            },
             {"role": "user", "content": json.dumps(user_message)},
         ]
 
@@ -172,13 +203,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
+        # Few-shot prompt synthesis expects a single structured response.
+        model_parameters = dict(self.model_parameters)
+        model_parameters.pop("n", None)
         response_content = _llm_calls.call_model(
             messages=messages,
             model=model,
             seed=self.seed,
-            model_parameters=self.model_parameters,
+            model_parameters=model_parameters,
             response_model=DynamicFewShotPromptMessages,
         )
+        if isinstance(response_content, list):
+            response_content = response_content[0]
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
         new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
@@ -493,6 +529,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 total_trials=n_trials,
                 messages=messages_for_reporting,
                 verbose=self.verbose,
+                selection_summary=reporting_utils.summarize_selection_policy(
+                    prompts_with_examples
+                ),
             )
 
             score = task_evaluator.evaluate(
@@ -540,10 +579,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
-        # Explicitly create and seed the sampler for Optuna
-        sampler = optuna.samplers.TPESampler(
-            seed=self.seed, multivariate=self.enable_multivariate_tpe
-        )
+        # Explicitly create and seed the sampler for Optuna.
+        # Note: Optuna warns that `multivariate` is experimental; we suppress that warning here.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*multivariate.*experimental.*",
+                category=optuna.exceptions.ExperimentalWarning,
+            )
+            sampler = optuna.samplers.TPESampler(
+                seed=self.seed, multivariate=self.enable_multivariate_tpe
+            )
         pruner = (
             optuna.pruners.MedianPruner(n_startup_trials=3)
             if self.enable_optuna_pruning
@@ -558,7 +604,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         optuna_history_processed = []
-        for trial_idx, trial in enumerate(study.trials):
+        for trial in study.trials:
             if trial.state == optuna.trial.TrialState.COMPLETE:
                 trial_config = trial.user_attrs.get("config", {})
                 prompt_cand_display = trial_config.get(
@@ -661,7 +707,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
         )
@@ -759,6 +805,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         with reporting.display_evaluation(
             message="First we will establish the baseline performance:",
             verbose=self.verbose,
+            selection_summary=reporting_utils.summarize_selection_policy(
+                optimizable_prompts
+            ),
         ) as eval_report:
             baseline_score = self.evaluate_prompt(
                 prompt=optimizable_prompts,
@@ -778,6 +827,50 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             eval_report.set_score(baseline_score)
 
+        if self._should_skip_optimization(baseline_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping few-shot optimization.",
+                baseline_score,
+                self.perfect_score,
+            )
+            reporting.display_result(
+                initial_score=baseline_score,
+                best_score=baseline_score,
+                prompt=optimizable_prompts,
+                verbose=self.verbose,
+            )
+
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=optimizable_prompts,
+                initial_prompts=optimizable_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=baseline_score,
+                metric_name=metric.__name__,
+                details={
+                    "initial_score": baseline_score,
+                    "total_trials": 0,
+                    "total_rounds": 0,
+                    "rounds": [],
+                    "stopped_early": True,
+                    "stopped_early_reason": "baseline_score_met_threshold",
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                    "model": self.model,
+                    "temperature": self.model_parameters.get("temperature"),
+                },
+                history=[],
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset.id,
+                optimization_id=optimization.id if optimization is not None else None,
+            )
+
         # Step 2. Create the few-shot prompt template
         prompts_with_placeholder, fewshot_template = (
             self._create_fewshot_prompt_template(
@@ -793,6 +886,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         reporting.display_few_shot_prompt_template(
             prompts_with_placeholder=prompts_with_placeholder,
             fewshot_template=fewshot_template,
+            placeholder=str(self.get_prompt("example_placeholder")),
             verbose=self.verbose,
         )
 
@@ -834,12 +928,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 Dictionary containing the LLM's response
             """
             prompts_with_examples = {}
+            example_placeholder = str(self.get_prompt("example_placeholder"))
 
             for key, prompt in prompts.items():
                 new_prompt = prompt.copy()
                 new_messages = new_prompt.replace_in_messages(
                     new_prompt.get_messages(),
-                    few_shot_prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER,
+                    example_placeholder,
                     few_shot_examples,
                 )
                 new_prompt.set_messages(new_messages)
@@ -908,7 +1003,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Reconstruct the prompts dict with few-shot examples filled in.
 
         Args:
-            prompts_with_placeholder: The template prompts with FEW_SHOT_EXAMPLE_PLACEHOLDER
+            prompts_with_placeholder: The template prompts with the few-shot placeholder
             demo_examples: List of example dictionaries from the dataset
             fewshot_prompt_template: The template string for formatting each example
 
@@ -922,11 +1017,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Fill in the placeholder in each prompt
         result_prompts = {}
+        example_placeholder = str(self.get_prompt("example_placeholder"))
         for key, prompt in prompts_with_placeholder.items():
             new_prompt = prompt.copy()
             new_messages = new_prompt.replace_in_messages(
                 new_prompt.get_messages(),
-                few_shot_prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER,
+                example_placeholder,
                 few_shot_examples,
             )
             new_prompt.set_messages(new_messages)

@@ -19,7 +19,9 @@ from ...utils import (
     optimization_context,
     unique_ordered_by_key,
 )
+from ...utils.prompt_library import PromptOverrides
 from . import reporting as gepa_reporting
+from . import prompts as gepa_prompts
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,10 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        prompt_overrides: Accepted for API parity, but ignored (GEPA does not expose prompt hooks).
     """
+
+    DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
 
     def __init__(
         self,
@@ -51,6 +56,9 @@ class GepaOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
+        prompt_overrides: PromptOverrides = None,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -77,6 +85,9 @@ class GepaOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
+            prompt_overrides=None,
         )
         self.n_threads = n_threads
         self._gepa_live_metric_calls = 0
@@ -88,6 +99,10 @@ class GepaOptimizer(BaseOptimizer):
                 "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
                 "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
+            )
+        if prompt_overrides is not None:
+            logger.warning(
+                "GEPA prompt overrides are not supported yet and will be ignored."
             )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -158,7 +173,7 @@ class GepaOptimizer(BaseOptimizer):
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
         skip_perfect_score: bool = True,
-        perfect_score: float = 1.0,
+        perfect_score: float = 0.95,
         use_merge: bool = False,
         max_merge_invocations: int = 5,
         run_dir: str | None = None,
@@ -369,6 +384,57 @@ class GepaOptimizer(BaseOptimizer):
                     baseline.set_score(initial_score)
                 except Exception:
                     logger.exception("Baseline evaluation failed")
+
+            if self._should_skip_optimization(
+                initial_score,
+                skip_perfect_score=skip_perfect_score,
+                perfect_score=perfect_score,
+            ):
+                logger.info(
+                    "Baseline score %.4f >= %.4f; skipping GEPA optimization.",
+                    initial_score,
+                    perfect_score,
+                )
+                early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                    best_prompts=optimizable_prompts,
+                    initial_prompts=initial_prompts,
+                    is_single_prompt_optimization=is_single_prompt_optimization,
+                )
+
+                gepa_reporting.display_result(
+                    initial_score=initial_score,
+                    best_score=initial_score,
+                    prompt=early_result_prompt,
+                    verbose=self.verbose,
+                )
+
+                return self._build_early_result(
+                    optimizer_name=self.__class__.__name__,
+                    prompt=early_result_prompt,
+                    initial_prompt=early_initial_prompt,
+                    score=initial_score,
+                    metric_name=metric.__name__,
+                    details={
+                        "optimizer": self.__class__.__name__,
+                        "model": self.model,
+                        "max_trials": max_trials,
+                        "n_samples": n_samples or "all",
+                        "max_metric_calls": max_metric_calls,
+                        "reflection_minibatch_size": reflection_minibatch_size,
+                        "candidate_selection_strategy": candidate_selection_strategy,
+                        "validation_dataset": getattr(val_source, "name", None),
+                        "skip_perfect_score": skip_perfect_score,
+                        "perfect_score": perfect_score,
+                        "stopped_early": True,
+                        "stopped_early_reason": "baseline_score_met_threshold",
+                        "iterations_completed": 0,
+                        "trials_used": 0,
+                    },
+                    llm_calls=self.llm_call_counter,
+                    llm_calls_tools=self.llm_calls_tools_counter,
+                    dataset_id=getattr(dataset, "id", None),
+                    optimization_id=self.current_optimization_id,
+                )
 
             # Create the adapter with multi-prompt support
             adapter = OpikGEPAAdapter(
@@ -643,16 +709,11 @@ class GepaOptimizer(BaseOptimizer):
             )
 
         # Convert result format based on input type
-        result_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompt: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_prompt, result_initial_prompt = self._select_result_prompts(
+            best_prompts=final_prompts,
+            initial_prompts=initial_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
         )
-        if is_single_prompt_optimization:
-            result_prompt = list(final_prompts.values())[0]
-            result_initial_prompt = list(initial_prompts.values())[0]
-        else:
-            result_prompt = final_prompts
-            result_initial_prompt = initial_prompts
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

@@ -9,6 +9,7 @@ from ...base_optimizer import BaseOptimizer
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent, LiteLLMAgent
+from ...utils.prompt_library import PromptOverrides
 
 from opik_optimizer.optimization_result import OptimizationResult
 from . import reporting
@@ -18,7 +19,7 @@ from .types import (
     ImprovedPrompt,
     HierarchicalRootCauseAnalysis,
 )
-from .prompts import IMPROVE_PROMPT_TEMPLATE
+from . import prompts as hierarchical_prompts
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -45,7 +46,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        prompt_overrides: Optional dict or callable to override/customize prompt templates.
+            If a dict, keys should match DEFAULT_PROMPTS keys.
+            If a callable, receives the PromptLibrary instance for in-place modification.
     """
+
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "batch_analysis_prompt": hierarchical_prompts.BATCH_ANALYSIS_PROMPT,
+        "synthesis_prompt": hierarchical_prompts.SYNTHESIS_PROMPT,
+        "improve_prompt_template": hierarchical_prompts.IMPROVE_PROMPT_TEMPLATE,
+    }
 
     DEFAULT_MAX_ITERATIONS = 5
     DEFAULT_CONVERGENCE_THRESHOLD = 0.01  # Stop if improvement is less than 1%
@@ -54,6 +64,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self,
         model: str = "gpt-4o",
         model_parameters: dict[str, Any] | None = None,
+        reasoning_model: str | None = None,
+        reasoning_model_parameters: dict[str, Any] | None = None,
         max_parallel_batches: int = 5,
         batch_size: int = 25,
         convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
@@ -61,13 +73,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        prompt_overrides: PromptOverrides = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ):
         super().__init__(
             model=model,
             verbose=verbose,
             seed=seed,
             model_parameters=model_parameters,
+            reasoning_model=reasoning_model,
+            reasoning_model_parameters=reasoning_model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches
@@ -77,12 +97,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
-            reasoning_model=self.model,
+            reasoning_model=self.reasoning_model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
             batch_size=self.batch_size,
             verbose=self.verbose,
-            model_parameters=self.model_parameters,
+            model_parameters=self.reasoning_model_parameters,
+            prompts=self._prompts,
         )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -94,6 +115,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         return {
             "model": self.model,
+            "reasoning_model": self.reasoning_model,
             "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "convergence_threshold": self.convergence_threshold,
@@ -137,7 +159,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts: dict[str, chat_prompt.ChatPrompt],
         root_cause: FailureMode,
         attempt: int = 1,
-    ) -> dict[str, ImprovedPrompt]:
+    ) -> dict[str, ImprovedPrompt] | list[dict[str, ImprovedPrompt]]:
         """
         Improve all prompts in the dict based on the root cause analysis.
 
@@ -157,7 +179,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
             prompts_section += f"```\n{prompt.get_messages()}\n```\n"
 
-        improve_prompt_prompt = IMPROVE_PROMPT_TEMPLATE.format(
+        improve_prompt_template = self.get_prompt("improve_prompt_template")
+        improve_prompt_prompt = improve_prompt_template.format(
             prompts_section=prompts_section,
             failure_mode_name=root_cause.name,
             failure_mode_description=root_cause.description,
@@ -184,20 +207,30 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         improve_prompt_response = _llm_calls.call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
-            model=self.model,
+            model=self.reasoning_model,
             seed=attempt_seed,
-            model_parameters=self.model_parameters,
+            model_parameters=self.reasoning_model_parameters,
             response_model=DynamicImprovedPromptsResponse,
+            project_name=self.project_name,
         )
 
         # Extract improved prompts from response
-        improved_prompts = {}
-        for prompt_name in prompts.keys():
-            improved_prompts[prompt_name] = getattr(
-                improve_prompt_response, prompt_name
-            )
+        responses = (
+            improve_prompt_response
+            if isinstance(improve_prompt_response, list)
+            else [improve_prompt_response]
+        )
 
-        return improved_prompts
+        improved_prompts_candidates: list[dict[str, ImprovedPrompt]] = []
+        for response_item in responses:
+            improved_prompts: dict[str, ImprovedPrompt] = {}
+            for prompt_name in prompts.keys():
+                improved_prompts[prompt_name] = getattr(response_item, prompt_name)
+            improved_prompts_candidates.append(improved_prompts)
+
+        if len(improved_prompts_candidates) == 1:
+            return improved_prompts_candidates[0]
+        return improved_prompts_candidates
 
     def _generate_and_evaluate_improvement(
         self,
@@ -485,6 +518,51 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         best_score = initial_score
         best_prompts = optimizable_prompts
 
+        if self._should_skip_optimization(best_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping HRPO iterations.",
+                best_score,
+                self.perfect_score,
+            )
+            first_best_prompt = list(best_prompts.values())[0]
+            details = {
+                "model": self.model,
+                "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
+                or self.model_parameters.get("temperature"),
+                "n_threads": self.n_threads,
+                "max_parallel_batches": self.max_parallel_batches,
+                "max_retries": max_retries,
+                "n_samples": n_samples,
+                "auto_continue": auto_continue,
+                "max_trials": max_trials,
+                "convergence_threshold": self.convergence_threshold,
+                "iterations_completed": 0,
+                "trials_used": 0,
+                "stopped_early": True,
+                "stopped_early_reason": "baseline_score_met_threshold",
+                "perfect_score": self.perfect_score,
+                "skip_perfect_score": self.skip_perfect_score,
+            }
+            result_best_prompt, result_initial_prompt = self._select_result_prompts(
+                best_prompts=best_prompts,
+                initial_prompts=optimizable_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=result_best_prompt,
+                initial_prompt=result_initial_prompt,
+                score=best_score,
+                metric_name=metric.__name__,
+                details=details,
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                llm_cost_total=getattr(self, "llm_cost_total", None),
+                llm_token_usage_total=getattr(self, "llm_token_usage_total", None),
+                optimization_id=optimization.id,
+                dataset_id=dataset.id,
+            )
+
         # Multi-iteration optimization loop
         iteration = 0
         previous_iteration_score = initial_score
@@ -662,7 +740,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     f"below threshold ({self.convergence_threshold:.2%}). "
                     f"Stopping after {iteration} iterations."
                 )
-                break
+                # Do not break early; continue until max_trials are exhausted for stubborn cases
+                # break
 
             # Update previous score for next iteration
             previous_iteration_score = best_score
@@ -690,16 +769,18 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             logger.warning(f"Failed to update optimization status: {e}")
 
         # Convert result format based on input type
-        result_best_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompt: (
+        result_best_prompt_final: (
+            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        )
+        result_initial_prompt_final: (
             chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
         )
         if is_single_prompt_optimization:
-            result_best_prompt = list(best_prompts.values())[0]
-            result_initial_prompt = list(optimizable_prompts.values())[0]
+            result_best_prompt_final = list(best_prompts.values())[0]
+            result_initial_prompt_final = list(optimizable_prompts.values())[0]
         else:
-            result_best_prompt = best_prompts
-            result_initial_prompt = optimizable_prompts
+            result_best_prompt_final = best_prompts
+            result_initial_prompt_final = optimizable_prompts
 
         # Prepare details for the result
         first_best_prompt = list(best_prompts.values())[0]
@@ -716,18 +797,22 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
             "trials_used": trials_used,
+            "llm_cost_total": getattr(self, "llm_cost_total", None),
+            "llm_token_usage_total": getattr(self, "llm_token_usage_total", None),
         }
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=result_best_prompt,
+            prompt=result_best_prompt_final,
             score=best_score,
             metric_name=metric.__name__,
-            initial_prompt=result_initial_prompt,
+            initial_prompt=result_initial_prompt_final,
             initial_score=initial_score,
             details=details,
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
+            llm_cost_total=getattr(self, "llm_cost_total", None),
+            llm_token_usage_total=getattr(self, "llm_token_usage_total", None),
             optimization_id=optimization.id,
             dataset_id=dataset.id,
         )

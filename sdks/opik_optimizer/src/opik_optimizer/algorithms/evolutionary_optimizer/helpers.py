@@ -35,10 +35,10 @@ def calculate_population_diversity(population: list[Any] | None) -> float:
                 if hasattr(population[j], "items")
                 else str(population[j])
             )
-            distance = rapidfuzz.distance.Indel.normalized_similarity(str1, str2)
-            max_len = max(len(str1), len(str2))
-            if max_len > 0:
-                normalized_distance = distance / max_len
+            normalized_distance = rapidfuzz.distance.Indel.normalized_distance(
+                str1, str2
+            )
+            if max(len(str1), len(str2)) > 0:
                 total_distance += normalized_distance
                 count += 1
 

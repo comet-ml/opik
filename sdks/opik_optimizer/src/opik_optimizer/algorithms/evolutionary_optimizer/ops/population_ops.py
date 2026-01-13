@@ -6,10 +6,10 @@ import logging
 from deap import tools
 from deap import creator as _creator
 
-from .. import prompts as evo_prompts
 from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
+from ....utils.prompt_library import PromptLibrary
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ def restart_population(
             optimization_id=optimizer.current_optimization_id,
             population_size=optimizer.population_size,
             verbose=optimizer.verbose,
+            prompts=optimizer._prompts,
         )
         prompt_variations[prompt_name] = variations
 
@@ -85,6 +86,7 @@ def initialize_population(
     output_style_guidance: str,
     model: str,
     model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
     optimization_id: str | None,
     population_size: int,
     verbose: int,
@@ -110,16 +112,20 @@ def initialize_population(
         # Fresh starts
         if num_fresh_starts > 0:
             init_pop_report.start_fresh_prompts(num_fresh_starts)
-            fresh_start_user_prompt = evo_prompts.fresh_start_user_prompt(
-                task_desc_for_llm, current_output_style_guidance, num_fresh_starts
+            fresh_start_user_prompt = prompts.get(
+                "fresh_start_user_prompt_template",
+                task_description=task_desc_for_llm,
+                style=current_output_style_guidance,
+                num_to_generate=num_fresh_starts,
             )
             try:
                 response_content = _llm_calls.call_model(
                     messages=[
                         {
                             "role": "system",
-                            "content": evo_prompts.fresh_start_system_prompt(
-                                current_output_style_guidance
+                            "content": prompts.get(
+                                "fresh_start_system_prompt_template",
+                                style=current_output_style_guidance,
                             ),
                         },
                         {"role": "user", "content": fresh_start_user_prompt},
@@ -127,48 +133,52 @@ def initialize_population(
                     model=model,
                     model_parameters=model_parameters,
                     is_reasoning=True,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        model_parameters
+                    ),
                 )
 
+                response_items = (
+                    response_content
+                    if isinstance(response_content, list)
+                    else [response_content]
+                )
                 logger.debug(
-                    f"Raw LLM response for fresh start prompts: {response_content}"
+                    "Raw LLM response for fresh start prompts: %s", response_items
                 )
 
-                fresh_prompts = utils.json_to_dict(response_content)
-                if isinstance(fresh_prompts, list):
-                    if all(isinstance(p, dict) for p in fresh_prompts) and all(
-                        p.get("role") is not None for p in fresh_prompts
-                    ):
-                        population.append(
+                # Collect prompt lists from each n-choice response to expand candidates.
+                parsed_prompts: list[list[dict[str, Any]]] = []
+                for response_item in response_items:
+                    fresh_prompts = utils.json_to_dict(response_item)
+                    if isinstance(fresh_prompts, list):
+                        if all(isinstance(p, dict) for p in fresh_prompts) and all(
+                            p.get("role") is not None for p in fresh_prompts
+                        ):
+                            parsed_prompts.append(fresh_prompts)
+                        elif all(isinstance(p, list) for p in fresh_prompts):
+                            parsed_prompts.extend(fresh_prompts)
+
+                if parsed_prompts:
+                    prompts_to_use = parsed_prompts[:num_fresh_starts]
+                    population.extend(
+                        [
                             chat_prompt.ChatPrompt(
-                                messages=fresh_prompts,
+                                messages=p,
                                 tools=prompt.tools,
                                 function_map=prompt.function_map,
                                 model=prompt.model,
                                 model_parameters=prompt.model_kwargs,
                             )
-                        )
-                        init_pop_report.success_fresh_prompts(1)
-                    elif all(isinstance(p, list) for p in fresh_prompts):
-                        population.extend(
-                            [
-                                chat_prompt.ChatPrompt(
-                                    messages=p,
-                                    tools=prompt.tools,
-                                    function_map=prompt.function_map,
-                                    model=prompt.model,
-                                    model_parameters=prompt.model_kwargs,
-                                )
-                                for p in fresh_prompts[:num_fresh_starts]
-                            ]
-                        )
-                        init_pop_report.success_fresh_prompts(
-                            len(fresh_prompts[:num_fresh_starts])
-                        )
-                    else:
-                        init_pop_report.failed_fresh_prompts(
-                            num_fresh_starts,
-                            f"LLM response for fresh starts was not a valid list of strings or was empty: {response_content}. Skipping fresh start prompts.",
-                        )
+                            for p in prompts_to_use
+                        ]
+                    )
+                    init_pop_report.success_fresh_prompts(len(prompts_to_use))
+                else:
+                    init_pop_report.failed_fresh_prompts(
+                        num_fresh_starts,
+                        "LLM response for fresh starts was not a valid list of prompts. Skipping fresh start prompts.",
+                    )
             except json.JSONDecodeError as e_json:
                 init_pop_report.failed_fresh_prompts(
                     num_fresh_starts,
@@ -183,19 +193,21 @@ def initialize_population(
         # Variations on the initial prompt
         if num_variations_on_initial > 0:
             init_pop_report.start_variations(num_variations_on_initial)
-            user_prompt_for_variation = evo_prompts.variation_user_prompt(
-                prompt.get_messages(),
-                task_desc_for_llm,
-                current_output_style_guidance,
-                num_variations_on_initial,
+            user_prompt_for_variation = prompts.get(
+                "variation_user_prompt_template",
+                initial_prompt_messages=prompt.get_messages(),
+                task_description=task_desc_for_llm,
+                style=current_output_style_guidance,
+                num_variations=num_variations_on_initial,
             )
             try:
                 response_content_variations = _llm_calls.call_model(
                     messages=[
                         {
                             "role": "system",
-                            "content": evo_prompts.variation_system_prompt(
-                                current_output_style_guidance
+                            "content": prompts.get(
+                                "variation_system_prompt_template",
+                                style=current_output_style_guidance,
                             ),
                         },
                         {"role": "user", "content": user_prompt_for_variation},
@@ -203,20 +215,32 @@ def initialize_population(
                     model=model,
                     model_parameters=model_parameters,
                     is_reasoning=True,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        model_parameters
+                    ),
+                )
+                response_items = (
+                    response_content_variations
+                    if isinstance(response_content_variations, list)
+                    else [response_content_variations]
                 )
                 logger.debug(
-                    f"Raw response for population variations: {response_content_variations}"
+                    "Raw response for population variations: %s", response_items
                 )
-                json_response_variations = json.loads(response_content_variations)
-                generated_prompts_variations = [
-                    p["prompt"]
-                    for p in json_response_variations.get("prompts", [])
-                    if isinstance(p, dict) and "prompt" in p
-                ]
+                generated_prompts_variations: list[list[dict[str, Any]]] = []
+                for response_item in response_items:
+                    json_response_variations = json.loads(response_item)
+                    generated_prompts_variations.extend(
+                        [
+                            p["prompt"]
+                            for p in json_response_variations.get("prompts", [])
+                            if isinstance(p, dict) and "prompt" in p
+                        ]
+                    )
 
                 if generated_prompts_variations:
                     init_pop_report.success_variations(
-                        len(generated_prompts_variations[:num_variations_on_initial])
+                        len(generated_prompts_variations)
                     )
                     population.extend(
                         [
@@ -227,9 +251,7 @@ def initialize_population(
                                 model=prompt.model,
                                 model_parameters=prompt.model_kwargs,
                             )
-                            for p in generated_prompts_variations[
-                                :num_variations_on_initial
-                            ]
+                            for p in generated_prompts_variations
                         ]
                     )
                 else:

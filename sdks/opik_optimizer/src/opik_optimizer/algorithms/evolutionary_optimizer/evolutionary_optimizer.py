@@ -13,22 +13,19 @@ import opik
 from deap import base, tools
 from deap import creator as _creator
 from opik.api_objects import optimization
-from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.agents import OptimizableAgent, LiteLLMAgent
 
-from . import reporting
-from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
-from . import helpers
+from . import reporting, helpers
 from . import prompts as evo_prompts
+from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
 
 logger = logging.getLogger(__name__)
-tqdm = get_tqdm_for_current_environment()
-
 creator = cast(Any, _creator)  # type: ignore[assignment]
 
 DEFAULT_DIVERSITY_THRESHOLD = 0.7
@@ -71,7 +68,35 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_threads: Number of threads for parallel evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        prompt_overrides: Optional dict or callable to customize internal prompts.
+            Dict: {"prompt_key": "new_template"} to override specific prompts.
+            Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    # Prompt templates for this optimizer
+    # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "infer_style_system_prompt": evo_prompts.INFER_STYLE_SYSTEM_PROMPT,
+        "style_inference_user_prompt_template": evo_prompts.STYLE_INFERENCE_USER_PROMPT_TEMPLATE,
+        "semantic_mutation_system_prompt_template": evo_prompts.SEMANTIC_MUTATION_SYSTEM_PROMPT_TEMPLATE,
+        "semantic_mutation_user_prompt_template": evo_prompts.SEMANTIC_MUTATION_USER_PROMPT_TEMPLATE,
+        "synonyms_system_prompt": evo_prompts.SYNONYMS_SYSTEM_PROMPT,
+        "rephrase_system_prompt": evo_prompts.REPHRASE_SYSTEM_PROMPT,
+        "fresh_start_system_prompt_template": evo_prompts.FRESH_START_SYSTEM_PROMPT_TEMPLATE,
+        "fresh_start_user_prompt_template": evo_prompts.FRESH_START_USER_PROMPT_TEMPLATE,
+        "variation_system_prompt_template": evo_prompts.VARIATION_SYSTEM_PROMPT_TEMPLATE,
+        "variation_user_prompt_template": evo_prompts.VARIATION_USER_PROMPT_TEMPLATE,
+        "llm_crossover_system_prompt_template": evo_prompts.LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE,
+        "llm_crossover_user_prompt_template": evo_prompts.LLM_CROSSOVER_USER_PROMPT_TEMPLATE,
+        "radical_innovation_system_prompt_template": evo_prompts.RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE,
+        "radical_innovation_user_prompt_template": evo_prompts.RADICAL_INNOVATION_USER_PROMPT_TEMPLATE,
+        "mutation_strategy_rephrase": evo_prompts.MUTATION_STRATEGY_REPHRASE,
+        "mutation_strategy_simplify": evo_prompts.MUTATION_STRATEGY_SIMPLIFY,
+        "mutation_strategy_elaborate": evo_prompts.MUTATION_STRATEGY_ELABORATE,
+        "mutation_strategy_restructure": evo_prompts.MUTATION_STRATEGY_RESTRUCTURE,
+        "mutation_strategy_focus": evo_prompts.MUTATION_STRATEGY_FOCUS,
+        "mutation_strategy_increase_complexity_and_detail": evo_prompts.MUTATION_STRATEGY_INCREASE_COMPLEXITY,
+    }
 
     DEFAULT_POPULATION_SIZE = 30
     DEFAULT_NUM_GENERATIONS = 15
@@ -114,6 +139,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = DEFAULT_SEED,
         name: str | None = None,
+        prompt_overrides: PromptOverrides = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         # Initialize base class first
         if sys.version_info >= (3, 13):
@@ -129,6 +157,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.population_size = population_size
         self.num_generations = num_generations
@@ -147,7 +178,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
-        self._current_generation = 0
         self._best_fitness_history: list[float] = []
         self._generations_without_improvement = 0
         self._current_population: list[Any] = []
@@ -322,6 +352,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             model=self.model,
                             model_parameters=self.model_parameters,
                             verbose=self.verbose,
+                            prompts=self._prompts,
                         )
                     else:
                         c1_new, c2_new = crossover_ops.deap_crossover(
@@ -352,6 +383,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     diversity_threshold=DEFAULT_DIVERSITY_THRESHOLD,
                     optimization_id=self.current_optimization_id,
                     verbose=self.verbose,
+                    prompts=self._prompts,
                 )
                 offspring[i] = new_ind
                 del offspring[i].fitness.values
@@ -496,7 +528,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         trials_used = [0]  # Use list for closure mutability
         self._history: list[OptimizationRound] = []
-        self._current_generation = 0
         self._best_fitness_history = []
         self._generations_without_improvement = 0
         self._current_population = []
@@ -599,6 +630,50 @@ class EvolutionaryOptimizer(BaseOptimizer):
             best_prompts_overall = optimizable_prompts
             report_baseline_performance.set_score(initial_primary_score)
 
+        if self._should_skip_optimization(initial_primary_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping evolutionary optimization.",
+                initial_primary_score,
+                self.perfect_score,
+            )
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=optimizable_prompts,
+                initial_prompts=optimizable_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            reporting.display_result(
+                initial_score=initial_primary_score,
+                best_score=initial_primary_score,
+                prompt=early_result_prompt,
+                verbose=self.verbose,
+            )
+
+            early_details: dict[str, Any] = {
+                "initial_primary_score": initial_primary_score,
+                "initial_length": initial_length,
+                "final_prompts": optimizable_prompts,
+                "final_score": initial_primary_score,
+                "stopped_early": True,
+                "stopped_early_reason": "baseline_score_met_threshold",
+                "perfect_score": self.perfect_score,
+                "skip_perfect_score": self.skip_perfect_score,
+                "trials_used": 0,
+            }
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=initial_primary_score,
+                metric_name=metric.__name__,
+                details=early_details,
+                history=[],
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset.id,
+                optimization_id=self.current_optimization_id,
+            )
+
         # Step 3. Define the output style guide
         effective_output_style_guidance = self.output_style_guidance
         if self.infer_output_style and (
@@ -611,6 +686,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 model=self.model,
                 model_parameters=self.model_parameters,
                 verbose=self.verbose,
+                prompts=self._prompts,
             )
             if inferred_style:
                 effective_output_style_guidance = inferred_style
@@ -639,6 +715,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 optimization_id=self.current_optimization_id,
                 population_size=self.population_size,
                 verbose=self.verbose,
+                prompts=self._prompts,
             )
             prompt_variations[prompt_name] = variations
 
@@ -771,7 +848,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
 
                 # ---------- run one generation --------------------------------
-                deap_population, invalid_count = self._run_generation(
+                deap_population, _ = self._run_generation(
                     generation_idx,
                     deap_population,
                     optimizable_prompts,
@@ -976,12 +1053,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Return the OptimizationResult
         # Display result - show single prompt or all prompts based on optimization type
-        if is_single_prompt_optimization:
-            display_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(final_best_prompts.values())[0]
-        else:
-            display_prompt = final_best_prompts
+        display_prompt, _ = self._select_result_prompts(
+            best_prompts=final_best_prompts,
+            initial_prompts=final_best_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
         reporting.display_result(
             initial_score=initial_score_for_display,
             best_score=final_primary_score,
@@ -998,18 +1074,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
             final_details["final_tools"] = all_final_tools
 
         # Convert result format based on input type
-        if is_single_prompt_optimization:
-            # Return single prompt (first one from dict)
-            result_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(final_best_prompts.values())[0]
-            result_initial_prompt: (
-                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-            ) = list(optimizable_prompts.values())[0]
-        else:
-            # Return all prompts as dict
-            result_prompt = final_best_prompts
-            result_initial_prompt = optimizable_prompts
+        result_prompt, result_initial_prompt = self._select_result_prompts(
+            best_prompts=final_best_prompts,
+            initial_prompts=optimizable_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -1021,17 +1090,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             details=final_details,
             history=[x.model_dump() for x in self.get_history()],
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
             dataset_id=dataset.id,
             optimization_id=self.current_optimization_id,
         )
-
-    # Override prompt builders to centralize strings in prompts.py
-    def _get_reasoning_system_prompt_for_variation(self) -> str:
-        return evo_prompts.variation_system_prompt(self.output_style_guidance)
-
-    def _get_llm_crossover_system_prompt(self) -> str:
-        return evo_prompts.llm_crossover_system_prompt(self.output_style_guidance)
-
-    def _get_radical_innovation_system_prompt(self) -> str:
-        return evo_prompts.radical_innovation_system_prompt(self.output_style_guidance)

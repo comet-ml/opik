@@ -2,9 +2,13 @@
 
 from typing import Any
 
-import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
+import builtins
+import sys
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import pytest
 
 from opik_optimizer.utils.tools.wikipedia import (
     search_wikipedia,
@@ -13,6 +17,8 @@ from opik_optimizer.utils.tools.wikipedia import (
     _search_wikipedia_bm25,
     _download_bm25_index,
 )
+
+pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
 
 class TestSearchWikipediaAPI:
@@ -88,19 +94,6 @@ class TestSearchWikipediaColBERT:
 
         assert results == ["fallback result"]
         mock_api.assert_called_once_with("test", k=1)
-
-    @patch("opik_optimizer.utils.tools.wikipedia._search_wikipedia_api")
-    def test_colbert_error_fallback(self, mock_api: Mock) -> None:
-        """Test fallback when ColBERT raises error."""
-        mock_api.return_value = ["fallback result"]
-
-        # ColBERT won't be available in test environment, so it will naturally fallback
-        # This test essentially checks the same thing as test_colbert_not_available_fallback
-        results = _search_wikipedia_colbert("test", k=1)
-
-        # Should fallback to API
-        assert results == ["fallback result"]
-        mock_api.assert_called()
 
 
 class TestSearchWikipediaBM25:
@@ -217,50 +210,68 @@ class TestSearchWikipediaUnified:
 class TestDownloadBM25Index:
     """Tests for BM25 index download."""
 
-    @patch("pathlib.Path.mkdir")
-    @patch("pathlib.Path.home")
     def test_download_with_default_cache(
-        self, mock_home: Mock, mock_mkdir: Mock
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test downloading index with default cache directory."""
-        # Mock home directory
-        mock_home.return_value = Path("/home/user")
-        _ = mock_mkdir  # referenced to avoid lint warning
+        calls: dict[str, Any] = {}
 
-        # Mock the import and download
-        mock_download = Mock()
-        with patch("builtins.__import__") as mock_import:
+        def snapshot_download(**kwargs: Any) -> str:
+            calls.update(kwargs)
+            return str(tmp_path / "hf-cache")
 
-            def import_side_effect(name: str, *args: Any, **kwargs: Any) -> Any:
-                if name == "huggingface_hub":
-                    # Return a mock module with snapshot_download
-                    mock_module = Mock()
-                    mock_module.snapshot_download = mock_download
-                    return mock_module
-                return __import__(name, *args, **kwargs)
+        monkeypatch.setitem(
+            sys.modules,
+            "huggingface_hub",
+            SimpleNamespace(snapshot_download=snapshot_download),
+        )
 
-            mock_import.side_effect = import_side_effect
+        result = _download_bm25_index("test/repo")
 
-            # This will fail because we can't properly mock the import inside the function
-            # Let's just test that it raises the right error when huggingface_hub is missing
-            pytest.skip(
-                "Cannot properly test download without huggingface_hub installed"
-            )
+        assert result == tmp_path / "hf-cache"
+        assert calls["repo_id"] == "test/repo"
+        assert calls["repo_type"] == "dataset"
+        assert calls["local_dir_use_symlinks"] is False
+        assert "local_dir" not in calls
 
-    def test_download_with_custom_cache(self) -> None:
+    def test_download_with_custom_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test downloading index with custom cache directory."""
-        # Skip this test as it requires mocking complex import behavior
-        pytest.skip("Cannot properly test download without huggingface_hub installed")
+        calls: dict[str, Any] = {}
 
-    def test_download_missing_huggingface_hub(self) -> None:
+        def snapshot_download(**kwargs: Any) -> str:
+            calls.update(kwargs)
+            return str(tmp_path / "downloaded")
+
+        monkeypatch.setitem(
+            sys.modules,
+            "huggingface_hub",
+            SimpleNamespace(snapshot_download=snapshot_download),
+        )
+
+        target_dir = tmp_path / "bm25-cache"
+        result = _download_bm25_index("test/repo", target_dir=target_dir)
+
+        assert target_dir.exists()
+        assert result == tmp_path / "downloaded"
+        assert calls["repo_id"] == "test/repo"
+        assert calls["repo_type"] == "dataset"
+        assert calls["local_dir"] == str(target_dir)
+        assert calls["local_dir_use_symlinks"] is False
+
+    def test_download_missing_huggingface_hub(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test error when huggingface_hub not installed."""
-        # Test that calling the function without huggingface_hub raises ImportError
-        # This only works if huggingface_hub is actually not installed
-        try:
-            import huggingface_hub  # noqa: F401
+        real_import = builtins.__import__
 
-            pytest.skip("huggingface_hub is installed, cannot test missing import")
-        except ImportError:
-            # Good - it's not installed, we can test the error
-            with pytest.raises(ImportError, match="huggingface_hub not installed"):
-                _download_bm25_index("test/repo")
+        def import_side_effect(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "huggingface_hub":
+                raise ImportError("missing")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", import_side_effect)
+
+        with pytest.raises(ImportError, match="huggingface_hub not installed"):
+            _download_bm25_index("test/repo")
