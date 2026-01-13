@@ -1727,7 +1727,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         if (latestVersion.isEmpty()) {
                             // No versions exist yet - create the first version with all items as "added"
-                            return createFirstVersion(datasetId, validatedItems, batchGroupId, workspaceId, userName);
+                            return createFirstVersion(datasetId, validatedItems, batchGroupId, workspaceId,
+                                    userName);
                         }
 
                         // Versions exist - apply delta on top of the latest
@@ -1746,9 +1747,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         // All items are "added" for the first version
         // Set datasetItemId as the stable ID for each item
+        // Use datasetItemId if already set, otherwise use id, otherwise generate new
         List<DatasetItem> addedItems = items.stream()
                 .map(item -> {
-                    UUID stableId = item.id() != null ? item.id() : idGenerator.generateId();
+                    UUID stableId;
+                    if (item.datasetItemId() != null) {
+                        stableId = item.datasetItemId();
+                    } else if (item.id() != null) {
+                        stableId = item.id();
+                    } else {
+                        stableId = idGenerator.generateId();
+                    }
                     return item.toBuilder()
                             .datasetItemId(stableId)
                             .datasetId(datasetId)
@@ -1805,17 +1814,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     List<DatasetItem> editedItems = new ArrayList<>();
 
                     for (DatasetItem item : items) {
-                        UUID itemId = item.id();
-                        if (itemId != null && existingItemIds.contains(itemId)) {
+                        // Try datasetItemId first, then fall back to id for backwards compatibility
+                        UUID stableId = item.datasetItemId() != null ? item.datasetItemId() : item.id();
+                        if (stableId != null && existingItemIds.contains(stableId)) {
                             // Existing item - treat as edit
                             editedItems.add(item.toBuilder()
-                                    .id(itemId) // Preserve original row ID
-                                    .datasetItemId(itemId)
+                                    .datasetItemId(stableId)
                                     .datasetId(datasetId)
                                     .build());
                         } else {
                             // New item - treat as add
-                            UUID newItemId = itemId != null ? itemId : idGenerator.generateId();
+                            UUID newItemId = stableId != null ? stableId : idGenerator.generateId();
                             addedItems.add(item.toBuilder()
                                     .datasetItemId(newItemId)
                                     .datasetId(datasetId)
@@ -1826,9 +1835,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Classified items: added='{}', edited='{}' for dataset '{}'",
                             addedItems.size(), editedItems.size(), datasetId);
 
-                    // Generate UUIDs for all items
-                    int baseVersionItemCount = existingItems.size();
-                    List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
+                    // Calculate unchanged items: items in base version that are NOT being edited
+                    Set<UUID> editedItemIds = editedItems.stream()
+                            .map(DatasetItem::datasetItemId)
+                            .collect(Collectors.toSet());
+                    int unchangedItemCount = (int) existingItems.stream()
+                            .filter(item -> !editedItemIds.contains(item.itemId()))
+                            .count();
+
+                    // Generate UUIDs for unchanged, added, and edited items
+                    List<UUID> unchangedUuids = generateUnchangedUuidsReversed(unchangedItemCount);
                     List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
                     List<DatasetItem> editedItemsWithIds = editedItems;

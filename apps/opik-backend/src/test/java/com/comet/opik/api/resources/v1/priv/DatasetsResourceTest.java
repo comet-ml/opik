@@ -5091,6 +5091,7 @@ class DatasetsResourceTest {
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
+                    .batchGroupId(null)
                     .build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
