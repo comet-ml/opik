@@ -26,6 +26,7 @@ import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.CsvDatasetExportService;
 import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetCriteria;
 import com.comet.opik.domain.DatasetExpansionService;
@@ -112,6 +113,7 @@ public class DatasetsResource {
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull CsvDatasetExportService csvExportService;
 
     @GET
     @Path("/{id}")

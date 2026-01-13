@@ -68,11 +68,11 @@ public class DatasetExportConfig implements StreamConfiguration {
     /**
      * Maximum part size for S3 multipart upload (in bytes).
      * S3 allows up to 5GB per part, but we limit to avoid memory issues.
-     * Default: 100MB (100 * 1024 * 1024 = 104857600 bytes)
+     * Default: 10MB (10 * 1024 * 1024 = 10485760 bytes)
      */
     @JsonProperty
     @Min(5 * 1024 * 1024) @Max(500 * 1024 * 1024) // Cap at 500MB to avoid memory issues
-    private int maxPartSize = 100 * 1024 * 1024;
+    private int maxPartSize = 10 * 1024 * 1024;
 
     /**
      * Number of items to fetch per batch when streaming dataset items.

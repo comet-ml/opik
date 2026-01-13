@@ -8,12 +8,12 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -26,15 +26,26 @@ public interface CsvDatasetExportService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
 
-    private static final String LOCK_KEY_PATTERN = "dataset-export:lock:%s:%s";
+    public static final String LOCK_KEY_PATTERN = "dataset-export:lock:%s:%s";
 
-    private final @NonNull DatasetExportJobService jobService;
-    private final @NonNull RedissonReactiveClient redisClient;
-    private final @NonNull DatasetExportConfig exportConfig;
-    private final @NonNull LockService lockService;
+    private final DatasetExportJobService jobService;
+    private final RedissonReactiveClient redisClient;
+    private final DatasetExportConfig exportConfig;
+    private final LockService lockService;
+
+    @Inject
+    public CsvDatasetExportServiceImpl(
+            @NonNull DatasetExportJobService jobService,
+            @NonNull RedissonReactiveClient redisClient,
+            @NonNull @Config("datasetExport") DatasetExportConfig exportConfig,
+            @NonNull LockService lockService) {
+        this.jobService = jobService;
+        this.redisClient = redisClient;
+        this.exportConfig = exportConfig;
+        this.lockService = lockService;
+    }
 
     @Override
     public Mono<DatasetExportJob> startExport(@NonNull UUID datasetId, @NonNull Duration ttl) {
