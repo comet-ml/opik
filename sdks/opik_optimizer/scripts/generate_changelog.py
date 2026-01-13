@@ -18,7 +18,6 @@ import argparse
 import re
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 
@@ -258,9 +257,7 @@ def summarize_commits(commits: list[tuple[str, str]], max_items: int = 5) -> str
     return ", ".join(unique_messages) + "."
 
 
-def extract_themes_from_commits(
-    commits: list[tuple[str, str]], version: str
-) -> str:
+def extract_themes_from_commits(commits: list[tuple[str, str]], version: str) -> str:
     """Extract key themes from a large set of commits."""
     # Collect all cleaned messages
     messages = []
@@ -309,14 +306,16 @@ def format_plain(entries: list[VersionEntry], repo_root: Path) -> str:
     """Format version entries as plain text."""
     lines = []
     for i, entry in enumerate(entries):
-        lines.append(f"\n{'='*60}")
+        lines.append(f"\n{'=' * 60}")
         lines.append(f"Version: {entry.version}")
         lines.append(f"Date: {entry.date}")
         lines.append(f"Commit: {entry.commit_hash}")
 
         if i + 1 < len(entries):
             prev_hash = entries[i + 1].commit_hash
-            lines.append(f"Compare: {generate_compare_url(prev_hash, entry.commit_hash)}")
+            lines.append(
+                f"Compare: {generate_compare_url(prev_hash, entry.commit_hash)}"
+            )
 
             # Show commits in this version
             commits = get_commits_between(repo_root, prev_hash, entry.commit_hash)
