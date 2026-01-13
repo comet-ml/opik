@@ -273,7 +273,7 @@ describe("AnnotationView - Button Label Logic", () => {
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
       // queueItems has 3 items in defaultContextValue, currentIndex is 1 (second item)
-      expect(screen.getByText("2/3")).toBeInTheDocument();
+      expect(screen.getByText("2 of 3")).toBeInTheDocument();
     });
 
     it("should display counter in green with check icon when viewing a completed item", () => {
@@ -286,9 +286,9 @@ describe("AnnotationView - Button Label Logic", () => {
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
       // queueItems has 3 items in defaultContextValue, currentIndex is 1 (second item)
-      expect(screen.getByText("2/3")).toBeInTheDocument();
+      expect(screen.getByText("2 of 3")).toBeInTheDocument();
       // Check that the counter container has the special button color class
-      const counterContainer = screen.getByText("2/3").closest("div");
+      const counterContainer = screen.getByText("2 of 3").closest("div");
       expect(counterContainer).toHaveClass("text-[var(--special-button)]");
     });
   });
