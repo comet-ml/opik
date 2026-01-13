@@ -49,7 +49,4 @@ dependencies:
   version: 0.25.4
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
-- name: common
-  version: 2.x.x
-  repository: oci://registry-1.docker.io/bitnamicharts
 
