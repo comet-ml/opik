@@ -28,6 +28,7 @@ type Props<T extends string> = {
   emptyMessage?: string;
   placeholder?: string;
   delay?: number;
+  className?: string;
 };
 
 const AutoComplete = <T extends string>({
@@ -39,6 +40,7 @@ const AutoComplete = <T extends string>({
   emptyMessage = "No items found",
   placeholder = "Search...",
   delay = 300,
+  className,
 }: Props<T>) => {
   const [open, setOpen] = useState(false);
   const [localValue, setLocalValue] = useState<T | undefined>(
@@ -135,7 +137,7 @@ const AutoComplete = <T extends string>({
               onBlur={handleBlur}
             >
               <Input
-                className={cn({ "border-destructive": hasError })}
+                className={cn({ "border-destructive": hasError }, className)}
                 placeholder={placeholder}
               />
             </CommandPrimitive.Input>
