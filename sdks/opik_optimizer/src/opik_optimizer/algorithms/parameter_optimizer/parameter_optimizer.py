@@ -168,13 +168,8 @@ class ParameterOptimizer(BaseOptimizer):
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
 
-        # Normalize prompt to dict format
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            prompts: dict[str, chat_prompt.ChatPrompt] = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            prompts = prompt
-            is_single_prompt_optimization = False
+        # Normalize prompt input using base class helper
+        prompts, is_single_prompt_optimization = self._normalize_prompt_input(prompt)
 
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
@@ -195,9 +190,9 @@ class ParameterOptimizer(BaseOptimizer):
             experiment_config["validation_dataset"] = validation_dataset.name
             experiment_config["validation_dataset_id"] = validation_dataset.id
 
-        # Logic on which dataset to use for scoring
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
+        # Select evaluation dataset using base class helper
+        evaluation_dataset = self._select_evaluation_dataset(
+            dataset, validation_dataset
         )
 
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
@@ -231,21 +226,13 @@ class ParameterOptimizer(BaseOptimizer):
 
         metric_name = metric.__name__
 
-        # Create optimization run
-        optimization = self.opik_client.create_optimization(
-            dataset_name=dataset.name,
-            objective_name=metric_name,
-            metadata=self._build_optimization_metadata(),
-            name=self.name,
-            optimization_id=optimization_id,
-        )
-        self.current_optimization_id = optimization.id
-        logger.debug(f"Created optimization with ID: {optimization.id}")
+        # Create optimization run using base class helper
+        optimization = self._create_optimization_run(dataset, metric, optimization_id)
 
         # Display header with optimization link
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=optimization.id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -346,7 +333,7 @@ class ParameterOptimizer(BaseOptimizer):
                 history=[],
                 llm_calls=self.llm_call_counter,
                 llm_calls_tools=self.llm_calls_tools_counter,
-                optimization_id=optimization.id,
+                optimization_id=self.current_optimization_id,
                 dataset_id=dataset.id,
             )
 
@@ -668,8 +655,11 @@ class ParameterOptimizer(BaseOptimizer):
 
         # Update optimization status to completed
         try:
-            optimization.update(status="completed")
-            logger.info(f"Optimization {optimization.id} status updated to completed.")
+            if optimization is not None:
+                optimization.update(status="completed")
+                logger.info(
+                    f"Optimization {self.current_optimization_id} status updated to completed."
+                )
         except Exception as e:
             logger.warning(f"Failed to update optimization status: {e}")
 
@@ -716,6 +706,6 @@ class ParameterOptimizer(BaseOptimizer):
             history=history,
             llm_calls=self.llm_call_counter,
             llm_calls_tools=self.llm_calls_tools_counter,
-            optimization_id=optimization.id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
         )

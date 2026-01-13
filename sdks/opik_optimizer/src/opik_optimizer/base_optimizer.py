@@ -224,6 +224,86 @@ class BaseOptimizer(ABC):
         except Exception:
             pass
 
+    def _normalize_prompt_input(
+        self,
+        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
+    ) -> tuple[dict[str, "chat_prompt.ChatPrompt"], bool]:
+        """
+        Normalize prompt input to dict format for internal processing.
+
+        Args:
+            prompt: Single ChatPrompt or dict of ChatPrompts
+
+        Returns:
+            Tuple of (normalized_prompts_dict, is_single_prompt_optimization)
+        """
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            return {prompt.name: prompt}, True
+        return prompt, False
+
+    def _create_optimization_run(
+        self,
+        dataset: "Dataset",
+        metric: "MetricFunction",
+        optimization_id: str | None = None,
+    ) -> "optimization.Optimization | None":
+        """
+        Create an Opik optimization run with consistent error handling.
+
+        Args:
+            dataset: The dataset being used for optimization
+            metric: The metric function being optimized
+            optimization_id: Optional pre-specified optimization ID
+
+        Returns:
+            The created Optimization object, or None if creation failed
+        """
+        try:
+            opik_optimization = self.opik_client.create_optimization(
+                dataset_name=dataset.name,
+                objective_name=metric.__name__,
+                metadata=self._build_optimization_metadata(),
+                name=self.name,
+                optimization_id=optimization_id,
+            )
+            self.current_optimization_id = (
+                opik_optimization.id if opik_optimization is not None else None
+            )
+            logger.debug(
+                f"Created optimization with ID: {self.current_optimization_id}"
+            )
+            return opik_optimization
+        except Exception as e:
+            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
+            self.current_optimization_id = None
+            return None
+
+    def _select_evaluation_dataset(
+        self,
+        dataset: "Dataset",
+        validation_dataset: "Dataset | None",
+        warn_unsupported: bool = False,
+    ) -> "Dataset":
+        """
+        Select which dataset to use for evaluation.
+
+        Args:
+            dataset: The training dataset
+            validation_dataset: Optional validation dataset
+            warn_unsupported: If True, log warning that validation_dataset is not supported
+
+        Returns:
+            The dataset to use for evaluation
+        """
+        if validation_dataset is not None:
+            if warn_unsupported:
+                logger.warning(
+                    f"{self.__class__.__name__} currently does not support validation dataset. "
+                    f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
+                )
+            return validation_dataset
+        return dataset
+
     def _select_result_prompts(self, **kwargs: Any) -> tuple[Any, Any]:
         """Return the result prompt(s) and initial prompt(s) for output."""
         best_prompts = kwargs["best_prompts"]

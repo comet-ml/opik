@@ -434,16 +434,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 the optimizer uses the training dataset for understanding failure modes and generating
                 improvements, then evaluates candidates on the validation dataset to prevent overfitting.
         """
-        # Convert single prompt to dict for internal processing
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
+        # Normalize prompt input using base class helper
+        optimizable_prompts, is_single_prompt_optimization = (
+            self._normalize_prompt_input(prompt)
+        )
 
-        # Reset counters at the start of optimization
+        # Validate inputs
         self._validate_optimization_inputs(
             optimizable_prompts, dataset, metric, support_content_parts=True
         )
@@ -459,15 +455,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         if optimization_id:
             optimization = self.opik_client.get_optimization_by_id(optimization_id)
             logger.debug(f"Using existing optimization with ID: {optimization.id}")
+            self.current_optimization_id = optimization.id
         else:
-            optimization = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=getattr(metric, "__name__", str(metric)),
-                metadata=self._build_optimization_metadata(),
-                name=self.name,
-            )
-            logger.debug(f"Created optimization with ID: {optimization.id}")
-        self.current_optimization_id = optimization.id
+            optimization = self._create_optimization_run(dataset, metric)
 
         reporting.display_header(
             algorithm=self.__class__.__name__,

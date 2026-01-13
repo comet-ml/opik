@@ -12,7 +12,6 @@ import opik
 # DEAP imports
 from deap import base, tools
 from deap import creator as _creator
-from opik.api_objects import optimization
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.utils.prompt_library import PromptOverrides
@@ -455,27 +454,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
             validation_dataset: Optional validation dataset (not yet supported by this optimizer).
             max_trials: Maximum number of prompt evaluations allowed.
         """
-        # Convert single prompt to dict format for internal processing
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        is_single_prompt_optimization: bool
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
-
-        # Logic on which dataset to use for scoring
-        if validation_dataset is not None:
-            logger.warning(
-                f"{self.__class__.__name__} currently does not support validation dataset. "
-                f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
-            )
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
+        # Normalize prompt input using base class helper
+        optimizable_prompts, is_single_prompt_optimization = (
+            self._normalize_prompt_input(prompt)
         )
 
-        # Use base class validation and setup methods
+        # Select evaluation dataset using base class helper
+        evaluation_dataset = self._select_evaluation_dataset(
+            dataset, validation_dataset, warn_unsupported=True
+        )
+
+        # Validate inputs
         self._validate_optimization_inputs(
             optimizable_prompts, dataset, metric, support_content_parts=True
         )
@@ -488,22 +477,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
         # Set project name from parameter
         self.project_name = project_name
 
-        # Step 0. Start Opik optimization run
-        opik_optimization_run: optimization.Optimization | None = None
-        try:
-            opik_optimization_run = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata=self._build_optimization_metadata(),
-                name=self.name,
-                optimization_id=optimization_id,
-            )
-            self.current_optimization_id = (
-                opik_optimization_run.id if opik_optimization_run is not None else None
-            )
-        except Exception as e:
-            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
-            self.current_optimization_id = None
+        # Create Opik optimization run using base class helper
+        opik_optimization_run = self._create_optimization_run(
+            dataset, metric, optimization_id
+        )
 
         reporting.display_header(
             algorithm=self.__class__.__name__,

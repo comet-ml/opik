@@ -290,6 +290,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             print(f"Best prompt: {result.best_prompt}")
             ```
         """
+        # Validate inputs
         self._validate_optimization_inputs(
             prompt, dataset, metric, support_content_parts=True
         )
@@ -297,18 +298,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
 
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
+        # Normalize prompt input using base class helper
+        optimizable_prompts, is_single_prompt_optimization = (
+            self._normalize_prompt_input(prompt)
+        )
 
         # Set project name from parameter
         self.project_name = project_name
 
-        dataset_name = getattr(dataset, "name", dataset.__class__.__name__)
         dataset_id = getattr(dataset, "id", None)
 
         # Update experiment_config with validation_dataset if provided
@@ -328,23 +325,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             n_samples = None
 
-        optimization = None
-        try:
-            optimization = self.opik_client.create_optimization(
-                dataset_name=dataset_name,
-                objective_name=metric.__name__,
-                metadata=self._build_optimization_metadata(),
-                name=self.name,
-                optimization_id=optimization_id,
-            )
-            self.current_optimization_id = optimization.id
-            logger.debug(f"Created optimization with ID: {optimization.id}")
-        except Exception as e:
-            logger.warning(
-                f"Opik server does not support optimizations: {e}. Please upgrade opik."
-            )
-            optimization = None
-            self.current_optimization_id = None
+        # Create Opik optimization run using base class helper
+        optimization = self._create_optimization_run(dataset, metric, optimization_id)
 
         reporting.display_header(
             algorithm=self.__class__.__name__,

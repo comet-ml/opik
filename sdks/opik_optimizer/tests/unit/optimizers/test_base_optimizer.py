@@ -930,3 +930,113 @@ class TestDescribeAnnotation:
         result = BaseOptimizer._describe_annotation("custom_annotation")
 
         assert result == "custom_annotation"
+
+
+class TestNormalizePromptInput:
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    def test_single_prompt_returns_dict_and_true(
+        self, optimizer, simple_chat_prompt
+    ) -> None:
+        prompts, is_single = optimizer._normalize_prompt_input(simple_chat_prompt)
+
+        assert isinstance(prompts, dict)
+        assert len(prompts) == 1
+        assert simple_chat_prompt.name in prompts
+        assert is_single is True
+
+    def test_dict_prompt_returns_same_dict_and_false(
+        self, optimizer, simple_chat_prompt
+    ) -> None:
+        input_dict = {"main": simple_chat_prompt}
+
+        prompts, is_single = optimizer._normalize_prompt_input(input_dict)
+
+        assert prompts is input_dict
+        assert is_single is False
+
+
+class TestCreateOptimizationRun:
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    def test_creates_optimization_and_sets_id(
+        self, optimizer, mock_opik_client
+    ) -> None:
+        mock_client = mock_opik_client()
+        mock_client.create_optimization.return_value = MagicMock(id="opt-123")
+
+        from opik import Dataset
+
+        mock_ds = MagicMock(spec=Dataset)
+        mock_ds.name = "test-dataset"
+
+        def metric(dataset_item, llm_output):
+            return 1.0
+
+        result = optimizer._create_optimization_run(mock_ds, metric)
+
+        assert result is not None
+        assert optimizer.current_optimization_id == "opt-123"
+
+    def test_returns_none_on_error(self, optimizer, mock_opik_client) -> None:
+        mock_client = mock_opik_client()
+        mock_client.create_optimization.side_effect = Exception("API error")
+
+        from opik import Dataset
+
+        mock_ds = MagicMock(spec=Dataset)
+        mock_ds.name = "test-dataset"
+
+        def metric(dataset_item, llm_output):
+            return 1.0
+
+        result = optimizer._create_optimization_run(mock_ds, metric)
+
+        assert result is None
+        assert optimizer.current_optimization_id is None
+
+
+class TestSelectEvaluationDataset:
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    def test_returns_training_dataset_when_no_validation(self, optimizer) -> None:
+        from opik import Dataset
+
+        training_ds = MagicMock(spec=Dataset)
+        training_ds.name = "training"
+
+        result = optimizer._select_evaluation_dataset(training_ds, None)
+
+        assert result is training_ds
+
+    def test_returns_validation_dataset_when_provided(self, optimizer) -> None:
+        from opik import Dataset
+
+        training_ds = MagicMock(spec=Dataset)
+        training_ds.name = "training"
+        validation_ds = MagicMock(spec=Dataset)
+        validation_ds.name = "validation"
+
+        result = optimizer._select_evaluation_dataset(training_ds, validation_ds)
+
+        assert result is validation_ds
+
+    def test_returns_validation_when_warn_unsupported_set(self, optimizer) -> None:
+        from opik import Dataset
+
+        training_ds = MagicMock(spec=Dataset)
+        training_ds.name = "training"
+        validation_ds = MagicMock(spec=Dataset)
+        validation_ds.name = "validation"
+
+        result = optimizer._select_evaluation_dataset(
+            training_ds, validation_ds, warn_unsupported=True
+        )
+
+        assert result is validation_ds

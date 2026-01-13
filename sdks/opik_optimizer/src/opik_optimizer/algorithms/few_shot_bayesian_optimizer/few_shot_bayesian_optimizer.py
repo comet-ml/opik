@@ -761,34 +761,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
 
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
+        # Normalize prompt input using base class helper
+        optimizable_prompts, is_single_prompt_optimization = (
+            self._normalize_prompt_input(prompt)
+        )
 
         self._validate_optimization_inputs(
             optimizable_prompts, dataset, metric, support_content_parts=True
         )
 
-        optimization = None
-        try:
-            optimization = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata=self._build_optimization_metadata(),
-                name=self.name,
-                optimization_id=optimization_id,
-            )
-            self.current_optimization_id = optimization.id
-        except Exception:
-            logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
-            )
-            optimization = None
-            self.current_optimization_id = None
+        # Create Opik optimization run using base class helper
+        optimization = self._create_optimization_run(dataset, metric, optimization_id)
 
         # Start experiment reporting
         reporting.display_header(
@@ -808,8 +791,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose=self.verbose,
         )
 
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
+        # Select evaluation dataset using base class helper
+        evaluation_dataset = self._select_evaluation_dataset(
+            dataset, validation_dataset
         )
 
         # Step 1. Compute the baseline evaluation

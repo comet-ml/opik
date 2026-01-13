@@ -227,14 +227,10 @@ class GepaOptimizer(BaseOptimizer):
             agent = LiteLLMAgent(project_name=project_name)
         self.agent = agent
 
-        # Normalize prompt input: convert single prompt to dict
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
+        # Normalize prompt input using base class helper
+        optimizable_prompts, is_single_prompt_optimization = (
+            self._normalize_prompt_input(prompt)
+        )
 
         # Work with a copy of prompts to avoid mutating the original
         optimizable_prompts = {
