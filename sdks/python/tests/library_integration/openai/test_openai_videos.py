@@ -362,3 +362,164 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+@pytest.mark.asyncio
+async def test_openai_async_client_videos_create_and_poll_and_download__happyflow(
+    fake_backend,
+):
+    """
+    Test async videos.create_and_poll and download_content workflow.
+
+    This test verifies that the async OpenAI client works correctly with video tracking.
+    """
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(openai_client=client)
+
+    prompt = "A serene mountain landscape at sunset"
+
+    video = await wrapped_client.videos.create_and_poll(
+        model=VIDEO_MODEL_FOR_TESTS,
+        prompt=prompt,
+        seconds="4",
+        size=VIDEO_SIZE_FOR_TESTS,
+    )
+
+    # Assume video generation succeeds
+    assert video.status == "completed", f"Video generation failed: {video.error}"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_path = os.path.join(temp_dir, "test_video.mp4")
+        content = await wrapped_client.videos.download_content(video_id=video.id)
+        content.write_to_file(output_path)
+
+        # Verify file was created
+        assert os.path.exists(output_path)
+
+    opik.flush_tracker()
+
+    # Three traces: create_and_poll, download_content, write_to_file
+    assert len(fake_backend.trace_trees) == 3
+
+    # Find traces by name
+    create_trace = next(
+        t for t in fake_backend.trace_trees if t.name == "videos_create_and_poll"
+    )
+    download_trace = next(
+        t for t in fake_backend.trace_trees if t.name == "videos_download_content"
+    )
+    write_to_file_trace = next(
+        t for t in fake_backend.trace_trees if t.name == "videos_write_to_file"
+    )
+
+    # Verify basic structure - same expectations as sync test
+    assert create_trace.spans[0].type == "general"
+    assert create_trace.spans[0].provider == "openai"
+    assert create_trace.spans[0].model == VIDEO_MODEL_FOR_TESTS
+    assert len(create_trace.spans[0].spans) == 2  # videos_create and videos_poll
+
+    assert download_trace.spans[0].type == "general"
+    assert download_trace.spans[0].provider == "openai"
+
+    assert write_to_file_trace.spans[0].type == "general"
+    assert write_to_file_trace.spans[0].name == "videos_write_to_file"
+
+
+@pytest.mark.asyncio
+async def test_openai_async_client_videos_create_and_poll__error_handling(fake_backend):
+    """
+    Test async error handling when video creation fails with invalid model.
+
+    This is a fast test (no actual video generation) that verifies async error handling.
+    """
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(openai_client=client)
+
+    prompt = "Test video"
+
+    with pytest.raises(openai.OpenAIError):
+        _ = await wrapped_client.videos.create_and_poll(
+            model="invalid-model-name",
+            prompt=prompt,
+            seconds="4",
+        )
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="videos_create_and_poll",
+        input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
+        output=None,
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=OPIK_PROJECT_DEFAULT_NAME,
+        error_info={
+            "exception_type": "BadRequestError",
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="general",
+                name="videos_create_and_poll",
+                input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
+                output=None,
+                tags=["openai"],
+                metadata=ANY_DICT.containing(
+                    {
+                        "created_from": "openai",
+                        "type": "openai_videos",
+                    }
+                ),
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                model="invalid-model-name",
+                provider="openai",
+                error_info={
+                    "exception_type": "BadRequestError",
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
+                },
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="videos_create",
+                        input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
+                        output=None,
+                        tags=["openai"],
+                        metadata=ANY_DICT.containing(
+                            {
+                                "created_from": "openai",
+                                "type": "openai_videos",
+                            }
+                        ),
+                        usage=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=OPIK_PROJECT_DEFAULT_NAME,
+                        model="invalid-model-name",
+                        provider="openai",
+                        error_info={
+                            "exception_type": "BadRequestError",
+                            "message": ANY_STRING,
+                            "traceback": ANY_STRING,
+                        },
+                        spans=[],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
