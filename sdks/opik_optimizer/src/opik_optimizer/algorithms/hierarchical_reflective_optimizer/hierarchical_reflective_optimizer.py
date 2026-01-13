@@ -282,24 +282,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             improved_prompts_response = self._improve_prompt(
                 prompts=best_prompts, root_cause=root_cause, attempt=attempt
             )
-            if isinstance(improved_prompts_response, list):
-                if improved_prompts_response:
-                    first_reasoning = list(improved_prompts_response[0].values())[
-                        0
-                    ].reasoning
-                else:
-                    first_reasoning = ""
-            else:
-                if improved_prompts_response:
-                    first_reasoning = list(improved_prompts_response.values())[
-                        0
-                    ].reasoning
-                else:
-                    first_reasoning = ""
-            improvement_reporter.set_reasoning(first_reasoning)
 
         # Convert ImprovedPrompt dict to ChatPrompt dict
         improved_chat_prompts_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+        candidate_reasonings: list[str] = []
         if isinstance(improved_prompts_response, list):
             responses = improved_prompts_response
         else:
@@ -307,7 +293,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         for response_item in responses:
             improved_chat_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+            response_reasoning = ""
             for prompt_name, improved_prompt in response_item.items():
+                if not response_reasoning:
+                    response_reasoning = improved_prompt.reasoning
                 messages_as_dicts = [x.model_dump() for x in improved_prompt.messages]
                 original = original_prompts[prompt_name]
 
@@ -319,6 +308,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     model_parameters=original.model_kwargs,
                 )
             improved_chat_prompts_candidates.append(improved_chat_prompts)
+            candidate_reasonings.append(response_reasoning)
 
         # Evaluate improved prompt
         eval_message = f"Evaluating improvement for failure mode '{root_cause.name}'"
@@ -347,7 +337,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             ) / len(best_result.test_results)
 
             # Evaluate remaining candidates and keep the best-scoring bundle.
-            for improved_chat_prompts in improved_chat_prompts_candidates[1:]:
+            best_reasoning = candidate_reasonings[0] if candidate_reasonings else ""
+            for idx, improved_chat_prompts in enumerate(
+                improved_chat_prompts_candidates[1:], start=1
+            ):
                 improved_experiment_result = self.evaluate_prompt(
                     prompt=improved_chat_prompts,
                     dataset=evaluation_dataset,  # use right dataset for scoring
@@ -369,8 +362,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     best_score_local = improved_score
                     best_prompt_bundle = improved_chat_prompts
                     best_result = improved_experiment_result
+                    if idx < len(candidate_reasonings):
+                        best_reasoning = candidate_reasonings[idx]
 
             improved_reporter.set_score(best_score_local)
+
+        if best_reasoning:
+            improvement_reporter.set_reasoning(best_reasoning)
 
         return best_prompt_bundle, best_score_local, best_result
 
