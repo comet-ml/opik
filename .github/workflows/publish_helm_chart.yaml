@@ -29,7 +29,7 @@ jobs:
         - name: Install Helm
           uses: azure/setup-helm@v4.2.0
           with:
-            version: v3.13.0
+            version: v3.19.4
 
         - name: Checkout
           uses: actions/checkout@v4
@@ -110,12 +110,12 @@ jobs:
           shell: bash
           working-directory: dest
           run: |
+            yq '.entries.opik[].created' "${INDEX_FILE}"
             helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
-            git remote -v
             git diff -- index.yaml
             git config user.name "Helm Updater"
             git config user.email "actions@users.noreply.github.com"
-            git config set advice.addEmptyPathspec false
+            git config advice.addEmptyPathspec false
             git ls-files -o --exclude-standard -z | xargs -0 git add
             git add index.yaml README.md
             git commit -m "Release Opik helm chart ${{inputs.version}}"
