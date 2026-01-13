@@ -29,9 +29,9 @@ jobs:
     steps:
 
         - name: Install Helm
-          # azure/setup-helm v4.2.0 pinned to commit SHA 4eee2cd0ed812d5867834b7c6a7c6ac458ef4821
-          # Source: https://github.com/Azure/setup-helm/releases/tag/v4.2.0
-          uses: azure/setup-helm@4eee2cd0ed812d5867834b7c6a7c6ac458ef4821
+          # azure/setup-helm v4.3.1 pinned to commit SHA 1a275c3b69536ee54be43f2070a358922e12c8d4
+          # Source: https://github.com/Azure/setup-helm/releases/tag/v4.3.1
+          uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
           with:
             version: v3.19.4
 
