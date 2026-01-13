@@ -614,19 +614,21 @@ public class DatasetsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info(
-                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
+                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}', createVersion='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
                 emptyIfNull(request.filters()).size(),
-                request.batchGroupId());
+                request.batchGroupId(),
+                request.createVersion());
 
-        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), request.batchGroupId())
+        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), request.batchGroupId(),
+                request.createVersion())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info(
-                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
+                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}', createVersion='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),

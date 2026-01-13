@@ -622,9 +622,29 @@ public class DatasetResourceClient {
         }
     }
 
+    public void deleteDatasetItem(UUID itemId, boolean createVersion, String apiKey, String workspaceName) {
+        try (var response = callDeleteDatasetItem(itemId, createVersion, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
     public Response callDeleteDatasetItem(UUID itemId, String apiKey, String workspaceName) {
         var deleteRequest = DatasetItemsDelete.builder()
                 .itemIds(Set.of(itemId))
+                .build();
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
+    }
+
+    public Response callDeleteDatasetItem(UUID itemId, boolean createVersion, String apiKey, String workspaceName) {
+        var deleteRequest = DatasetItemsDelete.builder()
+                .itemIds(Set.of(itemId))
+                .createVersion(createVersion)
                 .build();
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
