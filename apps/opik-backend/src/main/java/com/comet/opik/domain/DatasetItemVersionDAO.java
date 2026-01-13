@@ -32,6 +32,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -114,9 +114,23 @@ public interface DatasetItemVersionDAO {
      * @param baseVersionItemCount the item count in the base version (for UUID pool sizing)
      * @return the total number of items in the new version
      */
+    /**
+     * Apply delta changes to create a new dataset version.
+     * Added and edited items should already have their row IDs (id field) set.
+     * Unchanged items will be copied with UUIDs from unchangedUuids.
+     *
+     * @param datasetId         Dataset ID
+     * @param baseVersionId     Base version ID to copy unchanged items from
+     * @param newVersionId      New version ID to create
+     * @param addedItems        Items to add (with id already set)
+     * @param editedItems       Items to edit (with id already set)
+     * @param deletedIds        Stable dataset_item_ids to delete
+     * @param unchangedUuids    UUIDs to assign to unchanged items (pre-generated in correct order)
+     * @return Number of items in the new version
+     */
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             List<DatasetItem> addedItems, List<DatasetItem> editedItems, Set<UUID> deletedIds,
-            int baseVersionItemCount);
+            List<UUID> unchangedUuids);
 
     /**
      * Applies batch updates to items from a base version, creating updated copies in a new version.
@@ -231,7 +245,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
                 dataset_item_id,
-                data_hash
+                data_hash,
+                tags
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -1001,7 +1016,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                arrayElement(:uuids, row_number() OVER ()) as id,
+                arrayElement(:uuids, row_number() OVER (ORDER BY src.id DESC)) as id,
                 src.dataset_item_id,
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
@@ -1035,6 +1050,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS src
+            ORDER BY src.id DESC
             """;
 
     private static final String RESOLVE_DATASET_ID_FROM_ITEM_ID = """
@@ -1415,10 +1431,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMap(result -> result.map((row, metadata) -> {
                         var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
                         var hash = row.get("data_hash", Long.class);
-                        log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}'", datasetItemId, hash);
+                        Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
+                                .map(arr -> new HashSet<>(Arrays.asList(arr)))
+                                .orElseGet(HashSet::new);
+                        log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
+                                datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
                                 .itemId(datasetItemId)
                                 .dataHash(hash)
+                                .tags(tags)
                                 .build();
                     }))
                     .collectList()
@@ -1825,12 +1846,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull List<DatasetItem> addedItems,
             @NonNull List<DatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
-            int baseVersionItemCount) {
+            @NonNull List<UUID> unchangedUuids) {
 
         log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
-                "added='{}', edited='{}', deleted='{}', baseItemCount='{}'",
+                "added='{}', edited='{}', deleted='{}'",
                 datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(),
-                deletedIds.size(), baseVersionItemCount);
+                deletedIds.size());
 
         // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
@@ -1841,29 +1862,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         Set<UUID> excludedIds = new HashSet<>(deletedIds);
         excludedIds.addAll(editedItemIds);
 
-        // Generate UUID pool for worst-case scenario (all base items copied)
-        // We can't know how many excludedIds actually exist in base version,
-        // so we generate enough UUIDs for all items to prevent running out during copy
-        List<UUID> unchangedUuids = generateUuidPool(idGenerator, baseVersionItemCount);
-
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Step 1: Copy unchanged items from base version (excluding deleted and edited)
+            // Step 1: Insert added items (will sort first due to latest/largest UUIDs)
+            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
+
+            // Step 2: Insert edited items (will sort after added due to middle UUIDs)
+            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
+
+            // Step 3: Copy unchanged items (will sort last due to earliest/smallest UUIDs)
             Mono<Long> copyUnchanged = copyUnchangedItems(datasetId, baseVersionId, newVersionId,
                     excludedIds, unchangedUuids, workspaceId, userName);
 
-            // Step 2: Insert edited items
-            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
-
-            // Step 3: Insert added items
-            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
-
             // Execute all operations and sum the results
-            return copyUnchanged
+            return insertAdded
                     .zipWith(insertEdited, Long::sum)
-                    .zipWith(insertAdded, Long::sum)
+                    .zipWith(copyUnchanged, Long::sum)
                     .doOnSuccess(total -> log.info("Applied delta for dataset '{}': total items in new version '{}'",
                             datasetId, total));
         });
@@ -1919,9 +1935,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> batchUpdateItems(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull DatasetItemBatchUpdate batchUpdate, @NonNull List<UUID> uuids) {
 
-        // Early return if no IDs or filters provided
-        if ((batchUpdate.ids() == null || batchUpdate.ids().isEmpty())
-                && (batchUpdate.filters() == null || batchUpdate.filters().isEmpty())) {
+        // Early return ONLY if IDs are explicitly empty AND filters are null (not provided at all)
+        // Note: empty filters list means "select all items", so we should NOT early return in that case
+        boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
+        boolean hasFilters = batchUpdate.filters() != null; // null means not provided, empty list means "select all"
+
+        if (!hasIds && !hasFilters) {
+            // Neither IDs nor filters provided - nothing to update
             return Mono.just(0L);
         }
 

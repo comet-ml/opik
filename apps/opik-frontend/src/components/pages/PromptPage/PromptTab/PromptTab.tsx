@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
@@ -60,16 +60,23 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     },
   );
 
+  const versions = data?.content;
+
+  const effectiveVersionId = useMemo(() => {
+    if (activeVersionId && versions?.some((v) => v.id === activeVersionId)) {
+      return activeVersionId;
+    }
+    return prompt?.latest_version?.id ?? versions?.[0]?.id ?? "";
+  }, [activeVersionId, versions, prompt?.latest_version?.id]);
+
   const { data: activeVersion } = usePromptVersionById(
     {
-      versionId: activeVersionId || "",
+      versionId: effectiveVersionId,
     },
     {
-      enabled: !!activeVersionId,
+      enabled: !!effectiveVersionId,
     },
   );
-
-  const versions = data?.content;
 
   const handleOpenEditPrompt = (value: boolean) => {
     editPromptResetKeyRef.current = editPromptResetKeyRef.current + 1;
@@ -79,18 +86,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const handleRestoreVersionClick = (version: PromptVersion) => {
     setVersionToRestore(version);
   };
-
-  useEffect(() => {
-    if (versions && versions.length > 0 && !activeVersionId) {
-      setActiveVersionId(versions[0].id, "replaceIn");
-    }
-  }, [versions, activeVersionId, setActiveVersionId]);
-
-  useEffect(() => {
-    return () => {
-      setActiveVersionId(null);
-    };
-  }, [setActiveVersionId]);
 
   const displayText = activeVersion?.template || "";
 
@@ -227,7 +222,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
           <CommitHistory
             versions={versions || []}
-            activeVersionId={activeVersionId || ""}
+            activeVersionId={effectiveVersionId}
             onVersionClick={(version) => setActiveVersionId(version.id)}
             onRestoreVersionClick={handleRestoreVersionClick}
             latestVersionId={prompt.latest_version?.id}

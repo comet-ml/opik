@@ -115,11 +115,19 @@ component:
       requests:
         ephemeral-storage: 10Gi
     livenessProbe:
-      path: /health-check?name=all&type=alive
-      port:  8080
+      httpGet:
+        path: /health-check?name=all&type=alive
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
     readinessProbe:
-      path: /health-check?name=all&type=ready
-      port:  8080
+      httpGet:
+        path: /health-check?name=all&type=ready
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
       initialDelaySeconds: 20
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"

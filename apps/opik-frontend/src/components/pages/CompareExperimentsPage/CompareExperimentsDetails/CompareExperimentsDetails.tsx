@@ -20,8 +20,6 @@ import { generateExperimentIdFilter } from "@/lib/filters";
 import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Separator } from "@/components/ui/separator";
 
 type ExperimentScoreTagsProps = {
@@ -81,11 +79,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
   const title = !isCompare
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;
-
-  // TODO: Remove when dashboards are enabled by default - this entire expand/collapse charts feature will be replaced by dashboard view
-  const isDashboardsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DASHBOARDS_ENABLED,
-  );
 
   const [showCharts = true, setShowCharts] = useQueryParam(
     "chartsExpanded",
@@ -217,14 +210,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
           {isCompare &&
             view !== VIEW_TYPE.DASHBOARDS &&
             renderCompareFeedbackScoresButton()}
-          {isDashboardsEnabled && (
-            <>
-              {isCompare && view !== VIEW_TYPE.DASHBOARDS && (
-                <Separator orientation="vertical" className="mx-2 h-6" />
-              )}
-              <ViewSelector value={view} onChange={onViewChange} />
-            </>
+          {isCompare && view !== VIEW_TYPE.DASHBOARDS && (
+            <Separator orientation="vertical" className="mx-2 h-6" />
           )}
+          <ViewSelector value={view} onChange={onViewChange} />
         </div>
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">

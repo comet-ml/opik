@@ -35,7 +35,6 @@ export class TracesPage {
       await this.page.getByRole('button', { name: 'Columns' }).click({ timeout: 5000 });
     } catch {
       await this.page.reload();
-      await this.page.waitForLoadState('networkidle', { timeout: 10000 });
       await this.page.getByRole('button', { name: 'Columns' }).click({ timeout: 5000 });
     }
 

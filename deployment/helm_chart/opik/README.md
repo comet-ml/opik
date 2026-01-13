@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.71](https://img.shields.io/badge/Version-1.9.71-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.71](https://img.shields.io/badge/AppVersion-1.9.71-informational?style=flat-square)
+![Version: 1.9.75](https://img.shields.io/badge/Version-1.9.75-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.75](https://img.shields.io/badge/AppVersion-1.9.75-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -239,12 +239,16 @@ Call opik api on http://localhost:5173/api
 | component.backend.ingress.tls.enabled | bool | `false` |  |
 | component.backend.ingress.tls.hosts | list | `[]` |  |
 | component.backend.ingress.tls.secretName | string | `""` |  |
-| component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
-| component.backend.livenessProbe.port | int | `8080` |  |
+| component.backend.livenessProbe.httpGet.httpHeaders[0].name | string | `"Accept"` |  |
+| component.backend.livenessProbe.httpGet.httpHeaders[0].value | string | `"application/json"` |  |
+| component.backend.livenessProbe.httpGet.path | string | `"/health-check?name=all&type=alive"` |  |
+| component.backend.livenessProbe.httpGet.port | int | `8080` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
+| component.backend.readinessProbe.httpGet.httpHeaders[0].name | string | `"Accept"` |  |
+| component.backend.readinessProbe.httpGet.httpHeaders[0].value | string | `"application/json"` |  |
+| component.backend.readinessProbe.httpGet.path | string | `"/health-check?name=all&type=ready"` |  |
+| component.backend.readinessProbe.httpGet.port | int | `8080` |  |
 | component.backend.readinessProbe.initialDelaySeconds | int | `20` |  |
-| component.backend.readinessProbe.path | string | `"/health-check?name=all&type=ready"` |  |
-| component.backend.readinessProbe.port | int | `8080` |  |
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.backend.run_migration | bool | `true` |  |

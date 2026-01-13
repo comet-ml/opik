@@ -16,6 +16,11 @@ on:
         required: true
         description: Is release build
         default: false
+      is_adhoc:
+        type: boolean
+        required: false
+        description: Is adhoc build
+        default: false
       build_guardrails:
         type: boolean
         required: true
@@ -32,6 +37,11 @@ on:
         type: boolean
         required: true
         description: Is release build
+        default: false
+      is_adhoc:
+        type: boolean
+        required: false
+        description: Is adhoc build
         default: false
       ref:
         type: string
@@ -112,8 +122,10 @@ jobs:
       build_comet_image: false
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
 
   build-sandbox-executor-python:
+    if: ${{ !inputs.is_adhoc }}
     needs:
       - set-version
     secrets: inherit
@@ -125,8 +137,10 @@ jobs:
       build_comet_image: false
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
 
   build-python-backend:
+    if: always() && needs.set-version.result == 'success'
     needs:
       - set-version
       - build-sandbox-executor-python
@@ -139,6 +153,7 @@ jobs:
       build_comet_image: false
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
 
   # build-guardrails-backend:
   #   if: inputs.build_guardrails != false 
@@ -163,12 +178,19 @@ jobs:
       image: "opik-frontend"
       version: ${{needs.set-version.outputs.version}}
       build_from: ${{needs.set-version.outputs.build_from}}
-      build_comet_image: true
-      comet_build_args: "BUILD_MODE=comet"
+      build_comet_image: ${{ !inputs.is_adhoc }}
+      comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
       is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
       
   create-git-tag:
-    if: ${{ !(inputs.is_release || false) }}
+    if: |
+      always() &&
+      !inputs.is_release &&
+      needs.set-version.result == 'success' &&
+      needs.build-backend.result == 'success' &&
+      needs.build-frontend.result == 'success' &&
+      needs.build-python-backend.result == 'success'
     needs:
       - set-version
       - build-backend

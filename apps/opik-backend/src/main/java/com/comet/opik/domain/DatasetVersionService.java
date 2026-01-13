@@ -29,6 +29,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -503,14 +504,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     private Mono<List<DatasetItemIdAndHash>> getItems(UUID datasetId, UUID versionId, String userName,
             String workspaceId) {
-        if (versionId == null) {
-            return datasetItemDAO.getDraftItemIdsAndHashes(datasetId)
-                    .contextWrite(ctx -> ctx
-                            .put(RequestContext.USER_NAME, userName)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .collectList();
-        }
-
         return datasetItemVersionDAO.getItemIdsAndHashes(datasetId, versionId)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, userName)
@@ -574,7 +567,13 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             var fromItem = fromMap.get(itemId);
             var toItem = toMap.get(itemId);
 
-            if (fromItem.dataHash() != toItem.dataHash()) {
+            // Compare data hash
+            boolean dataChanged = fromItem.dataHash() != toItem.dataHash();
+
+            // Compare tags as sets (order-independent)
+            boolean tagsChanged = !toTagSet(fromItem.tags()).equals(toTagSet(toItem.tags()));
+
+            if (dataChanged || tagsChanged) {
                 modified++;
             } else {
                 unchanged++;
@@ -585,6 +584,17 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 added, modified, deleted, unchanged);
 
         return new DatasetVersionDiffStats(added, modified, deleted, unchanged);
+    }
+
+    /**
+     * Converts a set of tags to a non-null Set for order-independent comparison.
+     * Returns an empty set if the input is null.
+     *
+     * @param tags the tags set to convert, may be null
+     * @return a Set containing the tags, or an empty set if input is null
+     */
+    private static Set<String> toTagSet(Set<String> tags) {
+        return Optional.ofNullable(tags).orElseGet(Set::of);
     }
 
     @Override
