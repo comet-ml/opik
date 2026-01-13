@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import TraceDataViewer from "./TraceDataViewer";
 import SMEFlowLayout from "../SMEFlowLayout";
 import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
@@ -105,11 +106,12 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
             <ReturnToAnnotationQueueButton />
             <div className="flex items-center gap-2">
               <div
-                className={`comet-body-s flex items-center ${
+                className={cn(
+                  "comet-body-s flex items-center",
                   isCurrentItemProcessed
                     ? "text-[var(--special-button)]"
-                    : "text-light-slate"
-                }`}
+                    : "text-light-slate",
+                )}
               >
                 {isCurrentItemProcessed && <Check className="mr-1 size-4" />}
                 {processedCount}/{totalCount}
