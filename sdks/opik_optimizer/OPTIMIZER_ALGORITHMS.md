@@ -192,6 +192,21 @@ This creates a Pareto front of solutions, allowing you to choose the best trade-
         return self.mutation_rate
 ```
 
+**Itamar's Notes:**
+
+**⚠️ Implementation Issue**: The current implementation has a bug where `_best_fitness_history` is initialized but never populated. The code attempts to compare `_best_fitness_history[-1]` (best from current generation) with `_best_fitness_history[-2]` (best from previous generation), but since the list is never appended to, the adaptive mutation logic never executes (it returns early due to `len(self._best_fitness_history) < 2`).
+
+**Expected Behavior**: The code should track the best fitness score from each generation by appending to `_best_fitness_history` after each generation completes, allowing comparison of generation-to-generation improvement (not mutation-to-mutation).
+
+**Fix Required**: After each generation completes (around line 842 in `optimize_prompt`), the code should append the best fitness score from that generation to `_best_fitness_history`. For example:
+
+```python
+# After updating best_primary_score_overall (around line 795-808)
+self._best_fitness_history.append(best_primary_score_overall)
+```
+
+This would allow the adaptive mutation to properly compare generation-to-generation improvement rather than mutation-to-mutation.
+
 **LLM-Based Crossover**: When enabled, uses an LLM to intelligently combine two prompts rather than simple string operations, potentially creating more coherent offspring.
 
 ```317:332:sdks/opik_optimizer/src/opik_optimizer/algorithms/evolutionary_optimizer/evolutionary_optimizer.py
@@ -585,6 +600,17 @@ The optimizer uses Optuna's Tree-structured Parzen Estimator (TPE) sampler to se
 - You want to automatically find the optimal number of examples
 - Your dataset has diverse examples that need careful selection
 - You want a more efficient optimization than evolutionary approaches
+
+**Itamar's Notes:**
+
+**⚠️ Limited Use Case**: FewShotBayesianOptimizer should only be used in **rare cases** where you want to train from "good examples" rather than having "evals" that define good behavior. 
+
+In this specific use case, you need to maintain a clear concept of testing/validation dataset:
+- The training dataset contains the "good examples" that the optimizer selects from
+- The validation dataset is used to evaluate whether the selected examples actually improve performance on unseen data
+- This separation is critical to prevent overfitting to the training examples
+
+For most other optimization scenarios where you have proper evaluation metrics that define good behavior, a validation dataset may not be needed, and other optimizers (like MetaPromptOptimizer or HierarchicalReflectiveOptimizer) may be more appropriate.
 
 ### Implementation Details
 
