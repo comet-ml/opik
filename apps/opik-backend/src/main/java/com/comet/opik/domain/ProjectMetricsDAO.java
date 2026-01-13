@@ -341,7 +341,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration
+                         NULL) AS duration,
+                         usage
                     FROM spans FINAL
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -1197,6 +1198,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                                 feedbackScoreIsEmptyFilters));
                     });
 
+            Optional.ofNullable(request.spanFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                                .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                                .ifPresent(
+                                        scoresFilters -> template.add("span_feedback_scores_filters", scoresFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                                .ifPresent(
+                                        feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                                feedbackScoreIsEmptyFilters));
+                    });
+
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
                     .bind("uuid_from_time", request.uuidFromTime().toString())
@@ -1219,6 +1233,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                         filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                         filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    });
+
+            Optional.ofNullable(request.spanFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
                     });
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
