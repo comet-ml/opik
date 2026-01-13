@@ -10,7 +10,7 @@ import isArray from "lodash/isArray";
 
 import { Filter } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
-import FiltersAccordionSection from "@/components/shared/FiltersAccordionSection/FiltersAccordionSection";
+import FiltersSection from "@/components/shared/FiltersSection/FiltersSection";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -177,13 +177,13 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
       : undefined;
 
   return (
-    <FiltersAccordionSection
+    <FiltersSection
       columns={filterColumns as ColumnData<unknown>[]}
       config={filtersConfig}
       filters={filters}
       onChange={setFilters}
       label={label}
-      description="Add filters to focus the widget on specific properties."
+      description="Use filters to target specific traces, or leave empty to apply to all."
       className={className}
       errors={errors}
     />

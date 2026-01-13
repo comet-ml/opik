@@ -1288,6 +1288,7 @@ class RawDatasetsClient:
         dataset_name: str,
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
+        dataset_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1300,6 +1301,8 @@ class RawDatasetsClient:
         last_retrieved_id : typing.Optional[str]
 
         steam_limit : typing.Optional[int]
+
+        dataset_version : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1316,6 +1319,7 @@ class RawDatasetsClient:
                 "dataset_name": dataset_name,
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
+                "dataset_version": dataset_version,
             },
             headers={
                 "content-type": "application/json",
@@ -2963,6 +2967,7 @@ class AsyncRawDatasetsClient:
         dataset_name: str,
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
+        dataset_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -2975,6 +2980,8 @@ class AsyncRawDatasetsClient:
         last_retrieved_id : typing.Optional[str]
 
         steam_limit : typing.Optional[int]
+
+        dataset_version : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2991,6 +2998,7 @@ class AsyncRawDatasetsClient:
                 "dataset_name": dataset_name,
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
+                "dataset_version": dataset_version,
             },
             headers={
                 "content-type": "application/json",

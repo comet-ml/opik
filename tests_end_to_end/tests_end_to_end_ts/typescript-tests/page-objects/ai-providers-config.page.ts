@@ -13,7 +13,6 @@ export class AIProvidersConfigPage extends BasePage {
 
   async goto(): Promise<void> {
     await super.goto();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async searchProviderByName(providerName: string): Promise<void> {
@@ -25,12 +24,11 @@ export class AIProvidersConfigPage extends BasePage {
   async addProvider(providerType: 'OpenAI' | 'Anthropic', apiKey: string): Promise<void> {
     await this.addProviderButton.click();
 
-    await this.page.getByRole('combobox').click();
-    await this.page.getByRole('option', { name: providerType }).click();
+    await this.page.getByRole('button', { name: providerType }).click();
 
     await this.page.getByLabel('API key').fill(apiKey);
 
-    await this.page.getByRole('button', { name: 'Add configuration' }).click();
+    await this.page.getByRole('button', { name: 'Add provider' }).click();
   }
 
   async editProvider(name: string, apiKey?: string): Promise<void> {

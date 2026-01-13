@@ -30,8 +30,6 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean optimizationStudioEnabled;
     @JsonProperty
-    @NotNull boolean dashboardsEnabled;
-    @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
     // LLM Provider feature flags
     @JsonProperty
@@ -44,6 +42,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean openrouterProviderEnabled;
     @JsonProperty
     @NotNull boolean vertexaiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean bedrockProviderEnabled;
     @JsonProperty
     @NotNull boolean customllmProviderEnabled;
     @JsonProperty

@@ -1,9 +1,11 @@
-from typing import Dict, Any, Annotated
+from typing import Dict, Any, Annotated, Optional, Literal
 from pydantic import BaseModel
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph import message as langgraph_message
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 import langchain_openai
 
@@ -11,6 +13,9 @@ import opik
 from opik.integrations.langchain import (
     OpikTracer,
     extract_current_langgraph_span_data,
+    LANGGRAPH_INTERRUPT_OUTPUT_KEY,
+    LANGGRAPH_RESUME_INPUT_KEY,
+    LANGGRAPH_INTERRUPT_METADATA_KEY,
 )
 from opik import jsonable_encoder, context_storage
 from opik.api_objects import span, trace
@@ -448,8 +453,6 @@ def test_langgraph__node_returning_command__output_captured_correctly(
 
     Nodes returning Command objects should have their state updates captured in output.
     """
-    from typing import Literal
-    from langchain_core.messages import AIMessage
     from langgraph.types import Command
 
     class State(TypedDict):
@@ -1092,3 +1095,249 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
         len(callback.created_traces()) == 0
     )  # No new trace created, attached to the existing trace
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__interrupt_resume__second_trace_has_correct_input(
+    fake_backend,
+):
+    """Test that when LangGraph uses interrupts, the second trace (after resume) has correct input.
+
+    When a LangGraph execution is interrupted and then resumed with Command(resume=...),
+    the second trace should have the resume value as input, not an empty dict.
+    """
+
+    class GraphState(TypedDict):
+        question: Optional[str]
+        selected_option: Optional[str]
+        is_ambiguous: Optional[bool]
+        options: Optional[list]
+        response: Optional[str]
+
+    def is_ambiguous(question: str) -> bool:
+        """Simple check: questions with 'it', 'that', 'this' or very short are ambiguous"""
+        ambiguous_words = ["it", "that", "this", "they"]
+        question_lower = question.lower()
+        return (
+            any(word in question_lower for word in ambiguous_words)
+            or len(question.split()) < 3
+        )
+
+    def check_ambiguity_node(state):
+        question = state.get("question", "").strip()
+        selected_option = state.get("selected_option")
+
+        # If user already selected an option, not ambiguous anymore
+        if selected_option:
+            return {"is_ambiguous": False}
+
+        # Check if question is ambiguous
+        ambiguous = is_ambiguous(question)
+        return {"is_ambiguous": ambiguous}
+
+    def provide_options_node(state):
+        options = [
+            "Option 1: Weather information",
+            "Option 2: News updates",
+            "Option 3: Product recommendations",
+            "Option 4: General information",
+        ]
+        response = "Please select one of these options:\n" + "\n".join(
+            f"{i+1}. {opt}" for i, opt in enumerate(options)
+        )
+
+        # Interrupt execution to wait for user input
+        choice = interrupt(response)
+
+        return {"options": options, "selected_option": choice}
+
+    def handle_selection_node(state):
+        selected_option = state.get("selected_option", "").strip()
+
+        # Map selection to answer
+        option_answers = {
+            "1": "Here's the weather information you requested.",
+            "2": "Here are the latest news updates.",
+            "3": "Here are some product recommendations based on your preferences.",
+            "4": "Here's the general information you asked about.",
+        }
+
+        answer = option_answers.get(selected_option, "I'll help you with that.")
+        return {"response": answer}
+
+    def decide_next_node(state):
+        if state.get("is_ambiguous"):
+            return "provide_options"
+        else:
+            return "handle_selection"
+
+    workflow = StateGraph(GraphState)
+    workflow.add_node("check_ambiguity", check_ambiguity_node)
+    workflow.add_node("provide_options", provide_options_node)
+    workflow.add_node("handle_selection", handle_selection_node)
+
+    workflow.add_conditional_edges(
+        "check_ambiguity",
+        decide_next_node,
+        {"provide_options": "provide_options", "handle_selection": "handle_selection"},
+    )
+
+    workflow.set_entry_point("check_ambiguity")
+    workflow.add_edge("provide_options", "check_ambiguity")
+    workflow.add_edge("handle_selection", END)
+
+    # Compile with memory checkpoint for interrupts
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory)
+
+    tracer = OpikTracer(graph=app.get_graph(xray=True))
+
+    # Q1: Ambiguous question - graph will interrupt
+    config = {"configurable": {"thread_id": "test-thread"}, "callbacks": [tracer]}
+    initial_input = {"question": "Tell me about it"}
+
+    # First invocation - will hit the interrupt
+    first_result = app.invoke(initial_input, config=config)
+    assert LANGGRAPH_INTERRUPT_OUTPUT_KEY in first_result
+
+    tracer.flush()
+
+    # Q2: Resume execution - will process the selection
+    final_result = app.invoke(Command(resume="1"), config=config)
+    assert final_result["response"] == "Here's the weather information you requested."
+
+    tracer.flush()
+
+    # Verify we have 2 traces (one for initial invoke, one for resume)
+    assert len(fake_backend.trace_trees) == 2
+    assert len(tracer.created_traces()) == 2
+
+    # Build expected trace tree for first trace (interrupted)
+    EXPECTED_FIRST_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=initial_input,
+        output=ANY_DICT.containing({LANGGRAPH_INTERRUPT_OUTPUT_KEY: ANY_STRING}),
+        metadata=ANY_DICT.containing(
+            {"created_from": "langchain", LANGGRAPH_INTERRUPT_METADATA_KEY: True}
+        ),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info=None,  # GraphInterrupt is not an error
+        thread_id="test-thread",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="check_ambiguity",
+                input=ANY_DICT,
+                output=ANY_DICT.containing({"is_ambiguous": True}),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="decide_next_node",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        error_info=None,
+                        spans=[],
+                    ),
+                ],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="provide_options",
+                input=ANY_DICT,
+                output=ANY_DICT.containing(
+                    {LANGGRAPH_INTERRUPT_OUTPUT_KEY: ANY_STRING}
+                ),
+                metadata=ANY_DICT.containing(
+                    {
+                        "created_from": "langchain",
+                        LANGGRAPH_INTERRUPT_METADATA_KEY: True,
+                    }
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[],
+            ),
+        ],
+    )
+
+    # Build expected trace tree for second trace (resumed)
+    # When resuming, the provide_options node completes first (it was interrupted),
+    # then goes back to check_ambiguity, and finally to handle_selection
+    EXPECTED_SECOND_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input={
+            LANGGRAPH_RESUME_INPUT_KEY: "1"
+        },  # Resume value should be captured as input
+        output=ANY_DICT.containing(
+            {"response": "Here's the weather information you requested."}
+        ),
+        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info=None,
+        thread_id="test-thread",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="provide_options",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="check_ambiguity",
+                input=ANY_DICT,
+                output=ANY_DICT.containing({"is_ambiguous": False}),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="decide_next_node",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        error_info=None,
+                        spans=[],
+                    ),
+                ],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="handle_selection",
+                input=ANY_DICT,
+                output=ANY_DICT.containing(
+                    {"response": "Here's the weather information you requested."}
+                ),
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info=None,
+                spans=[],
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_FIRST_TRACE, fake_backend.trace_trees[0])
+    assert_equal(EXPECTED_SECOND_TRACE, fake_backend.trace_trees[1])

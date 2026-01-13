@@ -1,8 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MessageCircleWarning } from "lucide-react";
-import get from "lodash/get";
+import { ChevronLeft } from "lucide-react";
 import isFunction from "lodash/isFunction";
 import { v4 as uuidv4 } from "uuid";
 
@@ -10,20 +9,12 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogAutoScrollBody,
-  DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
-import { Label } from "@/components/ui/label";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_TYPE,
@@ -31,25 +22,22 @@ import {
 } from "@/types/providers";
 
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
-import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/ProviderSelect";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import {
   createAIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
-import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
-import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
-import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import {
   convertCustomProviderModels,
-  parseComposedProviderType,
   buildComposedProviderKey,
 } from "@/lib/provider";
+import { useProviderOptions } from "@/hooks/useProviderOptions";
+import ProviderSelectionStep from "@/components/pages-shared/llm/SetupProviderDialog/ProviderSelectionStep";
+import ProviderConfigurationStep from "@/components/pages-shared/llm/SetupProviderDialog/ProviderConfigurationStep";
 
 /**
  * Converts header array from form state to API-compatible object format
@@ -90,6 +78,8 @@ function convertHeadersForAPI(
   return undefined;
 }
 
+type Step = "select" | "configure";
+
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderObject;
   open: boolean;
@@ -97,6 +87,17 @@ type ManageAIProviderDialogProps = {
   onAddProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderObject[];
+};
+
+// Label generator for "Add new" options
+const addNewLabelGenerator = (providerType: PROVIDER_TYPE) => {
+  if (providerType === PROVIDER_TYPE.BEDROCK) {
+    return "Add Bedrock provider";
+  }
+  if (providerType === PROVIDER_TYPE.CUSTOM) {
+    return "Add vLLM / Custom provider";
+  }
+  return "Add provider";
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -107,20 +108,47 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
 }) => {
+  // Ensure providerKey is included in the list for proper grid highlighting
+  const effectiveConfiguredProvidersList = useMemo(() => {
+    if (configuredProvidersList) return configuredProvidersList;
+    if (providerKey) return [providerKey];
+    return undefined;
+  }, [configuredProvidersList, providerKey]);
+
+  // Get provider options with configured status and "Add new" options
+  const providerOptions = useProviderOptions({
+    configuredProvidersList: effectiveConfiguredProvidersList,
+    includeConfiguredStatus: true,
+    includeAddNewOptions: true,
+    addNewLabelGenerator,
+  });
+
+  const [step, setStep] = useState<Step>(providerKey ? "configure" : "select");
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [selectedProviderId, setSelectedProviderId] = useState<
     string | undefined
-  >(undefined);
+  >(providerKey?.id);
+  const [selectedComposedProvider, setSelectedComposedProvider] = useState<
+    COMPOSED_PROVIDER_TYPE | ""
+  >(providerKey?.ui_composed_provider ?? "");
+  const [selectedProviderType, setSelectedProviderType] = useState<
+    PROVIDER_TYPE | ""
+  >(providerKey?.provider ?? "");
+
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
 
   const existingProviderNames = useMemo(() => {
-    return configuredProvidersList
-      ?.filter((p) => p.provider === PROVIDER_TYPE.CUSTOM)
+    return effectiveConfiguredProvidersList
+      ?.filter(
+        (p) =>
+          p.provider === PROVIDER_TYPE.CUSTOM ||
+          p.provider === PROVIDER_TYPE.BEDROCK,
+      )
       .map((p) => p.provider_name)
       .filter(Boolean) as string[];
-  }, [configuredProvidersList]);
+  }, [effectiveConfiguredProvidersList]);
 
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
     resolver: zodResolver(createAIProviderFormSchema(existingProviderNames)),
@@ -150,11 +178,14 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const provider = form.watch("provider") as PROVIDER_TYPE | undefined;
 
   const calculatedProviderKey = useMemo(() => {
-    return configuredProvidersList?.find((p) => selectedProviderId === p.id);
-  }, [configuredProvidersList, selectedProviderId]);
+    return effectiveConfiguredProvidersList?.find(
+      (p) => selectedProviderId === p.id,
+    );
+  }, [effectiveConfiguredProvidersList, selectedProviderId]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
+
   const title = isEdit
     ? "Edit provider configuration"
     : "Add provider configuration";
@@ -162,8 +193,82 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const buttonText = provider
     ? providerKey || calculatedProviderKey
       ? "Update configuration"
-      : "Add configuration"
-    : "Done";
+      : "Add provider"
+    : "Add provider";
+
+  const customProviderName =
+    selectedProviderType === PROVIDER_TYPE.CUSTOM ||
+    selectedProviderType === PROVIDER_TYPE.BEDROCK
+      ? calculatedProviderKey?.provider_name || providerKey?.provider_name
+      : undefined;
+
+  const resetSelectionState = useCallback(() => {
+    setSelectedProviderId(undefined);
+    setSelectedComposedProvider("");
+    setSelectedProviderType("");
+    form.reset({
+      provider: undefined,
+      composedProviderType: "",
+      id: undefined,
+      apiKey: "",
+      location: "",
+      url: "",
+      providerName: "",
+      models: "",
+      headers: [],
+    });
+    setStep("select");
+  }, [form]);
+
+  const handleProviderSelect = useCallback(
+    (
+      composedProviderType: COMPOSED_PROVIDER_TYPE,
+      providerType: PROVIDER_TYPE,
+      configuredId?: string,
+    ) => {
+      setSelectedProviderId(configuredId);
+      setSelectedComposedProvider(composedProviderType);
+      setSelectedProviderType(providerType);
+
+      const providerData = effectiveConfiguredProvidersList?.find(
+        (c) => composedProviderType === c.ui_composed_provider,
+      );
+
+      form.setValue("id", providerData?.id);
+      form.setValue("url", providerData?.base_url ?? "");
+      form.setValue("providerName", providerData?.provider_name ?? "");
+      form.setValue(
+        "models",
+        convertCustomProviderModels(
+          providerData?.configuration?.models ?? "",
+          providerData?.provider_name,
+        ),
+      );
+      form.setValue("location", providerData?.configuration?.location ?? "");
+      form.setValue(
+        "headers",
+        providerData?.headers && Object.keys(providerData.headers).length > 0
+          ? Object.entries(providerData.headers).map(([key, value]) => ({
+              key,
+              value,
+              id: uuidv4(),
+            }))
+          : [],
+      );
+
+      form.setValue("provider", providerType);
+      form.setValue("composedProviderType", composedProviderType);
+      form.setValue("apiKey", "");
+      form.clearErrors();
+
+      setStep("configure");
+    },
+    [form, effectiveConfiguredProvidersList],
+  );
+
+  const handleBack = useCallback(() => {
+    resetSelectionState();
+  }, [resetSelectionState]);
 
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
@@ -182,17 +287,19 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     );
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
     const isCustom = provider === PROVIDER_TYPE.CUSTOM;
+    const isBedrock = provider === PROVIDER_TYPE.BEDROCK;
+    const isCustomLike = isCustom || isBedrock;
 
     const configuration =
-      isVertex || isCustom
+      isVertex || isCustomLike
         ? {
             location: isVertex ? location : undefined,
-            models: isCustom ? models : undefined,
+            models: isCustomLike ? models : undefined,
           }
         : undefined;
 
     const isEditingCustomProvider =
-      isCustom && !!(providerKey || calculatedProviderKey);
+      isCustomLike && !!(providerKey || calculatedProviderKey);
     const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
 
     if (providerKey || calculatedProviderKey) {
@@ -200,9 +307,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
-          base_url: isCustom ? url : undefined,
+          base_url: isCustomLike ? url : undefined,
           ...(configuration && { configuration }),
-          ...(isCustom && headers !== undefined && { headers }),
+          ...(isCustomLike && headers !== undefined && { headers }),
         },
       });
     } else if (provider) {
@@ -214,10 +321,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           apiKey,
           provider,
-          base_url: isCustom ? url : undefined,
-          provider_name: isCustom ? providerName : undefined,
+          base_url: isCustomLike ? url : undefined,
+          provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
-          ...(isCustom && headers !== undefined && { headers }),
+          ...(isCustomLike && headers !== undefined && { headers }),
         },
       });
     }
@@ -245,160 +352,110 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               onDeleteProvider(calculatedProviderKey.ui_composed_provider);
             }
 
-            form.reset({
-              provider: undefined,
-              composedProviderType: "",
-              id: undefined,
-              apiKey: "",
-              location: "",
-              url: "",
-              providerName: "",
-              models: "",
-            });
-            setSelectedProviderId(undefined);
+            resetSelectionState();
             setConfirmOpen(false);
           },
         },
       );
     }
-  }, [calculatedProviderKey, onDeleteProvider, deleteMutate, form]);
+  }, [
+    calculatedProviderKey,
+    onDeleteProvider,
+    deleteMutate,
+    resetSelectionState,
+  ]);
 
-  const getProviderDetails = () => {
-    if (provider === PROVIDER_TYPE.VERTEX_AI) {
-      return <VertexAIProviderDetails form={form} />;
+  const handleCancel = useCallback(() => {
+    setOpen(false);
+    if (!providerKey) {
+      resetSelectionState();
     }
+  }, [setOpen, providerKey, resetSelectionState]);
 
-    if (provider === PROVIDER_TYPE.CUSTOM) {
-      return <CustomProviderDetails form={form} isEdit={isEdit} />;
-    }
-
-    return (
-      <CloudAIProviderDetails
-        provider={provider as PROVIDER_TYPE}
-        form={form}
-      />
-    );
-  };
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      setOpen(isOpen);
+      if (!isOpen && !providerKey) {
+        resetSelectionState();
+      }
+    },
+    [setOpen, providerKey, resetSelectionState],
+  );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-lg sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            <ExplainerDescription
+              {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
+            />
+          </DialogDescription>
         </DialogHeader>
-        <DialogAutoScrollBody className="max-h-[60vh]">
-          <ExplainerDescription
-            className="mb-4"
-            {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
-          />
-          <Form {...form}>
-            <form
-              className="flex flex-col gap-4 pb-4"
-              onSubmit={form.handleSubmit(cloudConfigHandler)}
-            >
-              <FormField
-                control={form.control}
-                name="composedProviderType"
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, ["provider"]);
 
-                  return (
-                    <FormItem>
-                      <Label>Provider</Label>
-                      <FormControl>
-                        <ProviderSelect
-                          disabled={Boolean(providerKey)}
-                          value={field.value}
-                          onChange={(
-                            p: COMPOSED_PROVIDER_TYPE,
-                            id?: string,
-                          ) => {
-                            setSelectedProviderId(id);
-                            const providerData = configuredProvidersList?.find(
-                              (c) => p === c.ui_composed_provider,
-                            );
-
-                            form.setValue("id", providerData?.id);
-                            form.setValue("url", providerData?.base_url ?? "");
-                            form.setValue(
-                              "providerName",
-                              providerData?.provider_name ?? "",
-                            );
-                            form.setValue(
-                              "models",
-                              convertCustomProviderModels(
-                                providerData?.configuration?.models ?? "",
-                                providerData?.provider_name,
-                              ),
-                            );
-                            form.setValue(
-                              "location",
-                              providerData?.configuration?.location ?? "",
-                            );
-                            form.setValue(
-                              "headers",
-                              providerData?.headers &&
-                                Object.keys(providerData.headers).length > 0
-                                ? Object.entries(providerData.headers).map(
-                                    ([key, value]) => ({
-                                      key,
-                                      value,
-                                      id: uuidv4(),
-                                    }),
-                                  )
-                                : [],
-                            );
-
-                            form.setValue(
-                              "provider",
-                              parseComposedProviderType(p),
-                            );
-                            field.onChange(p);
-                          }}
-                          configuredProvidersList={
-                            configuredProvidersList ??
-                            (providerKey ? [providerKey] : undefined)
-                          }
-                          hasError={Boolean(validationErrors?.message)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+        <DialogAutoScrollBody className="max-h-[60vh] pr-6">
+          {step === "select" ? (
+            <ProviderSelectionStep
+              providerOptions={providerOptions}
+              selectedComposedProvider={selectedComposedProvider}
+              onSelectProvider={handleProviderSelect}
+            />
+          ) : (
+            selectedProviderType && (
+              <ProviderConfigurationStep
+                selectedProviderType={selectedProviderType as PROVIDER_TYPE}
+                form={form}
+                onSubmit={cloudConfigHandler}
+                isEdit={isEdit}
+                customProviderName={customProviderName}
               />
-              {(isConfiguredProvider || providerKey) && (
-                <ExplainerCallout
-                  Icon={MessageCircleWarning}
-                  isDismissable={false}
-                  {...EXPLAINERS_MAP[
-                    EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
-                  ]}
-                />
-              )}
-              {getProviderDetails()}
-            </form>
-          </Form>
+            )
+          )}
         </DialogAutoScrollBody>
         <DialogFooter>
-          {isConfiguredProvider && (
-            <>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setConfirmOpen(true)}
-              >
-                Delete configuration
-              </Button>
-              <div className="flex flex-auto"></div>
-            </>
+          {step === "select" ? null : (
+            <div className="flex w-full justify-between">
+              <div className="flex items-center gap-2">
+                {!providerKey && (
+                  <Button
+                    variant="ghost"
+                    onClick={handleBack}
+                    type="button"
+                    className="p-0"
+                  >
+                    <ChevronLeft className="mr-1 size-4" />
+                    Back
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {isConfiguredProvider ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => setConfirmOpen(true)}
+                  >
+                    Delete configuration
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={handleCancel}
+                    type="button"
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  onClick={form.handleSubmit(cloudConfigHandler)}
+                >
+                  {buttonText}
+                </Button>
+              </div>
+            </div>
           )}
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(cloudConfigHandler)}>
-            {buttonText}
-          </Button>
         </DialogFooter>
       </DialogContent>
       <ConfirmDialog
@@ -406,7 +463,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         setOpen={setConfirmOpen}
         onConfirm={deleteProviderKeyHandler}
         title="Delete configuration"
-        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
+        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can't be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
         confirmButtonVariant="destructive"
       />

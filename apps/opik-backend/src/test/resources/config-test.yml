@@ -432,9 +432,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
-  # Default: true
-  # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: "false"
@@ -456,6 +453,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Vertex AI provider is enabled
   vertexaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Bedrock provider is enabled
+  bedrockProviderEnabled: "true"
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"

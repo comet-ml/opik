@@ -241,6 +241,10 @@ services:
       # Redis Configuration
       REDIS_URL: redis://:opik@redis:6379/0
       RQ_WORKER_ENABLED: ${RQ_WORKER_ENABLED:-true}
+      # Optimization Studio parallel processing (default: 5)
+      OPTSTUDIO_MAX_CONCURRENT_JOBS: ${OPTSTUDIO_MAX_CONCURRENT_JOBS:-5}
+      # Optimization Studio log level (DEBUG, INFO, WARNING, ERROR) - default INFO
+      OPTSTUDIO_LOG_LEVEL: ${OPTSTUDIO_LOG_LEVEL:-INFO}
       # Opik SDK Configuration
       OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://backend:8080}
     healthcheck:

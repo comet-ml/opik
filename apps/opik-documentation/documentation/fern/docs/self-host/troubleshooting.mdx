@@ -13,6 +13,72 @@ This guide covers common troubleshooting scenarios for self-hosted Opik deployme
 
 ## Common Issues
 
+### ClickHouse Migration Failures: Missing Cluster Macro
+
+#### Problem Description
+
+Opik requires ClickHouse to be configured with cluster macros, even for single-node deployments. Opik migrations use the `ON CLUSTER '{cluster}'` clause to ensure DDL operations execute consistently across all nodes in a cluster.
+
+If the `{cluster}` macro is not configured in your ClickHouse instance, migrations will fail with the following error:
+
+```
+Code: 139. DB::Exception: No macro 'cluster' in config.
+```
+
+**Symptoms:**
+
+- Backend fails to start or enters CrashLoopBackOff state
+- Migration errors appear in backend logs
+- Error message: `Code: 139. DB::Exception: No macro 'cluster' in config.`
+
+#### Automatic Configuration
+
+**Opik Helm Chart and Docker Compose deployments automatically configure the required cluster macros.** If you're using Opik's provided deployment configurations, you should not encounter this issue.
+
+#### Manual Configuration Required
+
+If you're running your own ClickHouse instance (not using Opik's Helm chart or Docker Compose), you need to configure the cluster macros yourself.
+
+##### 1. Add Cluster Macro Configuration
+
+Add the `{cluster}` macro to your ClickHouse configuration file. The location depends on your ClickHouse installation:
+
+**For standard ClickHouse installations:**
+
+Add the macros to `/etc/clickhouse-server/config.d/macros.xml` (or your equivalent config directory):
+
+```xml
+<clickhouse>
+    <macros>
+        <cluster>single_node_cluster</cluster>
+        <shard>1</shard>
+        <replica>clickhouse</replica>
+    </macros>
+</clickhouse>
+```
+
+<Callout intent="info">
+  **Note**: For single-node setups, you can use any value for `<cluster>`. The value `single_node_cluster` is just an example. For multi-node clusters, use your actual cluster name that matches your `<remote_servers>` configuration.
+</Callout>
+
+##### 2. Restart ClickHouse
+
+After adding the configuration, restart ClickHouse for the changes to take effect:
+
+##### 3. Verify Configuration
+
+You can verify the macro is configured by connecting to ClickHouse and running:
+
+```sql
+SELECT * FROM system.macros WHERE macro = 'cluster';
+```
+
+You should see a row with the macro name and value.
+
+##### 4. Retry Migrations
+
+After restarting ClickHouse, retry the backend deployment or migration. The backend should automatically retry after ClickHouse is ready.
+
 ### ClickHouse Zookeeper Metadata Loss
 
 #### Problem Description

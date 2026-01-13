@@ -36,6 +36,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -317,8 +318,10 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = findByName(workspaceId, identifier.datasetName(), Visibility.PRIVATE);
 
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(DatasetDAO.class);
-            dao.delete(workspaceId, identifier.datasetName());
+            deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
+
+            var datasetDao = handle.attach(DatasetDAO.class);
+            datasetDao.delete(workspaceId, identifier.datasetName());
             return null;
         });
 
@@ -345,8 +348,10 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(DatasetDAO.class);
-            dao.delete(id, workspaceId);
+            deleteDatasetVersionData(handle, Set.of(id), workspaceId);
+
+            var datasetDao = handle.attach(DatasetDAO.class);
+            datasetDao.delete(id, workspaceId);
             return null;
         });
 
@@ -366,7 +371,10 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
-            handle.attach(DatasetDAO.class).delete(ids, workspaceId);
+            deleteDatasetVersionData(handle, ids, workspaceId);
+
+            var datasetDao = handle.attach(DatasetDAO.class);
+            datasetDao.delete(ids, workspaceId);
             return null;
         });
 
@@ -374,6 +382,27 @@ class DatasetServiceImpl implements DatasetService {
                 ids,
                 workspaceId,
                 requestContext.get().getUserName()));
+    }
+
+    /**
+     * Deletes version-related data for datasets to avoid foreign key constraint violations.
+     * <p>
+     * This method must be called before deleting datasets to ensure proper cleanup of:
+     * <ul>
+     *   <li>dataset_version_tags (child table with FK to datasets)</li>
+     *   <li>dataset_versions (child table with FK to datasets)</li>
+     * </ul>
+     *
+     * @param handle the JDBI handle for the current transaction
+     * @param datasetIds the set of dataset IDs to delete version data for
+     * @param workspaceId the workspace ID
+     */
+    private void deleteDatasetVersionData(Handle handle, Set<UUID> datasetIds, String workspaceId) {
+        var versionDao = handle.attach(DatasetVersionDAO.class);
+
+        // Delete in the correct order to respect foreign key constraints
+        versionDao.deleteAllTagsByDatasetIds(datasetIds, workspaceId);
+        versionDao.deleteAllVersionsByDatasetIds(datasetIds, workspaceId);
     }
 
     @Override

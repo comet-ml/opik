@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -27,6 +26,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
@@ -57,7 +57,8 @@ class ExperimentItemDAO {
                 created_by,
                 last_updated_by
             )
-            VALUES
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values
                   <items:{item |
                      (
                         :id<item.index>,
@@ -83,6 +84,7 @@ class ExperimentItemDAO {
             AND workspace_id = :workspace_id
             ORDER BY last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -303,6 +305,7 @@ class ExperimentItemDAO {
                     s.usage
             ) AS tfs ON ei.trace_id = tfs.id
             ORDER BY ei.experiment_id DESC
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -310,6 +313,7 @@ class ExperimentItemDAO {
             DELETE FROM experiment_items
             WHERE id IN :ids
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -324,6 +328,7 @@ class ExperimentItemDAO {
             AND ei.workspace_id = :workspace_id
             GROUP BY
                 e.dataset_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -331,6 +336,7 @@ class ExperimentItemDAO {
             DELETE FROM experiment_items
             WHERE experiment_id IN :experiment_ids
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -375,16 +381,15 @@ class ExperimentItemDAO {
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
 
-        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
-
-        var template = TemplateUtils.newST(INSERT)
-                .add("items", queryItems);
-
-        String sql = template.render();
-
-        var statement = connection.createStatement(sql);
-
         return makeMonoContextAware((userName, workspaceId) -> {
+            List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
+
+            var template = getSTWithLogComment(INSERT, "insert_experiment_items", workspaceId, experimentItems.size())
+                    .add("items", queryItems);
+
+            String sql = template.render();
+
+            var statement = connection.createStatement(sql);
 
             statement.bind("workspace_id", workspaceId);
 
@@ -443,19 +448,23 @@ class ExperimentItemDAO {
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
 
-        var template = TemplateUtils.newST(STREAM);
-        if (lastRetrievedId != null) {
-            template.add("lastRetrievedId", lastRetrievedId);
-        }
-        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
-        var statement = connection.createStatement(template.render())
-                .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
-                .bind("limit", limit);
-        if (lastRetrievedId != null) {
-            statement.bind("lastRetrievedId", lastRetrievedId);
-        }
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId,
+                    experimentIds.size());
+            if (lastRetrievedId != null) {
+                template.add("lastRetrievedId", lastRetrievedId);
+            }
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
+            var statement = connection.createStatement(template.render())
+                    .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
+                    .bind("limit", limit)
+                    .bind("workspace_id", workspaceId);
+            if (lastRetrievedId != null) {
+                statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+            return Flux.from(statement.execute());
+        });
     }
 
     @WithSpan

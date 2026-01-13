@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -32,9 +33,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
-import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
-import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
@@ -86,7 +88,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 created_by,
                 last_updated_by
             )
-            VALUES
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values
                 <items:{item |
                     (
                          :entity_type<item.index>,
@@ -116,6 +119,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND name = :name
             AND workspace_id = :workspace_id
             <if(author)>AND <author> = :author<endif>
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
@@ -130,7 +135,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             )
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
-            SETTINGS allow_nondeterministic_mutations = 1
+            SETTINGS allow_nondeterministic_mutations = 1, log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
@@ -142,6 +148,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
+            SETTINGS log_comment = '<log_comment>'
+            ;
             """;
 
     private static final String SELECT_FEEDBACK_SCORE_NAMES = """
@@ -241,6 +249,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             WHERE length(e.experiment_scores) > 2
                 AND length(JSON_VALUE(score, '$.name')) > 0
             <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -268,6 +277,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, author, name
             ) AS names
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -317,6 +327,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, author, name
             ) AS names
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -349,19 +360,22 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
+            var logComment = getLogComment("bulk_insert_feedback_score", workspaceId, scores.size());
             var template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
             template.add("author", author);
+            template.add("log_comment", logComment);
 
             var statement = connection.createStatement(template.render());
 
             bindParameters(entityType, scores, statement, author);
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
 
-            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+            return Flux.from(statement.execute())
                     .flatMap(Result::getRowsUpdated)
                     .reduce(Long::sum);
-        });
+        }));
     }
 
     @Override
@@ -394,10 +408,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @WithSpan
     public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score) {
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             // Delete from feedback_scores table
-            var deleteFeedbackScore = TemplateUtils.newST(DELETE_FEEDBACK_SCORE)
+            var deleteFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE, "delete_feedback_score", workspaceId,
+                    "")
                     .add("table_name", "feedback_scores");
 
             if (StringUtils.isNotBlank(score.author())) {
@@ -408,17 +423,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             statement1
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
-                    .bind("name", score.name());
+                    .bind("name", score.name())
+                    .bind("workspace_id", workspaceId);
 
             if (StringUtils.isNotBlank(score.author())) {
                 statement1.bind("author", score.author());
             }
 
-            var deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+            var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
             // Delete from authored_feedback_scores table
-            var deleteAuthoredFeedbackScore = TemplateUtils.newST(DELETE_FEEDBACK_SCORE)
+            var deleteAuthoredFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE,
+                    "delete_authored_feedback_score", workspaceId, "")
                     .add("table_name", "authored_feedback_scores");
             Optional.ofNullable(score.author())
                     .filter(StringUtils::isNotBlank)
@@ -428,16 +445,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             statement2
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
-                    .bind("name", score.name());
+                    .bind("name", score.name())
+                    .bind("workspace_id", workspaceId);
             Optional.ofNullable(score.author())
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> statement2.bind("author", author));
 
             return deleteNonAuthoredOperation
-                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
+                    .then(Mono.from(statement2.execute()))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
                     .then();
-        });
+        }));
     }
 
     @Override
@@ -471,10 +489,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             return Mono.just(0L);
         }
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             // Delete from feedback_scores table
-            var template1 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
+                    "delete_feedback_scores_by_entity_ids", workspaceId, names.size());
             template1.add("names", names);
             template1.add("table_name", "feedback_scores");
 
@@ -485,17 +504,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
-                    .bind("names", names);
+                    .bind("names", names)
+                    .bind("workspace_id", workspaceId);
 
             if (StringUtils.isNotBlank(author)) {
                 statement1.bind("author", author);
             }
 
-            var deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+            var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
             // Delete from authored_feedback_scores table
-            var template2 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
+                    "delete_authored_feedback_scores_by_entity_ids", workspaceId, names.size());
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
             Optional.ofNullable(author)
@@ -505,93 +526,106 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
-                    .bind("names", names);
+                    .bind("names", names)
+                    .bind("workspace_id", workspaceId);
             Optional.ofNullable(author)
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> statement2.bind("author", a));
 
             return deleteNonAuthoredOperation
-                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
+                    .then(Mono.from(statement2.execute()))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        });
+        }));
     }
 
     @Override
     @WithSpan
     public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId) {
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
+            var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_trace_feedback_score_names",
+                    workspaceId, "");
 
             List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
             bindTemplateParam(projectIds, false, null, false, template);
 
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId);
 
             bindStatementParam(projectIds, null, statement, EntityType.TRACE);
 
-            return getNames(statement);
-        });
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+                    .collect(Collectors.toList());
+        }));
     }
 
     @Override
     @WithSpan
     public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
-        return asyncTemplate.nonTransaction(connection -> {
-            var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
+                    workspaceId, experimentIds.size());
             bindTemplateParam(null, true, experimentIds, true, template);
 
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId);
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> FeedbackScoreNames.ScoreName.builder()
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> FeedbackScoreNames.ScoreName.builder()
                             .name(row.get("name", String.class))
                             .type(row.get("type", String.class))
                             .build()))
                     .collect(Collectors.toList());
-        });
+        }));
     }
 
     @Override
     @WithSpan
     public Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds) {
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var template = TemplateUtils.newST(SELECT_PROJECTS_FEEDBACK_SCORE_NAMES);
+            var template = getSTWithLogComment(SELECT_PROJECTS_FEEDBACK_SCORE_NAMES,
+                    "get_projects_feedback_score_names", workspaceId, projectIds != null ? projectIds.size() : 0);
 
             if (CollectionUtils.isNotEmpty(projectIds)) {
                 template.add("project_ids", projectIds);
             }
 
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId);
 
             if (CollectionUtils.isNotEmpty(projectIds)) {
                 statement.bind("project_ids", projectIds);
             }
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
                     .collect(Collectors.toList());
-        });
+        }));
     }
 
     @Override
     public Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(@NonNull List<UUID> projectIds) {
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
+            var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES,
+                    "get_projects_trace_threads_feedback_score_names", workspaceId, projectIds.size());
 
             bindTemplateParam(projectIds, false, null, false, template);
 
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId);
 
             bindStatementParam(projectIds, null, statement, EntityType.THREAD);
 
-            return getNames(statement);
-        });
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+                    .collect(Collectors.toList());
+        }));
     }
 
     @Override
@@ -599,12 +633,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(threadModelIds),
                 "Argument 'threadModelIds' must not be empty");
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
 
             // Delete from feedback_scores table
-            var template1 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_thread_manual_scores",
+                    workspaceId, threadModelIds.size());
             template1.add("project_id", projectId);
             template1.add("sources", sources);
             template1.add("table_name", "feedback_scores");
@@ -613,10 +648,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
                     .bind("sources", sources)
-                    .bind("project_id", projectId);
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
 
             // Delete from authored_feedback_scores table
-            var template2 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
+                    "delete_thread_manual_scores_authored", workspaceId, threadModelIds.size());
             template2.add("project_id", projectId);
             template2.add("sources", sources);
             template2.add("table_name", "authored_feedback_scores");
@@ -625,36 +662,41 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
                     .bind("sources", sources)
-                    .bind("project_id", projectId);
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+            return Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
+                    .then(Mono.from(statement2.execute()))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        });
+        }));
     }
 
     @Override
     @WithSpan
     public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var template = TemplateUtils.newST(SELECT_SPAN_FEEDBACK_SCORE_NAMES);
+            var template = getSTWithLogComment(SELECT_SPAN_FEEDBACK_SCORE_NAMES, "get_span_feedback_score_names",
+                    workspaceId, type != null ? type.name() : "");
 
             if (type != null) {
                 template.add("type", type.name());
             }
 
-            var statement = connection.createStatement(template.render());
-
-            statement.bind("project_id", projectId);
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
 
             if (type != null) {
                 statement.bind("type", type.name());
             }
 
-            return getNames(statement);
-        });
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+                    .distinct()
+                    .collect(Collectors.toList());
+        }));
     }
 
     private Mono<List<String>> getNames(Statement statement) {
@@ -695,71 +737,83 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, UUID projectId, Connection connection) {
         log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
 
-        // Delete from feedback_scores table
-        var template1 = TemplateUtils.newST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
-        Optional.ofNullable(projectId)
-                .ifPresent(id -> template1.add("project_id", id));
-        template1.add("table_name", "feedback_scores");
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // Delete from feedback_scores table
+            var template1 = getSTWithLogComment(DELETE_SPANS_CASCADE_FEEDBACK_SCORE, "cascade_span_delete", workspaceId,
+                    traceIds.size());
+            Optional.ofNullable(projectId)
+                    .ifPresent(id -> template1.add("project_id", id));
+            template1.add("table_name", "feedback_scores");
 
-        var statement1 = connection.createStatement(template1.render())
-                .bind("trace_ids", traceIds.toArray(UUID[]::new));
+            var statement1 = connection.createStatement(template1.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId);
 
-        if (projectId != null) {
-            statement1.bind("project_id", projectId);
-        }
+            if (projectId != null) {
+                statement1.bind("project_id", projectId);
+            }
 
-        // Delete from authored_feedback_scores table
-        var template2 = TemplateUtils.newST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
-        Optional.ofNullable(projectId)
-                .ifPresent(id -> template2.add("project_id", id));
-        template2.add("table_name", "authored_feedback_scores");
+            // Delete from authored_feedback_scores table
+            var template2 = getSTWithLogComment(DELETE_SPANS_CASCADE_FEEDBACK_SCORE, "cascade_span_delete_authored",
+                    workspaceId, traceIds.size());
+            Optional.ofNullable(projectId)
+                    .ifPresent(id -> template2.add("project_id", id));
+            template2.add("table_name", "authored_feedback_scores");
 
-        var statement2 = connection.createStatement(template2.render())
-                .bind("trace_ids", traceIds.toArray(UUID[]::new));
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId);
 
-        if (projectId != null) {
-            statement2.bind("project_id", projectId);
-        }
+            if (projectId != null) {
+                statement2.bind("project_id", projectId);
+            }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
-                .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)));
+            return Mono.from(statement1.execute())
+                    .then(Mono.from(statement2.execute()));
+        });
     }
 
     private Mono<Long> deleteScoresByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId,
             Connection connection) {
         log.info("Deleting feedback scores by entityType '{}', entityIds count '{}'", entityType, entityIds.size());
 
-        // Delete from feedback_scores table
-        var template1 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
-        Optional.ofNullable(projectId)
-                .ifPresent(id -> template1.add("project_id", id));
-        template1.add("table_name", "feedback_scores");
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // Delete from feedback_scores table
+            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_scores_by_entity_ids",
+                    workspaceId, entityIds.size());
+            Optional.ofNullable(projectId)
+                    .ifPresent(id -> template1.add("project_id", id));
+            template1.add("table_name", "feedback_scores");
 
-        var statement1 = connection.createStatement(template1.render())
-                .bind("entity_ids", entityIds.toArray(UUID[]::new))
-                .bind("entity_type", entityType.getType());
+            var statement1 = connection.createStatement(template1.render())
+                    .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                    .bind("entity_type", entityType.getType())
+                    .bind("workspace_id", workspaceId);
 
-        if (projectId != null) {
-            statement1.bind("project_id", projectId);
-        }
+            if (projectId != null) {
+                statement1.bind("project_id", projectId);
+            }
 
-        // Delete from authored_feedback_scores table
-        var template2 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
-        Optional.ofNullable(projectId)
-                .ifPresent(id -> template2.add("project_id", id));
-        template2.add("table_name", "authored_feedback_scores");
+            // Delete from authored_feedback_scores table
+            var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
+                    "delete_scores_by_entity_ids_authored", workspaceId, entityIds.size());
+            Optional.ofNullable(projectId)
+                    .ifPresent(id -> template2.add("project_id", id));
+            template2.add("table_name", "authored_feedback_scores");
 
-        var statement2 = connection.createStatement(template2.render())
-                .bind("entity_ids", entityIds.toArray(UUID[]::new))
-                .bind("entity_type", entityType.getType());
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                    .bind("entity_type", entityType.getType())
+                    .bind("workspace_id", workspaceId);
 
-        if (projectId != null) {
-            statement2.bind("project_id", projectId);
-        }
+            if (projectId != null) {
+                statement2.bind("project_id", projectId);
+            }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
-                .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
-                .flatMap(result -> Mono.from(result.getRowsUpdated()));
+            return Mono.from(statement1.execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(Mono.from(statement2.execute()))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
     }
 }

@@ -14,7 +14,7 @@ const SideDialog: React.FunctionComponent<SideDialogProps> = ({
 }) => {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent className="w-[calc(100vw-60px)] sm:max-w-full xl:w-[calc(100vw-240px)]">
+      <SheetContent className="w-[calc(100vw-32px)] sm:max-w-full md:w-[calc(100vw-60px)] xl:w-[calc(100vw-240px)]">
         {children}
       </SheetContent>
     </Sheet>

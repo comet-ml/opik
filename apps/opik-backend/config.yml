@@ -588,9 +588,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
-  # Default: true
-  # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: ${TOGGLE_DASHBOARDS_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
@@ -612,6 +609,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Vertex AI provider is enabled
   vertexaiProviderEnabled: ${TOGGLE_VERTEXAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Bedrock provider is enabled
+  bedrockProviderEnabled: ${TOGGLE_BEDROCK_PROVIDER_ENABLED:-"true"}
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}

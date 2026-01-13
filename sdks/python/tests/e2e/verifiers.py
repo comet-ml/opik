@@ -202,7 +202,9 @@ def verify_dataset(
     actual_dataset = opik_client.get_dataset(name=name)
     assert actual_dataset.description == description
 
-    actual_dataset_items = actual_dataset.__internal_api__get_items_as_dataclasses__()
+    actual_dataset_items = list(
+        actual_dataset.__internal_api__stream_items_as_dataclasses__()
+    )
     assert (
         len(actual_dataset_items) == len(dataset_items)
     ), f"Amount of actual dataset items ({len(actual_dataset_items)}) is not the same as of expected ones ({len(dataset_items)})"
@@ -230,6 +232,7 @@ def verify_experiment(
     traces_amount: int,
     prompts: Optional[List[Prompt]] = None,
     experiment_scores: Optional[Dict[str, float]] = None,
+    experiment_tags: Optional[List[str]] = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -270,6 +273,8 @@ def verify_experiment(
     _verify_experiment_prompts(experiment_content, prompts)
 
     _verify_experiment_scores(experiment_content, experiment_scores)
+
+    testlib.assert_equal(expected=experiment_tags, actual=experiment_content.tags)
 
 
 def verify_attachments(

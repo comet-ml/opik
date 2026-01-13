@@ -21,13 +21,13 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     csvUploadEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
     optimizationStudioEnabled: core.serialization.boolean(),
-    dashboardsEnabled: core.serialization.boolean(),
     datasetVersioningEnabled: core.serialization.boolean(),
     openaiProviderEnabled: core.serialization.boolean(),
     anthropicProviderEnabled: core.serialization.boolean(),
     geminiProviderEnabled: core.serialization.boolean(),
     openrouterProviderEnabled: core.serialization.boolean(),
     vertexaiProviderEnabled: core.serialization.boolean(),
+    bedrockProviderEnabled: core.serialization.boolean(),
     customllmProviderEnabled: core.serialization.boolean(),
     collaboratorsTabEnabled: core.serialization.boolean(),
 });
@@ -45,13 +45,13 @@ export declare namespace ServiceTogglesConfig {
         csvUploadEnabled: boolean;
         exportEnabled: boolean;
         optimizationStudioEnabled: boolean;
-        dashboardsEnabled: boolean;
         datasetVersioningEnabled: boolean;
         openaiProviderEnabled: boolean;
         anthropicProviderEnabled: boolean;
         geminiProviderEnabled: boolean;
         openrouterProviderEnabled: boolean;
         vertexaiProviderEnabled: boolean;
+        bedrockProviderEnabled: boolean;
         customllmProviderEnabled: boolean;
         collaboratorsTabEnabled: boolean;
     }
