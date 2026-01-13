@@ -178,10 +178,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
         id=ANY_BUT_NONE,
         name="videos_download_content",
         input={"video_id": video.id},
-        output={
-            "message": "Video content ready for download",
-            "content_type": "video/mp4",
-        },
+        output=ANY,
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -194,10 +191,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 type="general",
                 name="videos_download_content",
                 input={"video_id": video.id},
-                output={
-                    "message": "Video content ready for download",
-                    "content_type": "video/mp4",
-                },
+                output=ANY,
                 tags=["openai"],
                 metadata=ANY_DICT.containing(
                     {

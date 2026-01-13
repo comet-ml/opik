@@ -81,13 +81,8 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
         if output is not None:
             _track_instance_write_to_file(output, current_span_data.project_name)
 
-        output_data = {
-            "message": "Video content ready for download",
-            "content_type": "video/mp4",
-        }
-
         result = arguments_helpers.EndSpanParameters(
-            output=output_data,
+            output=output,
             usage=None,
             metadata={},
             model=None,
