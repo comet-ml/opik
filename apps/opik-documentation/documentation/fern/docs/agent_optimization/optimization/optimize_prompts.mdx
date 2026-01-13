@@ -49,6 +49,41 @@ result = optimizer.optimize_prompt(
 - Start with `max_trials` = 3–5. Increase once you confirm the metric is reliable.
 - Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
 
+### Optimize multiple prompts together
+
+You can pass a dict of `ChatPrompt` objects to optimize a coordinated prompt bundle (for example, a multi-agent setup or system/user prompt pair that must stay in sync). Each key names a prompt and is preserved through optimization.
+
+```python
+from opik_optimizer import MetaPromptOptimizer, ChatPrompt
+
+prompts = {
+    "researcher": ChatPrompt(
+        name="researcher",
+        messages=[
+            {"role": "system", "content": "Gather facts and cite sources."},
+            {"role": "user", "content": "{question}"},
+        ],
+    ),
+    "synthesizer": ChatPrompt(
+        name="synthesizer",
+        messages=[
+            {"role": "system", "content": "Summarize findings clearly."},
+            {"role": "user", "content": "{question}"},
+        ],
+    ),
+}
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o-mini", prompts_per_round=2)
+result = optimizer.optimize_prompt(
+    prompt=prompts,
+    dataset=my_dataset,
+    metric=answer_quality,
+    max_trials=3,
+)
+```
+
+`result.prompt` returns a dict keyed by the same names so you can update each agent prompt together.
+
 ## 4. Evaluate outcomes
 
 - Compare `result.score` vs. `result.initial_score` to ensure material improvement.
