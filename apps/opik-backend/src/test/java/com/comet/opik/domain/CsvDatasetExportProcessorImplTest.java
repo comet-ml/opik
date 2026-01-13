@@ -94,20 +94,21 @@ class CsvDatasetExportProcessorImplTest {
                 })
                 .verifyComplete();
 
-        // Verify FileService.upload was called
-        ArgumentCaptor<String> filePathCaptor = ArgumentCaptor.forClass(String.class);
+        // Verify multipart upload was called
+        verify(fileService).createMultipartUpload(any(), eq("text/csv"));
+
+        // Verify at least one part was uploaded
         ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
-        verify(fileService).upload(filePathCaptor.capture(), dataCaptor.capture(), contentTypeCaptor.capture());
-
-        assertThat(contentTypeCaptor.getValue()).isEqualTo("text/csv");
-
-        // Verify CSV content
+        // Verify CSV content in uploaded part
         String csvContent = new String(dataCaptor.getValue());
         assertThat(csvContent).contains("name,age"); // Headers
         assertThat(csvContent).contains("Alice,30"); // First row
         assertThat(csvContent).contains("Bob,25"); // Second row
+
+        // Verify multipart upload was completed
+        verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
     }
 
     @Test
@@ -129,7 +130,11 @@ class CsvDatasetExportProcessorImplTest {
                 })
                 .verifyComplete();
 
-        // Verify FileService.upload was called with empty CSV (may contain newline)
+        // Verify multipart upload was created then aborted (empty dataset special case)
+        verify(fileService).createMultipartUpload(any(), eq("text/csv"));
+        verify(fileService).abortMultipartUpload(any(), eq("test-upload-id"));
+
+        // Verify fallback to regular upload for empty file
         ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(fileService).upload(any(), dataCaptor.capture(), eq("text/csv"));
 
@@ -164,9 +169,12 @@ class CsvDatasetExportProcessorImplTest {
                 .assertNext(filePath -> assertThat(filePath).isNotEmpty())
                 .verifyComplete();
 
+        // Verify multipart upload was called
+        verify(fileService).createMultipartUpload(any(), eq("text/csv"));
+
         // Verify CSV content
         ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        verify(fileService).upload(any(), dataCaptor.capture(), eq("text/csv"));
+        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
         String csvContent = new String(dataCaptor.getValue());
         // Verify headers are present (order from LinkedHashMap)
@@ -174,6 +182,9 @@ class CsvDatasetExportProcessorImplTest {
         // Verify data row with empty city value
         assertThat(csvContent).contains("Alice");
         assertThat(csvContent).contains("30");
+
+        // Verify multipart upload was completed
+        verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
     }
 
     @Test
@@ -202,13 +213,19 @@ class CsvDatasetExportProcessorImplTest {
                 .assertNext(filePath -> assertThat(filePath).isNotEmpty())
                 .verifyComplete();
 
+        // Verify multipart upload was called
+        verify(fileService).createMultipartUpload(any(), eq("text/csv"));
+
         // Verify CSV content
         ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        verify(fileService).upload(any(), dataCaptor.capture(), eq("text/csv"));
+        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
         String csvContent = new String(dataCaptor.getValue());
         assertThat(csvContent).contains("Alice");
         assertThat(csvContent).contains("key"); // Complex JSON is serialized as string
+
+        // Verify multipart upload was completed
+        verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
     }
 
     @Test
