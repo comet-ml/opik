@@ -58,6 +58,16 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
 
 logger = logging.getLogger(__name__)
 
+
+def requested_multiple_candidates(model_parameters: dict[str, Any] | None) -> bool:
+    """Return True when model parameters request multiple completions (n > 1)."""
+    n_value = (model_parameters or {}).get("n", 1) or 1
+    try:
+        return int(n_value) > 1
+    except (TypeError, ValueError):
+        return False
+
+
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 # TypeVar for generic response model typing
@@ -492,7 +502,7 @@ def call_model(
     logger.debug(
         f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
     )
-    wants_all = return_all or (final_params_for_litellm.get("n", 1) or 1) > 1
+    wants_all = return_all
     return _parse_response(response, response_model, wants_all)
 
 
@@ -629,5 +639,5 @@ async def call_model_async(
     logger.debug(
         f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
     )
-    wants_all = return_all or (final_params_for_litellm.get("n", 1) or 1) > 1
+    wants_all = return_all
     return _parse_response(response, response_model, wants_all)
