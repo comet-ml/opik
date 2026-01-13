@@ -310,7 +310,7 @@ describe("OpikClient - Chat Prompts", () => {
         ],
       } as OpikApi.PromptPagePublic);
 
-      const mockRetrievePromptVersion = vi
+      vi
         .spyOn(client.api.prompts, "retrievePromptVersion")
         // @ts-expect-error - Mocking with simplified return type
         .mockImplementation((options) => {

@@ -7,6 +7,7 @@ import type { PromptType, PromptVariables } from "./types";
 /**
  * Format a prompt template by substituting variables.
  * Validates that all template placeholders are provided (for Mustache templates).
+ * Used by both text prompts and chat prompts for consistent error handling.
  *
  * @param template - Template text with placeholders
  * @param variables - Object with values to substitute into template
@@ -17,7 +18,7 @@ import type { PromptType, PromptVariables } from "./types";
 export function formatPromptTemplate(
   template: string,
   variables: PromptVariables,
-  type: PromptType
+  type: PromptType,
 ): string {
   try {
     // Validate variables match template placeholders (Mustache only)
@@ -31,7 +32,7 @@ export function formatPromptTemplate(
           {},
           {
             escape: (value: string) => value,
-          }
+          },
         );
 
       case "jinja2":
@@ -49,7 +50,7 @@ export function formatPromptTemplate(
     // Wrap other errors
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new PromptValidationError(
-      `Failed to format prompt template: ${errorMessage}`
+      `Failed to format prompt template: ${errorMessage}`,
     );
   }
 }

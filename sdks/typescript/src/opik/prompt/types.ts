@@ -14,6 +14,19 @@ export const PromptType = {
 export type PromptType = (typeof PromptType)[keyof typeof PromptType];
 
 /**
+ * Template structure types for prompts
+ */
+export const PromptTemplateStructure = {
+  /** Text-based prompt with a single template string */
+  Text: "text" as const,
+  /** Chat-based prompt with an array of messages */
+  Chat: "chat" as const,
+} as const;
+
+export type PromptTemplateStructure =
+  (typeof PromptTemplateStructure)[keyof typeof PromptTemplateStructure];
+
+/**
  * Configuration options for creating a new prompt
  * Extends REST API PromptWrite with renamed 'prompt' field
  */
@@ -152,20 +165,4 @@ export interface CreateChatPromptOptions {
   tags?: string[];
   /** Whether to validate template placeholders */
   validatePlaceholders?: boolean;
-}
-
-/**
- * Data structure for creating a ChatPrompt instance
- */
-export interface ChatPromptData {
-  promptId: string;
-  versionId: string;
-  name: string;
-  messages: ChatMessage[];
-  commit?: string;
-  metadata?: OpikApi.JsonNode;
-  type?: PromptType;
-  changeDescription?: string;
-  description?: string;
-  tags?: string[];
 }

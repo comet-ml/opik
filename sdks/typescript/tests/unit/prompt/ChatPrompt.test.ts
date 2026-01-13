@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ChatPrompt } from "@/prompt/ChatPrompt";
-import type { ChatMessage, ChatPromptData } from "@/prompt/types";
+import { ChatPrompt, type ChatPromptData } from "@/prompt/ChatPrompt";
+import type { ChatMessage } from "@/prompt/types";
 import type { OpikClient } from "@/client/Client";
 import type * as OpikApi from "@/rest_api/api";
 import { PromptValidationError } from "@/prompt/errors";
@@ -434,6 +434,136 @@ describe("ChatPrompt", () => {
       expect(() => {
         (tags as string[]).push("tag3");
       }).toThrow();
+    });
+  });
+
+  describe("format() error handling", () => {
+    it("should throw PromptValidationError for missing variables in mustache template", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: "Hello {{name}}, you have {{count}} messages",
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      // Missing 'count' variable
+      expect(() => {
+        chatPrompt.format({ name: "Alice" });
+      }).toThrow(PromptValidationError);
+    });
+
+    it("should throw PromptValidationError for missing variables in text content parts", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Hello {{name}}, check {{item}}",
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      // Missing 'item' variable
+      expect(() => {
+        chatPrompt.format({ name: "Bob" });
+      }).toThrow(PromptValidationError);
+    });
+
+    it("should throw PromptValidationError for missing variables in image URLs", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: "https://example.com/{{imageId}}.jpg",
+                },
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      // Missing 'imageId' variable
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+    });
+
+    it("should throw PromptValidationError for missing variables in video URLs", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "video_url",
+                video_url: {
+                  url: "https://example.com/videos/{{videoId}}.mp4",
+                },
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      // Missing 'videoId' variable
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+    });
+
+    it("should throw PromptValidationError for invalid jinja2 syntax", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: "Hello {{ name | invalid_filter }}",
+          },
+        ],
+        type: "jinja2",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      expect(() => {
+        chatPrompt.format({ name: "Alice" });
+      }).toThrow(PromptValidationError);
     });
   });
 });

@@ -4,87 +4,49 @@ import {
   ChatMessage,
   SupportedModalities,
   PromptVariables,
-  ChatPromptData,
+  PromptTemplateStructure,
 } from "./types";
 import { PromptValidationError } from "./errors";
 import type * as OpikApi from "@/rest_api/api";
 import { ChatPromptTemplate } from "./chat/ChatPromptTemplate";
+import { BasePrompt, type BasePromptData } from "./BasePrompt";
+import { PromptVersion } from "./PromptVersion";
+
+export interface ChatPromptData extends BasePromptData {
+  messages: ChatMessage[];
+}
 
 /**
  * Domain object representing a versioned chat prompt template.
  * Provides immutable access to chat message templates and formatting.
  * Integrates with backend for persistence and version management.
  */
-export class ChatPrompt {
-  public readonly id: string;
-  public readonly versionId: string;
+export class ChatPrompt extends BasePrompt {
   public readonly messages: ChatMessage[];
-  public readonly commit: string | undefined;
-  public readonly type: PromptType;
-  public readonly changeDescription: string | undefined;
-
-  // Mutable fields (can be updated via updateProperties)
-  private _name: string;
-  private _description: string | undefined;
-  private _tags: string[];
-
-  private readonly _metadata: OpikApi.JsonNode | undefined;
   private readonly chatTemplate: ChatPromptTemplate;
 
   /**
    * Creates a new ChatPrompt instance.
    * This should not be created directly, use OpikClient.createChatPrompt() instead.
    */
-  constructor(
-    {
-      promptId,
-      versionId,
-      name,
-      messages,
-      commit,
-      metadata,
-      type,
-      changeDescription,
-      description,
-      tags = [],
-    }: ChatPromptData,
-    private opik: OpikClient
-  ) {
-    this.id = promptId;
-    this.versionId = versionId;
-    this.messages = messages;
-    this.commit = commit;
-    this.type = type ?? PromptType.MUSTACHE;
-    this.changeDescription = changeDescription;
-    this._name = name;
-    this._description = description;
-    this._tags = [...tags];
-    this._metadata = metadata;
-    this.chatTemplate = new ChatPromptTemplate(messages, this.type);
-  }
-
-  // Public getters for mutable fields
-  get name(): string {
-    return this._name;
-  }
-
-  get description(): string | undefined {
-    return this._description;
-  }
-
-  get tags(): readonly string[] | undefined {
-    return Object.freeze([...this._tags]);
+  constructor(data: ChatPromptData, opik: OpikClient) {
+    super(
+      {
+        ...data,
+        templateStructure: PromptTemplateStructure.Chat,
+      },
+      opik,
+    );
+    this.messages = data.messages;
+    this.chatTemplate = new ChatPromptTemplate(data.messages, this.type);
   }
 
   /**
-   * Read-only metadata property.
-   * Returns deep copy to prevent external mutation.
+   * Returns the template messages for this chat prompt.
+   * Alias for the `messages` property for consistency with Prompt.
    */
-  get metadata(): OpikApi.JsonNode | undefined {
-    if (!this._metadata) {
-      return undefined;
-    }
-    return structuredClone(this._metadata);
+  get template(): ChatMessage[] {
+    return structuredClone(this.messages);
   }
 
   /**
@@ -125,7 +87,7 @@ export class ChatPrompt {
    */
   format(
     variables: PromptVariables,
-    supportedModalities?: SupportedModalities
+    supportedModalities?: SupportedModalities,
   ): ChatMessage[] {
     return this.chatTemplate.format(variables, supportedModalities);
   }
@@ -142,30 +104,30 @@ export class ChatPrompt {
   static fromApiResponse(
     promptData: OpikApi.PromptPublic,
     apiResponse: OpikApi.PromptVersionDetail,
-    opik: OpikClient
+    opik: OpikClient,
   ): ChatPrompt {
     // Validate required fields
     if (!apiResponse.template) {
       throw new PromptValidationError(
-        "Invalid API response: missing required field 'template'"
+        "Invalid API response: missing required field 'template'",
       );
     }
 
     if (!apiResponse.commit) {
       throw new PromptValidationError(
-        "Invalid API response: missing required field 'commit'"
+        "Invalid API response: missing required field 'commit'",
       );
     }
 
     if (!apiResponse.promptId) {
       throw new PromptValidationError(
-        "Invalid API response: missing required field 'promptId'"
+        "Invalid API response: missing required field 'promptId'",
       );
     }
 
     if (!apiResponse.id) {
       throw new PromptValidationError(
-        "Invalid API response: missing required field 'id' (version ID)"
+        "Invalid API response: missing required field 'id' (version ID)",
       );
     }
 
@@ -175,7 +137,7 @@ export class ChatPrompt {
       messages = JSON.parse(apiResponse.template);
       if (!Array.isArray(messages)) {
         throw new PromptValidationError(
-          "Invalid chat prompt template: expected array of messages"
+          "Invalid chat prompt template: expected array of messages",
         );
       }
     } catch (error) {
@@ -183,7 +145,7 @@ export class ChatPrompt {
         throw error;
       }
       throw new PromptValidationError(
-        `Failed to parse chat prompt template: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to parse chat prompt template: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
@@ -191,7 +153,7 @@ export class ChatPrompt {
     const promptType = apiResponse.type ?? PromptType.MUSTACHE;
     if (promptType !== "mustache" && promptType !== "jinja2") {
       throw new PromptValidationError(
-        `Invalid API response: unknown prompt type '${promptType}'`
+        `Invalid API response: unknown prompt type '${promptType}'`,
       );
     }
 
@@ -209,55 +171,84 @@ export class ChatPrompt {
         description: promptData.description,
         tags: promptData.tags,
       },
-      opik
+      opik,
     );
   }
 
   /**
-   * Updates prompt properties (name, description, and/or tags).
-   * Performs immediate update (no batching).
+   * Restores a specific version by creating a new version with content from the specified version.
+   * The version must be obtained from the backend (e.g., via getVersions()).
+   * Returns a new ChatPrompt instance with the restored content as the latest version.
    *
-   * @param updates - Partial updates with optional name, description, and tags
-   * @returns Promise resolving to this ChatPrompt instance for method chaining
+   * @param version - PromptVersion object to restore (must be from backend)
+   * @returns Promise resolving to a new ChatPrompt instance with the restored version
+   * @throws OpikApiError if REST API call fails
    *
    * @example
    * ```typescript
    * const chatPrompt = await client.getChatPrompt({ name: "my-chat-prompt" });
-   * await chatPrompt.updateProperties({
-   *   name: "renamed-chat-prompt",
-   *   description: "Updated description",
-   *   tags: ["tag1", "tag2"]
-   * });
+   *
+   * // Get all versions
+   * const versions = await chatPrompt.getVersions();
+   *
+   * // Restore a specific version
+   * const targetVersion = versions.find(v => v.commit === "abc123de");
+   * if (targetVersion) {
+   *   const restoredPrompt = await chatPrompt.useVersion(targetVersion);
+   *   console.log(`Restored to commit: ${restoredPrompt.commit}`);
+   *
+   *   // Continue using the restored prompt
+   *   const formatted = restoredPrompt.format({ name: "World" });
+   * }
    * ```
    */
-  async updateProperties(updates: {
-    name?: string;
-    description?: string;
-    tags?: string[];
-  }): Promise<this> {
-    await this.opik.api.prompts.updatePrompt(
-      this.id,
+  async useVersion(version: PromptVersion): Promise<ChatPrompt> {
+    const restoredVersionResponse = await this.restoreVersion(version);
+
+    // Return a new ChatPrompt instance with the restored version
+    return ChatPrompt.fromApiResponse(
       {
-        name: updates.name ?? this._name,
-        description: updates.description,
-        tags: updates.tags,
+        name: this.name,
+        description: this.description,
+        tags: Array.from(this.tags ?? []),
       },
-      this.opik.api.requestOptions
+      restoredVersionResponse,
+      this.opik,
     );
-
-    // Update local state after successful backend update
-    this._name = updates.name ?? this._name;
-    this._description = updates.description ?? this._description;
-    this._tags = updates.tags ?? this._tags;
-
-    return this;
   }
 
   /**
-   * Deletes this chat prompt from the backend.
-   * Performs immediate deletion (no batching).
+   * Get a ChatPrompt with a specific version by commit hash.
+   *
+   * @param commit - Commit hash (8-char short form or full)
+   * @returns ChatPrompt instance representing that version, or null if not found
+   *
+   * @example
+   * ```typescript
+   * const chatPrompt = await client.getChatPrompt({ name: "greeting" });
+   *
+   * // Get a specific version directly as a ChatPrompt
+   * const versionedPrompt = await chatPrompt.getVersion("abc123de");
+   * if (versionedPrompt) {
+   *   const messages = versionedPrompt.format({ name: "Alice" });
+   * }
+   * ```
    */
-  async delete(): Promise<void> {
-    await this.opik.deletePrompts([this.id]);
+  async getVersion(commit: string): Promise<ChatPrompt | null> {
+    const response = await this.retrieveVersionByCommit(commit);
+    if (!response) {
+      return null;
+    }
+
+    // Return a ChatPrompt instance representing this version
+    return ChatPrompt.fromApiResponse(
+      {
+        name: this.name,
+        description: this.description,
+        tags: Array.from(this.tags ?? []),
+      },
+      response,
+      this.opik,
+    );
   }
 }

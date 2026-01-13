@@ -1,5 +1,3 @@
-import Mustache from "mustache";
-import nunjucks from "nunjucks";
 import type {
   ChatMessage,
   ContentPart,
@@ -11,6 +9,7 @@ import type {
   ImageUrlContentPart,
   VideoUrlContentPart,
 } from "../types";
+import { formatPromptTemplate } from "../formatting";
 
 /**
  * Template for chat-style prompts with multimodal content support.
@@ -24,7 +23,7 @@ export class ChatPromptTemplate {
   constructor(
     messages: ChatMessage[],
     templateType: PromptType = "mustache",
-    validatePlaceholders: boolean = false
+    validatePlaceholders: boolean = false,
   ) {
     this.messages = messages;
     this.templateType = templateType;
@@ -37,7 +36,7 @@ export class ChatPromptTemplate {
    */
   format(
     variables: PromptVariables,
-    supportedModalities?: SupportedModalities
+    supportedModalities?: SupportedModalities,
   ): ChatMessage[] {
     // Default to all modalities supported
     const modalities: SupportedModalities = {
@@ -59,13 +58,17 @@ export class ChatPromptTemplate {
 
       if (typeof content === "string") {
         // Simple string content - just render template
-        renderedContent = this.renderTemplateString(content, variables);
+        renderedContent = formatPromptTemplate(
+          content,
+          variables,
+          this.templateType,
+        );
       } else if (Array.isArray(content)) {
         // Multimodal content - render each part
         renderedContent = this.renderContentParts(
           content,
           variables,
-          modalities
+          modalities,
         );
       } else {
         renderedContent = "";
@@ -81,47 +84,12 @@ export class ChatPromptTemplate {
   }
 
   /**
-   * Render a template string with variables
-   */
-  private renderTemplateString(
-    template: string,
-    variables: PromptVariables
-  ): string {
-    if (!template) {
-      return "";
-    }
-
-    try {
-      switch (this.templateType) {
-        case "mustache":
-          return Mustache.render(
-            template,
-            variables,
-            {},
-            {
-              escape: (value: string) => value,
-            }
-          );
-
-        case "jinja2":
-          return nunjucks.renderString(template, variables);
-
-        default:
-          return template;
-      }
-    } catch {
-      // Fall back to raw template if formatting fails
-      return template;
-    }
-  }
-
-  /**
    * Render an array of content parts
    */
   private renderContentParts(
     parts: ContentPart[],
     variables: PromptVariables,
-    modalities: SupportedModalities
+    modalities: SupportedModalities,
   ): ContentPart[] | string {
     const renderedParts: ContentPart[] = [];
     const textParts: string[] = [];
@@ -136,9 +104,10 @@ export class ChatPromptTemplate {
       switch (type) {
         case "text": {
           const textPart = part as TextContentPart;
-          const renderedText = this.renderTemplateString(
+          const renderedText = formatPromptTemplate(
             textPart.text || "",
-            variables
+            variables,
+            this.templateType,
           );
           renderedParts.push({
             type: "text",
@@ -148,25 +117,29 @@ export class ChatPromptTemplate {
         }
 
         case "image_url": {
-            if (modalities.vision === false) {
-                // Modality not supported - add placeholder
-                textParts.push("<<<image>>><<</image>>>");
-            } else {
-                const imagePart = part as ImageUrlContentPart;
-                const imageUrl = imagePart.image_url?.url || "";
-                const renderedUrl = this.renderTemplateString(imageUrl, variables);
-                if (renderedUrl) {
-                const rendered: ImageUrlContentPart = {
-                    type: "image_url",
-                    image_url: {
-                    url: renderedUrl,
-                    },
-                };
-                if (imagePart.image_url?.detail) {
-                    rendered.image_url.detail = imagePart.image_url.detail;
-                }
-                renderedParts.push(rendered);
-                }
+          if (modalities.vision === false) {
+            // Modality not supported - add placeholder
+            textParts.push("<<<image>>><<</image>>>");
+          } else {
+            const imagePart = part as ImageUrlContentPart;
+            const imageUrl = imagePart.image_url?.url || "";
+            const renderedUrl = formatPromptTemplate(
+              imageUrl,
+              variables,
+              this.templateType,
+            );
+            if (renderedUrl) {
+              const rendered: ImageUrlContentPart = {
+                type: "image_url",
+                image_url: {
+                  url: renderedUrl,
+                },
+              };
+              if (imagePart.image_url?.detail) {
+                rendered.image_url.detail = imagePart.image_url.detail;
+              }
+              renderedParts.push(rendered);
+            }
           }
           break;
         }
@@ -178,7 +151,11 @@ export class ChatPromptTemplate {
           } else {
             const videoPart = part as VideoUrlContentPart;
             const videoUrl = videoPart.video_url?.url || "";
-            const renderedUrl = this.renderTemplateString(videoUrl, variables);
+            const renderedUrl = formatPromptTemplate(
+              videoUrl,
+              variables,
+              this.templateType,
+            );
             if (renderedUrl) {
               const rendered: VideoUrlContentPart = {
                 type: "video_url",
