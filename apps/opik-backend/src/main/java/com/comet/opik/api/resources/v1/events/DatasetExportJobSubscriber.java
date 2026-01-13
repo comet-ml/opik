@@ -30,8 +30,7 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
 
     @Override
     public void start() {
-        if (!config.isEnabled()) {
-            log.info("Dataset export job subscriber is disabled, skipping startup");
+        if (isDisabled()) {
             return;
         }
 
@@ -46,13 +45,20 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
 
     @Override
     public void stop() {
-        if (!config.isEnabled()) {
-            log.info("Dataset export job subscriber is disabled, skipping shutdown");
+        if (isDisabled()) {
             return;
         }
 
         log.info("Stopping dataset export job subscriber");
         super.stop();
+    }
+
+    private boolean isDisabled() {
+        if (!config.isEnabled()) {
+            log.info("Dataset export job subscriber is disabled, skipping lifecycle operation");
+            return true;
+        }
+        return false;
     }
 
     @Override

@@ -421,9 +421,9 @@ onlineScoring:
 
 # Configuration for Dataset Export
 datasetExport:
-  # Default: true
+  # Default: false
   # Description: Whether dataset export feature is enabled
-  enabled: ${DATASET_EXPORT_ENABLED:-true}
+  enabled: ${DATASET_EXPORT_ENABLED:-false}
   # Default: dataset-export
   # Description: Redis stream name for dataset export jobs
   streamName: ${DATASET_EXPORT_STREAM_NAME:-'dataset-export'}
