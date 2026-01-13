@@ -96,7 +96,7 @@ jobs:
             # 1. Set timestamp for the newly packaged chart from source repo tag
             NEW_CHART_FILE="opik-${VERSION}.tgz"
             if [ -f "$NEW_CHART_FILE" ]; then
-              NEW_CHART_TIME=$(cd ../src && git log -1 --format="%cI" "$VERSION")
+              NEW_CHART_TIME=$(cd ../src && git log -1 --format="%cI" "$VERSION" || true)
               if [ -n "$NEW_CHART_TIME" ]; then
                 touch -d "$NEW_CHART_TIME" "$NEW_CHART_FILE"
                 echo "Set $NEW_CHART_FILE mtime to $NEW_CHART_TIME (from source tag)"
