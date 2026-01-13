@@ -290,6 +290,7 @@ def mock_dataset():
         dataset_id: str = "dataset-123",
     ):
         mock = MagicMock(spec=Dataset)
+        mock = MagicMock(spec=Dataset)
         mock.name = name
         mock.id = dataset_id
 
@@ -834,7 +835,9 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch):
 
             return current_score
 
-        monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+        monkeypatch.setattr(
+            "opik_optimizer.task_evaluator.evaluate", fake_evaluate
+        )
 
         class Evaluator:
             pass

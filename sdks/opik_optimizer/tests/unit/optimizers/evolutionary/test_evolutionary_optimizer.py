@@ -83,9 +83,7 @@ class TestEvolutionaryOptimizerOptimizePrompt:
         optimizer = EvolutionaryOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompts = {
             "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(
-                name="secondary", system="Secondary", user="{input}"
-            ),
+            "secondary": ChatPrompt(name="secondary", system="Secondary", user="{input}"),
         }
         dataset = _make_dataset()
 
@@ -158,9 +156,7 @@ class TestEvolutionaryOptimizerEarlyStop:
             model="gpt-4o", perfect_score=0.95, enable_moo=False
         )
 
-        monkeypatch.setattr(
-            evaluation_ops, "evaluate_bundle", lambda *args, **kwargs: 0.96
-        )
+        monkeypatch.setattr(evaluation_ops, "evaluate_bundle", lambda *args, **kwargs: 0.96)
         monkeypatch.setattr(
             population_ops,
             "initialize_population",
