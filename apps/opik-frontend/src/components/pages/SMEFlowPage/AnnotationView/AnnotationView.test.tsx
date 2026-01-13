@@ -175,7 +175,7 @@ describe("AnnotationView - Button Label Logic", () => {
 
       expect(screen.getByText("Update & next")).toBeInTheDocument();
       // Button should be disabled when canSubmit is false
-      const button = screen.getByText("Update & next");
+      const button = screen.getByText("Update & next").closest("button");
       expect(button).toBeDisabled();
     });
 
@@ -224,7 +224,7 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      const submitButton = screen.getByText("Submit & next");
+      const submitButton = screen.getByText("Submit & next").closest("button");
       expect(submitButton).toBeDisabled();
     });
 
