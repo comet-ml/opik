@@ -75,8 +75,17 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
     """Context manager to convert tqdm to rich progress bars."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
-    def _tqdm_to_track(iterable: Any, desc: str, disable: bool, total: int) -> Any:
+    def _tqdm_to_track(
+        iterable: Any | None = None,
+        desc: str | None = None,
+        disable: bool = False,
+        total: int | None = None,
+    ) -> Any:
         disable = verbose == 0
+        if iterable is None:
+            return track(
+                [], description=description or desc, disable=disable, total=total
+            )
         return track(
             iterable, description=description or desc, disable=disable, total=total
         )
