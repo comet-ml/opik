@@ -92,11 +92,14 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
 
         def __iter__(self) -> Any:
             if self._iterable is None:
+                self.close()
                 return iter(())
-            for item in self._iterable:
-                yield item
-                self.update(1)
-            self.close()
+            try:
+                for item in self._iterable:
+                    yield item
+                    self.update(1)
+            finally:
+                self.close()
 
         def update(self, advance: int = 1) -> None:
             self._progress.advance(self._task_id, advance)

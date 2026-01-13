@@ -283,11 +283,19 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 prompts=best_prompts, root_cause=root_cause, attempt=attempt
             )
             if isinstance(improved_prompts_response, list):
-                first_reasoning = list(improved_prompts_response[0].values())[
-                    0
-                ].reasoning
+                if improved_prompts_response:
+                    first_reasoning = list(improved_prompts_response[0].values())[
+                        0
+                    ].reasoning
+                else:
+                    first_reasoning = ""
             else:
-                first_reasoning = list(improved_prompts_response.values())[0].reasoning
+                if improved_prompts_response:
+                    first_reasoning = list(improved_prompts_response.values())[
+                        0
+                    ].reasoning
+                else:
+                    first_reasoning = ""
             improvement_reporter.set_reasoning(first_reasoning)
 
         # Convert ImprovedPrompt dict to ChatPrompt dict
