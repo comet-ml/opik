@@ -73,8 +73,7 @@ public interface DatasetItemService {
 
     Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
-    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId,
-            Boolean createVersion);
+    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
@@ -113,9 +112,9 @@ public interface DatasetItemService {
      * When dataset versioning is enabled:
      * <ul>
      *   <li>Resolves dataset ID from batch (creates dataset if needed)</li>
-     *   <li>If createVersion is true: Creates a new version on top of the latest one</li>
-     *   <li>If createVersion is false: Mutates the latest version by appending items</li>
-     *   <li>If no versions exist, creates the first version regardless of createVersion flag</li>
+     *   <li>If batchGroupId is null: Mutates the latest version by appending items (backwards compatibility)</li>
+     *   <li>If batchGroupId is provided: Creates a new version with batch grouping (multiple batches can share the same version)</li>
+     *   <li>If no versions exist, creates the first version regardless of batchGroupId</li>
      *   <li>Returns the DatasetVersion (newly created or mutated)</li>
      * </ul>
      * When versioning is disabled (legacy mode):
@@ -124,7 +123,7 @@ public interface DatasetItemService {
      *   <li>Returns empty Mono</li>
      * </ul>
      *
-     * @param batch the batch of items to save (must include datasetId or datasetName, may include batchGroupId and createVersion)
+     * @param batch the batch of items to save (must include datasetId or datasetName, may include batchGroupId)
      * @return Mono emitting the DatasetVersion when versioning is enabled, or empty when disabled
      */
     Mono<DatasetVersion> save(DatasetItemBatch batch);
@@ -924,8 +923,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId,
-            Boolean createVersion) {
+    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -937,19 +935,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 return dao.delete(ids, datasetId, filters).then();
             }
 
-            // Default createVersion to false for backwards compatibility
-            boolean shouldCreateVersion = Boolean.TRUE.equals(createVersion);
-
             if (batchGroupId == null) {
-                // batch delete with no grouping
-                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName, null,
-                        shouldCreateVersion);
+                // No batch_group_id: mutate the latest version (backwards compatibility)
+                log.info(
+                        "Mutating latest version with delete (no batch_group_id). datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
+                        datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
+                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName, null, false);
             }
 
-            // New SDK with batch_group_id - handle grouped deletions
+            // batch_group_id provided: create new version with batch grouping
+            log.info(
+                    "Creating version with batch grouping for delete. batchGroupId='{}', datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
+                    batchGroupId, datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
             return getDatasetIdOrResolveItemDatasetId(datasetId, ids)
                     .flatMap(resolvedDatasetId -> handleGroupedDeletion(
-                            batchGroupId, ids, resolvedDatasetId, filters, workspaceId, userName, shouldCreateVersion));
+                            batchGroupId, ids, resolvedDatasetId, filters, workspaceId, userName, true));
         });
     }
 
@@ -1618,30 +1618,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
             String batchGroupId = batch.batchGroupId();
-            // Default createVersion to false for backwards compatibility
-            boolean createVersion = Boolean.TRUE.equals(batch.createVersion());
 
-            // If createVersion=false and no batchGroupId, mutate the latest version
-            if (!createVersion && batchGroupId == null) {
-                log.info("Mutating latest version for dataset '{}' (createVersion=false)", datasetId);
+            if (batchGroupId == null) {
+                // No batch_group_id: mutate the latest version (backwards compatibility)
+                log.info("Mutating latest version for dataset '{}' (no batch_group_id)", datasetId);
                 return mutateLatestVersionWithInsert(batch, datasetId, workspaceId, userName);
             }
 
-            if (batchGroupId == null) {
-                // batch creation with no grouping, createVersion=true
-                return saveItemsWithVersion(batch, datasetId, null)
-                        .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
-                                .put(RequestContext.USER_NAME, userName));
-            }
-
-            // New SDK with batch_group_id - handle grouped insertions
+            // batch_group_id provided: create new version with batch grouping
+            log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
+                    batchGroupId);
             return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
         });
     }
 
     /**
      * Mutates the latest version by appending items to it.
-     * Used when createVersion=false.
+     * Used when batchGroupId is null (backwards compatibility).
      */
     private Mono<DatasetVersion> mutateLatestVersionWithInsert(DatasetItemBatch batch, UUID datasetId,
             String workspaceId, String userName) {

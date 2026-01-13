@@ -177,7 +177,7 @@ class DatasetVersionResourceTest {
         var batch = DatasetItemBatch.builder()
                 .datasetId(datasetId)
                 .items(itemsList)
-                .createVersion(true) // Explicitly create new version
+                .batchGroupId(UUID.randomUUID().toString()) // Unique batch_group_id to create new version
                 .build();
 
         datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
@@ -207,7 +207,12 @@ class DatasetVersionResourceTest {
     }
 
     private void deleteDatasetItem(UUID datasetId, UUID itemId) {
-        datasetResourceClient.deleteDatasetItem(itemId, true, API_KEY, TEST_WORKSPACE);
+        // Create a delete request with a unique batchGroupId to create a new version
+        var deleteRequest = DatasetItemsDelete.builder()
+                .itemIds(Set.of(itemId))
+                .batchGroupId(UUID.randomUUID().toString())
+                .build();
+        datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
     }
 
     private void deleteDatasetItemsByFilters(UUID datasetId, List<DatasetItemFilter> filters) {
@@ -644,7 +649,7 @@ class DatasetVersionResourceTest {
                     DatasetItemBatch.builder()
                             .datasetId(dataset1Id)
                             .items(List.of(item))
-                            .createVersion(true)
+                            .batchGroupId(UUID.randomUUID().toString())
                             .build(),
                     TEST_WORKSPACE,
                     API_KEY);
@@ -653,7 +658,7 @@ class DatasetVersionResourceTest {
                     DatasetItemBatch.builder()
                             .datasetId(dataset2Id)
                             .items(List.of(item))
-                            .createVersion(true)
+                            .batchGroupId(UUID.randomUUID().toString())
                             .build(),
                     TEST_WORKSPACE,
                     API_KEY);
@@ -692,7 +697,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .items(items)
                     .datasetId(datasetId)
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -753,7 +758,7 @@ class DatasetVersionResourceTest {
             var batch1 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(originalItems)
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
@@ -859,7 +864,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(originalItems)
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1064,7 +1069,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(originalItems)
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1265,7 +1270,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(item1, item2, item3))
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1296,13 +1301,13 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
-    @DisplayName("Mutate Latest Version (createVersion=false):")
+    @DisplayName("Mutate Latest Version (no batch_group_id):")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class MutateLatestVersion {
 
         @Test
-        @DisplayName("Success: Insert items with createVersion=false mutates latest version")
-        void insertItems__whenCreateVersionFalse__thenMutateLatestVersion() {
+        @DisplayName("Success: Insert items without batch_group_id mutates latest version")
+        void insertItems__whenNoBatchGroupId__thenMutateLatestVersion() {
             // Given - Create dataset with initial items (creates v1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 3);
@@ -1311,12 +1316,12 @@ class DatasetVersionResourceTest {
             assertThat(version1.versionName()).isEqualTo("v1");
             assertThat(version1.itemsTotal()).isEqualTo(3);
 
-            // When - Insert more items with createVersion=false
+            // When - Insert more items without batch_group_id (mutates latest version)
             var newItems = generateDatasetItems(2);
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(newItems)
-                    .createVersion(false) // Mutate latest version
+                    // No batchGroupId - mutates latest version
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1336,8 +1341,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Delete items with createVersion=false mutates latest version")
-        void deleteItems__whenCreateVersionFalse__thenMutateLatestVersion() {
+        @DisplayName("Success: Delete items without batch_group_id mutates latest version")
+        void deleteItems__whenNoBatchGroupId__thenMutateLatestVersion() {
             // Given - Create dataset with items (creates v1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 5);
@@ -1352,10 +1357,10 @@ class DatasetVersionResourceTest {
             assertThat(v1Items).hasSize(5);
             var itemToDelete = v1Items.getFirst();
 
-            // When - Delete item with createVersion=false
+            // When - Delete item without batch_group_id (mutates latest version)
             var deleteRequest = DatasetItemsDelete.builder()
                     .itemIds(Set.of(itemToDelete.datasetItemId()))
-                    .createVersion(false) // Mutate latest version
+                    // No batchGroupId - mutates latest version
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
 
@@ -1377,8 +1382,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Multiple inserts with createVersion=false accumulate in same version")
-        void insertItems__whenMultipleInsertsWithCreateVersionFalse__thenAccumulateInSameVersion() {
+        @DisplayName("Success: Multiple inserts without batch_group_id accumulate in same version")
+        void insertItems__whenMultipleInsertsWithoutBatchGroupId__thenAccumulateInSameVersion() {
             // Given - Create dataset with initial items (creates v1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 2);
@@ -1386,18 +1391,18 @@ class DatasetVersionResourceTest {
             var version1 = getLatestVersion(datasetId);
             assertThat(version1.itemsTotal()).isEqualTo(2);
 
-            // When - Insert more items twice with createVersion=false
+            // When - Insert more items twice without batch_group_id (mutates latest version)
             var batch1 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(generateDatasetItems(3))
-                    .createVersion(false)
+                    // No batchGroupId
                     .build();
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
             var batch2 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(generateDatasetItems(2))
-                    .createVersion(false)
+                    // No batchGroupId
                     .build();
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
@@ -1411,16 +1416,16 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Insert with createVersion=false on empty dataset creates first version")
-        void insertItems__whenCreateVersionFalseOnEmptyDataset__thenCreateFirstVersion() {
+        @DisplayName("Success: Insert without batch_group_id on empty dataset creates first version")
+        void insertItems__whenNoBatchGroupIdOnEmptyDataset__thenCreateFirstVersion() {
             // Given - Create empty dataset (no items yet)
             var datasetId = createDataset(UUID.randomUUID().toString());
 
-            // When - Insert items with createVersion=false
+            // When - Insert items without batch_group_id
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(generateDatasetItems(3))
-                    .createVersion(false)
+                    // No batchGroupId
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1434,15 +1439,15 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Delete with createVersion=false on empty dataset does nothing")
-        void deleteItems__whenCreateVersionFalseOnEmptyDataset__thenDoNothing() {
+        @DisplayName("Success: Delete without batch_group_id on empty dataset does nothing")
+        void deleteItems__whenNoBatchGroupIdOnEmptyDataset__thenDoNothing() {
             // Given - Create empty dataset (no items yet)
             var datasetId = createDataset(UUID.randomUUID().toString());
 
-            // When - Delete items with createVersion=false (no items to delete)
+            // When - Delete items without batch_group_id (no items to delete)
             var deleteRequest = DatasetItemsDelete.builder()
                     .itemIds(Set.of(UUID.randomUUID()))
-                    .createVersion(false)
+                    // No batchGroupId
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
 
@@ -1483,7 +1488,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(item1, item2))
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1610,7 +1615,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(item1, item2, item3))
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1880,7 +1885,8 @@ class DatasetVersionResourceTest {
                     .build();
 
             var batch = DatasetItemBatch.builder().datasetId(datasetId)
-                    .items(List.of(item1, item2, item3, item4, item5)).createVersion(true).build();
+                    .items(List.of(item1, item2, item3, item4, item5)).batchGroupId(UUID.randomUUID().toString())
+                    .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             var version1 = getLatestVersion(datasetId);
@@ -1978,7 +1984,7 @@ class DatasetVersionResourceTest {
                     .build();
 
             var batch = DatasetItemBatch.builder().datasetId(datasetId).items(List.of(item1, item2, item3))
-                    .createVersion(true).build();
+                    .batchGroupId(UUID.randomUUID().toString()).build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             var version1 = getLatestVersion(datasetId);
@@ -2276,7 +2282,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(itemsList)
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -2634,7 +2640,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(items)
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
 
             // when - PUT without query param (default behavior)
@@ -2784,7 +2790,6 @@ class DatasetVersionResourceTest {
                     .datasetId(datasetId)
                     .items(batch1Items)
                     .batchGroupId(batchGroupId)
-                    .createVersion(true)
                     .build();
 
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
@@ -2794,7 +2799,6 @@ class DatasetVersionResourceTest {
                     .datasetId(datasetId)
                     .items(batch2Items)
                     .batchGroupId(batchGroupId)
-                    .createVersion(true)
                     .build();
 
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
@@ -2804,7 +2808,6 @@ class DatasetVersionResourceTest {
                     .datasetId(datasetId)
                     .items(batch3Items)
                     .batchGroupId(batchGroupId)
-                    .createVersion(true)
                     .build();
 
             datasetResourceClient.createDatasetItems(batch3, TEST_WORKSPACE, API_KEY);
@@ -2839,7 +2842,6 @@ class DatasetVersionResourceTest {
                     .datasetId(datasetId)
                     .items(batch1Items)
                     .batchGroupId(batchGroupId1)
-                    .createVersion(true)
                     .build();
 
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
@@ -2850,7 +2852,6 @@ class DatasetVersionResourceTest {
                     .datasetId(datasetId)
                     .items(batch2Items)
                     .batchGroupId(batchGroupId2)
-                    .createVersion(true)
                     .build();
 
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
@@ -2903,7 +2904,6 @@ class DatasetVersionResourceTest {
             var deleteRequest1 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(0, 3)))
                     .batchGroupId(batchGroupId)
-                    .createVersion(true)
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
 
@@ -2911,7 +2911,6 @@ class DatasetVersionResourceTest {
             var deleteRequest2 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(3, 5)))
                     .batchGroupId(batchGroupId)
-                    .createVersion(true)
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
 
@@ -2958,7 +2957,6 @@ class DatasetVersionResourceTest {
             var deleteRequest1 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(0, 3)))
                     .batchGroupId(batchGroupId1)
-                    .createVersion(true)
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
 
@@ -2966,7 +2964,6 @@ class DatasetVersionResourceTest {
             var deleteRequest2 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(3, 5)))
                     .batchGroupId(batchGroupId2)
-                    .createVersion(true)
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
 
@@ -3016,13 +3013,13 @@ class DatasetVersionResourceTest {
             // itemIds is mutually exclusive with datasetId
             var deleteRequest1 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(0, 3)))
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
 
             var deleteRequest2 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(3, 5)))
-                    .createVersion(true)
+                    .batchGroupId(UUID.randomUUID().toString())
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
 
