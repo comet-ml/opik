@@ -167,7 +167,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.DONE].display}
                     size="sm"
-                    className="ml-2"
+                    className="ml-2 shrink-0"
                   />
                 </Button>
               </TooltipWrapper>
