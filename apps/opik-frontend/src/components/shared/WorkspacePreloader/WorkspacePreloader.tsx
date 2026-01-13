@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import useAppStore from "@/store/AppStore";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { useWorkspaceNameFromURL } from "@/hooks/useWorkspaceNameFromURL";
@@ -11,14 +11,7 @@ type WorkspacePreloaderProps = {
 const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   children,
 }) => {
-  const setActiveWorkspaceName = useAppStore(
-    (state) => state.setActiveWorkspaceName,
-  );
-
-  useEffect(() => {
-    setActiveWorkspaceName(DEFAULT_WORKSPACE_NAME);
-  }, [setActiveWorkspaceName]);
-
+  useAppStore.getState().setActiveWorkspaceName(DEFAULT_WORKSPACE_NAME);
   const workspaceNameFromURL = useWorkspaceNameFromURL();
 
   if (workspaceNameFromURL && workspaceNameFromURL !== DEFAULT_WORKSPACE_NAME) {
