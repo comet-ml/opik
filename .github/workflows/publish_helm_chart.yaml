@@ -90,15 +90,8 @@ jobs:
           env:
             INDEX_FILE: index.yaml
           run: |
-            echo "=== Before helm repo index ==="
-            yq '.entries[][] | "\(.created) \(.urls[0])"' "${INDEX_FILE}" | head || true
-            ls -la *.tgz | head || true
-            
             # Run helm repo index which will overwrite created timestamps
             helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge "${INDEX_FILE}"
-            
-            echo "=== After helm repo index (timestamps overwritten) ==="
-            yq '.entries[][] | "\(.created) \(.urls[0])"' "${INDEX_FILE}" | head || true
             
             # Fix timestamps again - helm repo index overwrites them based on file mtime
             echo "=== Fixing timestamps based on file modification times ==="
@@ -110,14 +103,10 @@ jobs:
                 if [ -f "$FILENAME" ]; then
                     MTIME=$(date -u -r "$FILENAME" +"%Y-%m-%dT%H:%M:%SZ")
                     echo "Setting $FILENAME timestamp to $MTIME"
-                    yq eval "(.entries[][] | select(.urls[0] == \"$CHART_URL\") | .created) = \"$MTIME\"" -i "${INDEX_FILE}"
+                    yq eval "(.entries[][] | select(.urls[0] == \"$CHART_URL\") | .created) = \"$MTIME\"" -i --indent 2 "${INDEX_FILE}"
                 fi
             done
             
-            echo "=== After timestamp fix ==="
-            yq '.entries[][] | "\(.created) \(.urls[0])"' "${INDEX_FILE}" | head || true
-            
-            git diff -- "${INDEX_FILE}"
             git config user.name "Helm Updater"
             git config user.email "actions@users.noreply.github.com"
             git ls-files -o --exclude-standard -z | xargs -0 -r git add
