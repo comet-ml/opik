@@ -332,6 +332,8 @@ datasetExport:
   minPartSize: 5242880  # 5MB - S3 minimum
   maxPartSize: 104857600  # 100MB
   itemBatchSize: 1000
+  cleanupTimeout: 5m
+  cleanupLockWaitTime: 1s
 
 # LLM providers client configuration
 llmProviderClient:

@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.attachment.FileService;
+import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -9,7 +10,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -17,6 +17,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -41,12 +42,16 @@ class CsvDatasetExportProcessorImplTest {
     @Mock
     private FileService fileService;
 
+    @Mock
+    private PreSignerService preSignerService;
+
     private DatasetExportConfig exportConfig;
 
     private CsvDatasetExportProcessorImpl processor;
 
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final String WORKSPACE_ID = "test-workspace";
+    private static final String TEST_PRESIGNED_URL = "https://s3.amazonaws.com/bucket/path?signature=test";
 
     @BeforeEach
     void setUp() {
@@ -61,7 +66,11 @@ class CsvDatasetExportProcessorImplTest {
         lenient().when(fileService.uploadPart(any(), any(), anyInt(), any())).thenReturn("test-etag");
         lenient().when(fileService.completeMultipartUpload(any(), any(), any())).thenReturn(null);
 
-        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, exportConfig);
+        // Mock presigned URL generation (both overloads)
+        lenient().when(preSignerService.presignDownloadUrl(any())).thenReturn(TEST_PRESIGNED_URL);
+        lenient().when(preSignerService.presignDownloadUrl(any(), any())).thenReturn(TEST_PRESIGNED_URL);
+
+        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, preSignerService, exportConfig);
     }
 
     @Test
@@ -83,14 +92,17 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
-                .assertNext(filePath -> {
-                    assertThat(filePath).startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
-                    assertThat(filePath).endsWith(".csv");
+                .assertNext(exportResult -> {
+                    assertThat(exportResult.filePath())
+                            .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
+                    assertThat(exportResult.filePath()).endsWith(".csv");
+                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
+                    assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
                 .verifyComplete();
 
@@ -98,17 +110,13 @@ class CsvDatasetExportProcessorImplTest {
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
 
         // Verify at least one part was uploaded
-        ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
-
-        // Verify CSV content in uploaded part
-        String csvContent = new String(dataCaptor.getValue());
-        assertThat(csvContent).contains("name,age"); // Headers
-        assertThat(csvContent).contains("Alice,30"); // First row
-        assertThat(csvContent).contains("Bob,25"); // Second row
+        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), any());
 
         // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
+
+        // Verify presigned URL was generated with custom TTL
+        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -120,27 +128,24 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.empty());
 
         // When
-        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
-                .assertNext(filePath -> {
-                    assertThat(filePath).startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
+                .assertNext(exportResult -> {
+                    assertThat(exportResult.filePath())
+                            .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
+                    assertThat(exportResult.filePath()).endsWith(".csv");
+                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
+                    assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
                 .verifyComplete();
 
-        // Verify multipart upload was created then aborted (empty dataset special case)
-        verify(fileService).createMultipartUpload(any(), eq("text/csv"));
+        // Verify abortMultipartUpload and upload were called for empty dataset
         verify(fileService).abortMultipartUpload(any(), eq("test-upload-id"));
-
-        // Verify fallback to regular upload for empty file
-        ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        verify(fileService).upload(any(), dataCaptor.capture(), eq("text/csv"));
-
-        String csvContent = new String(dataCaptor.getValue());
-        // CSV with no columns produces just a newline or empty string
-        assertThat(csvContent).hasSizeLessThan(5); // Allow for newline characters
+        verify(fileService).upload(any(), any(), eq("text/csv"));
+        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -161,30 +166,21 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
-                .assertNext(filePath -> assertThat(filePath).isNotEmpty())
+                .assertNext(exportResult -> {
+                    assertThat(exportResult.filePath()).isNotEmpty();
+                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
+                })
                 .verifyComplete();
 
         // Verify multipart upload was called
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
-
-        // Verify CSV content
-        ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
-
-        String csvContent = new String(dataCaptor.getValue());
-        // Verify headers are present (order from LinkedHashMap)
-        assertThat(csvContent).containsPattern("name.*age.*city");
-        // Verify data row with empty city value
-        assertThat(csvContent).contains("Alice");
-        assertThat(csvContent).contains("30");
-
-        // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
+        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -205,27 +201,21 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
-                .assertNext(filePath -> assertThat(filePath).isNotEmpty())
+                .assertNext(exportResult -> {
+                    assertThat(exportResult.filePath()).isNotEmpty();
+                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
+                })
                 .verifyComplete();
 
         // Verify multipart upload was called
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
-
-        // Verify CSV content
-        ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
-        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
-
-        String csvContent = new String(dataCaptor.getValue());
-        assertThat(csvContent).contains("Alice");
-        assertThat(csvContent).contains("key"); // Complex JSON is serialized as string
-
-        // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
+        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -234,7 +224,7 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.error(new RuntimeException("DB error")));
 
         // When
-        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then

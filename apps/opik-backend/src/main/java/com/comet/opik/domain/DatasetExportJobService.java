@@ -32,9 +32,48 @@ public interface DatasetExportJobService {
 
     Mono<DatasetExportJob> getJob(UUID jobId);
 
-    Mono<Void> updateJobToCompleted(UUID jobId, String filePath);
+    Mono<Void> updateJobToProcessing(UUID jobId);
+
+    Mono<Void> updateJobToCompleted(UUID jobId, String filePath, String downloadUrl, Instant expiresAt);
 
     Mono<Void> updateJobToFailed(UUID jobId, String errorMessage);
+
+    /**
+     * Finds all expired export jobs across all workspaces.
+     *
+     * <p><strong>Security Note:</strong> This method operates across ALL workspaces and should ONLY be called
+     * by system-level cleanup jobs (e.g., {@code DatasetExportCleanupJob}). The caller MUST set
+     * {@link RequestContext#SYSTEM_USER} in the reactive context before calling this method.</p>
+     *
+     * @param now   The current timestamp to compare against expiration
+     * @param limit Maximum number of expired jobs to return
+     * @return Mono emitting list of expired export jobs across all workspaces
+     */
+    Mono<List<DatasetExportJob>> findExpiredCompletedJobs(Instant now, int limit);
+
+    /**
+     * Finds all failed export jobs that have been viewed by users across all workspaces.
+     *
+     * <p><strong>Security Note:</strong> This method operates across ALL workspaces and should ONLY be called
+     * by system-level cleanup jobs (e.g., {@code DatasetExportCleanupJob}). The caller MUST set
+     * {@link RequestContext#SYSTEM_USER} in the reactive context before calling this method.</p>
+     *
+     * @param limit Maximum number of viewed failed jobs to return
+     * @return Mono emitting list of viewed failed export jobs across all workspaces
+     */
+    Mono<List<DatasetExportJob>> findViewedFailedJobs(int limit);
+
+    /**
+     * Deletes expired export jobs by their IDs across all workspaces.
+     *
+     * <p><strong>Security Note:</strong> This method operates across ALL workspaces and should ONLY be called
+     * by system-level cleanup jobs (e.g., {@code DatasetExportCleanupJob}). The caller MUST set
+     * {@link RequestContext#SYSTEM_USER} in the reactive context before calling this method.</p>
+     *
+     * @param jobIds Set of job IDs to delete
+     * @return Mono emitting number of deleted records
+     */
+    Mono<Integer> deleteExpiredJobs(Set<UUID> jobIds);
 }
 
 @Slf4j
@@ -47,6 +86,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             DatasetExportStatus.PROCESSING);
 
     public static final String EXPORT_JOB_NOT_FOUND = "Export job not found: '%s'";
+    public static final String INVALID_STATE_TRANSITION = "Invalid state transition for export job: '%s'. Current status does not allow this operation.";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -111,16 +151,49 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
-                return dao.findById(workspaceId, jobId)
+
+                // Find the job
+                var job = dao.findById(workspaceId, jobId)
                         .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+
+                // Update viewed_at only if it's not already set (first view only)
+                if (job.viewedAt() == null) {
+                    dao.updateViewedAt(workspaceId, jobId, Instant.now());
+                    log.debug("Marked export job '{}' as viewed for the first time", jobId);
+                }
+
+                return job;
             })).subscribeOn(Schedulers.boundedElastic());
         });
     }
 
     @Override
-    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath) {
+    public Mono<Void> updateJobToProcessing(@NonNull UUID jobId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return Mono.fromCallable(() -> {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetExportJobDAO.class);
+                    int updated = dao.updateStatus(workspaceId, jobId, DatasetExportStatus.PROCESSING, userName);
+
+                    verifyJobExistsOrThrow(updated, jobId);
+
+                    return null;
+                });
+
+                log.info("Updated export job: '{}' to status: 'PROCESSING'", jobId);
+                return null;
+            }).subscribeOn(Schedulers.boundedElastic()).then();
+        });
+    }
+
+    @Override
+    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath, @NonNull String downloadUrl,
+            @NonNull Instant expiresAt) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -129,7 +202,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
-                            userName);
+                            downloadUrl, expiresAt, userName);
 
                     verifyJobExistsOrThrow(updated, jobId);
 
@@ -167,15 +240,54 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
 
     /**
      * Verifies that a job update operation affected at least one row.
-     * Throws NotFoundException if the job was not found or doesn't belong to the current workspace.
+     * Throws NotFoundException if the job was not found or doesn't belong to the current workspace,
+     * or ConflictException if the update failed due to invalid state transition.
      *
      * @param updatedRows The number of rows affected by the update operation
      * @param jobId       The ID of the job being updated
-     * @throws NotFoundException if no rows were updated
+     * @throws NotFoundException if no rows were updated (job not found or wrong workspace)
      */
     private void verifyJobExistsOrThrow(int updatedRows, UUID jobId) {
         if (updatedRows == 0) {
+            // Check if job exists at all to provide better error message
             throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
         }
+    }
+
+    @Override
+    public Mono<List<DatasetExportJob>> findExpiredCompletedJobs(@NonNull Instant now, int limit) {
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.findExpiredCompletedJobs(userName, now, limit);
+            }));
+        });
+    }
+
+    @Override
+    public Mono<List<DatasetExportJob>> findViewedFailedJobs(int limit) {
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.findViewedFailedJobs(userName, limit);
+            }));
+        });
+    }
+
+    @Override
+    public Mono<Integer> deleteExpiredJobs(@NonNull Set<UUID> jobIds) {
+        if (jobIds.isEmpty()) {
+            return Mono.just(0);
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.deleteExpiredJobs(userName, jobIds);
+            }));
+        });
     }
 }
