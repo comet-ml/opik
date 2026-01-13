@@ -98,7 +98,7 @@ jobs:
 
                     # Update the 'created' field for this specific version in index.yaml
                     # We match by the first URL in the list
-                    yq eval "(.entries[] | select(.[] | .urls[0] == \"$CHART_URL\") | .[].created) = \"$MTIME\"" -i "${INDEX_FILE}"
+                    yq eval "(.entries[][] | select(.urls[0] == \"$CHART_URL\") | .created) = \"$MTIME\"" -i "${INDEX_FILE}"
                 else
                     echo "Warning: File $FILENAME not found on disk, skipping..."
                 fi
@@ -113,6 +113,7 @@ jobs:
               helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
               git config user.name "Helm Updater"
               git config user.email "actions@users.noreply.github.com"
+              git config set advice.addEmptyPathspec false
               git add $(git ls-files -o --exclude-standard)
               git add index.yaml README.md
               git commit -m "Release Opik helm chart ${{inputs.version}}"
