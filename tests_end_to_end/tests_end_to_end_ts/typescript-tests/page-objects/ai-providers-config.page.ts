@@ -28,7 +28,7 @@ export class AIProvidersConfigPage extends BasePage {
 
     await this.page.getByLabel('API key').fill(apiKey);
 
-    await this.page.getByRole('button', { name: 'Add configuration' }).click();
+    await this.page.getByRole('button', { name: 'Add provider' }).click();
   }
 
   async editProvider(name: string, apiKey?: string): Promise<void> {
