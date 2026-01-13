@@ -161,7 +161,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 <Button
                   onClick={handleSubmit}
                   disabled={!validationState.canSubmit}
-                  className="min-w-[200px]"
+                  className="w-[180px]"
                 >
                   <span className="flex-1 text-left">{buttonLabel}</span>
                   <HotkeyDisplay
