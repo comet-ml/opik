@@ -1,8 +1,8 @@
 import React from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
-import { TraceAnalyzerLLMMessage } from "@/types/ai-assistant";
+import { TraceAnalyzerLLMMessage, MESSAGE_TYPE } from "@/types/ai-assistant";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
@@ -12,8 +12,35 @@ type TraceChatMessageProps = {
 };
 
 const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
-  const noContent = message.content === "";
   const isUser = message.role === LLM_MESSAGE_ROLE.user;
+  const isToolCall = message.messageType === MESSAGE_TYPE.tool_call;
+
+  // Tool call messages have their own rendering
+  if (isToolCall && message.toolCalls) {
+    return (
+      <div className="mb-2 flex justify-start">
+        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-muted/30 px-4 py-2">
+          <div className="flex flex-col gap-1.5">
+            {message.toolCalls.map((toolCall) => (
+              <div
+                key={toolCall.id}
+                className="flex items-center gap-2 text-muted-foreground"
+              >
+                {toolCall.completed ? (
+                  <CheckCircle2 className="size-3 text-green-600" />
+                ) : (
+                  <Loader2 className="size-3 animate-spin" />
+                )}
+                <span className="comet-body-xs">{toolCall.display_name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const noContent = message.content === "";
 
   return (
     <div
@@ -35,9 +62,6 @@ const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
             <AlertCircle className="size-3" />
             <span className="comet-body-s-accented">Error</span>
           </div>
-        )}
-        {message.status && (
-          <div className="comet-body-xs text-muted-slate">{message.status}</div>
         )}
         {noContent ? (
           <div className="flex w-full flex-wrap gap-2 overflow-hidden">
