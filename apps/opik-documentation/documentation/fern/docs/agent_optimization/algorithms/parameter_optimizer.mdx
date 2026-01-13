@@ -66,7 +66,9 @@ The optimizer intelligently balances exploration (trying diverse parameters) wit
 
 ```python
 from opik_optimizer import ParameterOptimizer
-from opik_optimizer.parameter_optimizer import ParameterSearchSpace
+from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
+    ParameterSearchSpace,
+)
 
 optimizer = ParameterOptimizer(
     model="openai/gpt-4",
@@ -106,7 +108,9 @@ The key parameters are:
 
 ```python
 from opik_optimizer import ParameterOptimizer, ChatPrompt
-from opik_optimizer.parameter_optimizer import ParameterSearchSpace
+from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
+    ParameterSearchSpace,
+)
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import datasets
 
@@ -354,6 +358,6 @@ optimizer = ParameterOptimizer(
 
 ## Next Steps
 
-1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+1. Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
 2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
+3. Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.

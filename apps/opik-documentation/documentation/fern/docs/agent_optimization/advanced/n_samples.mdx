@@ -76,7 +76,7 @@ prompt = ChatPrompt(
 
 <AccordionGroup>
   <Accordion title="Reducing Evaluation Variance">
-    Single-sample evaluation is noisy. With `n=3`, if even one of three candidates passes the metric, the prompt gets credit. This makes optimization more robust to stochastic failures.
+    Single-sample evaluation is noisy. With `n=3`, the optimizer scores each candidate and uses the best result, which makes optimization more robust to stochastic failures.
 
     ```python
     # Before: Single sample - noisy evaluation
