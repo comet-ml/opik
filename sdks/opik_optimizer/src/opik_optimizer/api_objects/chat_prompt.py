@@ -1,11 +1,15 @@
 import copy
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
 from pydantic import BaseModel, ConfigDict
 from opik import track
 
 from . import types
+
+
+logger = logging.getLogger(__name__)
 
 
 class ModelParameters(BaseModel):
@@ -41,7 +45,25 @@ class ChatPrompt:
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",
         model_parameters: dict[str, Any] | None = None,
+        model_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
+        if "model_kwdargs" in kwargs:
+            if model_kwargs is not None:
+                logger.warning(
+                    "ChatPrompt received both model_kwargs and model_kwdargs; "
+                    "ignoring model_kwdargs."
+                )
+            else:
+                model_kwargs = kwargs["model_kwdargs"]
+                logger.warning(
+                    "ChatPrompt received model_kwdargs; remapping to model_parameters."
+                )
+            kwargs.pop("model_kwdargs", None)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword argument(s): {unexpected}")
+
         if system is None and user is None and messages is None:
             raise ValueError(
                 "At least one of `system`, `user`, or `messages` must be provided"
@@ -86,6 +108,18 @@ class ChatPrompt:
 
         # These are used for the LiteLLMAgent class:
         self.model = model
+        if model_kwargs is not None:
+            if model_parameters is not None:
+                logger.warning(
+                    "ChatPrompt received model_kwargs and model_parameters; "
+                    "using model_parameters."
+                )
+            else:
+                logger.warning(
+                    "ChatPrompt received model_kwargs; remapping to model_parameters."
+                )
+                model_parameters = model_kwargs
+
         self.model_kwargs = model_parameters or {}
 
     @staticmethod

@@ -604,6 +604,7 @@ def test_semantic_mutation_invalid_json_response(
         is_reasoning: bool,
         model: str,
         model_parameters: dict[str, Any],
+        **_kwargs: Any,
     ) -> str:
         # Model responded with a Python repr instead of strict JSON
         return "[{'role': 'system', 'content': 'Provide a brief and direct answer to the question.'}, {'role': 'user', 'content': '{question}'}]"

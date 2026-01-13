@@ -14,6 +14,7 @@ from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
 from .api_objects import chat_prompt
+from .utils.candidate_selection import DEFAULT_SELECTION_POLICY
 
 PANEL_WIDTH = 70
 
@@ -127,6 +128,31 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     if len(normalized) > max_length:
         return normalized[:max_length] + "…"
     return normalized
+
+
+def summarize_selection_policy(
+    prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Return a compact n/policy summary for prompt evaluation reporting."""
+    prompts_list = list(prompts.values()) if isinstance(prompts, dict) else [prompts]
+    summaries = []
+    for prompt in prompts_list:
+        model_parameters = prompt.model_kwargs or {}
+        n_value = model_parameters.get("n", 1) or 1
+        try:
+            n_value = int(n_value)
+        except (TypeError, ValueError):
+            n_value = 1
+        policy = str(
+            model_parameters.get("selection_policy", DEFAULT_SELECTION_POLICY)
+            or DEFAULT_SELECTION_POLICY
+        ).lower()
+        summaries.append(f"n={n_value} policy={policy}")
+
+    unique = sorted(set(summaries))
+    if len(unique) == 1:
+        return unique[0]
+    return "mixed (" + ", ".join(unique) + ")"
 
 
 def _format_message_content(content: str | list[dict[str, Any]]) -> Text:
@@ -530,10 +556,16 @@ def display_configuration(
         display_messages(messages)
         _display_tools(tools)
 
+    selection_summary = None
+    if isinstance(messages, (chat_prompt.ChatPrompt, dict)):
+        selection_summary = summarize_selection_policy(messages)
+
     # Panel for configuration
     console.print(
         Text(f"\nUsing {optimizer_config['optimizer']} with the parameters: ")
     )
+    if selection_summary:
+        console.print(Text(f"  - evaluation: {selection_summary}", style="dim"))
 
     for key, value in optimizer_config.items():
         if key == "optimizer":  # Already displayed in the introductory text

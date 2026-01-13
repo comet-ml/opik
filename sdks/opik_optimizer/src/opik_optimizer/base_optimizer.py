@@ -21,6 +21,7 @@ from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from . import task_evaluator, helpers
 from .utils.prompt_library import PromptLibrary, PromptOverrides
+from .utils.candidate_selection import select_candidate
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -723,6 +724,12 @@ class BaseOptimizer(ABC):
             )
             # Normalize n to an int so pass@k selection logic stays predictable.
             requested_n = int(prompt_config.get("n", 1) or 1)
+            selection_policy = (
+                prompt_config.get("selection_policy", "best_by_metric")
+                if isinstance(prompt_config, dict)
+                else "best_by_metric"
+            )
+            selection_policy = str(selection_policy or "best_by_metric").lower()
 
             if requested_n > 1 and hasattr(agent, "invoke_agent_candidates"):
                 candidates = agent.invoke_agent_candidates(
@@ -734,45 +741,43 @@ class BaseOptimizer(ABC):
                     )
                     cleaned_model_output = raw_model_output.strip()
                 else:
-                    scored_candidates: list[tuple[str, float]] = []
-                    for candidate in candidates:
-                        try:
-                            metric_val = metric(
-                                dataset_item=dataset_item, llm_output=candidate
-                            )
-                            if isinstance(metric_val, list):
-                                metric_score = max(
-                                    (score.value for score in metric_val), default=0.0
-                                )
-                            elif hasattr(metric_val, "value"):
-                                metric_score = float(metric_val.value)
-                            else:
-                                metric_score = float(metric_val)
-                        except Exception:
-                            metric_score = 0.0
-                        scored_candidates.append((candidate, metric_score))
-
-                    best_idx, (best_output, _) = max(
-                        enumerate(scored_candidates), key=lambda item: item[1][1]
+                    selection_result = select_candidate(
+                        candidates=candidates,
+                        policy=selection_policy,
+                        metric=metric,
+                        dataset_item=dataset_item,
+                        candidate_logprobs=getattr(
+                            agent, "_last_candidate_logprobs", None
+                        ),
+                        rng=random,
                     )
+                    cleaned_model_output = selection_result.output.strip()
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Pass@k selection: n=%s policy=%s candidates=%d chosen=%s scores=%s logprobs=%s",
+                            requested_n,
+                            selection_result.policy,
+                            len(candidates),
+                            selection_result.chosen_index,
+                            selection_result.candidate_scores,
+                            selection_result.candidate_logprobs,
+                        )
 
                     try:
                         opik_context.update_current_trace(
                             metadata={
                                 "opik_optimizer": {
+                                    "selection_policy": selection_result.policy,
                                     "n_requested": requested_n,
-                                    "candidates_scored": len(scored_candidates),
-                                    "candidate_scores": [
-                                        score for _, score in scored_candidates
-                                    ],
-                                    "chosen_index": best_idx,
+                                    "candidates_scored": len(candidates),
+                                    "candidate_scores": selection_result.candidate_scores,
+                                    "candidate_logprobs": selection_result.candidate_logprobs,
+                                    "chosen_index": selection_result.chosen_index,
                                 }
                             }
                         )
                     except Exception:
                         pass
-
-                    cleaned_model_output = best_output.strip()
             else:
                 raw_model_output = agent.invoke_agent(
                     prompts=prompts_dict, dataset_item=dataset_item
