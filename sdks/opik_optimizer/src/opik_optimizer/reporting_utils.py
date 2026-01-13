@@ -9,7 +9,7 @@ from collections.abc import Callable
 from rich import box
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
-from rich.progress import track
+from rich.progress import Progress
 from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
@@ -75,21 +75,51 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
     """Context manager to convert tqdm to rich progress bars."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
+    class _TqdmAdapter:
+        """Minimal tqdm-like adapter backed by rich.Progress for Opik evaluators."""
+        def __init__(
+            self,
+            iterable: Any | None,
+            desc: str | None,
+            total: int | None,
+            disable: bool,
+        ) -> None:
+            self._iterable = iterable
+            self._progress = Progress(transient=True, disable=disable)
+            self._progress.start()
+            self._task_id = self._progress.add_task(desc or "", total=total)
+
+        def __iter__(self) -> Any:
+            if self._iterable is None:
+                return iter(())
+            for item in self._iterable:
+                yield item
+                self.update(1)
+            self.close()
+
+        def update(self, advance: int = 1) -> None:
+            self._progress.advance(self._task_id, advance)
+
+        @property
+        def total(self) -> float | None:
+            task = self._progress.tasks[self._task_id]
+            return task.total
+
+        @total.setter
+        def total(self, value: int | None) -> None:
+            self._progress.update(self._task_id, total=value)
+
+        def close(self) -> None:
+            self._progress.stop()
+
     def _tqdm_to_track(iterable: Any | None = None, *args: Any, **kwargs: Any) -> Any:
         desc = kwargs.get("desc")
         total = kwargs.get("total")
         disable = kwargs.get("disable", False) or verbose == 0
         if iterable is None and args:
             iterable = args[0]
-        if iterable is None:
-            iterable = []
         desc_value = description or (desc if isinstance(desc, str) else None) or ""
-        return track(
-            iterable,
-            description=desc_value,
-            disable=disable,
-            total=total,
-        )
+        return _TqdmAdapter(iterable, desc_value, total, disable)
 
     original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
     opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track  # type: ignore[assignment]
