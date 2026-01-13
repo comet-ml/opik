@@ -939,18 +939,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             Returns:
                 Dictionary containing the LLM's response
             """
-            prompts_with_examples = {}
-            example_placeholder = str(self.get_prompt("example_placeholder"))
-
-            for key, prompt in prompts.items():
-                new_prompt = prompt.copy()
-                new_messages = new_prompt.replace_in_messages(
-                    new_prompt.get_messages(),
-                    example_placeholder,
-                    few_shot_examples,
-                )
-                new_prompt.set_messages(new_messages)
-                prompts_with_examples[key] = new_prompt
+            prompts_with_examples = self._reconstruct_prompts_with_examples(
+                prompts_with_placeholder=prompts,
+                few_shot_examples=few_shot_examples,
+            )
 
             result = agent.invoke_agent(
                 prompts=prompts_with_examples,
@@ -1008,8 +1000,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _reconstruct_prompts_with_examples(
         self,
         prompts_with_placeholder: dict[str, chat_prompt.ChatPrompt],
-        demo_examples: list[dict[str, Any]],
-        fewshot_prompt_template: str,
+        demo_examples: list[dict[str, Any]] | None = None,
+        fewshot_prompt_template: str | None = None,
+        few_shot_examples: str | None = None,
     ) -> dict[str, chat_prompt.ChatPrompt]:
         """
         Reconstruct the prompts dict with few-shot examples filled in.
@@ -1018,14 +1011,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompts_with_placeholder: The template prompts with the few-shot placeholder
             demo_examples: List of example dictionaries from the dataset
             fewshot_prompt_template: The template string for formatting each example
+            few_shot_examples: Preformatted few-shot string to insert directly
 
         Returns:
             Dictionary of ChatPrompt objects with examples filled in
         """
-        # Build the few_shot_examples string from demo_examples
-        few_shot_examples, _ = self._build_few_shot_examples_string(
-            demo_examples, fewshot_prompt_template
-        )
+        if few_shot_examples is None:
+            if demo_examples is None or fewshot_prompt_template is None:
+                raise ValueError(
+                    "demo_examples and fewshot_prompt_template are required when few_shot_examples is None."
+                )
+            few_shot_examples, _ = self._build_few_shot_examples_string(
+                demo_examples, fewshot_prompt_template
+            )
 
         # Fill in the placeholder in each prompt
         result_prompts = {}

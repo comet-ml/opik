@@ -106,6 +106,13 @@ Scores:
 
         return "\n\n" + ("=" * 80 + "\n\n").join(formatted_results)
 
+    @staticmethod
+    def _extract_first_response(response: Any) -> Any:
+        """Normalize list responses to a single response object."""
+        if isinstance(response, list):
+            return response[0]
+        return response
+
     async def _analyze_batch_async(
         self,
         evaluation_result: EvaluationResult,
@@ -152,11 +159,9 @@ Scores:
             model_parameters=self.model_parameters,
             response_model=RootCauseAnalysis,
         )
-        if isinstance(root_cause_response, list):
-            root_cause = root_cause_response[0]
-        else:
-            root_cause = root_cause_response
-        root_cause = cast(RootCauseAnalysis, root_cause)
+        root_cause = cast(
+            RootCauseAnalysis, self._extract_first_response(root_cause_response)
+        )
 
         return BatchAnalysis(
             batch_number=batch_number,
@@ -215,10 +220,7 @@ Scores:
             response_model=HierarchicalRootCauseAnalysis,
         )
 
-        if isinstance(synthesis_response, list):
-            synthesis = synthesis_response[0]
-        else:
-            synthesis = synthesis_response
+        synthesis = self._extract_first_response(synthesis_response)
         return cast(HierarchicalRootCauseAnalysis, synthesis)
 
     def _validate_reasons_present(self, test_results: list[Any]) -> None:

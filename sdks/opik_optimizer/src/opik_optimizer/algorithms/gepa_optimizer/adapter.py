@@ -89,6 +89,26 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         return self._dataset
 
+    def _collect_candidates(
+        self,
+        prompt_variants: dict[str, chat_prompt.ChatPrompt],
+        dataset_item: dict[str, Any],
+    ) -> list[str]:
+        """Invoke the agent and normalize candidate outputs for scoring."""
+        if hasattr(self._agent, "invoke_agent_candidates"):
+            candidates = self._agent.invoke_agent_candidates(
+                prompts=prompt_variants,
+                dataset_item=dataset_item,
+            )
+        else:
+            candidates = [
+                self._agent.invoke_agent(
+                    prompts=prompt_variants,
+                    dataset_item=dataset_item,
+                )
+            ]
+        return [str(c).strip() for c in candidates if c is not None and str(c).strip()]
+
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
     ) -> dict[str, chat_prompt.ChatPrompt]:
@@ -195,21 +215,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             for inst in batch:
                 dataset_item = inst.opik_item
-                # Use agent.invoke_agent with dict of prompts
-                # Select best candidate per item when n>1 to support pass@k evaluation.
-                if hasattr(self._agent, "invoke_agent_candidates"):
-                    candidates = self._agent.invoke_agent_candidates(
-                        prompts=prompt_variants,
-                        dataset_item=dataset_item,
-                    )
-                else:
-                    candidates = [
-                        self._agent.invoke_agent(
-                            prompts=prompt_variants,
-                            dataset_item=dataset_item,
-                        )
-                    ]
-                candidates = [str(c).strip() for c in candidates if c is not None]
+                candidates = self._collect_candidates(prompt_variants, dataset_item)
                 raw_output, score = _score_candidates(dataset_item, candidates)
 
                 outputs.append({"output": raw_output})
@@ -242,19 +248,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             # Choose the best candidate output before passing into Opik evaluation.
-            if hasattr(self._agent, "invoke_agent_candidates"):
-                candidates = self._agent.invoke_agent_candidates(
-                    prompts=prompt_variants,
-                    dataset_item=dataset_item,
-                )
-            else:
-                candidates = [
-                    self._agent.invoke_agent(
-                        prompts=prompt_variants,
-                        dataset_item=dataset_item,
-                    )
-                ]
-            candidates = [str(c).strip() for c in candidates if c is not None]
+            candidates = self._collect_candidates(prompt_variants, dataset_item)
 
             best_output = candidates[0]
             best_score = float("-inf")
