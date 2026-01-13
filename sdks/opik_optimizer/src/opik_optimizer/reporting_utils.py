@@ -77,6 +77,7 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
 
     class _TqdmAdapter:
         """Minimal tqdm-like adapter backed by rich.Progress for Opik evaluators."""
+
         def __init__(
             self,
             iterable: Any | None,
