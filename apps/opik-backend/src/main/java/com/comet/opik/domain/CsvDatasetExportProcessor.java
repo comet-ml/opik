@@ -333,48 +333,62 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
             return new byte[0];
         }
 
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                OutputStreamWriter writer = new OutputStreamWriter(baos, StandardCharsets.UTF_8);
-                CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT)) {
-
-            csvPrinter.printRecord(columns);
-            csvPrinter.flush();
-            return baos.toByteArray();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to create CSV header", e);
-        }
+        return writeCsv(csvPrinter -> csvPrinter.printRecord(columns));
     }
 
     /**
      * Converts a DatasetItem to a CSV row string.
      */
     private String convertItemToCsvRow(DatasetItem item, List<String> columnList) {
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            try (OutputStreamWriter writer = new OutputStreamWriter(baos, StandardCharsets.UTF_8);
-                    CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT)) {
+        byte[] rowBytes = writeCsv(csvPrinter -> {
+            List<String> row = new ArrayList<>(columnList.size());
+            Map<String, JsonNode> data = item.data();
 
-                List<String> row = new ArrayList<>(columnList.size());
-                Map<String, JsonNode> data = item.data();
-
-                for (String column : columnList) {
-                    JsonNode value = data.get(column);
-                    if (value == null || value.isNull()) {
-                        row.add("");
-                    } else if (value.isTextual()) {
-                        row.add(value.asText());
-                    } else {
-                        row.add(JsonUtils.writeValueAsString(value));
-                    }
+            for (String column : columnList) {
+                JsonNode value = data.get(column);
+                if (value == null || value.isNull()) {
+                    row.add("");
+                } else if (value.isTextual()) {
+                    row.add(value.asText());
+                } else {
+                    row.add(JsonUtils.writeValueAsString(value));
                 }
-
-                csvPrinter.printRecord(row);
-                csvPrinter.flush();
             }
-            return baos.toString(StandardCharsets.UTF_8);
+
+            csvPrinter.printRecord(row);
+        });
+
+        return new String(rowBytes, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Helper method to write CSV data using a consumer that provides the record-writing logic.
+     * Handles all the plumbing: ByteArrayOutputStream, OutputStreamWriter, CSVPrinter creation,
+     * flushing, and exception wrapping.
+     *
+     * @param writer Consumer that writes records to the CSVPrinter
+     * @return The CSV data as a byte array
+     * @throws UncheckedIOException if an I/O error occurs
+     */
+    private byte[] writeCsv(ThrowingConsumer<CSVPrinter> writer) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                OutputStreamWriter osw = new OutputStreamWriter(baos, StandardCharsets.UTF_8);
+                CSVPrinter csvPrinter = new CSVPrinter(osw, CSVFormat.DEFAULT)) {
+
+            writer.accept(csvPrinter);
+            csvPrinter.flush();
+            return baos.toByteArray();
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to convert item to CSV row", e);
+            throw new UncheckedIOException("Failed to write CSV data", e);
         }
+    }
+
+    /**
+     * Functional interface for operations that may throw IOException.
+     */
+    @FunctionalInterface
+    private interface ThrowingConsumer<T> {
+        void accept(T t) throws IOException;
     }
 
     /**
