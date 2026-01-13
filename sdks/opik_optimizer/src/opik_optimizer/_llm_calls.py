@@ -8,6 +8,7 @@ from types import FrameType
 
 import litellm
 from litellm.exceptions import BadRequestError
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
 from . import _throttle
@@ -53,6 +54,7 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
         updated_metadata.pop("opik", None)
     updated_params["metadata"] = updated_metadata
     return updated_params
+
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +201,10 @@ def _prepare_model_params(
     """
 
     # Merge optimizer's model_parameters with call-time overrides
-    final_params = {**model_parameters, **call_time_params}
+    merged_params = {**model_parameters, **call_time_params}
+
+    # Add Opik monitoring wrapper
+    final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(merged_params)
 
     # Add reasoning metadata if applicable
     if is_reasoning and "metadata" in final_params:

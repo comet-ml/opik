@@ -332,7 +332,7 @@ class BaseOptimizer(ABC):
 
         if not callable(metric):
             raise ValueError(
-                "Metric must be a callable that takes `dataset_item` and `llm_output` as arguments, "
+                "Metric must be a callable function that takes `dataset_item` and `llm_output` as arguments, "
                 "and optionally `task_span` for metrics that need access to span information."
             )
 
@@ -352,7 +352,7 @@ class BaseOptimizer(ABC):
             The agent class to instantiate for dataset evaluations.
         """
         if agent_class is None:
-            return create_litellm_agent_class(prompt, optimizer_ref=self)
+            return LiteLLMAgent
         if not issubclass(agent_class, OptimizableAgent):
             raise TypeError(
                 f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"

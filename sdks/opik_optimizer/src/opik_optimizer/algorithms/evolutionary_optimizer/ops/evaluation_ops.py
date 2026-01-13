@@ -1,4 +1,4 @@
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 
 
 from .... import task_evaluator, helpers
@@ -54,7 +54,7 @@ def evaluate_bundle(
             tools=metadata.get("tools"),
             function_map=metadata.get("function_map"),
             name=metadata.get("name", name),
-            model=metadata.get("model"),
+            model=cast(str, metadata.get("model") or optimizer.model),
             model_parameters=metadata.get("model_kwargs"),
         )
 

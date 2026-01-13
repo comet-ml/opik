@@ -3,115 +3,75 @@ import math
 from typing import Any, overload, Literal
 from collections.abc import Callable
 
-
 import opik
 from .api_objects.types import MetricFunction
 from .reporting_utils import suppress_experiment_reporting
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
-from .metrics import multi_metric_objective
-from opik.message_processing.emulation.models import SpanModel
-from opik_optimizer.metrics import helpers
+from . import multi_metric_objective
 
 logger = logging.getLogger(__name__)
 
 
 def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
-    metric_name = metric.__name__
+    class MetricClass(base_metric.BaseMetric):
+        def __init__(self) -> None:
+            self.name = metric.__name__
 
-    needs_task_span = (
-        helpers.has_task_span_parameter(metric)
-        if not isinstance(metric, multi_metric_objective.MultiMetricObjective)
-        else metric.needs_task_span
-    )
+        def score(
+            self, llm_output: str, **kwargs: Any
+        ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+            try:
+                metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
 
-    def _process_metric_result(
-        metric_val: Any,
-        metric_name: str,
-    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-        """Normalize metric return types into ScoreResult(s)."""
-        if isinstance(metric_val, list):
-            return metric_val
+                # Handle list[ScoreResult] return type first
+                if isinstance(metric_val, list):
+                    return metric_val
 
-        if isinstance(metric, multi_metric_objective.MultiMetricObjective):
-            if isinstance(metric_val, score_result.ScoreResult):
-                raw_results = (
-                    metric_val.metadata.get("raw_score_results")
-                    if isinstance(metric_val.metadata, dict)
-                    else None
-                )
-                if isinstance(raw_results, list):
-                    return [metric_val, *raw_results]
-                return [metric_val]
-            return [
-                score_result.ScoreResult(
-                    name=metric_name,
-                    value=float(metric_val),
-                    scoring_failed=False,
-                )
-            ]
+                # Handle MultiMetricObjective - always returns list (preserves original)
+                if isinstance(metric, multi_metric_objective.MultiMetricObjective):
+                    # MultiMetricObjective.__call__ always returns ScoreResult
+                    if isinstance(metric_val, score_result.ScoreResult):
+                        if (
+                            metric_val.metadata is not None
+                            and isinstance(metric_val.metadata, dict)
+                            and "raw_score_results" in metric_val.metadata
+                        ):
+                            raw_results = metric_val.metadata["raw_score_results"]
+                            if isinstance(raw_results, list):
+                                return [metric_val, *raw_results]
+                        # No raw_score_results - still return as list
+                        return [metric_val]
+                    # Type-safe fallback (shouldn't happen at runtime)
+                    return [
+                        score_result.ScoreResult(
+                            name=self.name,
+                            value=float(metric_val),
+                            scoring_failed=False,
+                        )
+                    ]
 
-        if isinstance(metric_val, score_result.ScoreResult):
-            return score_result.ScoreResult(
-                name=metric_name,
-                value=metric_val.value,
-                scoring_failed=metric_val.scoring_failed,
-                metadata=metric_val.metadata,
-                reason=metric_val.reason,
-            )
-
-        return score_result.ScoreResult(
-            name=metric_name,
-            value=float(metric_val),
-            scoring_failed=False,
-            reason="Metric returned a numeric value",
-        )
-
-    if not needs_task_span:
-
-        class _MetricClassWithoutSpan(base_metric.BaseMetric):
-            def __init__(self) -> None:
-                super().__init__(name=metric_name, track=True)
-
-            def score(
-                self, llm_output: str, **kwargs: Any
-            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-                try:
-                    metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
-                    return _process_metric_result(metric_val, self.name)
-                except Exception as e:
+                # Handle ScoreResult return type (non-MultiMetricObjective)
+                if isinstance(metric_val, score_result.ScoreResult):
                     return score_result.ScoreResult(
                         name=self.name,
-                        value=0,
-                        scoring_failed=True,
-                        reason=f"Scoring failed with error: {type(e).__name__}: {e}",
+                        value=metric_val.value,
+                        scoring_failed=metric_val.scoring_failed,
+                        metadata=metric_val.metadata,
+                        reason=metric_val.reason,
                     )
 
-        return _MetricClassWithoutSpan()
-    else:
+                # Handle float/int return type
+                return score_result.ScoreResult(
+                    name=self.name, value=float(metric_val), scoring_failed=False
+                )
+            except Exception:
+                return score_result.ScoreResult(
+                    name=self.name, value=0, scoring_failed=True
+                )
 
-        class _MetricClassWithSpan(base_metric.BaseMetric):
-            def __init__(self) -> None:
-                super().__init__(name=metric_name, track=True)
-
-            def score(
-                self, llm_output: str, task_span: SpanModel, **kwargs: Any
-            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-                try:
-                    metric_val = metric(
-                        dataset_item=kwargs, llm_output=llm_output, task_span=task_span
-                    )
-                    return _process_metric_result(metric_val, self.name)
-                except Exception as e:
-                    return score_result.ScoreResult(
-                        name=self.name,
-                        value=0,
-                        scoring_failed=True,
-                        reason=f"Scoring failed with error: {type(e).__name__}: {e}",
-                    )
-
-        return _MetricClassWithSpan()
+    return MetricClass()
 
 
 @overload
