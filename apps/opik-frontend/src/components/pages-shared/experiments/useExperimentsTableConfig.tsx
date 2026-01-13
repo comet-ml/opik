@@ -173,9 +173,35 @@ export const useExperimentsTableConfig = <
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
-    return experiments.filter(
-      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
-    );
+    const selected = experiments.filter((row) => {
+      if (checkIsGroupRowType(row.id)) {
+        return false;
+      }
+
+      // Check if this experiment is selected using either simple or compound ID
+      // When grouping is active, the rowSelection keys are compound IDs like "experimentId|grouping_field:value"
+      // We need to check both the simple ID and all possible compound IDs
+      if (rowSelection[row.id]) {
+        return true;
+      }
+
+      // Check if any compound ID containing this experiment ID is selected
+      return Object.keys(rowSelection).some((selectionKey) => {
+        return (
+          selectionKey.startsWith(`${row.id}|`) && rowSelection[selectionKey]
+        );
+      });
+    });
+
+    // Deduplicate by experiment ID since the same experiment can appear in multiple groups
+    const uniqueRows = new Map<string, T>();
+    selected.forEach((row) => {
+      if (!uniqueRows.has(row.id)) {
+        uniqueRows.set(row.id, row);
+      }
+    });
+
+    return Array.from(uniqueRows.values());
   }, [rowSelection, experiments]);
 
   const groupFieldNames = useMemo(
