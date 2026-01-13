@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:000043_add_batch_group_id_to_dataset_versions
+--changeset idoberko2:000044_add_batch_group_id_to_dataset_versions
 --comment: Add batch_group_id column to dataset_versions table for SDK batch operation tracking
 
 ALTER TABLE dataset_versions
