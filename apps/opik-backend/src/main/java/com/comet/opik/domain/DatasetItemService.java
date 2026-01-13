@@ -1066,9 +1066,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         userName,
                                         batchGroupId))
                                 .switchIfEmpty(Mono.defer(() -> {
-                                    log.warn("Could not find item '{}' in versioned table", firstItemId);
-                                    return Mono.error(new NotFoundException(
-                                            "Dataset item not found: '%s'".formatted(firstItemId)));
+                                    // Item not found - DELETE is idempotent, so this is not an error
+                                    log.info("Item '{}' not found in versioned table, treating as already deleted",
+                                            firstItemId);
+                                    return Mono.empty();
                                 }));
                     }
 
