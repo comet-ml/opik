@@ -27,7 +27,7 @@ jobs:
     steps:
 
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v4
           with:
             ref: ${{inputs.version}}
             fetch-tags: true
@@ -35,7 +35,7 @@ jobs:
             fetch-depth: 0
 
         - name: Checkout GH Pages branch
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v4
           with:
             path: 'dest'
             ref: 'gh-pages'
@@ -105,6 +105,8 @@ jobs:
             done
 
             echo "Done! ${INDEX_FILE} dates synchronized with filesystem."
+            # check updated timestamps
+            yq '.entries.opik[].created' "${INDEX_FILE}"
 
         - name: Push New Files
           shell: bash
