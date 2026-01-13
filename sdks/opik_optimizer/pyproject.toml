@@ -45,7 +45,7 @@ dev = [
     "radon",
     "xenon",
     "lizard",
-    # Test required packaegs
+    # Test required packages
     # "google-adk",
     "huggingface-hub",
     "langgraph",
