@@ -292,10 +292,18 @@ def _semantic_mutation(
 
         response_item = response[0] if isinstance(response, list) else response
         try:
-            messages = utils.json_to_dict(response_item.strip())
+            if isinstance(response_item, list):
+                messages = response_item
+            elif isinstance(response_item, dict):
+                if "messages" in response_item:
+                    messages = response_item["messages"]
+                else:
+                    messages = [response_item]
+            else:
+                messages = utils.json_to_dict(response_item.strip())
         except Exception as parse_exc:
             raise RuntimeError(
-                f"Error parsing semantic mutation response as JSON. "
+                "Error parsing semantic mutation response as JSON. "
                 f"Response: {response_item!r}\nOriginal error: {parse_exc}"
             ) from parse_exc
         return chat_prompt.ChatPrompt(
