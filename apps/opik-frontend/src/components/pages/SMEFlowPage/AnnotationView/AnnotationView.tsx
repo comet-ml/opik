@@ -32,7 +32,6 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     validationState,
     isCurrentItemProcessed,
     unprocessedItems,
-    totalCount,
     handleNext,
     handlePrevious,
     handleSubmit,
@@ -113,7 +112,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 )}
               >
                 {isCurrentItemProcessed && <Check className="mr-1 size-4" />}
-                {currentIndex + 1}/{totalCount}
+                {currentIndex + 1}/{queueItems.length}
               </div>
               <TooltipWrapper
                 content="Previous item"

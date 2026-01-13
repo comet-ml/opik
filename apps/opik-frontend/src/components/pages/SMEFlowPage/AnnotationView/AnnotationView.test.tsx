@@ -84,7 +84,6 @@ describe("AnnotationView - Button Label Logic", () => {
       { id: "item-1", name: "Item 1" },
       { id: "item-2", name: "Item 2" },
     ],
-    totalCount: 3,
     handleNext: vi.fn(),
     handlePrevious: vi.fn(),
     handleSubmit: vi.fn(),
@@ -269,11 +268,11 @@ describe("AnnotationView - Button Label Logic", () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         currentIndex: 1, // Second item (0-indexed, so displays as 2)
-        totalCount: 3,
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
+      // queueItems has 3 items in defaultContextValue, currentIndex is 1 (second item)
       expect(screen.getByText("2/3")).toBeInTheDocument();
     });
 
@@ -282,11 +281,11 @@ describe("AnnotationView - Button Label Logic", () => {
         ...defaultContextValue,
         currentIndex: 1, // Second item (0-indexed, so displays as 2)
         isCurrentItemProcessed: true,
-        totalCount: 3,
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
+      // queueItems has 3 items in defaultContextValue, currentIndex is 1 (second item)
       expect(screen.getByText("2/3")).toBeInTheDocument();
       // Check that the counter container has the special button color class
       const counterContainer = screen.getByText("2/3").closest("div");
