@@ -110,7 +110,7 @@ jobs:
           shell: bash
           working-directory: dest
           run: |
-            yq '.entries.opik[].created' "${INDEX_FILE}"
+            yq '.entries.opik[].created' index.yaml
             helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
             git diff -- index.yaml
             git config user.name "Helm Updater"
