@@ -46,6 +46,8 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             DatasetExportStatus.PENDING,
             DatasetExportStatus.PROCESSING);
 
+    public static final String EXPORT_JOB_NOT_FOUND = "Export job not found: '%s'";
+
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
 
@@ -112,7 +114,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
                 return dao.findById(workspaceId, jobId)
-                        .orElseThrow(() -> new NotFoundException("Export job not found: '%s'".formatted(jobId)));
+                        .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
             })).subscribeOn(Schedulers.boundedElastic());
         });
     }
@@ -130,7 +132,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                             userName);
 
                     if (updated == 0) {
-                        throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
+                        throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
                     }
 
                     return null;
@@ -155,7 +157,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                             userName);
 
                     if (updated == 0) {
-                        throw new NotFoundException("Export job not found: '%s'".formatted(jobId));
+                        throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
                     }
 
                     return null;

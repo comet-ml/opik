@@ -27,7 +27,7 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
 
     @Inject
     public DatasetExportJobSubscriber(
-            @NonNull @Config DatasetExportConfig config,
+            @NonNull @Config("datasetExport") DatasetExportConfig config,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull DatasetExportJobService jobService,
             @NonNull CsvDatasetExportProcessor csvProcessor) {
@@ -87,6 +87,6 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 })
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, "system")); // System user for async processing
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER)); // System user for async processing
     }
 }

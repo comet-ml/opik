@@ -28,6 +28,8 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.UploadPartRequest;
+import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -39,10 +41,14 @@ import java.util.Set;
 public interface FileService {
     CreateMultipartUploadResponse createMultipartUpload(String key, String contentType);
 
+    String uploadPart(String key, String uploadId, int partNumber, byte[] data);
+
     CompleteMultipartUploadResponse completeMultipartUpload(String key, String uploadId,
             List<MultipartUploadPart> parts);
 
     PutObjectResponse upload(String key, byte[] data, String contentType);
+
+    PutObjectResponse uploadStream(String key, InputStream inputStream, long contentLength, String contentType);
 
     InputStream download(String key);
 
@@ -82,6 +88,25 @@ class FileServiceImpl implements FileService {
     }
 
     @Override
+    @WithSpan
+    public String uploadPart(@NonNull String key, @NonNull String uploadId, int partNumber, @NonNull byte[] data) {
+        log.debug("Uploading part {} for key: '{}', size: {} bytes", partNumber, key, data.length);
+
+        UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+                .bucket(s3Config.getS3BucketName())
+                .key(key)
+                .uploadId(uploadId)
+                .partNumber(partNumber)
+                .build();
+
+        UploadPartResponse response = s3Client.uploadPart(uploadPartRequest, RequestBody.fromBytes(data));
+        String eTag = response.eTag();
+
+        log.debug("Successfully uploaded part {} for key: '{}', eTag: '{}'", partNumber, key, eTag);
+        return eTag;
+    }
+
+    @Override
     public CompleteMultipartUploadResponse completeMultipartUpload(@NonNull String key,
             @NonNull String uploadId,
             @NonNull List<MultipartUploadPart> parts) {
@@ -114,6 +139,30 @@ class FileServiceImpl implements FileService {
                 .build();
 
         return s3Client.putObject(putRequest, RequestBody.fromBytes(data));
+    }
+
+    @Override
+    @WithSpan
+    public PutObjectResponse uploadStream(@NonNull String key, @NonNull InputStream inputStream, long contentLength,
+            @NonNull String contentType) {
+        log.info("Uploading file with streaming for key: '{}'", key);
+
+        PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(s3Config.getS3BucketName())
+                .key(key)
+                .contentType(contentType)
+                .contentLength(contentLength)
+                .build();
+
+        try {
+            PutObjectResponse response = s3Client.putObject(putRequest,
+                    RequestBody.fromInputStream(inputStream, contentLength));
+            log.info("Successfully uploaded file for key: '{}'", key);
+            return response;
+        } catch (Exception exception) {
+            log.error("Failed to upload file for key: '{}'", key, exception);
+            throw exception;
+        }
     }
 
     @Override

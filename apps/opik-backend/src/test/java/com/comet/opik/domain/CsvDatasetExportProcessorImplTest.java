@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,7 +41,6 @@ class CsvDatasetExportProcessorImplTest {
     @Mock
     private FileService fileService;
 
-    @Mock
     private DatasetExportConfig exportConfig;
 
     private CsvDatasetExportProcessorImpl processor;
@@ -49,6 +50,17 @@ class CsvDatasetExportProcessorImplTest {
 
     @BeforeEach
     void setUp() {
+        // Use real config with default values
+        exportConfig = new DatasetExportConfig();
+
+        // Mock multipart upload methods (lenient because not all tests use them)
+        CreateMultipartUploadResponse multipartResponse = CreateMultipartUploadResponse.builder()
+                .uploadId("test-upload-id")
+                .build();
+        lenient().when(fileService.createMultipartUpload(any(), any())).thenReturn(multipartResponse);
+        lenient().when(fileService.uploadPart(any(), any(), anyInt(), any())).thenReturn("test-etag");
+        lenient().when(fileService.completeMultipartUpload(any(), any(), any())).thenReturn(null);
+
         processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, exportConfig);
     }
 
