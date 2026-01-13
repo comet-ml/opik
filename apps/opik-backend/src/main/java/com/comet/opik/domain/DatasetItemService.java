@@ -1633,27 +1633,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Mutates the latest version by appending items to it.
+     * Mutates the latest version by applying a delta (adds/edits).
      * Used when batchGroupId is null (backwards compatibility).
      */
     private Mono<DatasetVersion> mutateLatestVersionWithInsert(DatasetItemBatch batch, UUID datasetId,
             String workspaceId, String userName) {
         log.info("Mutating latest version for dataset '{}' with '{}' items", datasetId, batch.items().size());
 
-        // Get the latest version
-        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
-
-        if (latestVersion.isEmpty()) {
-            // No versions exist - create the first version
-            log.info("No versions exist for dataset '{}', creating first version", datasetId);
-            return saveItemsWithVersion(batch, datasetId, null)
-                    .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.USER_NAME, userName));
-        }
-
-        // Mutate the latest version by appending items
-        UUID latestVersionId = latestVersion.get().id();
-        return appendItemsToVersion(datasetId, latestVersionId, batch.items(), workspaceId)
+        // Use saveItemsWithVersion which properly handles add vs edit logic
+        return saveItemsWithVersion(batch, datasetId, null)
                 .contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName));
     }
