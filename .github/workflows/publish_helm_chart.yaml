@@ -26,6 +26,11 @@ jobs:
     timeout-minutes: 15
     steps:
 
+        - name: Install Helm
+          uses: azure/setup-helm@v4.2.0
+          with:
+            version: v3.13.0
+
         - name: Checkout
           uses: actions/checkout@v4
           with:
@@ -40,11 +45,6 @@ jobs:
             path: 'dest'
             ref: 'gh-pages'
             fetch-depth: 0
-
-        - name: Install Helm
-          uses: azure/setup-helm@v4.2.0
-          with:
-            version: v3.13.0
 
         - name: Run lint on Helm chart
           shell: bash
@@ -105,21 +105,21 @@ jobs:
             done
 
             echo "Done! ${INDEX_FILE} dates synchronized with filesystem."
-            # check updated timestamps
-            yq '.entries.opik[].created' "${INDEX_FILE}"
 
         - name: Push New Files
           shell: bash
           working-directory: dest
           run: |
-              helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
-              git config user.name "Helm Updater"
-              git config user.email "actions@users.noreply.github.com"
-              git config set advice.addEmptyPathspec false
-              git add $(git ls-files -o --exclude-standard)
-              git add index.yaml README.md
-              git commit -m "Release Opik helm chart ${{inputs.version}}"
-              git push   
+            helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
+            git remote -v
+            git diff -- index.yaml
+            git config user.name "Helm Updater"
+            git config user.email "actions@users.noreply.github.com"
+            git config set advice.addEmptyPathspec false
+            git ls-files -o --exclude-standard -z | xargs -0 git add
+            git add index.yaml README.md
+            git commit -m "Release Opik helm chart ${{inputs.version}}"
+            git push   
 
         - name: Summary
           run: |
