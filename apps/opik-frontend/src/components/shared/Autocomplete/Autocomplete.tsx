@@ -152,7 +152,7 @@ const AutoComplete = <T extends string>({
                 e.preventDefault();
               }
             }}
-            className="w-[--radix-popover-trigger-width] p-0"
+            className="w-[--radix-popover-trigger-width] min-w-64 p-0"
           >
             <CommandList onWheel={(e) => e.stopPropagation()}>
               {isLoading && (
