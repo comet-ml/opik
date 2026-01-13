@@ -743,7 +743,7 @@ navigation:
             icon: fa-regular fa-sliders
             path: docs/agent_optimization/advanced/custom_metrics.mdx
             slug: custom_metrics
-          - page: Prompt customization
+          - page: Custom optimizer prompts
             icon: fa-regular fa-pen-to-square
             path: docs/agent_optimization/advanced/prompt_customization.mdx
             slug: prompt_customization

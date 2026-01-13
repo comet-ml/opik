@@ -50,9 +50,9 @@ While the exact implementation would vary, a custom optimizer might conceptually
 
 class CustomOptimizer:
     def __init__(self, model: str, # and other relevant params like in existing optimizers
-                 **model_kwargs):
+                 **model_parameters):
         self.model = model
-        self.model_kwargs = model_kwargs
+        self.model_parameters = model_parameters
         # Custom initialization for your algorithm
 
     def optimize_prompt(

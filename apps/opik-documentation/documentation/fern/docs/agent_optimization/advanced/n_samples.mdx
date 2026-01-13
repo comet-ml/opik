@@ -8,15 +8,19 @@ When optimizing prompts, single-sample evaluation can be noisy - a good prompt m
 
 ## How It Works
 
-When you set `n > 1` in your prompt's `model_kwargs`, the optimizer:
+When you set `n > 1` in your prompt's `model_parameters`, the optimizer:
 
-1. Requests N completions from the LLM in a single API call
+1. Requests N completions from the LLM in a single API call (pass@N)
 2. Scores each candidate output using your metric
 3. Selects the best candidate (`best_by_metric` policy)
 4. Logs all scores and selection info to the Opik trace
 
 In optimizers that already generate multiple prompt variants per round, `n` is
 applied per evaluation, so total candidate evaluations scale by `prompts_per_round * n`.
+
+For tasks that execute generated code (like ARC-AGI or tool-driven agents), this means
+each prompt produces multiple candidate programs that are executed and scored, and the
+best candidate is used for optimization feedback.
 
 ```mermaid
 sequenceDiagram
@@ -39,7 +43,7 @@ sequenceDiagram
 
 ## Configuration
 
-Set the `n` parameter in your `ChatPrompt.model_kwargs`:
+Set the `n` parameter in your `ChatPrompt.model_parameters`:
 
 ```python
 from opik_optimizer import ChatPrompt
@@ -51,7 +55,7 @@ prompt = ChatPrompt(
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Answer: {question}"},
     ],
-    model_kwargs={
+    model_parameters={
         "n": 3,  # Generate 3 completions per call
         "temperature": 0.7,  # Higher temp = more variety between candidates
     },
@@ -60,6 +64,12 @@ prompt = ChatPrompt(
 
 <Info>
   Higher `temperature` values increase diversity between the N candidates. Consider using `temperature: 0.7-1.0` with `n > 1` to maximize variety.
+</Info>
+
+<Info>
+  The low-level `call_model` and `call_model_async` helpers return a single
+  response unless you pass `return_all=True`. Optimizers handle `n` internally,
+  so you only need `return_all` when calling those helpers directly.
 </Info>
 
 ## Use Cases
@@ -77,7 +87,7 @@ prompt = ChatPrompt(
     prompt = ChatPrompt(
         model="gpt-4o-mini",
         messages=[...],
-        model_kwargs={"n": 3, "temperature": 0.8},
+        model_parameters={"n": 3, "temperature": 0.8},
     )
     # Score reflects best achievable output
     ```
@@ -91,7 +101,7 @@ prompt = ChatPrompt(
     prompt = ChatPrompt(
         model="gpt-4o-mini",
         messages=[...],
-        model_kwargs={"n": 5},  # pass@5 style
+        model_parameters={"n": 5},  # pass@5 style
     )
     ```
 
@@ -111,7 +121,7 @@ prompt = ChatPrompt(
         messages=[
             {"role": "user", "content": "Write a haiku about {topic}"},
         ],
-        model_kwargs={"n": 3, "temperature": 1.0},
+        model_parameters={"n": 3, "temperature": 1.0},
     )
     ```
   </Accordion>
@@ -119,7 +129,45 @@ prompt = ChatPrompt(
 
 ## Selection Policy
 
-Currently, the optimizer uses `best_by_metric` selection:
+Currently, the optimizer supports these selection policies:
+
+- `best_by_metric` (default): score each candidate with the metric and pick the best.
+- `first`: pick the first candidate (fast, deterministic, but ignores scoring).
+- `concat`: join all candidates into one output string.
+- `random`: pick a random candidate (seeded if provided).
+- `max_logprob`: pick the candidate with the highest average token logprob (provider support required; logprobs must be enabled in model kwargs).
+
+Use the `selection_policy` key in `model_parameters` to override. The optimizer
+routes these policies through a shared candidate-selection utility so behavior
+is consistent across optimizers:
+
+```python
+prompt = ChatPrompt(
+    model="gpt-4o-mini",
+    messages=[...],
+    model_parameters={
+        "n": 3,
+        "selection_policy": "first",
+    },
+)
+```
+
+For `max_logprob`, enable logprobs in your model kwargs (provider support varies):
+
+```python
+prompt = ChatPrompt(
+    model="gpt-4o-mini",
+    messages=[...],
+    model_parameters={
+        "n": 3,
+        "selection_policy": "max_logprob",
+        "logprobs": True,
+        "top_logprobs": 1,
+    },
+)
+```
+
+When `selection_policy=best_by_metric`, the optimizer:
 
 1. Each candidate is scored independently using your metric function
 2. The candidate with the highest score is selected as the final output
@@ -136,7 +184,8 @@ final_output = candidates[best_idx]  # "output_2"
 The trace metadata includes:
 - `n_requested`: Number of completions requested
 - `candidates_scored`: Number of candidates evaluated
-- `candidate_scores`: List of all scores
+- `candidate_scores`: List of all scores (best_by_metric only)
+- `candidate_logprobs`: List of logprob scores (max_logprob only)
 - `chosen_index`: Index of the selected candidate
 
 ## Cost Considerations
@@ -169,7 +218,7 @@ The trace metadata includes:
         model="gpt-4o-mini",
         messages=[...],
         tools=[...],
-        model_kwargs={"n": 3},  # Ignored when tools are used
+        model_parameters={"n": 3},  # Ignored when tools are used
     )
     ```
   </Accordion>
@@ -196,7 +245,7 @@ prompt = ChatPrompt(
         {"role": "system", "content": "Extract the key entities from the text."},
         {"role": "user", "content": "{text}"},
     ],
-    model_kwargs={
+    model_parameters={
         "n": 3,  # Generate 3 candidates
         "temperature": 0.7,  # Moderate variety
     },
