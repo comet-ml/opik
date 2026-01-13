@@ -84,6 +84,8 @@ describe("AnnotationView - Button Label Logic", () => {
       { id: "item-1", name: "Item 1" },
       { id: "item-2", name: "Item 2" },
     ],
+    processedCount: 1,
+    totalCount: 3,
     handleNext: vi.fn(),
     handlePrevious: vi.fn(),
     handleSubmit: vi.fn(),
@@ -158,7 +160,7 @@ describe("AnnotationView - Button Label Logic", () => {
   });
 
   describe("Completed item scenarios", () => {
-    it('should show "Item completed" when viewing a completed item with no changes', () => {
+    it('should show "Update & next" when viewing a completed item with no changes and other unprocessed items exist', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: true,
@@ -171,9 +173,9 @@ describe("AnnotationView - Button Label Logic", () => {
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("Item completed")).toBeInTheDocument();
+      expect(screen.getByText("Update & next")).toBeInTheDocument();
       // Button should be disabled when canSubmit is false
-      const button = screen.getByText("Item completed");
+      const button = screen.getByText("Update & next");
       expect(button).toBeDisabled();
     });
 
@@ -264,15 +266,33 @@ describe("AnnotationView - Button Label Logic", () => {
       expect(screen.getByTestId("validation-alert")).toBeInTheDocument();
     });
 
-    it("should display correct item counter", () => {
+    it("should display correct processed count", () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         currentIndex: 1, // Second item
+        processedCount: 1,
+        totalCount: 3,
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });
 
-      expect(screen.getByText("2 of 3")).toBeInTheDocument();
+      expect(screen.getByText("1/3")).toBeInTheDocument();
+    });
+
+    it("should display counter in green with check icon when viewing a completed item", () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        isCurrentItemProcessed: true,
+        processedCount: 2,
+        totalCount: 3,
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("2/3")).toBeInTheDocument();
+      // Check that the counter container has the success color class
+      const counterContainer = screen.getByText("2/3").closest("div");
+      expect(counterContainer).toHaveClass("text-success");
     });
   });
 

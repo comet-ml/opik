@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Card } from "@/components/ui/card";
 import TraceDataViewer from "./TraceDataViewer";
@@ -31,6 +31,8 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
     validationState,
     isCurrentItemProcessed,
     unprocessedItems,
+    processedCount,
+    totalCount,
     handleNext,
     handlePrevious,
     handleSubmit,
@@ -43,9 +45,6 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   const getButtonLabel = () => {
     if (isCurrentItemProcessed) {
       // Viewing a completed item (current item is NOT in unprocessedItems)
-      if (!validationState.canSubmit) {
-        return "Item completed";
-      }
       // Check if there are OTHER unprocessed items
       // Since current item is already processed, it's not in unprocessedItems
       const hasOtherUnprocessedItems = unprocessedItems.length > 0;
@@ -105,8 +104,15 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
           <>
             <ReturnToAnnotationQueueButton />
             <div className="flex items-center gap-2">
-              <div className="comet-body-s flex items-center text-light-slate">
-                {currentIndex + 1} of {queueItems.length}
+              <div
+                className={`comet-body-s flex items-center ${
+                  isCurrentItemProcessed
+                    ? "text-[var(--special-button)]"
+                    : "text-light-slate"
+                }`}
+              >
+                {isCurrentItemProcessed && <Check className="mr-1 size-4" />}
+                {processedCount}/{totalCount}
               </div>
               <TooltipWrapper
                 content="Previous item"
