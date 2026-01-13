@@ -19,6 +19,7 @@ This is the main frontend development guide. For detailed guidelines, refer to t
 7. **[Code Quality](mdc:.cursor/rules/code-quality.mdc)** - TypeScript patterns and naming conventions
 8. **[Accessibility & Testing](mdc:.cursor/rules/accessibility-testing.mdc)** - Accessibility and testing guidelines
 9. **[Unit Testing](mdc:.cursor/rules/unit-testing.mdc)** - Unit testing patterns for complex cases
+10. **[Responsive Design](mdc:.cursor/rules/responsive-design.mdc)** - Tailwind CSS breakpoints vs useIsPhone hook
 
 ## Quick Reference
 

@@ -3,7 +3,7 @@
 ## Rule References
 - Repo guardrails: `.cursor/rules/` (`project-structure.mdc`, `clean-code.mdc`, `git-workflow.mdc`, `test-workflow.mdc`).
 - Backend: `apps/opik-backend/.cursor/rules/` (e.g., `tech_stack.mdc`, `code_quality.mdc`, `api_design.mdc`).
-- Frontend: `apps/opik-frontend/.cursor/rules/` (`tech-stack.mdc`, `code-quality.mdc`, `unit-testing.mdc`).
+- Frontend: `apps/opik-frontend/.cursor/rules/` (`tech-stack.mdc`, `code-quality.mdc`, `unit-testing.mdc`, `responsive-design.mdc`).
 - Python SDK: `sdks/python/.cursor/rules/` (`code-structure.mdc`, `test-best-practices.mdc`, `documentation-style.mdc`).
 - Opik Optimizer SDK: `sdks/opik_optimizer/.cursor/rules/` (`architecture.mdc`, `code-structure.mdc`, `dependencies.mdc`, `documentation-style.mdc`, `error-handling.mdc`, `logging.mdc`, `test-best-practices.mdc`, `test-organization.mdc`).
 - TypeScript SDK: `sdks/typescript/.cursor/rules/` (`overview.mdc`, `code-structure.mdc`, `test-best-practices.mdc`).
