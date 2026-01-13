@@ -131,9 +131,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
                             userName);
 
-                    if (updated == 0) {
-                        throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
-                    }
+                    verifyJobExistsOrThrow(updated, jobId);
 
                     return null;
                 });
@@ -156,9 +154,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage,
                             userName);
 
-                    if (updated == 0) {
-                        throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
-                    }
+                    verifyJobExistsOrThrow(updated, jobId);
 
                     return null;
                 });
@@ -167,5 +163,19 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });
+    }
+
+    /**
+     * Verifies that a job update operation affected at least one row.
+     * Throws NotFoundException if the job was not found or doesn't belong to the current workspace.
+     *
+     * @param updatedRows The number of rows affected by the update operation
+     * @param jobId       The ID of the job being updated
+     * @throws NotFoundException if no rows were updated
+     */
+    private void verifyJobExistsOrThrow(int updatedRows, UUID jobId) {
+        if (updatedRows == 0) {
+            throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
+        }
     }
 }
