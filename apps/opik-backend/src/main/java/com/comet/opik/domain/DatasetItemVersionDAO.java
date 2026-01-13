@@ -289,6 +289,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId<endif>
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             <if(lastRetrievedId)>
             LIMIT :limit
             <else>
