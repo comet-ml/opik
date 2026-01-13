@@ -33,16 +33,22 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # Test Related
     "pytest",
     "pytest-cov",
     "pytest-xdist",
     "pytest-asyncio",
     "pytest-env",
     "pytest-profiling",
-    "huggingface-hub",
-    # "google-adk",
-    "langgraph",
+    # Pre-commit
     "pre-commit",
+    "radon",
+    "xenon",
+    "lizard",
+    # Test required packaegs
+    # "google-adk",
+    "huggingface-hub",
+    "langgraph",
     "bm25s",
     "PyStemmer",
     "scikit-learn",
