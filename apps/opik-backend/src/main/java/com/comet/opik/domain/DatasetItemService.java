@@ -1750,14 +1750,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Use datasetItemId if already set, otherwise use id, otherwise generate new
         List<DatasetItem> addedItems = items.stream()
                 .map(item -> {
-                    UUID stableId;
-                    if (item.datasetItemId() != null) {
-                        stableId = item.datasetItemId();
-                    } else if (item.id() != null) {
-                        stableId = item.id();
-                    } else {
-                        stableId = idGenerator.generateId();
-                    }
+                    UUID stableId = item.id() != null ? item.id() : idGenerator.generateId();
                     return item.toBuilder()
                             .datasetItemId(stableId)
                             .datasetId(datasetId)
@@ -1847,14 +1840,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     List<UUID> unchangedUuids = generateUnchangedUuidsReversed(unchangedItemCount);
                     List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
-                    List<DatasetItem> editedItemsWithIds = editedItems;
-
                     // Assign row IDs to added items
                     List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
                     // Apply delta changes - no deletions in PUT flow
                     return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                            addedItemsWithIds, editedItemsWithIds, Set.of(), unchangedUuids)
+                            addedItemsWithIds, editedItems, Set.of(), unchangedUuids)
                             .map(itemsTotal -> {
                                 log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
