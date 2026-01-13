@@ -19,6 +19,7 @@ import logging
 from unittest.mock import MagicMock
 from typing import Any
 
+from opik import Dataset
 from opik_optimizer import ChatPrompt
 
 
@@ -288,7 +289,7 @@ def mock_dataset():
         name: str = "test-dataset",
         dataset_id: str = "dataset-123",
     ):
-        mock = MagicMock()
+        mock = MagicMock(spec=Dataset)
         mock.name = name
         mock.id = dataset_id
 
@@ -681,3 +682,283 @@ def mock_evaluation_result():
         return mock_result
 
     return _create
+
+
+# ============================================================
+# Optimizer Setup Flow Fixtures
+# ============================================================
+
+
+@pytest.fixture
+def mock_optimization_context(monkeypatch: pytest.MonkeyPatch):
+    """
+    Mock Opik optimization creation and updates for optimizer setup flow tests.
+
+    This fixture mocks the Opik client's optimization-related methods to avoid
+    network calls while allowing verification of proper optimization tracking.
+
+    Usage:
+        def test_optimization_tracking(mock_optimization_context):
+            ctx = mock_optimization_context()
+
+            # Run optimizer...
+
+            # Verify optimization was created
+            ctx.client.create_optimization.assert_called_once()
+
+            # Verify status was updated
+            ctx.optimization.update.assert_called_with(status="completed")
+
+            # Access the optimization ID
+            assert ctx.optimization.id == "test-opt-123"
+    """
+
+    def _configure(
+        *,
+        optimization_id: str = "test-opt-123",
+        raise_on_create: Exception | None = None,
+        raise_on_update: Exception | None = None,
+    ):
+        mock_client = MagicMock()
+        mock_optimization = MagicMock()
+        mock_optimization.id = optimization_id
+
+        if raise_on_create:
+            mock_client.create_optimization.side_effect = raise_on_create
+        else:
+            mock_client.create_optimization.return_value = mock_optimization
+
+        if raise_on_update:
+            mock_optimization.update.side_effect = raise_on_update
+
+        mock_client.get_optimization_by_id.return_value = mock_optimization
+        monkeypatch.setattr("opik.Opik", lambda **kw: mock_client)
+
+        class Context:
+            pass
+
+        ctx = Context()
+        ctx.client = mock_client  # type: ignore[attr-defined]
+        ctx.optimization = mock_optimization  # type: ignore[attr-defined]
+        return ctx
+
+    return _configure
+
+
+@pytest.fixture
+def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch):
+    """
+    Mock the task evaluator to return configurable scores.
+
+    This fixture mocks `opik_optimizer.task_evaluator.evaluate` to return
+    predictable scores without running actual evaluations.
+
+    Usage:
+        def test_evaluation(mock_task_evaluator):
+            # Return a fixed score
+            mock_task_evaluator(score=0.75)
+
+            # Return different scores on successive calls
+            mock_task_evaluator(scores=[0.5, 0.8, 0.9])
+
+            # Access captured calls
+            evaluator = mock_task_evaluator(score=0.5)
+            # ... run optimization ...
+            assert len(evaluator.calls) == 3
+    """
+
+    def _configure(
+        score: float | None = None,
+        *,
+        scores: list[float] | None = None,
+        return_evaluation_result: bool = False,
+    ):
+        call_count: dict[str, int] = {"n": 0}
+        captured_calls: list[dict[str, Any]] = []
+
+        def fake_evaluate(
+            dataset,
+            evaluated_task,
+            metric,
+            num_threads,
+            optimization_id=None,
+            dataset_item_ids=None,
+            project_name=None,
+            n_samples=None,
+            experiment_config=None,
+            verbose=1,
+            return_evaluation_result=False,
+            **kwargs,
+        ):
+            captured_calls.append(
+                {
+                    "dataset": dataset,
+                    "evaluated_task": evaluated_task,
+                    "metric": metric,
+                    "num_threads": num_threads,
+                    "optimization_id": optimization_id,
+                    "n_samples": n_samples,
+                    "return_evaluation_result": return_evaluation_result,
+                }
+            )
+
+            # Determine the score to return
+            if scores is not None:
+                idx = min(call_count["n"], len(scores) - 1)
+                current_score = scores[idx]
+            else:
+                current_score = score if score is not None else 0.5
+
+            call_count["n"] += 1
+
+            if return_evaluation_result:
+                mock_result = MagicMock()
+                mock_result.test_results = []
+                items = dataset.get_items() if hasattr(dataset, "get_items") else []
+                for i, item in enumerate(items[:5]):
+                    test_result = MagicMock()
+                    test_case = MagicMock()
+                    test_case.dataset_item_id = item.get("id", f"item-{i}")
+                    test_result.test_case = test_case
+
+                    score_result = MagicMock()
+                    score_result.name = "test_metric"
+                    score_result.value = current_score
+                    score_result.reason = None
+                    score_result.scoring_failed = False
+
+                    test_result.score_results = [score_result]
+                    mock_result.test_results.append(test_result)
+
+                return mock_result
+
+            return current_score
+
+        monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+
+        class Evaluator:
+            pass
+
+        evaluator = Evaluator()
+        evaluator.calls = captured_calls  # type: ignore[attr-defined]
+        evaluator.call_count = call_count  # type: ignore[attr-defined]
+        return evaluator
+
+    return _configure
+
+
+@pytest.fixture
+def mock_full_optimization_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_llm_call,
+    mock_optimization_context,
+    mock_task_evaluator,
+):
+    """
+    Comprehensive mock for full optimization flow testing.
+
+    This fixture combines all necessary mocks for testing the complete
+    optimize_prompt flow without making any real API calls.
+
+    Mocks:
+    - LLM calls (via mock_llm_call)
+    - Opik client and optimization (via mock_optimization_context)
+    - Task evaluator (via mock_task_evaluator)
+    - LiteLLMAgent instantiation
+
+    Usage:
+        def test_optimizer(mock_full_optimization_flow):
+            mocks = mock_full_optimization_flow(
+                llm_response="improved prompt",
+                evaluation_scores=[0.5, 0.8]  # baseline, improved
+            )
+
+            optimizer = SomeOptimizer(model="gpt-4", verbose=0)
+            result = optimizer.optimize_prompt(...)
+
+            # Access mocks for assertions
+            mocks.optimization_context.client.create_optimization.assert_called_once()
+            assert mocks.evaluator.call_count["n"] >= 1
+    """
+
+    def _configure(
+        *,
+        llm_response: Any = "Improved prompt content",
+        llm_responses: list[Any] | None = None,
+        evaluation_score: float = 0.75,
+        evaluation_scores: list[float] | None = None,
+        optimization_id: str = "test-opt-123",
+        raise_on_optimization_create: Exception | None = None,
+    ):
+        if llm_responses is not None:
+            call_idx = {"n": 0}
+
+            def llm_side_effect(**kwargs):
+                idx = min(call_idx["n"], len(llm_responses) - 1)
+                call_idx["n"] += 1
+                return llm_responses[idx]
+
+            llm_mock = mock_llm_call(side_effect=llm_side_effect)
+        else:
+            llm_mock = mock_llm_call(llm_response)
+
+        opt_ctx = mock_optimization_context(
+            optimization_id=optimization_id,
+            raise_on_create=raise_on_optimization_create,
+        )
+
+        evaluator = mock_task_evaluator(
+            score=evaluation_score,
+            scores=evaluation_scores,
+        )
+
+        mock_agent_instance = MagicMock()
+        mock_agent_instance.invoke_agent.return_value = "Mock agent response"
+        mock_agent_instance.invoke_agent_candidates.return_value = [
+            "Mock agent response"
+        ]
+
+        def mock_litellm_agent_init(*args, **kwargs):
+            return mock_agent_instance
+
+        monkeypatch.setattr(
+            "opik_optimizer.agents.LiteLLMAgent", mock_litellm_agent_init
+        )
+
+        class Mocks:
+            pass
+
+        mocks = Mocks()
+        mocks.llm = llm_mock  # type: ignore[attr-defined]
+        mocks.optimization_context = opt_ctx  # type: ignore[attr-defined]
+        mocks.evaluator = evaluator  # type: ignore[attr-defined]
+        mocks.agent = mock_agent_instance  # type: ignore[attr-defined]
+        return mocks
+
+    return _configure
+
+
+@pytest.fixture
+def optimizer_test_params() -> dict[str, Any]:
+    """
+    Standard test parameters for fast optimizer testing.
+
+    Returns minimal configuration values to make optimizer tests run quickly
+    while still exercising the full code paths.
+
+    Usage:
+        def test_optimizer(optimizer_test_params, mock_full_optimization_flow):
+            mocks = mock_full_optimization_flow()
+            optimizer = SomeOptimizer(model="gpt-4", **optimizer_test_params)
+            result = optimizer.optimize_prompt(
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                **optimizer_test_params,
+            )
+    """
+    return {
+        "max_trials": 1,
+        "n_samples": 2,
+        "verbose": 0,
+    }

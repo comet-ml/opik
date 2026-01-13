@@ -1,14 +1,13 @@
-"""
-Unit tests for ParameterOptimizer multi-prompt and parameter expansion features.
+# mypy: disable-error-code=no-untyped-def
 
-Tests cover:
-- expand_for_prompts: Auto-expansion of parameters per prompt
-- apply_to_prompts: Application of prefixed parameters to prompts
-- Multi-prompt handling in optimizer
-- Single prompt backward compatibility
-"""
+from collections.abc import Callable
+from typing import Any
+from unittest.mock import MagicMock
 
-from opik_optimizer import ChatPrompt
+import pytest
+
+from opik import Dataset
+from opik_optimizer import ChatPrompt, ParameterOptimizer
 from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
     ParameterSearchSpace,
 )
@@ -16,6 +15,96 @@ from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import Paramet
 from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
     ParameterType,
 )
+
+
+def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
+    return 1.0
+
+
+def _make_dataset() -> MagicMock:
+    dataset = MagicMock(spec=Dataset)
+    dataset.name = "test-dataset"
+    dataset.id = "dataset-123"
+    dataset.get_items.return_value = [{"id": "1", "question": "Q1", "answer": "A1"}]
+    return dataset
+
+
+class TestParameterOptimizerInit:
+    def test_initialization_with_defaults(self) -> None:
+        optimizer = ParameterOptimizer(model="gpt-4o")
+        assert optimizer.model == "gpt-4o"
+        assert optimizer.seed == 42
+
+    def test_initialization_with_custom_params(self) -> None:
+        optimizer = ParameterOptimizer(
+            model="gpt-4o-mini",
+            verbose=0,
+            seed=123,
+        )
+        assert optimizer.model == "gpt-4o-mini"
+        assert optimizer.verbose == 0
+        assert optimizer.seed == 123
+
+
+class TestParameterOptimizerOptimizePrompt:
+    def test_optimize_prompt_raises_not_implemented(
+        self,
+        mock_optimization_context,
+    ) -> None:
+        mock_optimization_context()
+        optimizer = ParameterOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompt = ChatPrompt(system="Test", user="{question}")
+        dataset = _make_dataset()
+
+        with pytest.raises(NotImplementedError):
+            optimizer.optimize_prompt(
+                prompt=prompt,
+                dataset=dataset,
+                metric=_metric,
+                max_trials=1,
+            )
+
+
+class TestParameterOptimizerEarlyStop:
+    def test_skips_on_perfect_score(
+        self,
+        mock_opik_client: Callable[..., MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mock_opik_client()
+        dataset = _make_dataset()
+        optimizer = ParameterOptimizer(model="gpt-4o", perfect_score=0.95)
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
+        monkeypatch.setattr(
+            "optuna.create_study",
+            lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
+        )
+
+        prompt = ChatPrompt(system="baseline", user="{question}")
+        parameter_space = ParameterSearchSpace(
+            parameters=[
+                ParameterSpec(
+                    name="temperature",
+                    distribution=ParameterType.FLOAT,
+                    low=0.0,
+                    high=1.0,
+                )
+            ]
+        )
+        result = optimizer.optimize_parameter(
+            prompt=prompt,
+            dataset=dataset,
+            metric=_metric,
+            parameter_space=parameter_space,
+            max_trials=1,
+        )
+
+        assert result.details["stopped_early"] is True
+        assert result.details["stop_reason"] == "baseline_score_met_threshold"
+        assert result.details["perfect_score"] == 0.95
+        assert result.initial_score == result.score
+        assert result.details["n_trials"] == 0
 
 
 class TestExpandForPrompts:
