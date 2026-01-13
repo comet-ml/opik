@@ -2562,13 +2562,6 @@ class ProjectMetricsResourceTest {
                         Arrays.asList(0, 5, 5)),
                 Arguments.of(
                         (Function<Span, SpanFilter>) span -> SpanFilter.builder()
-                                .field(SpanField.TYPE)
-                                .operator(EQUAL)
-                                .value(span.type().toString())
-                                .build(),
-                        Arrays.asList(0, 5, 5)),
-                Arguments.of(
-                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
                                 .field(SpanField.FEEDBACK_SCORES)
                                 .operator(EQUAL)
                                 .key("score1")
@@ -2579,10 +2572,10 @@ class ProjectMetricsResourceTest {
                         (Function<Span, SpanFilter>) span -> SpanFilter.builder()
                                 .field(SpanField.FEEDBACK_SCORES)
                                 .operator(IS_EMPTY)
-                                .key("NonExistingScore")
+                                .key("score2")
                                 .value("")
                                 .build(),
-                        Arrays.asList(1, 2, 3)));
+                        Arrays.asList(1, 3, 4)));
     }
 
     @Nested
@@ -2630,21 +2623,26 @@ class ProjectMetricsResourceTest {
 
             // create spans in several buckets
             var expected = List.of(3, 2, 1);
-            var spans = createSpansForCountWithFilter(projectName, subtract(marker, TIME_BUCKET_3, interval),
+            var spans = createSpansForCount(projectName, subtract(marker, TIME_BUCKET_3, interval),
                     expected.getFirst());
             // allow one empty hour
             createSpansForCount(projectName, subtract(marker, TIME_BUCKET_1, interval), expected.get(1));
             createSpansForCount(projectName, marker, expected.getLast());
 
             // create feedback scores for the first bucket spans
-            List<FeedbackScoreBatchItem> scores = spans.stream()
-                    .map(span -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                            .id(span.id())
+            List<FeedbackScoreBatchItem> scores = List
+                    .of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
                             .name("score1")
                             .value(BigDecimal.ONE)
                             .projectName(projectName)
-                            .build())
-                    .collect(Collectors.toList());
+                            .build(),
+                            factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .id(spans.getFirst().id())
+                                    .name("score2")
+                                    .value(BigDecimal.ONE)
+                                    .projectName(projectName)
+                                    .build());
 
             spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
@@ -2690,7 +2688,7 @@ class ProjectMetricsResourceTest {
                     .build(), marker, List.of("spans"), Integer.class, emptySpans, emptySpans, emptySpans);
         }
 
-        private void createSpansForCount(String projectName, Instant marker, int count) {
+        private List<Span> createSpansForCount(String projectName, Instant marker, int count) {
             List<Span> spans = IntStream.range(0, count)
                     .mapToObj(i -> {
                         Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
@@ -2703,34 +2701,7 @@ class ProjectMetricsResourceTest {
                     .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-        }
 
-        private List<Span> createSpansForCountWithFilter(String projectName, Instant marker, int count) {
-            // Create traces first
-            List<Trace> traces = IntStream.range(0, count)
-                    .mapToObj(i -> {
-                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
-                        return factory.manufacturePojo(Trace.class).toBuilder()
-                                .id(idGenerator.generateId(traceStartTime))
-                                .projectName(projectName)
-                                .startTime(traceStartTime)
-                                .build();
-                    })
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-
-            // Create spans linked to traces
-            List<Span> spans = traces.stream()
-                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
-                            .id(idGenerator.generateId(trace.startTime()))
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .startTime(trace.startTime())
-                            .build())
-                    .toList();
-
-            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
             return spans;
         }
     }

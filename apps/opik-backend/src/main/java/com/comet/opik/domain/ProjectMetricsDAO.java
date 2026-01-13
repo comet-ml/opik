@@ -1205,7 +1205,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
                                 .ifPresent(
                                         scoresFilters -> template.add("span_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                        filterQueryBuilder
+                                .toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
                                 .ifPresent(
                                         feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                                 feedbackScoreIsEmptyFilters));
