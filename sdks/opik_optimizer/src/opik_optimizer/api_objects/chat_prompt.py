@@ -183,6 +183,14 @@ class ChatPrompt:
                     url = image_url_data.get("url", "")
                     if isinstance(url, str) and label in url:
                         image_url_data["url"] = url.replace(label, value)
+                    sanitized_url = image_url_data.get("url", "")
+                    if (
+                        isinstance(sanitized_url, str)
+                        and sanitized_url.startswith("{data:image/")
+                        and sanitized_url.endswith("}")
+                    ):
+                        # Some datasets pass data URIs wrapped in braces; strip them to keep URLs valid.
+                        image_url_data["url"] = sanitized_url[1:-1]
 
     def replace_in_messages(
         self, messages: list[dict[str, Any]], label: str, value: str
