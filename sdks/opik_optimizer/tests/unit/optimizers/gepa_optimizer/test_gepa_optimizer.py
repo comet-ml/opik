@@ -83,7 +83,9 @@ class TestGepaOptimizerOptimizePrompt:
         optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompts = {
             "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(name="secondary", system="Secondary", user="{input}"),
+            "secondary": ChatPrompt(
+                name="secondary", system="Secondary", user="{input}"
+            ),
         }
         dataset = _make_dataset()
 
