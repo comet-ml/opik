@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import random
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
+from collections.abc import Callable
 
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,7 @@ DEFAULT_SELECTION_POLICY = "best_by_metric"
 
 
 class RandomLike(Protocol):
-    def randrange(
-        self, start: int, stop: int | None = ..., step: int = ...
-    ) -> int: ...
+    def randrange(self, *args: Any, **kwargs: Any) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -218,9 +216,7 @@ def _score_candidates(
         try:
             metric_val = metric(dataset_item, candidate)
             if isinstance(metric_val, list):
-                metric_score = max(
-                    (score.value for score in metric_val), default=0.0
-                )
+                metric_score = max((score.value for score in metric_val), default=0.0)
             elif hasattr(metric_val, "value"):
                 metric_score = float(metric_val.value)
             else:

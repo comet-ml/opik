@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import random
+from typing import Any
 
 from opik_optimizer.utils.candidate_selection import select_candidate
 
 
 def test_select_candidate_best_by_metric() -> None:
-    def metric(dataset_item, llm_output):
+    def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
         _ = dataset_item
         return 1.0 if llm_output == "good" else 0.0
 
@@ -40,7 +41,7 @@ def test_select_candidate_concat() -> None:
 
 
 def test_select_candidate_max_logprob_falls_back() -> None:
-    def metric(dataset_item, llm_output):
+    def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
         _ = dataset_item
         return 1.0 if llm_output == "good" else 0.0
 
