@@ -434,7 +434,7 @@ serviceToggles:
   exportEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: "true"
+  datasetVersioningEnabled: "false"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
