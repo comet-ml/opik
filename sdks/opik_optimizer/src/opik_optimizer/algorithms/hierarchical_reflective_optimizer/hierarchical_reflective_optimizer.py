@@ -308,6 +308,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     messages=messages_as_dicts,
                     tools=best_prompts[prompt_name].tools,
                     function_map=best_prompts[prompt_name].function_map,
+                    model_parameters=original.model_kwargs,
                 )
             improved_chat_prompts_candidates.append(improved_chat_prompts)
 

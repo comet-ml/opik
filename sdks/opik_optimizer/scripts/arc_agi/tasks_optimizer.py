@@ -94,6 +94,7 @@ SEED = 42
 DEBUG_LOG = True
 N_SAMPLES_PER_TRIAL = 6
 EVAL_COMPLETIONS_PER_CALL = 6
+EVAL_SELECTION_POLICY = os.getenv("ARC_AGI2_SELECTION_POLICY", "concat")
 SANDBOX_TIMEOUT_S = 5.0
 RAISE_SCORING_ERRORS = False
 COMPOSITE_METRIC_NAME = "arc_agi2_multi"
@@ -163,6 +164,7 @@ def build_prompt() -> ChatPrompt:
         model_parameters={
             "temperature": EVAL_TEMPERATURE,
             "n": EVAL_COMPLETIONS_PER_CALL,
+            "selection_policy": EVAL_SELECTION_POLICY,
         },
     )
 
@@ -235,7 +237,9 @@ def main() -> None:
             )
 
     prompt = build_prompt()
-    CONSOLE.print(f"[info] ARC-AGI pass@k={EVAL_CONTEXT.pass_at_k}")
+    CONSOLE.print(
+        f"[info] ARC-AGI pass@k={EVAL_CONTEXT.pass_at_k} policy={EVAL_SELECTION_POLICY}"
+    )
 
     optimizer = HierarchicalReflectiveOptimizer(
         model=EVAL_MODEL,
