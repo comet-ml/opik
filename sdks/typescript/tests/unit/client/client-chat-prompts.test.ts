@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { PromptTemplateStructureMismatch } from "@/prompt/errors";
-import type { ChatMessage } from "@/prompt/types";
+import { PromptTemplateStructure, type ChatMessage } from "@/prompt/types";
 import type * as OpikApi from "@/rest_api/api";
 
 describe("OpikClient - Chat Prompts", () => {
@@ -71,8 +71,8 @@ describe("OpikClient - Chat Prompts", () => {
             template: JSON.stringify(messages),
             metadata: undefined,
             type: "mustache",
-            templateStructure: "chat",
           },
+          templateStructure: PromptTemplateStructure.Chat,
         },
         {}
       );

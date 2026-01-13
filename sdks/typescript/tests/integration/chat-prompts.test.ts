@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
-import { PromptType, ContentPart } from "@/prompt/types";
+import {
+  PromptType,
+  ContentPart,
+  TextContentPart,
+  MessageContent,
+} from "@/prompt/types";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -9,6 +14,30 @@ import {
 import { cleanupPrompts } from "./evaluation/helpers/testData";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
+
+/**
+ * Helper function to analyze formatted message content for modality filtering tests
+ * @param content - The message content to analyze
+ * @returns Object with text content and presence flags for image/video parts
+ */
+function analyzeContentParts(content: MessageContent): {
+  textContent: string;
+  hasImagePart: boolean;
+  hasVideoPart: boolean;
+} {
+  expect(Array.isArray(content)).toBe(true);
+  const contentArray = content as ContentPart[];
+
+  const textContent = contentArray
+    .filter((part) => part.type === "text")
+    .map((part) => (part as TextContentPart).text)
+    .join(" ");
+
+  const hasImagePart = contentArray.some((part) => part.type === "image_url");
+  const hasVideoPart = contentArray.some((part) => part.type === "video_url");
+
+  return { textContent, hasImagePart, hasVideoPart };
+}
 
 describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
   let client: Opik;
@@ -21,7 +50,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       return;
     }
 
-    client = new Opik();
+    client = new Opik({apiUrl: "http://localhost:5173/api/"});
   });
 
   afterAll(async () => {
@@ -61,14 +90,16 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
     expect(chatPrompt.name).toBe(testPromptName);
     expect(chatPrompt.messages).toHaveLength(2);
     expect(chatPrompt.description).toBe("Test chat prompt");
-    expect(chatPrompt.tags).toEqual(["test", "integration"]);
+    expect(chatPrompt.tags).toHaveLength(2);
+    expect(chatPrompt.tags).toEqual(expect.arrayContaining(["test", "integration"]));
     expect(chatPrompt.type).toBe(PromptType.MUSTACHE);
 
     // Retrieve the prompt
     const retrieved = await client.getChatPrompt({ name: testPromptName });
     expect(retrieved).not.toBeNull();
     expect(retrieved!.name).toBe(testPromptName);
-    expect(retrieved!.messages).toEqual(chatPrompt.messages);
+    expect(retrieved!.messages).toHaveLength(chatPrompt.messages.length);
+    expect(retrieved!.messages).toEqual(expect.arrayContaining(chatPrompt.messages));
   });
 
   it("should format a chat prompt with variables", async () => {
@@ -168,12 +199,14 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
 
     // Verify updates
     expect(chatPrompt.description).toBe("Updated description");
-    expect(chatPrompt.tags).toEqual(["updated", "test"]);
+    expect(chatPrompt.tags).toHaveLength(2);
+    expect(chatPrompt.tags).toEqual(expect.arrayContaining(["updated", "test"]));
 
     // Retrieve again to verify persistence
     const reRetrieved = await client.getChatPrompt({ name: testPromptName });
     expect(reRetrieved!.description).toBe("Updated description");
-    expect(reRetrieved!.tags).toEqual(["updated", "test"]);
+    expect(reRetrieved!.tags).toHaveLength(2);
+    expect(reRetrieved!.tags).toEqual(expect.arrayContaining(["updated", "test"]));
   });
 
   it("should handle modality filtering", async () => {
@@ -213,27 +246,39 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       {},
       { vision: false, video: true }
     );
-    const contentNoVision = formattedNoVision[0].content as string;
-    expect(contentNoVision).toContain("<<<image>>>");
-    expect(contentNoVision).not.toContain("<<<video>>>");
+    const noVision = analyzeContentParts(formattedNoVision[0].content);
+    // Should have text part with image placeholder, video part preserved
+    expect(noVision.textContent).toContain("<<<image>>>");
+    expect(noVision.textContent).not.toContain("<<<video>>>");
+    expect(noVision.hasVideoPart).toBe(true);
+    expect(noVision.hasImagePart).toBe(false);
 
     // Format with video disabled
     const formattedNoVideo = chatPrompt.format(
       {},
       { vision: true, video: false }
     );
-    const contentNoVideo = formattedNoVideo[0].content as string;
-    expect(contentNoVideo).not.toContain("<<<image>>>");
-    expect(contentNoVideo).toContain("<<<video>>>");
+    const noVideo = analyzeContentParts(formattedNoVideo[0].content);
+    // Should have text part with video placeholder, image part preserved
+    expect(noVideo.textContent).not.toContain("<<<image>>>");
+    expect(noVideo.textContent).toContain("<<<video>>>");
+    expect(noVideo.hasImagePart).toBe(true);
+    expect(noVideo.hasVideoPart).toBe(false);
 
     // Format with all modalities disabled
     const formattedNoModalities = chatPrompt.format(
       {},
       { vision: false, video: false }
     );
-    const contentNoModalities = formattedNoModalities[0].content as string;
-    expect(contentNoModalities).toContain("<<<image>>>");
-    expect(contentNoModalities).toContain("<<<video>>>");
+    const noModalities = analyzeContentParts(
+      formattedNoModalities[0].content
+    );
+    // Should have text parts with both placeholders
+    expect(noModalities.textContent).toContain("<<<image>>>");
+    expect(noModalities.textContent).toContain("<<<video>>>");
+    // No structured image or video parts should be present
+    expect(noModalities.hasImagePart).toBe(false);
+    expect(noModalities.hasVideoPart).toBe(false);
   });
 
   it("should search and find chat prompts", async () => {

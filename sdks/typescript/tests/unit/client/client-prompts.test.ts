@@ -120,8 +120,8 @@ describe("Opik prompt operations", () => {
             template: "Hello {{name}}!",
             metadata: undefined,
             type: PromptType.MUSTACHE,
-            templateStructure: PromptTemplateStructure.Text,
           },
+          templateStructure: PromptTemplateStructure.Text,
         },
         client.api.requestOptions
       );
@@ -214,8 +214,8 @@ describe("Opik prompt operations", () => {
             template: "New template",
             metadata: undefined,
             type: PromptType.MUSTACHE,
-            templateStructure: PromptTemplateStructure.Text,
           },
+          templateStructure: PromptTemplateStructure.Text,
         },
         client.api.requestOptions
       );

@@ -28,7 +28,7 @@ import {
   PromptType,
 } from "@/prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
-import type { CreateChatPromptOptions } from "@/prompt/types";
+import { PromptTemplateStructure, type CreateChatPromptOptions } from "@/prompt/types";
 import { PromptTemplateStructureMismatch } from "@/prompt/errors";
 import {
   fetchLatestPromptVersion,
@@ -605,8 +605,8 @@ export class OpikClient {
               template: options.prompt,
               metadata: options.metadata,
               type: normalizedType,
-              templateStructure: "text",
             },
+            templateStructure: PromptTemplateStructure.Text,
           },
           this.api.requestOptions
         );
@@ -687,12 +687,12 @@ export class OpikClient {
       if (
         latestPromptVersion &&
         latestPromptVersion.templateStructure &&
-        latestPromptVersion.templateStructure !== "chat"
+        latestPromptVersion.templateStructure !== PromptTemplateStructure.Chat
       ) {
         throw new PromptTemplateStructureMismatch(
           options.name,
           latestPromptVersion.templateStructure,
-          "chat"
+          PromptTemplateStructure.Chat
         );
       }
 
@@ -718,8 +718,8 @@ export class OpikClient {
               template: messagesJson,
               metadata: options.metadata,
               type: normalizedType,
-              templateStructure: "chat",
             },
+            templateStructure: PromptTemplateStructure.Chat,
           },
           this.api.requestOptions
         );
@@ -805,11 +805,11 @@ export class OpikClient {
 
       // Step 3: Validate template structure
       const templateStructure = versionData.templateStructure;
-      if (templateStructure && templateStructure !== "text") {
+      if (templateStructure && templateStructure !== PromptTemplateStructure.Text) {
         throw new PromptTemplateStructureMismatch(
           options.name,
           templateStructure,
-          "text"
+          PromptTemplateStructure.Text
         );
       }
 
@@ -871,11 +871,11 @@ export class OpikClient {
 
       // Step 3: Validate template structure
       const templateStructure = versionData.templateStructure;
-      if (templateStructure && templateStructure !== "chat") {
+      if (templateStructure && templateStructure !== PromptTemplateStructure.Chat) {
         throw new PromptTemplateStructureMismatch(
           options.name,
           templateStructure,
-          "chat"
+          PromptTemplateStructure.Chat
         );
       }
 
@@ -974,9 +974,9 @@ export class OpikClient {
             const templateStructure = versionResponse.templateStructure;
 
             // Default to text for backwards compatibility
-            if (!templateStructure || templateStructure === "text") {
+            if (!templateStructure || templateStructure === PromptTemplateStructure.Text) {
               return Prompt.fromApiResponse(promptData, versionResponse, this);
-            } else if (templateStructure === "chat") {
+            } else if (templateStructure === PromptTemplateStructure.Chat) {
               return ChatPrompt.fromApiResponse(
                 promptData,
                 versionResponse,
