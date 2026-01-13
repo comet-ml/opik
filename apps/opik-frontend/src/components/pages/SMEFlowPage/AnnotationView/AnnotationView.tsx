@@ -161,12 +161,12 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 <Button
                   onClick={handleSubmit}
                   disabled={!validationState.canSubmit}
-                  className="w-[180px] justify-between"
                 >
                   {buttonLabel}
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.DONE].display}
                     size="sm"
+                    className="ml-2"
                   />
                 </Button>
               </TooltipWrapper>
