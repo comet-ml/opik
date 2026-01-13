@@ -1,5 +1,7 @@
 """
 Decorator for OpenAI video creation methods (create, create_and_poll, remix).
+
+Output type: openai.types.video.Video
 """
 
 import logging
@@ -10,6 +12,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    TYPE_CHECKING,
 )
 
 from typing_extensions import override
@@ -17,6 +20,9 @@ from typing_extensions import override
 import opik.dict_utils as dict_utils
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+
+if TYPE_CHECKING:
+    from openai.types.video import Video
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,13 +49,6 @@ VIDEO_RESPONSE_KEYS_TO_LOG_AS_OUTPUT = [
     "progress",
     "error",
 ]
-
-# Map of video seconds string to integer
-VIDEO_SECONDS_MAP = {
-    "4": 4,
-    "8": 8,
-    "12": 12,
-}
 
 
 class VideosCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -114,53 +113,38 @@ class VideosCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
     @override
     def _end_span_inputs_preprocessor(
         self,
-        output: Any,
+        output: Optional["Video"],
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        output_data: Optional[Dict[str, Any]] = None
-        metadata: Dict[str, Any] = {}
-        model: Optional[str] = None
-
         if output is None:
-            output_data = None
-        elif hasattr(output, "model_dump"):
-            # Video object
-            result_dict = output.model_dump(mode="json")
-
-            output_data, metadata = dict_utils.split_dict_by_keys(
-                result_dict, VIDEO_RESPONSE_KEYS_TO_LOG_AS_OUTPUT
+            return arguments_helpers.EndSpanParameters(
+                output=None,
+                usage=None,
+                metadata={},
+                model=None,
+                provider=self.provider,
             )
 
-            model = result_dict.get("model", None)
+        result_dict: Dict[str, Any] = output.model_dump(mode="json")
 
-            # Add video generation usage info to metadata for cost calculation
-            seconds_str = result_dict.get("seconds")
-            if seconds_str is not None:
-                seconds_int = VIDEO_SECONDS_MAP.get(seconds_str)
-                if seconds_int is None:
-                    try:
-                        seconds_int = int(seconds_str)
-                    except (ValueError, TypeError):
-                        seconds_int = None
-                if seconds_int is not None:
-                    metadata["video_seconds"] = seconds_int
+        output_data, metadata = dict_utils.split_dict_by_keys(
+            result_dict, VIDEO_RESPONSE_KEYS_TO_LOG_AS_OUTPUT
+        )
 
-            size = result_dict.get("size")
-            if size is not None:
-                metadata["video_size"] = size
-        else:
-            output_data = {"result_type": type(output).__name__}
+        # Add video generation info to metadata for cost calculation
+        if result_dict.get("seconds") is not None:
+            metadata["video_seconds"] = int(result_dict["seconds"])
+        if result_dict.get("size") is not None:
+            metadata["video_size"] = result_dict["size"]
 
-        result = arguments_helpers.EndSpanParameters(
+        return arguments_helpers.EndSpanParameters(
             output=output_data,
             usage=None,
             metadata=metadata,
-            model=model,
+            model=result_dict.get("model"),
             provider=self.provider,
         )
-
-        return result
 
     @override
     def _streams_handler(

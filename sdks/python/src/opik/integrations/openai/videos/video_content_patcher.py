@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 _original_write_to_file = HttpxBinaryResponseContent.write_to_file
 
 
-def patch_write_to_file() -> None:
+def patch_HttpxBinaryResponseContent_write_to_file() -> None:
     """
     Patch HttpxBinaryResponseContent.write_to_file to attach
     the video to the current span after writing.

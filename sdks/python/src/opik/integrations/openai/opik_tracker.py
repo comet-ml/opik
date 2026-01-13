@@ -233,7 +233,7 @@ def _patch_openai_videos(
     # Patch videos.download_content - download video content with attachment support
     # Patch write_to_file to attach video when called
     if hasattr(openai_client.videos, "download_content"):
-        video_content_patcher.patch_write_to_file()
+        video_content_patcher.patch_HttpxBinaryResponseContent_write_to_file()
 
         decorator = download_decorator_factory.track(
             type="general",
