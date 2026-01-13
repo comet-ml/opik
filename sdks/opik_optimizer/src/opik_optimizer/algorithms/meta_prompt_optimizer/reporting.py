@@ -161,13 +161,15 @@ def display_optimization_start_message(
 
 
 class CandidateGenerationReporter:
-    def __init__(self, num_prompts: int):
+    def __init__(self, num_prompts: int, selection_summary: str | None = None):
         self.num_prompts = num_prompts
+        self.selection_summary = selection_summary
 
     def set_generated_prompts(self) -> None:
+        summary = f" ({self.selection_summary})" if self.selection_summary else ""
         console.print(
             Text(
-                f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}",
+                f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
                 style="dim",
             )
         )
@@ -188,22 +190,29 @@ def display_tool_description(description: str, label: str, color: str) -> None:
 
 @contextmanager
 def display_candidate_generation_report(
-    num_prompts: int, verbose: int = 1
+    num_prompts: int, verbose: int = 1, selection_summary: str | None = None
 ) -> Iterator[CandidateGenerationReporter]:
     if verbose >= 1:
         console.print(
             Text(f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:")
         )
+        if selection_summary:
+            console.print(
+                Text(f"│      Evaluation settings: {selection_summary}", style="dim")
+            )
 
     try:
-        yield CandidateGenerationReporter(num_prompts)
+        yield CandidateGenerationReporter(num_prompts, selection_summary)
     finally:
         pass
 
 
 @contextmanager
 def display_prompt_candidate_scoring_report(
-    verbose: int = 1, dataset_name: str | None = None, is_validation: bool = False
+    verbose: int = 1,
+    dataset_name: str | None = None,
+    is_validation: bool = False,
+    selection_summary: str | None = None,
 ) -> Any:
     """Context manager to display messages during an evaluation phase."""
 
@@ -216,6 +225,13 @@ def display_prompt_candidate_scoring_report(
                 console.print(
                     Text(f"│    Evaluating candidate prompt {candidate_count + 1}:")
                 )
+                if selection_summary:
+                    console.print(
+                        Text(
+                            f"│         Evaluation settings: {selection_summary}",
+                            style="dim",
+                        )
+                    )
                 if dataset_name:
                     dataset_type = "validation" if is_validation else "training"
                     console.print(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Iterable
+import random
 
 import logging
 
@@ -13,6 +14,7 @@ from ... import helpers, task_evaluator
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
+from ...utils.candidate_selection import select_candidate
 
 
 logger = logging.getLogger(__name__)
@@ -142,20 +144,28 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             ) -> tuple[str, float]:
                 """Pick the best candidate using the optimizer metric for pass@k evaluation."""
                 # FIXME: Align this selection with GEPA's Pareto/multi-metric scoring once integrated.
-                best_output = candidates[0]
-                best_score = float("-inf")
-                for candidate in candidates:
-                    metric_result = self._metric(dataset_item, candidate)
+                selection = select_candidate(
+                    candidates=candidates,
+                    policy="best_by_metric",
+                    metric=lambda item, output: self._metric(item, output),
+                    dataset_item=dataset_item,
+                    candidate_logprobs=None,
+                    rng=random.Random(0),
+                )
+                if (
+                    selection.candidate_scores is not None
+                    and selection.chosen_index is not None
+                ):
+                    best_score = selection.candidate_scores[selection.chosen_index]
+                else:
+                    metric_result = self._metric(dataset_item, selection.output)
                     if hasattr(metric_result, "value"):
-                        score = float(metric_result.value)  # type: ignore[arg-type]
+                        best_score = float(metric_result.value)  # type: ignore[arg-type]
                     elif hasattr(metric_result, "score"):
-                        score = float(metric_result.score)  # type: ignore[arg-type]
+                        best_score = float(metric_result.score)  # type: ignore[arg-type]
                     else:
-                        score = float(metric_result)  # type: ignore[arg-type]
-                    if score > best_score:
-                        best_score = score
-                        best_output = candidate
-                return best_output, best_score
+                        best_score = float(metric_result)  # type: ignore[arg-type]
+                return selection.output, best_score
 
             for inst in batch:
                 dataset_item = inst.opik_item

@@ -75,6 +75,7 @@ def infer_output_style_from_dataset(
                 model_parameters=model_parameters,
                 is_reasoning=True,
                 response_model=StyleInferenceResponse,
+                return_all=_llm_calls.requested_multiple_candidates(model_parameters),
             )
             inferred_style_response = (
                 response[0] if isinstance(response, list) else response

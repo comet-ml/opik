@@ -10,6 +10,7 @@ from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ... import _throttle
 from . import reporting
+from ... import reporting_utils
 from .ops.halloffame_ops import PromptHallOfFame
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
@@ -631,7 +632,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
                 for candidate_count, prompts in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
-                        verbose=self.verbose
+                        verbose=self.verbose,
+                        selection_summary=reporting_utils.summarize_selection_policy(
+                            prompts
+                        ),
                     ) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompts)
 

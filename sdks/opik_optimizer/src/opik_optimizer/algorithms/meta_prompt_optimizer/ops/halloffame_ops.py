@@ -156,6 +156,7 @@ class PromptHallOfFame:
                 model=model,
                 model_parameters=model_parameters,
                 is_reasoning=True,
+                return_all=_llm_calls.requested_multiple_candidates(model_parameters),
             )
 
             # Parse extracted patterns

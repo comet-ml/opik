@@ -18,7 +18,7 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import LiteLLMAgent, OptimizableAgent
-from ... import _throttle, optimization_result, task_evaluator
+from ... import _throttle, optimization_result, task_evaluator, reporting_utils
 from ...utils.prompt_library import PromptOverrides
 from . import reporting, types
 from . import prompts as few_shot_prompts
@@ -529,6 +529,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 total_trials=n_trials,
                 messages=messages_for_reporting,
                 verbose=self.verbose,
+                selection_summary=reporting_utils.summarize_selection_policy(
+                    prompts_with_examples
+                ),
             )
 
             score = task_evaluator.evaluate(
@@ -802,6 +805,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         with reporting.display_evaluation(
             message="First we will establish the baseline performance:",
             verbose=self.verbose,
+            selection_summary=reporting_utils.summarize_selection_policy(
+                optimizable_prompts
+            ),
         ) as eval_report:
             baseline_score = self.evaluate_prompt(
                 prompt=optimizable_prompts,

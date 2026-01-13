@@ -18,6 +18,7 @@ from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
+from ... import reporting_utils
 from .parameter_search_space import ParameterSearchSpace
 from .search_space_types import ParameterType
 from .sensitivity_analysis import compute_sensitivity_from_trials
@@ -271,7 +272,10 @@ class ParameterOptimizer(BaseOptimizer):
         )
 
         # Evaluate baseline with reporting
-        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+        with reporting.display_evaluation(
+            verbose=self.verbose,
+            selection_summary=reporting_utils.summarize_selection_policy(base_prompts),
+        ) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompts,
                 agent=agent,
@@ -413,6 +417,9 @@ class ParameterOptimizer(BaseOptimizer):
                 stage=current_stage,
                 parameters=sampled_values,
                 verbose=self.verbose,
+                selection_summary=reporting_utils.summarize_selection_policy(
+                    tuned_prompts
+                ),
             ) as trial_reporter:
                 score = self.evaluate_prompt(
                     prompt=tuned_prompts,

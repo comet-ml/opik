@@ -21,10 +21,32 @@ from .... import _llm_calls
 from ....base_optimizer import OptimizationRound
 from .. import prompts as meta_prompts
 from .. import reporting
+from .... import reporting_utils
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 
 logger = logging.getLogger(__name__)
+
+
+def _build_metadata_for_call(
+    optimizer: Any,
+    call_type: str,
+    optimization_id: str | None = None,
+    project_name: str | None = None,
+) -> dict[str, Any]:
+    """Build LiteLLM metadata payloads for trace attribution."""
+    metadata_for_call: dict[str, Any] = {
+        "optimizer_name": optimizer.__class__.__name__,
+        "opik_call_type": call_type,
+    }
+    opik_metadata: dict[str, Any] = {}
+    if optimization_id:
+        opik_metadata["optimization_id"] = optimization_id
+    if project_name:
+        opik_metadata["project_name"] = project_name
+    if opik_metadata:
+        metadata_for_call["opik"] = opik_metadata
+    return metadata_for_call
 
 
 class AgentPromptUpdate(BaseModel):
@@ -232,7 +254,9 @@ def generate_candidate_prompts(
         List of candidate prompts
     """
     with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round, verbose=optimizer.verbose
+        optimizer.prompts_per_round,
+        verbose=optimizer.verbose,
+        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
         logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
@@ -296,12 +320,12 @@ def generate_candidate_prompts(
 
         try:
             # Prepare metadata for optimization algorithm call
-            metadata_for_call: dict[str, Any] = {
-                "optimizer_name": optimizer.__class__.__name__,
-                "opik_call_type": "optimization_algorithm",
-            }
-            if optimization_id:
-                metadata_for_call["opik"] = {"optimization_id": optimization_id}
+            metadata_for_call = _build_metadata_for_call(
+                optimizer=optimizer,
+                call_type="optimization_algorithm",
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
 
             content = _llm_calls.call_model(
                 messages=[
@@ -317,6 +341,9 @@ def generate_candidate_prompts(
                 ],
                 model=optimizer.model,
                 model_parameters=optimizer.model_parameters,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
                 project_name=project_name,
@@ -424,10 +451,13 @@ def generate_candidate_prompts(
 
                         valid_prompts.append(
                             chat_prompt.ChatPrompt(
+                                name=current_prompt.name,
                                 system=system_content,
                                 user=user_content,
                                 tools=current_prompt.tools,
                                 function_map=current_prompt.function_map,
+                                model=current_prompt.model,
+                                model_parameters=current_prompt.model_kwargs,
                             )
                         )
 
@@ -480,7 +510,9 @@ def generate_agent_bundle_candidates(
         and strongly-typed metadata for all agents in the bundle.
     """
     with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round, verbose=optimizer.verbose
+        optimizer.prompts_per_round,
+        verbose=optimizer.verbose,
+        selection_summary=reporting_utils.summarize_selection_policy(current_prompts),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating agent bundle prompts for round {round_num + 1}")
         logger.debug("Generating from agents: %s", list(current_prompts.keys()))
@@ -533,12 +565,12 @@ def generate_agent_bundle_candidates(
         )
 
         try:
-            metadata_for_call: dict[str, Any] = {
-                "optimizer_name": optimizer.__class__.__name__,
-                "opik_call_type": "optimization_algorithm",
-            }
-            if optimization_id:
-                metadata_for_call["opik"] = {"optimization_id": optimization_id}
+            metadata_for_call = _build_metadata_for_call(
+                optimizer=optimizer,
+                call_type="optimization_algorithm",
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
 
             response = _llm_calls.call_model(
                 messages=[
@@ -557,6 +589,9 @@ def generate_agent_bundle_candidates(
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
                 project_name=project_name,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
                 response_model=AgentBundleCandidatesResponse,
             )
 
@@ -680,6 +715,7 @@ def generate_synthesis_prompts(
     with reporting.display_candidate_generation_report(
         num_synthesis_prompts,
         verbose=optimizer.verbose,  # Synthesis generates a small number of prompts
+        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         # Get top performers from Hall of Fame
         top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
@@ -777,12 +813,12 @@ def generate_synthesis_prompts(
 
         try:
             # Prepare metadata for synthesis call
-            metadata_for_call: dict[str, Any] = {
-                "optimizer_name": optimizer.__class__.__name__,
-                "opik_call_type": "optimization_algorithm_synthesis",
-            }
-            if optimization_id:
-                metadata_for_call["opik"] = {"optimization_id": optimization_id}
+            metadata_for_call = _build_metadata_for_call(
+                optimizer=optimizer,
+                call_type="optimization_algorithm_synthesis",
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
 
             content = _llm_calls.call_model(
                 messages=[
@@ -794,6 +830,9 @@ def generate_synthesis_prompts(
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
                 project_name=project_name,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
             )
 
             contents = content if isinstance(content, list) else [content]
@@ -866,10 +905,13 @@ def generate_synthesis_prompts(
 
                         valid_prompts.append(
                             chat_prompt.ChatPrompt(
+                                name=current_prompt.name,
                                 system=item["prompt"][0]["content"],
                                 user=user_text,
                                 tools=current_prompt.tools,
                                 function_map=current_prompt.function_map,
+                                model=current_prompt.model,
+                                model_parameters=current_prompt.model_kwargs,
                             )
                         )
 

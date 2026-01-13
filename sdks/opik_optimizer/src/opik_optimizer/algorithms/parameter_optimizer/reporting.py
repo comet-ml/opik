@@ -21,13 +21,19 @@ PANEL_WIDTH = 70
 
 @contextmanager
 def display_evaluation(
-    message: str = "First we will establish the baseline performance:", verbose: int = 1
+    message: str = "First we will establish the baseline performance:",
+    verbose: int = 1,
+    selection_summary: str | None = None,
 ) -> Iterator[Any]:
     """Context manager to display messages during an evaluation phase."""
 
     # Entry point
     if verbose >= 1:
         console.print(Text(f"> {message}"))
+        if selection_summary:
+            console.print(
+                Text(f"│ Evaluation settings: {selection_summary}", style="dim")
+            )
 
     # Create a simple object with a method to set the score
     class Reporter:
@@ -51,6 +57,7 @@ def display_trial_evaluation(
     stage: str,
     parameters: dict[str, Any],
     verbose: int = 1,
+    selection_summary: str | None = None,
 ) -> Iterator[Any]:
     """Context manager to display a single trial evaluation with parameters."""
 
@@ -62,6 +69,10 @@ def display_trial_evaluation(
                 style="cyan bold",
             )
         )
+        if selection_summary:
+            console.print(
+                Text(f"│ Evaluation settings: {selection_summary}", style="dim")
+            )
 
         # Display parameters being tested
         if parameters:

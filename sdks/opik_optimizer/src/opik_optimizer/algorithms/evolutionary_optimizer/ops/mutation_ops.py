@@ -46,6 +46,7 @@ def _get_synonym(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
         response_item = response[0] if isinstance(response, list) else response
         return response_item.strip()
@@ -78,6 +79,7 @@ def _modify_phrase(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
         response_item = response[0] if isinstance(response, list) else response
         return response_item.strip()
@@ -285,6 +287,7 @@ def _semantic_mutation(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
 
         response_item = response[0] if isinstance(response, list) else response
@@ -344,6 +347,7 @@ def _radical_innovation_mutation(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
         response_item = (
             new_prompt_str[0] if isinstance(new_prompt_str, list) else new_prompt_str

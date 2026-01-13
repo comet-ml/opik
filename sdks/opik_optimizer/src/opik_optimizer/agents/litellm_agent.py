@@ -11,10 +11,15 @@ from .. import _llm_calls, _throttle
 import os
 from typing import Any
 import json
+import logging
 from opik import opik_context
 import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
+from ..utils.candidate_selection import extract_choice_logprob
+
+
+logger = logging.getLogger(__name__)
 
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -88,6 +93,17 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         except Exception:
             pass
 
+    def _sanitize_model_kwargs(
+        self, model_kwargs: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Strip optimizer-only keys before sending kwargs to LiteLLM."""
+        if not model_kwargs:
+            return model_kwargs
+        sanitized = dict(model_kwargs)
+        sanitized.pop("selection_policy", None)
+        sanitized.pop("candidate_selection_policy", None)
+        return sanitized
+
     def invoke_agent(
         self,
         prompts: dict[str, "chat_prompt.ChatPrompt"],
@@ -131,7 +147,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                     messages=all_messages,
                     tools=prompt.tools,
                     seed=seed,
-                    model_kwargs=prompt.model_kwargs,
+                    model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
                 )
 
                 _llm_calls._increment_llm_counter_if_in_optimizer()
@@ -172,7 +188,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 messages=all_messages,
                 tools=None,
                 seed=seed,
-                model_kwargs=prompt.model_kwargs,
+                model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
             )
             _llm_calls._increment_llm_counter_if_in_optimizer()
             self._apply_cost_usage_to_owner(response)
@@ -240,12 +256,35 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             messages=all_messages,
             tools=None,
             seed=seed,
-            model_kwargs=prompt.model_kwargs,
+            model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
         )
         _llm_calls._increment_llm_counter_if_in_optimizer()
         self._apply_cost_usage_to_owner(response)
 
         choices = response.choices or []
+        candidate_logprobs: list[float] = []
+        for choice in choices:
+            score = extract_choice_logprob(
+                choice,
+                aggregation="mean",
+                min_tokens=5,
+            )
+            if score is None:
+                candidate_logprobs = []
+                break
+            candidate_logprobs.append(score)
+        self._last_candidate_logprobs = (
+            candidate_logprobs if candidate_logprobs else None
+        )
+        if candidate_logprobs:
+            logger.debug(
+                "LiteLLMAgent: extracted logprobs for %d choices",
+                len(candidate_logprobs),
+            )
+        else:
+            logger.debug(
+                "LiteLLMAgent: no logprobs available; max_logprob will fall back"
+            )
         outputs = [
             ch.message.content
             for ch in choices

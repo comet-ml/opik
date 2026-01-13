@@ -192,6 +192,7 @@ def _llm_crossover_messages(
         model_parameters=model_parameters,
         response_model=CrossoverResponse,
         is_reasoning=True,
+        return_all=_llm_calls.requested_multiple_candidates(model_parameters),
     )
 
     response_item = response[0] if isinstance(response, list) else response
