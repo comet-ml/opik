@@ -68,57 +68,60 @@ jobs:
             echo "Copy updated README"
             cp deployment/helm_chart/opik/README.md ../dest/.
 
-        - name: Fix Charts timestamps
+        - name: Restore file timestamps from git history
+          shell: bash
+          working-directory: dest
+          run: |
+            # Set file modification times based on git commit history
+            # This is important because helm repo index uses file mtime to set the 'created' field
+            echo "Restoring file timestamps from git history..."
+            git ls-files -z | while read -d $'\0' file; do
+              if [ -f "$file" ]; then
+                TIME=$(git log -1 --format="%cI" -- "$file")
+                touch -d "$TIME" "$file"
+                echo "Set $file mtime to $TIME"
+              fi
+            done
+            echo "File timestamps restored."
+
+        - name: Push New Files
           shell: bash
           working-directory: dest
           env:
             INDEX_FILE: index.yaml
           run: |
-            # this step can be removed after fix applied
-            # get timestamps for files
-            git ls-files -z | while read -d $'\0' file; do
-              TIME=$(git log -1 --format="%cI" -- "$file")
-              touch -d "$TIME" "$file"
-            done
-            yq --version
-            # 1. Get a list of all chart filenames mentioned in the index
-            # We use yq to extract the 'urls' which usually contain the filename
+            echo "=== Before helm repo index ==="
+            yq '.entries[][] | "\(.created) \(.urls[0])"' "${INDEX_FILE}" | head || true
+            ls -la *.tgz | head || true
+            
+            # Run helm repo index which will overwrite created timestamps
+            helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge "${INDEX_FILE}"
+            
+            echo "=== After helm repo index (timestamps overwritten) ==="
+            yq '.entries[][] | "\(.created) \(.urls[0])"' "${INDEX_FILE}" | head || true
+            
+            # Fix timestamps again - helm repo index overwrites them based on file mtime
+            echo "=== Fixing timestamps based on file modification times ==="
             CHARTS=$(yq eval '.entries[] | .[] | .urls[0]' "${INDEX_FILE}")
-
+            
             for CHART_URL in $CHARTS; do
-                # Extract filename from URL (e.g., opik-1.9.76.tgz)
                 FILENAME=$(basename "$CHART_URL")
                 
                 if [ -f "$FILENAME" ]; then
-                    # Get modification time in ISO 8601 format (e.g., 2024-11-12T12:56:00Z)
-                    # Using 'date' to ensure UTC format which Helm prefers
                     MTIME=$(date -u -r "$FILENAME" +"%Y-%m-%dT%H:%M:%SZ")
-                    
-                    echo "Updating $FILENAME with date $MTIME"
-
-                    # Update the 'created' field for this specific version in index.yaml
-                    # We match by the first URL in the list
+                    echo "Setting $FILENAME timestamp to $MTIME"
                     yq eval "(.entries[][] | select(.urls[0] == \"$CHART_URL\") | .created) = \"$MTIME\"" -i "${INDEX_FILE}"
-                else
-                    echo "Warning: File $FILENAME not found on disk, skipping..."
                 fi
             done
-
-            echo "Done! ${INDEX_FILE} dates synchronized with filesystem."
-
-        - name: Push New Files
-          shell: bash
-          working-directory: dest
-          run: |
-            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head || true
-            ls -la . | head || true
-            helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge index.yaml
-            yq '.entries[][] | "\(.created) \(.urls[0])"' index.yaml | head || true
-            git diff -- index.yaml
+            
+            echo "=== After timestamp fix ==="
+            yq '.entries[][] | "\(.created) \(.urls[0])"' "${INDEX_FILE}" | head || true
+            
+            git diff -- "${INDEX_FILE}"
             git config user.name "Helm Updater"
             git config user.email "actions@users.noreply.github.com"
             git ls-files -o --exclude-standard -z | xargs -0 -r git add
-            git add index.yaml README.md
+            git add "${INDEX_FILE}" README.md
             git commit -m "Release Opik helm chart ${{inputs.version}}"
             git push   
 
