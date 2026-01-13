@@ -14,7 +14,8 @@ This document provides clear guidelines on when to use **Tailwind CSS breakpoint
 
 1. **Explicitly requested in the Jira ticket** - The ticket specifically mentions phone/mobile support
 2. **Explicitly requested by the user in a prompt** - The user asks for phone/mobile support in their message
-3. **Working on a component that already has phone support** - Maintain consistency with existing responsive behavior
+3. **Working on onboarding features** - When adding or modifying onboarding components, ensure mobile support by default for new user discovery
+4. **Working on a component that already has phone support** - Maintain consistency with existing responsive behavior
 
 **Do NOT proactively add phone support** to features unless the ticket explicitly requires it. Most Opik features are desktop-first and don't need mobile optimization.
 
