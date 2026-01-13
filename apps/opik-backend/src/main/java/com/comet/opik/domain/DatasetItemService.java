@@ -2068,8 +2068,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * If a version exists for the batch_group_id, appends deletions to it.
      * Otherwise, creates a new version with the deletions.
      *
+     * Maps incoming row IDs to stable dataset_item_ids before processing.
+     *
      * @param batchGroupId the batch group ID
-     * @param ids the item IDs to delete
+     * @param ids the item IDs to delete (may be UI row IDs)
      * @param datasetId the resolved dataset ID
      * @param filters optional filters
      * @param workspaceId the workspace ID
@@ -2078,21 +2080,73 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> handleGroupedDeletion(String batchGroupId, Set<UUID> ids, UUID datasetId,
             List<DatasetItemFilter> filters, String workspaceId, String userName, boolean createVersion) {
+
+        // First, map row IDs to dataset_item_ids
+        return versionDao.mapRowIdsToDatasetItemIds(ids)
+                .collectList()
+                .flatMap(mappings -> {
+                    // Determine the stable dataset_item_ids to use
+                    Set<UUID> datasetItemIds;
+                    UUID resolvedDatasetId = datasetId;
+
+                    if (mappings.isEmpty()) {
+                        // No mappings found - IDs are already stable dataset_item_ids (SDK or direct usage)
+                        log.info("No row ID mappings found for batch_group_id '{}', treating as dataset_item_ids",
+                                batchGroupId);
+                        datasetItemIds = ids;
+
+                        // If datasetId is null, resolve it from the first item
+                        if (resolvedDatasetId == null && !ids.isEmpty()) {
+                            return versionDao.resolveDatasetIdFromItemId(ids.iterator().next())
+                                    .flatMap(resolvedId -> proceedWithGroupedDeletion(batchGroupId, datasetItemIds,
+                                            resolvedId,
+                                            filters, workspaceId, userName, createVersion))
+                                    .switchIfEmpty(Mono.defer(() -> {
+                                        log.info("Item not found for batch_group_id '{}', treating as already deleted",
+                                                batchGroupId);
+                                        return Mono.empty();
+                                    }));
+                        }
+                    } else {
+                        // Successfully mapped row IDs to dataset_item_ids
+                        datasetItemIds = mappings.stream()
+                                .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
+                                .collect(Collectors.toSet());
+
+                        // If datasetId is null, use the dataset from the first mapping
+                        if (resolvedDatasetId == null) {
+                            resolvedDatasetId = mappings.get(0).datasetId();
+                        }
+
+                        log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for batch_group_id '{}', dataset '{}'",
+                                ids.size(), datasetItemIds.size(), batchGroupId, resolvedDatasetId);
+                    }
+
+                    return proceedWithGroupedDeletion(batchGroupId, datasetItemIds, resolvedDatasetId,
+                            filters, workspaceId, userName, createVersion);
+                });
+    }
+
+    /**
+     * Proceeds with grouped deletion after row IDs have been mapped to dataset_item_ids.
+     */
+    private Mono<Void> proceedWithGroupedDeletion(String batchGroupId, Set<UUID> datasetItemIds, UUID datasetId,
+            List<DatasetItemFilter> filters, String workspaceId, String userName, boolean createVersion) {
         return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
                 .flatMap(optionalVersion -> {
                     if (optionalVersion.isPresent()) {
                         // Version exists - this is a subsequent batch of deletions
                         var existingVersion = optionalVersion.get();
-                        log.info("Deleting more items from existing version '{}' for batch_group_id '{}'",
-                                existingVersion.id(), batchGroupId);
-                        return deleteItemsFromExistingVersion(ids, datasetId, filters,
+                        log.info("Deleting '{}' items from existing version '{}' for batch_group_id '{}'",
+                                datasetItemIds.size(), existingVersion.id(), batchGroupId);
+                        return deleteItemsFromExistingVersion(datasetItemIds, datasetId, filters,
                                 existingVersion.id(), workspaceId, userName);
                     } else {
                         // No version with this batch_group_id - create new version with deletions
-                        log.info("Creating new version with batch_group_id '{}' for dataset '{}' with deletions",
-                                batchGroupId, datasetId);
-                        return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName, batchGroupId,
-                                createVersion);
+                        log.info("Creating new version with batch_group_id '{}' for dataset '{}' with '{}' deletions",
+                                batchGroupId, datasetId, datasetItemIds.size());
+                        return deleteItemsWithVersion(datasetItemIds, datasetId, filters, workspaceId, userName,
+                                batchGroupId, createVersion);
                     }
                 });
     }
