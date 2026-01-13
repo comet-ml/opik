@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -78,8 +79,8 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 .then()
                 .onErrorResume(throwable -> {
                     log.error("Failed to process dataset export job: jobId='{}'", message.jobId(), throwable);
-                    String rawMessage = throwable.getMessage() != null ? throwable.getMessage() : throwable.toString();
-                    String errorMessage = truncateErrorMessage(rawMessage, 255);
+                    String errorMessage = truncateErrorMessage(
+                            StringUtils.defaultIfBlank(throwable.getMessage(), throwable.toString()), 255);
                     return jobService.updateJobToFailed(message.jobId(), errorMessage)
                             .then(Mono.error(throwable)); // Re-throw to prevent ACK
                 })
