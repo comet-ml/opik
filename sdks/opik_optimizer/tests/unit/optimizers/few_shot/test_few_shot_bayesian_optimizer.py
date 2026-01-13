@@ -65,16 +65,22 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
 
         def mock_create_fewshot_template(**kwargs):
             prompts = kwargs.get("prompts", {})
-            return {name: p.copy() for name, p in prompts.items()}, "Examples:\n{examples}"
+            return {
+                name: p.copy() for name, p in prompts.items()
+            }, "Examples:\n{examples}"
 
-        monkeypatch.setattr(optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template)
+        monkeypatch.setattr(
+            optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template
+        )
 
         def mock_run_optimization(**kwargs):
             prompts = kwargs.get("prompts", {})
             original_prompts = kwargs.get("original_prompts", prompts)
             is_single = kwargs.get("is_single_prompt_optimization", True)
             best_prompt = list(prompts.values())[0] if is_single else prompts
-            initial_prompt = list(original_prompts.values())[0] if is_single else original_prompts
+            initial_prompt = (
+                list(original_prompts.values())[0] if is_single else original_prompts
+            )
             return OptimizationResult(
                 optimizer="FewShotBayesianOptimizer",
                 prompt=best_prompt,
@@ -116,7 +122,9 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         )
         prompts = {
             "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(name="secondary", system="Secondary", user="{input}"),
+            "secondary": ChatPrompt(
+                name="secondary", system="Secondary", user="{input}"
+            ),
         }
         dataset = _make_dataset()
 
@@ -124,16 +132,22 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
 
         def mock_create_fewshot_template(**kwargs):
             prompts_arg = kwargs.get("prompts", {})
-            return {name: p.copy() for name, p in prompts_arg.items()}, "Examples:\n{examples}"
+            return {
+                name: p.copy() for name, p in prompts_arg.items()
+            }, "Examples:\n{examples}"
 
-        monkeypatch.setattr(optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template)
+        monkeypatch.setattr(
+            optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template
+        )
 
         def mock_run_optimization(**kwargs):
             prompts_arg = kwargs.get("prompts", {})
             original_prompts = kwargs.get("original_prompts", prompts_arg)
             is_single = kwargs.get("is_single_prompt_optimization", False)
             best_prompt = list(prompts_arg.values())[0] if is_single else prompts_arg
-            initial_prompt = list(original_prompts.values())[0] if is_single else original_prompts
+            initial_prompt = (
+                list(original_prompts.values())[0] if is_single else original_prompts
+            )
             return OptimizationResult(
                 optimizer="FewShotBayesianOptimizer",
                 prompt=best_prompt,

@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik import Dataset
-from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer, OptimizationResult
+from opik_optimizer import (
+    ChatPrompt,
+    HierarchicalReflectiveOptimizer,
+    OptimizationResult,
+)
 from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
     FailureMode,
     HierarchicalRootCauseAnalysis,
@@ -90,11 +94,14 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
     ) -> None:
         mock_optimization_context()
 
-        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        optimizer = HierarchicalReflectiveOptimizer(
+            model="gpt-4o-mini", verbose=0, seed=42
+        )
         prompt = ChatPrompt(system="Test", user="{question}")
         dataset = _make_dataset()
 
         eval_scores = iter([0.5, 0.6, 0.7, 0.85])
+
         def mock_evaluate(**kwargs):
             score = next(eval_scores, 0.85)
             if kwargs.get("return_evaluation_result"):
@@ -107,7 +114,9 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
             total_test_cases=5,
             num_batches=1,
             unified_failure_modes=[
-                FailureMode(name="Test", description="Test failure", root_cause="Test cause")
+                FailureMode(
+                    name="Test", description="Test failure", root_cause="Test cause"
+                )
             ],
             synthesis_notes="Test",
         )
@@ -122,7 +131,9 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
             improved = {name: p.copy() for name, p in prompts.items()}
             return improved, 0.85, _mock_experiment_result(0.85)
 
-        monkeypatch.setattr(optimizer, "_generate_and_evaluate_improvement", mock_generate_and_evaluate)
+        monkeypatch.setattr(
+            optimizer, "_generate_and_evaluate_improvement", mock_generate_and_evaluate
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompt,
@@ -142,14 +153,19 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
     ) -> None:
         mock_optimization_context()
 
-        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        optimizer = HierarchicalReflectiveOptimizer(
+            model="gpt-4o-mini", verbose=0, seed=42
+        )
         prompts = {
             "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(name="secondary", system="Secondary", user="{input}"),
+            "secondary": ChatPrompt(
+                name="secondary", system="Secondary", user="{input}"
+            ),
         }
         dataset = _make_dataset()
 
         eval_scores = iter([0.5, 0.6, 0.7, 0.85])
+
         def mock_evaluate(**kwargs):
             score = next(eval_scores, 0.85)
             if kwargs.get("return_evaluation_result"):
@@ -162,7 +178,9 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
             total_test_cases=5,
             num_batches=1,
             unified_failure_modes=[
-                FailureMode(name="Test", description="Test failure", root_cause="Test cause")
+                FailureMode(
+                    name="Test", description="Test failure", root_cause="Test cause"
+                )
             ],
             synthesis_notes="Test",
         )
@@ -177,7 +195,9 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
             improved = {name: p.copy() for name, p in prompts_arg.items()}
             return improved, 0.85, _mock_experiment_result(0.85)
 
-        monkeypatch.setattr(optimizer, "_generate_and_evaluate_improvement", mock_generate_and_evaluate)
+        monkeypatch.setattr(
+            optimizer, "_generate_and_evaluate_improvement", mock_generate_and_evaluate
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
@@ -195,7 +215,9 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         mock_optimization_context,
     ) -> None:
         mock_optimization_context()
-        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        optimizer = HierarchicalReflectiveOptimizer(
+            model="gpt-4o-mini", verbose=0, seed=42
+        )
         dataset = _make_dataset()
 
         with pytest.raises((ValueError, TypeError)):
@@ -217,7 +239,9 @@ class TestHierarchicalReflectiveOptimizerEarlyStop:
         dataset = _make_dataset()
         optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o", perfect_score=0.95)
 
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: _mock_experiment_result(0.96))
+        monkeypatch.setattr(
+            optimizer, "evaluate_prompt", lambda **kwargs: _mock_experiment_result(0.96)
+        )
 
         prompt = ChatPrompt(system="baseline", user="{question}")
         result = optimizer.optimize_prompt(

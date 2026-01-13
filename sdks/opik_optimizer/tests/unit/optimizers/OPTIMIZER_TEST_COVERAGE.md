@@ -6,7 +6,7 @@ This document describes the test coverage for optimizers in the `opik_optimizer`
 
 ## Test File Organization
 
-```
+```text
 tests/unit/optimizers/
 ├── test_base_optimizer.py           # BaseOptimizer class internals
 ├── test_prompt_factory.py           # prompt_overrides feature (cross-optimizer)
@@ -76,6 +76,7 @@ Plus additional files for algorithm-specific internals.
 ## Test Patterns
 
 ### Initialization Tests
+
 ```python
 class TestOptimizerInit:
     def test_initialization_with_defaults(self) -> None:
@@ -89,19 +90,21 @@ class TestOptimizerInit:
 ```
 
 ### optimize_prompt Tests
+
 ```python
 class TestOptimizerOptimizePrompt:
     def test_single_prompt_returns_chat_prompt(self, mock_...) -> None:
         # Verify single ChatPrompt input returns ChatPrompt output
-        
+
     def test_dict_prompt_returns_dict(self, mock_...) -> None:
         # Verify dict input returns dict output
-        
+
     def test_invalid_prompt_raises_error(self, mock_...) -> None:
         # Verify invalid input raises ValueError/TypeError
 ```
 
 ### Early-Stop Tests
+
 ```python
 class TestOptimizerEarlyStop:
     def test_skips_on_perfect_score(self, mock_opik_client, monkeypatch) -> None:
@@ -122,6 +125,7 @@ class TestOptimizerEarlyStop:
 3. **Create additional files** for algorithm-specific internals
 
 4. **Run tests** to verify:
+
    ```bash
    pytest tests/unit/optimizers/<optimizer_name>/ -v
    ```

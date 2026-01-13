@@ -835,9 +835,7 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch):
 
             return current_score
 
-        monkeypatch.setattr(
-            "opik_optimizer.task_evaluator.evaluate", fake_evaluate
-        )
+        monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
 
         class Evaluator:
             pass
