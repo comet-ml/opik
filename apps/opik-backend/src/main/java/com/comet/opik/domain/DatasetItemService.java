@@ -961,14 +961,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private Mono<Void> deleteItemsWithVersion(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters,
             String workspaceId, String userName, String batchGroupId) {
 
-        // Case 1: Deleting by datasetId with filters
-        if (datasetId != null) {
-            return deleteByDatasetIdWithVersion(datasetId, filters, workspaceId, userName, batchGroupId);
-        }
-
-        // Case 2: Deleting by item IDs - need to find the dataset
+        // Case 1: Deleting by item IDs
         if (ids != null && !ids.isEmpty()) {
             return deleteByItemIdsWithVersion(ids, workspaceId, userName, batchGroupId);
+        }
+
+        // Case 2: Deleting by datasetId with filters
+        if (datasetId != null) {
+            return deleteByDatasetIdWithVersion(datasetId, filters, workspaceId, userName, batchGroupId);
         }
 
         // No valid input
@@ -1047,27 +1047,32 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     /**
      * Deletes items by item IDs, creating a new version.
-     * Items are grouped by dataset since the API allows deleting items across datasets.
-     * <p>
-     * The frontend sends row IDs (id field) but deletion works on dataset_item_id (stable IDs).
-     * This method first maps row IDs to dataset_item_ids, then performs the deletion.
      */
     private Mono<Void> deleteByItemIdsWithVersion(Set<UUID> ids, String workspaceId, String userName,
             String batchGroupId) {
         log.info("Deleting '{}' items by IDs with versioning, batchGroupId='{}'", ids.size(), batchGroupId);
 
-        // First, map the provided IDs (could be row IDs from frontend) to dataset_item_ids
-        // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for deletion
+        // Try to map the provided IDs as row IDs (from frontend) to dataset_item_ids
         return versionDao.mapRowIdsToDatasetItemIds(ids)
                 .collectList()
                 .flatMap(mappings -> {
                     if (mappings.isEmpty()) {
-                        // IDs might be dataset_item_ids directly (from SDK), try the old lookup
-                        log.info("No row ID mappings found, trying as dataset_item_ids directly");
-                        return deleteByDatasetItemIds(ids, workspaceId, userName, batchGroupId);
+                        // IDs are already dataset_item_ids (from SDK) - resolve dataset from first item
+                        log.info("No row ID mappings found, treating as dataset_item_ids and resolving dataset");
+                        UUID firstItemId = ids.iterator().next();
+
+                        return versionDao.resolveDatasetIdFromItemId(firstItemId)
+                                .flatMap(datasetId -> deleteByDatasetItemIdsInDataset(ids, datasetId, workspaceId,
+                                        userName,
+                                        batchGroupId))
+                                .switchIfEmpty(Mono.defer(() -> {
+                                    log.warn("Could not find item '{}' in versioned table", firstItemId);
+                                    return Mono.error(new NotFoundException(
+                                            "Dataset item not found: '%s'".formatted(firstItemId)));
+                                }));
                     }
 
-                    // Extract the dataset_item_ids and dataset_id from the mappings
+                    // Successfully mapped row IDs to dataset_item_ids
                     Set<UUID> datasetItemIds = mappings.stream()
                             .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
                             .collect(Collectors.toSet());
@@ -1075,30 +1080,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                     log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset '{}'",
                             ids.size(), datasetItemIds.size(), datasetId);
-
-                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName,
-                            batchGroupId);
-                });
-    }
-
-    /**
-     * Deletes items by dataset_item_id values (stable IDs), first resolving which dataset they belong to.
-     */
-    private Mono<Void> deleteByDatasetItemIds(Set<UUID> datasetItemIds, String workspaceId, String userName,
-            String batchGroupId) {
-        UUID firstItemId = datasetItemIds.iterator().next();
-
-        // Resolve which dataset contains this item
-        return versionDao.resolveDatasetIdFromItemId(firstItemId)
-                .switchIfEmpty(
-                        // Fall back to draft table if not found in versioned table
-                        dao.get(firstItemId)
-                                .map(DatasetItem::datasetId))
-                .flatMap(datasetId -> {
-                    if (datasetId == null) {
-                        log.warn("Could not find item '{}' or its dataset", firstItemId);
-                        return Mono.empty();
-                    }
 
                     return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName,
                             batchGroupId);
@@ -1140,8 +1121,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
             Set<UUID> deletedIds, int baseVersionItemCount, String batchGroupId,
             String workspaceId, String userName) {
 
-        // Generate UUIDs for unchanged items
-        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
+        // Generate UUIDs for unchanged items (items that are NOT being deleted)
+        int unchangedItemCount = baseVersionItemCount - deletedIds.size();
+        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(unchangedItemCount);
 
         // Apply delta with only deletions (no adds or edits)
         return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
@@ -1903,12 +1885,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Deletes items from an existing version (subsequent batches with same batch_group_id).
      * Similar to appendItemsToVersion for inserts, but removes items instead.
+     *
+     * Note: Only supports deletion by explicit item IDs. Filter-based deletions cannot be batched
+     * because the client doesn't know which items will be deleted.
      */
     private Mono<Void> deleteItemsFromExistingVersion(Set<UUID> ids, UUID datasetId,
             List<DatasetItemFilter> filters, UUID versionId,
             String workspaceId, String userName) {
 
         log.info("Deleting items from existing version '{}' for dataset '{}'", versionId, datasetId);
+
+        // Only explicit IDs are supported for batched deletions
+        if (CollectionUtils.isEmpty(ids)) {
+            log.warn("Batched deletion requires explicit item IDs. Filters are not supported for batched deletions.");
+            return Mono.empty();
+        }
 
         return Mono.defer(() -> {
             // Get current version to update counts
@@ -1918,13 +1909,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     "deleteItemsFromExistingVersion: currentVersion itemsTotal='{}', itemsDeleted='{}', versionId='{}'",
                     currentVersion.itemsTotal(), currentVersion.itemsDeleted(), versionId);
 
-            // Determine items to remove
-            Set<UUID> itemsToRemove = (ids != null && !ids.isEmpty()) ? ids : Set.of();
-
-            log.info("deleteItemsFromExistingVersion: attempting to remove '{}' items", itemsToRemove.size());
+            log.info("deleteItemsFromExistingVersion: attempting to remove '{}' items", ids.size());
 
             // Remove items from the version
-            return versionDao.removeItemsFromVersion(datasetId, versionId, itemsToRemove, workspaceId)
+            return versionDao.removeItemsFromVersion(datasetId, versionId, ids, workspaceId)
                     .flatMap(deletedCount -> {
                         log.info("deleteItemsFromExistingVersion: removeItemsFromVersion returned deletedCount='{}'",
                                 deletedCount);
@@ -2016,8 +2004,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // No version with this batch_group_id - create new version with deletions
                         log.info("Creating new version with batch_group_id '{}' for dataset '{}' with deletions",
                                 batchGroupId, datasetId);
-                        // Pass null for datasetId to route by itemIds (datasetId and itemIds are mutually exclusive)
-                        return deleteItemsWithVersion(ids, null, filters, workspaceId, userName, batchGroupId);
+                        return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName, batchGroupId);
                     }
                 });
     }

@@ -445,7 +445,7 @@ public class DatasetsResource {
 
         log.info(
                 "Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), batch.batchGroupId(), workspaceId);
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batch.batchGroupId(), workspaceId);
 
         DatasetItemBatch batchWithIds = batch.toBuilder()
                 .items(items)
