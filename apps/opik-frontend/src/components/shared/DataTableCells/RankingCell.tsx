@@ -1,46 +1,17 @@
-import React from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Trophy, Medal } from "lucide-react";
+import { Medal } from "lucide-react";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
+const MEDAL_COLORS: Record<number, string> = {
+  1: "text-yellow-500",
+  2: "text-slate-400",
+  3: "text-amber-700",
+};
+
 const RankingCell = <TData,>(context: CellContext<TData, unknown>) => {
   const rank = context.getValue() as number | undefined;
-
-  const renderRankContent = () => {
-    if (rank === undefined) {
-      return <span className="comet-body-s text-light-slate">—</span>;
-    }
-
-    if (rank === 1) {
-      return (
-        <>
-          <Trophy className="size-4 shrink-0 text-yellow-500" />
-          <span className="comet-body-s-accented ml-1">{rank}</span>
-        </>
-      );
-    }
-
-    if (rank === 2) {
-      return (
-        <>
-          <Medal className="size-4 shrink-0 text-slate-400" />
-          <span className="comet-body-s-accented ml-1">{rank}</span>
-        </>
-      );
-    }
-
-    if (rank === 3) {
-      return (
-        <>
-          <Medal className="size-4 shrink-0 text-amber-700" />
-          <span className="comet-body-s-accented ml-1">{rank}</span>
-        </>
-      );
-    }
-
-    return <span className="comet-body-s-accented">{rank}</span>;
-  };
+  const medalColor = rank ? MEDAL_COLORS[rank] : null;
 
   return (
     <CellWrapper
@@ -48,7 +19,20 @@ const RankingCell = <TData,>(context: CellContext<TData, unknown>) => {
       tableMetadata={context.table.options.meta}
     >
       <div className="flex items-center justify-center">
-        {renderRankContent()}
+        {rank === undefined ? (
+          <span className="comet-body-s text-light-slate">—</span>
+        ) : (
+          <>
+            {medalColor && (
+              <Medal className={`size-4 shrink-0 ${medalColor}`} />
+            )}
+            <span
+              className={`comet-body-s-accented ${medalColor ? "ml-1" : ""}`}
+            >
+              {rank}
+            </span>
+          </>
+        )}
       </div>
     </CellWrapper>
   );

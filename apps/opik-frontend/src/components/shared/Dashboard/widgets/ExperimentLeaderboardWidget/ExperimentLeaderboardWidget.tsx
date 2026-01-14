@@ -3,10 +3,13 @@ import { useShallow } from "zustand/react/shallow";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import get from "lodash/get";
+import isNumber from "lodash/isNumber";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import DataTable from "@/components/shared/DataTable/DataTable";
+import ExperimentLeaderboardTableWrapper from "./ExperimentLeaderboardTableWrapper";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 import {
   DashboardWidgetComponentProps,
@@ -25,11 +28,7 @@ import { Sorting } from "@/types/sorting";
 import { getRowId } from "@/components/shared/DataTable/utils";
 import {
   COLUMN_TYPE,
-  AggregatedFeedbackScore,
   SCORE_TYPE_FEEDBACK,
-  SCORE_TYPE_EXPERIMENT,
-  COLUMN_EXPERIMENT_SCORES_ID,
-  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_METADATA_ID,
   DynamicColumn,
   ColumnData,
@@ -39,9 +38,20 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import RankingCell from "@/components/shared/DataTableCells/RankingCell";
 import RankingHeader from "@/components/shared/DataTableHeaders/RankingHeader";
-import { formatConfigColumnName, PREDEFINED_COLUMNS } from "./helpers";
+import {
+  formatConfigColumnName,
+  PREDEFINED_COLUMNS,
+  DEFAULT_MAX_ROWS,
+  MAX_MAX_ROWS,
+  getExperimentListParams,
+  isSelectExperimentsMode,
+  parseScoreColumnId,
+  getExperimentScore,
+  buildScoreLabel,
+  getRankingSorting,
+  getRankingFilters,
+} from "./helpers";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
-import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 
@@ -88,12 +98,19 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     selectedColumns = [],
     enableRanking = true,
     rankingMetric,
+    rankingDirection = true,
     columnsWidth = {},
+    columnsOrder = [],
     scoresColumnsOrder = [],
-    maxRows = 20,
+    metadataColumnsOrder = [],
+    maxRows,
     sorting: savedSorting = [],
     overrideDefaults = false,
   } = config;
+
+  const maxRowsValue = useMemo(() => {
+    return isNumber(maxRows) ? maxRows : DEFAULT_MAX_ROWS;
+  }, [maxRows]);
 
   const experimentIds = useMemo(() => {
     if (overrideDefaults) {
@@ -106,100 +123,65 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     overrideDefaults,
   ]);
 
-  const isSelectExperimentsMode =
-    dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+  const experimentListParams = getExperimentListParams({
+    dataSource,
+    experimentIds,
+    filters,
+  });
 
-  const { data: feedbackScoresData } = useExperimentsFeedbackScoresNames(
-    {
-      experimentsIds: isSelectExperimentsMode ? experimentIds : undefined,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
+  const rankingSorting = useMemo(
+    () => getRankingSorting({ rankingMetric, rankingDirection }),
+    [rankingMetric, rankingDirection],
   );
 
-  const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? [])
-      .sort((c1, c2) => c1.name.localeCompare(c2.name))
-      .map<DynamicColumn>((c) => {
-        const prefix =
-          c.type === SCORE_TYPE_EXPERIMENT
-            ? COLUMN_EXPERIMENT_SCORES_ID
-            : COLUMN_FEEDBACK_SCORES_ID;
-        return {
-          id: `${prefix}.${c.name}`,
-          label: c.name,
-          columnType: COLUMN_TYPE.number,
-          type: c.type,
-        };
-      });
-  }, [feedbackScoresData?.scores]);
-
-  // Use saved sorting if available, otherwise use ranking metric as default
   const apiSorting = useMemo(() => {
     if (savedSorting && savedSorting.length > 0) {
       return savedSorting;
     }
-    if (enableRanking && rankingMetric) {
-      return [{ id: rankingMetric, desc: false }];
+    if (enableRanking && rankingSorting) {
+      return rankingSorting;
     }
     return undefined;
-  }, [savedSorting, enableRanking, rankingMetric]);
-
-  const isRequestEnabled =
-    dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
-      ? experimentIds.length > 0
-      : true;
+  }, [savedSorting, enableRanking, rankingSorting]);
 
   const { data: experimentsData, isPending } = useExperimentsList(
     {
       workspaceName,
-      filters:
-        dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
-          ? filters
-          : undefined,
-      experimentIds:
-        dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
-          ? experimentIds
-          : undefined,
+      filters: experimentListParams.filters,
+      experimentIds: experimentListParams.experimentIds,
       sorting: apiSorting,
       page: 1,
-      size:
-        dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP ? maxRows : 100,
+      size: isSelectExperimentsMode(dataSource) ? MAX_MAX_ROWS : maxRowsValue,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: isRequestEnabled,
+      enabled: experimentListParams.isEnabled,
     },
+  );
+
+  const rankingFilters = useMemo(
+    () => getRankingFilters(rankingMetric, experimentListParams.filters),
+    [rankingMetric, experimentListParams.filters],
   );
 
   const { data: rankingData } = useExperimentsList(
     {
       workspaceName,
-      filters:
-        dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
-          ? filters
-          : undefined,
-      experimentIds:
-        dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
-          ? experimentIds
-          : undefined,
-      sorting: rankingMetric ? [{ id: rankingMetric, desc: true }] : undefined,
+      filters: rankingFilters,
+      experimentIds: experimentListParams.experimentIds,
+      sorting: rankingSorting,
       page: 1,
-      size: 100,
+      size: MAX_MAX_ROWS,
       queryKey: "experiments-ranking",
     },
     {
       placeholderData: keepPreviousData,
-      enabled: isRequestEnabled && enableRanking && !!rankingMetric,
+      enabled:
+        experimentListParams.isEnabled && enableRanking && !!rankingMetric,
     },
   );
 
-  const experiments = useMemo(
-    () => experimentsData?.content ?? [],
-    [experimentsData?.content],
-  );
-
+  const experiments = experimentsData?.content ?? [];
   const sortableColumns = useMemo(
     () => experimentsData?.sortable_by ?? [],
     [experimentsData?.sortable_by],
@@ -217,40 +199,30 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     return map;
   }, [enableRanking, rankingData?.content]);
 
-  // Build selected score columns with auto-add ranking metric
   const selectedScoreColumns = useMemo(() => {
-    const cols = dynamicScoresColumns.filter((col) =>
-      selectedColumns.includes(col.id),
-    );
+    const scoreColumnIds = [...selectedColumns];
 
-    // Auto-add ranking metric if enabled and not already selected
-    if (enableRanking && rankingMetric) {
-      const rankingCol = dynamicScoresColumns.find(
-        (c) => c.id === rankingMetric,
-      );
-      if (rankingCol && !cols.find((c) => c.id === rankingMetric)) {
-        cols.push(rankingCol);
-      }
+    if (
+      enableRanking &&
+      rankingMetric &&
+      !scoreColumnIds.includes(rankingMetric)
+    ) {
+      scoreColumnIds.push(rankingMetric);
     }
 
-    // Apply ordering
-    const orderedCols = [...cols].sort((a, b) => {
-      const indexA = scoresColumnsOrder.indexOf(a.id);
-      const indexB = scoresColumnsOrder.indexOf(b.id);
-      if (indexA === -1 && indexB === -1) return 0;
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
-    });
-
-    return orderedCols;
-  }, [
-    dynamicScoresColumns,
-    selectedColumns,
-    enableRanking,
-    rankingMetric,
-    scoresColumnsOrder,
-  ]);
+    return scoreColumnIds
+      .map((colId) => {
+        const parsed = parseScoreColumnId(colId);
+        if (!parsed) return null;
+        return {
+          id: colId,
+          label: buildScoreLabel(parsed.scoreName, parsed.scoreType),
+          columnType: COLUMN_TYPE.number,
+          type: parsed.scoreType,
+        } as DynamicColumn;
+      })
+      .filter((col): col is DynamicColumn => col !== null);
+  }, [selectedColumns, enableRanking, rankingMetric]);
 
   // Build metadata columns data
   const metadataColumnsData = useMemo<ColumnData<Experiment>[]>(() => {
@@ -268,32 +240,16 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       });
   }, [selectedColumns]);
 
-  // Build feedback score columns data
   const scoresColumnsData = useMemo<ColumnData<Experiment>[]>(() => {
-    const getScoreByName = (
-      scores: AggregatedFeedbackScore[] | undefined,
-      scoreName: string,
-    ) => scores?.find((f) => f.name === scoreName);
-
     return selectedScoreColumns.map((scoreCol) => {
       const actualType = scoreCol.type || SCORE_TYPE_FEEDBACK;
-      const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
-      const scoresKey = isExperimentScore
-        ? "experiment_scores"
-        : "feedback_scores";
 
       return {
         id: scoreCol.id,
         label: scoreCol.label,
         type: scoreCol.columnType,
-        accessorFn: (row: Experiment) => {
-          const rowWithScores = row as Experiment & {
-            feedback_scores?: AggregatedFeedbackScore[];
-            experiment_scores?: AggregatedFeedbackScore[];
-          };
-          const scores = rowWithScores[scoresKey];
-          return getScoreByName(scores, scoreCol.label);
-        },
+        scoreType: actualType,
+        accessorFn: (row: Experiment) => getExperimentScore(scoreCol.id, row),
         header: FeedbackScoreHeader as never,
         cell: FeedbackScoreCell as never,
       };
@@ -312,7 +268,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
         header: RankingHeader as never,
         cell: RankingCell as never,
         enableSorting: false,
-        size: 100,
+        size: 50,
         meta: {
           type: COLUMN_TYPE.number,
           header: "Rank",
@@ -339,6 +295,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     // 3. Predefined columns (using helper)
     allColumns.push(
       ...convertColumnDataToColumn<Experiment, Experiment>(PREDEFINED_COLUMNS, {
+        columnsOrder,
         selectedColumns,
         sortableColumns,
       }),
@@ -349,6 +306,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       ...convertColumnDataToColumn<Experiment, Experiment>(
         metadataColumnsData,
         {
+          columnsOrder: metadataColumnsOrder,
           sortableColumns,
         },
       ),
@@ -357,6 +315,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     // 5. Feedback score columns (using helper)
     allColumns.push(
       ...convertColumnDataToColumn<Experiment, Experiment>(scoresColumnsData, {
+        columnsOrder: scoresColumnsOrder,
         sortableColumns,
       }),
     );
@@ -366,8 +325,11 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     enableRanking,
     rankingMap,
     selectedColumns,
+    columnsOrder,
     metadataColumnsData,
+    metadataColumnsOrder,
     scoresColumnsData,
+    scoresColumnsOrder,
     sortableColumns,
   ]);
 
@@ -425,7 +387,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
   const noData = experiments.length === 0;
 
   const renderContent = () => {
-    if (isSelectExperimentsMode && experimentIds.length === 0) {
+    if (isSelectExperimentsMode(dataSource) && experimentIds.length === 0) {
       return (
         <DashboardWidget.EmptyState
           title="Experiments not configured"
@@ -436,7 +398,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       );
     }
 
-    if (isPending && isRequestEnabled) {
+    if (isPending && experimentListParams.isEnabled) {
       return (
         <div className="flex size-full min-h-32 items-center justify-center">
           <Spinner />
@@ -456,19 +418,22 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     }
 
     return (
-      <div className="h-full overflow-auto">
+      <div
+        className={cn(
+          "h-full",
+          preview &&
+            "[&_a]:pointer-events-none [&_button]:pointer-events-none [&_th]:pointer-events-none",
+        )}
+      >
         <DataTable
+          key={`ranking-${rankingDirection}`}
           columns={tableColumns}
           data={experiments}
-          resizeConfig={resizeConfig}
-          sortConfig={sortConfig}
+          resizeConfig={preview ? undefined : resizeConfig}
+          sortConfig={preview ? undefined : sortConfig}
           getRowId={getRowId}
-          noData={
-            <DashboardWidget.EmptyState
-              title="No data available"
-              message="No experiments match the current filters"
-            />
-          }
+          TableWrapper={ExperimentLeaderboardTableWrapper}
+          stickyHeader
         />
       </div>
     );

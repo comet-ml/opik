@@ -2,13 +2,12 @@ import { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import {
-  COLUMN_EXPERIMENT_SCORES_ID,
-  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_TYPE,
   DynamicColumn,
-  SCORE_TYPE_EXPERIMENT,
+  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
+import { buildScoreColumnId, buildScoreLabel } from "./scoresUtils";
 
 interface UseExperimentsFeedbackScoresOptions {
   experimentIds?: string[];
@@ -35,15 +34,12 @@ export const useExperimentsFeedbackScores = (
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => {
-        const prefix =
-          c.type === SCORE_TYPE_EXPERIMENT
-            ? COLUMN_EXPERIMENT_SCORES_ID
-            : COLUMN_FEEDBACK_SCORES_ID;
+        const scoreType = c.type || SCORE_TYPE_FEEDBACK;
         return {
-          id: `${prefix}.${c.name}`,
-          label: c.name,
+          id: buildScoreColumnId(c.name, scoreType),
+          label: buildScoreLabel(c.name, scoreType),
           columnType: COLUMN_TYPE.number,
-          type: c.type,
+          type: scoreType,
         };
       });
   }, [feedbackScoresData?.scores]);

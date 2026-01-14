@@ -24,7 +24,6 @@ import GroupsAccordionSection, {
 } from "@/components/shared/GroupsAccordionSection/GroupsAccordionSection";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
-import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { Description } from "@/components/ui/description";
 
 type ExperimentColumnData = {
@@ -43,17 +42,6 @@ const EXPERIMENT_DATA_COLUMNS: ColumnData<ExperimentColumnData>[] = [
     id: COLUMN_METADATA_ID,
     label: "Configuration",
     type: COLUMN_TYPE.dictionary,
-  },
-  {
-    id: "project_id",
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    disposable: true,
-  },
-  {
-    id: "created_at",
-    label: "Created at",
-    type: COLUMN_TYPE.time,
   },
 ];
 
@@ -115,19 +103,6 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
             placeholder: "key",
             excludeRoot: true,
           },
-        },
-        project_id: {
-          keyComponent:
-            ProjectsSelectBox as React.FunctionComponent<unknown> & {
-              placeholder: string;
-              value: string;
-              onValueChange: (value: string) => void;
-            },
-          keyComponentProps: {
-            className: "w-full min-w-72",
-          },
-          defaultOperator: "=" as FilterOperator,
-          operators: [{ label: "=", value: "=" as FilterOperator }],
         },
       },
     }),

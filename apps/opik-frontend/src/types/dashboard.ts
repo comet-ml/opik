@@ -90,6 +90,7 @@ export interface ExperimentLeaderboardWidgetType {
     selectedColumns?: string[];
     enableRanking?: boolean;
     rankingMetric?: string;
+    rankingDirection?: boolean;
     columnsOrder?: string[];
     scoresColumnsOrder?: string[];
     metadataColumnsOrder?: string[];

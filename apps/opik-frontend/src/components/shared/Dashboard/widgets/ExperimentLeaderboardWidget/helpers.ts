@@ -1,13 +1,56 @@
 import uniq from "lodash/uniq";
+import get from "lodash/get";
 
 import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
 import { Experiment } from "@/types/datasets";
-import { COLUMN_TYPE, ColumnData, COLUMN_ID_ID } from "@/types/shared";
+import {
+  COLUMN_TYPE,
+  ColumnData,
+  COLUMN_ID_ID,
+  COLUMN_DATASET_ID,
+} from "@/types/shared";
+import { Filters } from "@/types/filters";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { getJSONPaths } from "@/lib/utils";
+import { formatDate } from "@/lib/date";
+
+export {
+  parseScoreColumnId,
+  getExperimentScore,
+  buildScoreLabel,
+} from "@/components/pages-shared/experiments/scoresUtils";
+
+export const isSelectExperimentsMode = (dataSource: EXPERIMENT_DATA_SOURCE) =>
+  dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+
+interface ExperimentListParamsInput {
+  dataSource: EXPERIMENT_DATA_SOURCE;
+  experimentIds: string[];
+  filters: Filters;
+}
+
+export const getExperimentListParams = ({
+  dataSource,
+  experimentIds,
+  filters,
+}: ExperimentListParamsInput) => {
+  const isSelectMode = isSelectExperimentsMode(dataSource);
+  return {
+    experimentIds: isSelectMode ? experimentIds : undefined,
+    filters: !isSelectMode ? filters : undefined,
+    isEnabled: isSelectMode ? experimentIds.length > 0 : true,
+  };
+};
+
+export const DEFAULT_MAX_ROWS = 20;
+export const MIN_MAX_ROWS = 1;
+export const MAX_MAX_ROWS = 100;
 
 export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   {
@@ -15,6 +58,28 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.dataset,
+    },
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.created_at),
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
   },
   {
     id: "duration.p50",
@@ -36,6 +101,21 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p99,
     cell: DurationCell as never,
+  },
+  {
+    id: "prompt",
+    label: "Prompt commit",
+    type: COLUMN_TYPE.list,
+    accessorFn: (row) => get(row, ["prompt_versions"], []),
+    cell: MultiResourceCell as never,
+    customMeta: {
+      nameKey: "commit",
+      idKey: "prompt_id",
+      resource: RESOURCE_TYPE.prompt,
+      getSearch: (data: Experiment) => ({
+        activeVersionId: get(data, "id", null),
+      }),
+    },
   },
   {
     id: "trace_count",
@@ -60,17 +140,24 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
 ];
 
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_DATASET_ID,
+  "created_at",
+  "duration.p50",
+  "trace_count",
+];
+
 export const getDefaultConfig = () => ({
   overrideDefaults: false,
   dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
   experimentIds: [],
-  selectedColumns: ["duration.p50"],
+  selectedColumns: DEFAULT_SELECTED_COLUMNS,
   enableRanking: true,
-  columnsOrder: ["duration.p50"],
+  columnsOrder: DEFAULT_SELECTED_COLUMNS,
   scoresColumnsOrder: [],
   metadataColumnsOrder: [],
   columnsWidth: {},
-  maxRows: 20,
+  maxRows: DEFAULT_MAX_ROWS,
   sorting: [],
 });
 
@@ -110,6 +197,38 @@ export const formatMetricName = (metric: string): string => {
 
 export const formatConfigColumnName = (key: string): string => {
   return `config.${key}`;
+};
+
+interface GetRankingSortingParams {
+  rankingMetric?: string;
+  rankingDirection?: boolean;
+}
+
+export const getRankingSorting = ({
+  rankingMetric,
+  rankingDirection = true,
+}: GetRankingSortingParams) => {
+  if (!rankingMetric) return undefined;
+  return [{ id: rankingMetric, desc: rankingDirection }];
+};
+
+export const getRankingFilters = (
+  rankingMetric: string | undefined,
+  existingFilters: Filters = [],
+): Filters => {
+  // TODO lala remove true when BE is implemented
+  // eslint-disable-next-line no-constant-condition
+  if (!rankingMetric || true) return existingFilters;
+
+  const rankingFilter: Filters[number] = {
+    id: `ranking-filter-${rankingMetric}`,
+    field: rankingMetric as string,
+    type: COLUMN_TYPE.number,
+    operator: "is_not_empty",
+    value: "",
+  };
+
+  return [...existingFilters, rankingFilter];
 };
 
 export const widgetHelpers = {

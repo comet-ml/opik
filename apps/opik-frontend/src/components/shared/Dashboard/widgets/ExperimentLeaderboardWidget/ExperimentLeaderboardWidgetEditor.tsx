@@ -8,6 +8,8 @@ import React, {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
+import isNumber from "lodash/isNumber";
 import { Filter, ListChecks } from "lucide-react";
 
 import {
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Description } from "@/components/ui/description";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import ExperimentWidgetDataSection from "@/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection";
@@ -40,6 +43,7 @@ import {
 import {
   useDashboardStore,
   selectUpdatePreviewWidget,
+  selectConfig,
 } from "@/store/DashboardStore";
 import {
   ExperimentLeaderboardWidgetSchema,
@@ -50,13 +54,15 @@ import {
   parseMetadataKeys,
   formatConfigColumnName,
   PREDEFINED_COLUMNS,
+  DEFAULT_MAX_ROWS,
+  MIN_MAX_ROWS,
+  MAX_MAX_ROWS,
+  getExperimentListParams,
 } from "./helpers";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
 import { COLUMN_METADATA_ID, COLUMN_TYPE } from "@/types/shared";
-
-const DEFAULT_ROW_COUNT = 20;
 
 const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
   (_, ref) => {
@@ -65,37 +71,40 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
       (state) => state.previewWidget!,
     ) as DashboardWidget & ExperimentLeaderboardWidgetType;
     const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
+    const globalConfig = useDashboardStore(selectConfig);
 
     const { config } = widgetData;
 
     const dataSource =
       config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
 
-    const filters = useMemo(() => config.filters || [], [config.filters]);
-    const experimentIds = useMemo(
-      () => config.experimentIds || [],
-      [config.experimentIds],
-    );
-    const selectedColumns = useMemo(
-      () => config.selectedColumns || [],
-      [config.selectedColumns],
-    );
+    const filters = config.filters || [];
     const overrideDefaults = config.overrideDefaults || false;
+    const selectedColumns = config.selectedColumns || [];
+
+    const experimentIds = useMemo(() => {
+      if (overrideDefaults) {
+        return config.experimentIds || [];
+      }
+      return globalConfig?.experimentIds || [];
+    }, [globalConfig?.experimentIds, config.experimentIds, overrideDefaults]);
+
     const enableRanking = config.enableRanking ?? true;
     const rankingMetric = config.rankingMetric;
-    const columnsOrder = useMemo(
-      () => config.columnsOrder || [],
-      [config.columnsOrder],
-    );
+    const rankingDirection = config.rankingDirection ?? true;
+    const columnsOrder = config.columnsOrder || [];
+
     const scoresColumnsOrder = useMemo(
       () => config.scoresColumnsOrder || [],
       [config.scoresColumnsOrder],
     );
+
     const metadataColumnsOrder = useMemo(
       () => config.metadataColumnsOrder || [],
       [config.metadataColumnsOrder],
     );
-    const maxRows = config.maxRows || DEFAULT_ROW_COUNT;
+
+    const maxRows = config.maxRows || DEFAULT_MAX_ROWS;
 
     const form = useForm<ExperimentLeaderboardWidgetFormData>({
       resolver: zodResolver(ExperimentLeaderboardWidgetSchema),
@@ -103,19 +112,21 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
       defaultValues: {
         dataSource,
         filters,
-        experimentIds,
+        experimentIds: config.experimentIds || [],
         selectedColumns,
         overrideDefaults,
         enableRanking,
         rankingMetric,
+        rankingDirection,
         columnsOrder,
         scoresColumnsOrder,
         metadataColumnsOrder,
-        maxRows,
+        maxRows: String(maxRows),
       },
     });
 
     const currentFilters = form.watch("filters") || [];
+    const watchedDataSource = form.watch("dataSource");
 
     useEffect(() => {
       if (form.formState.errors.filters) {
@@ -131,24 +142,22 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
       refetchInterval: 0,
     });
 
+    const experimentListParams = getExperimentListParams({
+      dataSource,
+      experimentIds,
+      filters,
+    });
+
     const { data: experimentsData } = useExperimentsList(
       {
         workspaceName,
-        experimentIds:
-          dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
-            ? experimentIds
-            : undefined,
-        filters:
-          dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
-            ? filters
-            : undefined,
+        experimentIds: experimentListParams.experimentIds,
+        filters: experimentListParams.filters,
         page: 1,
         size: 100,
       },
       {
-        enabled:
-          overrideDefaults &&
-          dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+        enabled: experimentListParams.isEnabled,
       },
     );
 
@@ -206,6 +215,9 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
     const handleEnableRankingChange = (checked: boolean) => {
       form.setValue("enableRanking", checked);
+      if (!checked) {
+        form.clearErrors("rankingMetric");
+      }
       updatePreviewWidget({
         config: {
           ...config,
@@ -220,6 +232,16 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
         config: {
           ...config,
           rankingMetric: value,
+        },
+      });
+    };
+
+    const handleRankingHigherIsBetterChange = (value: boolean) => {
+      form.setValue("rankingDirection", value);
+      updatePreviewWidget({
+        config: {
+          ...config,
+          rankingDirection: value,
         },
       });
     };
@@ -244,7 +266,7 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
           },
         });
       },
-      [form, config, updatePreviewWidget],
+      [config, form, updatePreviewWidget],
     );
 
     const handleMetadataColumnsOrderChange = useCallback(
@@ -257,20 +279,17 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
           },
         });
       },
-      [form, config, updatePreviewWidget],
+      [config, form, updatePreviewWidget],
     );
 
     const handleMaxRowsChange = (value: string) => {
-      const numValue = parseInt(value, 10);
-      if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
-        form.setValue("maxRows", numValue);
-        updatePreviewWidget({
-          config: {
-            ...config,
-            maxRows: numValue,
-          },
-        });
-      }
+      const numValue = isEmpty(value) ? undefined : parseInt(value, 10);
+      updatePreviewWidget({
+        config: {
+          ...config,
+          maxRows: isNumber(numValue) ? numValue : undefined,
+        },
+      });
     };
 
     const dynamicMetadataColumns = useMemo(() => {
@@ -309,37 +328,32 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
     return (
       <Form {...form}>
         <WidgetEditorBaseLayout>
-          <div className="space-y-4">
-            <FormField
-              control={form.control}
-              name="selectedColumns"
-              render={() => (
-                <FormItem>
-                  <FormLabel>Columns</FormLabel>
-                  <FormControl>
-                    <ColumnsButton
-                      columns={PREDEFINED_COLUMNS}
-                      selectedColumns={selectedColumns}
-                      onSelectionChange={handleSelectedColumnsChange}
-                      order={columnsOrder}
-                      onOrderChange={handleColumnsOrderChange}
-                      sections={columnSections}
-                    />
-                  </FormControl>
+          <div className="space-y-3">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 pr-4">
+                <div className="flex flex-col gap-0.5 px-0.5">
+                  <Label className="comet-body-s-accented">Columns</Label>
                   <Description>
-                    Select and reorder columns to display
+                    Select and reorder columns to display.
                   </Description>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </div>
+              </div>
+              <ColumnsButton
+                columns={PREDEFINED_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={handleSelectedColumnsChange}
+                order={columnsOrder}
+                onOrderChange={handleColumnsOrderChange}
+                sections={columnSections}
+              />
+            </div>
 
             <WidgetRankingSettingsSection
               control={form.control}
-              enableRanking={enableRanking}
               dynamicScoresColumns={dynamicScoresColumns}
               onEnableRankingChange={handleEnableRankingChange}
               onRankingMetricChange={handleRankingMetricChange}
+              onRankingHigherIsBetterChange={handleRankingHigherIsBetterChange}
             />
 
             <WidgetOverrideDefaultsSection
@@ -401,7 +415,7 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                   )}
                 />
 
-                {form.watch("dataSource") ===
+                {watchedDataSource ===
                   EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP && (
                   <>
                     <ExperimentWidgetDataSection
@@ -423,12 +437,13 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                             <FormControl>
                               <Input
                                 type="number"
-                                min={1}
-                                max={100}
-                                value={field.value || DEFAULT_ROW_COUNT}
+                                min={MIN_MAX_ROWS}
+                                max={MAX_MAX_ROWS}
+                                value={field.value ?? ""}
                                 onChange={(e) => {
-                                  field.onChange(e.target.value);
-                                  handleMaxRowsChange(e.target.value);
+                                  const value = e.target.value;
+                                  field.onChange(value);
+                                  handleMaxRowsChange(value);
                                 }}
                                 className={cn({
                                   "border-destructive": Boolean(
@@ -438,7 +453,8 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               />
                             </FormControl>
                             <Description>
-                              Number of experiments to display (1-100)
+                              Number of experiments to display ({MIN_MAX_ROWS}-
+                              {MAX_MAX_ROWS})
                             </Description>
                             <FormMessage />
                           </FormItem>
@@ -448,7 +464,7 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                   </>
                 )}
 
-                {form.watch("dataSource") ===
+                {watchedDataSource ===
                   EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS && (
                   <FormField
                     control={form.control}
