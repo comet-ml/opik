@@ -26,6 +26,7 @@ LOGGER = logging.getLogger(__name__)
 
 EVALUATION_TASK_NAME = "evaluation_task"
 
+STREAM_DATASET_BATCH_SIZE = 200 # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
 
 def _calculate_total_items(
     dataset: dataset.Dataset,
@@ -338,6 +339,7 @@ class EvaluationEngine:
             dataset_items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
                 nb_samples=nb_samples,
                 dataset_item_ids=dataset_item_ids,
+                batch_size=STREAM_DATASET_BATCH_SIZE,
             )
         else:
             LOGGER.info("Dataset streaming disabled due to evaluation parameters")
@@ -345,6 +347,7 @@ class EvaluationEngine:
                 dataset_.__internal_api__stream_items_as_dataclasses__(
                     nb_samples=nb_samples,
                     dataset_item_ids=dataset_item_ids,
+                    batch_size=STREAM_DATASET_BATCH_SIZE,
                 )
             )
 
