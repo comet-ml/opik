@@ -9,7 +9,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -74,7 +73,7 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 .flatMap(result -> {
                     log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
                             message.jobId(), result.filePath(), result.expiresAt());
-                    return jobService.updateJobToCompleted(message.jobId(), result.filePath(), result.downloadUrl(),
+                    return jobService.updateJobToCompleted(message.jobId(), result.filePath(),
                             result.expiresAt());
                 })
                 .then()

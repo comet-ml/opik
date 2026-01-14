@@ -34,7 +34,7 @@ public interface DatasetExportJobService {
 
     Mono<Void> updateJobToProcessing(UUID jobId);
 
-    Mono<Void> updateJobToCompleted(UUID jobId, String filePath, String downloadUrl, Instant expiresAt);
+    Mono<Void> updateJobToCompleted(UUID jobId, String filePath, Instant expiresAt);
 
     Mono<Void> updateJobToFailed(UUID jobId, String errorMessage);
 
@@ -151,20 +151,11 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
 
-                // Find the job
-                var job = dao.findById(workspaceId, jobId)
+                return dao.findById(workspaceId, jobId)
                         .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
-
-                // Update viewed_at only if it's not already set (first view only)
-                if (job.viewedAt() == null) {
-                    dao.updateViewedAt(workspaceId, jobId, Instant.now());
-                    log.debug("Marked export job '{}' as viewed for the first time", jobId);
-                }
-
-                return job;
             })).subscribeOn(Schedulers.boundedElastic());
         });
     }
@@ -192,7 +183,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     }
 
     @Override
-    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath, @NonNull String downloadUrl,
+    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath,
             @NonNull Instant expiresAt) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -202,7 +193,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
-                            downloadUrl, expiresAt, userName);
+                            expiresAt, userName);
 
                     verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.COMPLETED, workspaceId, dao);
 
@@ -246,8 +237,8 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
      * in the expected state, the operation is treated as successful. Otherwise, throws NotFoundException.
      * <p>
      * <strong>Design Note:</strong> For COMPLETED state, this intentionally does NOT compare or update
-     * payload fields (downloadUrl, filePath, expiresAt). The first successful completion is authoritative.
-     * Subsequent replays with potentially different values (e.g., new presigned URLs) are ignored.
+     * payload fields (filePath, expiresAt). The first successful completion is authoritative.
+     * Subsequent replays with potentially different values are ignored.
      * This is correct because:
      * <ul>
      *   <li>The original completion already has valid data that users may have received</li>

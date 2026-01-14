@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -10,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -42,16 +42,12 @@ class CsvDatasetExportProcessorImplTest {
     @Mock
     private FileService fileService;
 
-    @Mock
-    private PreSignerService preSignerService;
-
     private DatasetExportConfig exportConfig;
 
     private CsvDatasetExportProcessorImpl processor;
 
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final String WORKSPACE_ID = "test-workspace";
-    private static final String TEST_PRESIGNED_URL = "https://s3.amazonaws.com/bucket/path?signature=test";
 
     @BeforeEach
     void setUp() {
@@ -66,17 +62,13 @@ class CsvDatasetExportProcessorImplTest {
         lenient().when(fileService.uploadPart(any(), any(), anyInt(), any())).thenReturn("test-etag");
         lenient().when(fileService.completeMultipartUpload(any(), any(), any())).thenReturn(null);
 
-        // Mock presigned URL generation (both overloads)
-        lenient().when(preSignerService.presignDownloadUrl(any())).thenReturn(TEST_PRESIGNED_URL);
-        lenient().when(preSignerService.presignDownloadUrl(any(), any())).thenReturn(TEST_PRESIGNED_URL);
-
-        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, preSignerService, exportConfig);
+        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, exportConfig);
     }
 
     @Test
     void generateAndUploadCsv_shouldGenerateCsvAndUpload_whenItemsExist() {
         // Given
-        Map<String, List<String>> columns = new HashMap<>();
+        Map<String, List<String>> columns = new LinkedHashMap<>();
         columns.put("name", List.of("String"));
         columns.put("age", List.of("Int"));
 
@@ -101,7 +93,6 @@ class CsvDatasetExportProcessorImplTest {
                     assertThat(exportResult.filePath())
                             .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
                     assertThat(exportResult.filePath()).endsWith(".csv");
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                     assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
                 .verifyComplete();
@@ -114,9 +105,6 @@ class CsvDatasetExportProcessorImplTest {
 
         // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
-
-        // Verify presigned URL was generated with custom TTL
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -137,7 +125,6 @@ class CsvDatasetExportProcessorImplTest {
                     assertThat(exportResult.filePath())
                             .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
                     assertThat(exportResult.filePath()).endsWith(".csv");
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                     assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
                 .verifyComplete();
@@ -145,7 +132,6 @@ class CsvDatasetExportProcessorImplTest {
         // Verify abortMultipartUpload and upload were called for empty dataset
         verify(fileService).abortMultipartUpload(any(), eq("test-upload-id"));
         verify(fileService).upload(any(), any(), eq("text/csv"));
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -173,14 +159,12 @@ class CsvDatasetExportProcessorImplTest {
         StepVerifier.create(result)
                 .assertNext(exportResult -> {
                     assertThat(exportResult.filePath()).isNotEmpty();
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                 })
                 .verifyComplete();
 
         // Verify multipart upload was called
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -208,14 +192,12 @@ class CsvDatasetExportProcessorImplTest {
         StepVerifier.create(result)
                 .assertNext(exportResult -> {
                     assertThat(exportResult.filePath()).isNotEmpty();
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                 })
                 .verifyComplete();
 
         // Verify multipart upload was called
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test

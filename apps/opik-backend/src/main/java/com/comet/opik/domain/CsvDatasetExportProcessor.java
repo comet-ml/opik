@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -11,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.InternalServerErrorException;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -49,7 +49,7 @@ public interface CsvDatasetExportProcessor {
      * Generates a CSV file from dataset items and uploads it to S3/MinIO.
      *
      * @param datasetId The dataset ID to export
-     * @return A Mono containing the export result with file path, download URL, and expiration
+     * @return A Mono containing the export result with file path and expiration
      */
     Mono<CsvExportResult> generateAndUploadCsv(UUID datasetId);
 
@@ -59,7 +59,6 @@ public interface CsvDatasetExportProcessor {
     @Builder
     record CsvExportResult(
             @NonNull String filePath,
-            @NonNull String downloadUrl,
             @NonNull Instant expiresAt) {
     }
 }
@@ -71,7 +70,6 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     private final @NonNull DatasetItemDAO datasetItemDao;
     private final @NonNull FileService fileService;
-    private final @NonNull PreSignerService preSignerService;
     private final @NonNull @Config("datasetExport") DatasetExportConfig exportConfig;
 
     private static final String CSV_CONTENT_TYPE = "text/csv";
@@ -92,17 +90,15 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                         // Step 2: Generate CSV and upload using streaming approach
                         return generateAndUploadCsvStreaming(datasetId, columns, workspaceId)
                                 .map(filePath -> {
-                                    // Step 3: Generate presigned URL for download (works for both S3 and MinIO)
+                                    // Step 3: Calculate expiration time
                                     Duration ttl = exportConfig.getDefaultTtl().toJavaDuration();
-                                    String downloadUrl = preSignerService.presignDownloadUrl(filePath, ttl);
                                     Instant expiresAt = Instant.now().plus(ttl);
 
-                                    log.info("Generated presigned download URL for dataset '{}', expires at: '{}'",
+                                    log.info("CSV export completed for dataset '{}', expires at: '{}'",
                                             datasetId, expiresAt);
 
                                     return CsvExportResult.builder()
                                             .filePath(filePath)
-                                            .downloadUrl(downloadUrl)
                                             .expiresAt(expiresAt)
                                             .build();
                                 });
