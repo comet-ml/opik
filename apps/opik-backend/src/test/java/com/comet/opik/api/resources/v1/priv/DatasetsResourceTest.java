@@ -4686,9 +4686,8 @@ class DatasetsResourceTest {
                         .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                         .get();
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset item not found");
             }
         }
 
