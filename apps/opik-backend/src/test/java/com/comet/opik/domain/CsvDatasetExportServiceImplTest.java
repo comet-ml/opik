@@ -243,7 +243,8 @@ class CsvDatasetExportServiceImplTest {
 
         // Then
         StepVerifier.create(result)
-                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.NotFoundException)
+                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.BadRequestException
+                        && throwable.getMessage().contains("is not ready for download"))
                 .verify();
 
         verify(jobService).getJob(JOB_ID);
