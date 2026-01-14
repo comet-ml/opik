@@ -33,11 +33,7 @@ import {
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import {
-  DEFAULT_ITEMS_PER_GROUP,
-  GROUPING_KEY,
-  GROUP_ROW_TYPE,
-} from "@/constants/groups";
+import { DEFAULT_ITEMS_PER_GROUP, GROUP_ROW_TYPE } from "@/constants/groups";
 import { mapColumnDataFields } from "@/lib/table";
 import {
   checkIsGroupRowType,
@@ -263,24 +259,7 @@ export const generateActionsColumDef = <TData,>({
   } as ColumnDef<TData>;
 };
 
-export const getRowId = <TData extends { id: string }>(row: TData) => {
-  // When grouping is active, the same experiment can appear in multiple groups
-  // (e.g., when grouping by tags, an experiment with multiple tags appears once per tag)
-  // We need to include the group data in the row ID to make it unique
-  const groupingFields = Object.keys(row).filter((key) =>
-    key.startsWith(GROUPING_KEY),
-  );
-
-  if (groupingFields.length > 0) {
-    // Create a unique ID by combining the experiment ID with all grouping field values
-    const groupParts = groupingFields
-      .map((field) => `${field}:${row[field as keyof TData]}`)
-      .join("|");
-    return `${row.id}|${groupParts}`;
-  }
-
-  return row.id;
-};
+export const getRowId = <TData extends { id: string }>(row: TData) => row.id;
 
 // The goal to use shared handler between two different helpers to draw cells in table with grouping,
 // to share in closure the previousSelectedRowID between two helpers

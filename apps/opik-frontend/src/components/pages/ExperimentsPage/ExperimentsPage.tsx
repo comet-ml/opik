@@ -62,7 +62,6 @@ import { useExperimentsAutoExpandingLogic } from "@/components/pages-shared/expe
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   getIsGroupRow,
-  getRowId,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
@@ -386,6 +385,7 @@ const ExperimentsPage: React.FC = () => {
     columnsOrder,
     setColumnsOrder,
     groupFieldNames,
+    getExperimentRowId,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
@@ -701,7 +701,7 @@ const ExperimentsPage: React.FC = () => {
         }}
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
-        getRowId={getRowId}
+        getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
