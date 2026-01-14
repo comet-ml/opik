@@ -312,7 +312,10 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   };
 
   const handleRemoveGroup = () => {
-    handleBreakdownChange({ field: BREAKDOWN_FIELD.NONE, metadataKey: undefined });
+    handleBreakdownChange({
+      field: BREAKDOWN_FIELD.NONE,
+      metadataKey: undefined,
+    });
   };
 
   return (

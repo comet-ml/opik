@@ -81,4 +81,3 @@ export const BREAKDOWN_FIELD_OPTIONS = Object.values(BREAKDOWN_FIELD).map(
     requiresKey: field === BREAKDOWN_FIELD.METADATA,
   }),
 );
-
