@@ -6,6 +6,7 @@ import React, {
 } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, X } from "lucide-react";
 
 import {
   Form,
@@ -16,6 +17,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Description } from "@/components/ui/description";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
@@ -39,6 +48,7 @@ import {
   DashboardWidget,
   ProjectMetricsWidget,
   WidgetEditorHandle,
+  BreakdownConfig,
 } from "@/types/dashboard";
 import {
   ProjectMetricsWidgetSchema,
@@ -46,6 +56,11 @@ import {
 } from "./schema";
 import WidgetEditorBaseLayout from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetEditorBaseLayout";
 import { CHART_TYPE } from "@/constants/chart";
+import {
+  BREAKDOWN_FIELD,
+  BREAKDOWN_FIELD_LABELS,
+  getCompatibleBreakdownFields,
+} from "@/constants/breakdown";
 
 const METRIC_OPTIONS = [
   {
@@ -125,6 +140,14 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     [config.feedbackScores],
   );
 
+  const breakdown = useMemo(
+    () =>
+      config.breakdown || {
+        field: BREAKDOWN_FIELD.NONE,
+      },
+    [config.breakdown],
+  );
+
   const globalProjectId = useDashboardStore((state) => {
     const config = selectMixedConfig(state);
     return config?.projectIds?.[0];
@@ -138,6 +161,24 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
     metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES;
 
+  const isMetadataBreakdown = breakdown.field === BREAKDOWN_FIELD.METADATA;
+  const hasBreakdown = breakdown.field !== BREAKDOWN_FIELD.NONE;
+
+  // Get compatible breakdown fields for the current metric type (excluding NONE)
+  const compatibleBreakdownFields = useMemo(() => {
+    if (!metricType) return [];
+    return getCompatibleBreakdownFields(metricType).filter(
+      (field) => field !== BREAKDOWN_FIELD.NONE,
+    );
+  }, [metricType]);
+
+  const breakdownFieldOptions = useMemo(() => {
+    return compatibleBreakdownFields.map((field) => ({
+      value: field,
+      label: BREAKDOWN_FIELD_LABELS[field],
+    }));
+  }, [compatibleBreakdownFields]);
+
   const form = useForm<ProjectMetricsWidgetFormData>({
     resolver: zodResolver(ProjectMetricsWidgetSchema),
     mode: "onTouched",
@@ -148,6 +189,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       traceFilters,
       threadFilters,
       feedbackScores,
+      breakdown,
       overrideDefaults,
     },
   });
@@ -205,6 +247,35 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
         ...config,
         feedbackScores: newFeedbackScores,
       },
+    });
+  };
+
+  const handleBreakdownChange = (newBreakdown: Partial<BreakdownConfig>) => {
+    const updatedBreakdown = {
+      ...breakdown,
+      ...newBreakdown,
+    };
+    updatePreviewWidget({
+      config: {
+        ...config,
+        breakdown: updatedBreakdown,
+      },
+    });
+  };
+
+  const handleAddGroup = () => {
+    // Set a default breakdown field when "Add group" is clicked
+    const defaultField =
+      compatibleBreakdownFields.length > 0
+        ? compatibleBreakdownFields[0]
+        : BREAKDOWN_FIELD.TAGS;
+    handleBreakdownChange({ field: defaultField, metadataKey: undefined });
+  };
+
+  const handleRemoveGroup = () => {
+    handleBreakdownChange({
+      field: BREAKDOWN_FIELD.NONE,
+      metadataKey: undefined,
     });
   };
 
@@ -306,6 +377,128 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
               });
             }}
           />
+
+          {/* Group by Section - matches experiment widget pattern */}
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="groupby" className="border-t">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                Group by {hasBreakdown && "(1)"}
+              </AccordionTrigger>
+              <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
+                <Description>Add groups to aggregate data.</Description>
+                <div className="space-y-3">
+                  {hasBreakdown ? (
+                    <>
+                      {/* Group row with field selector and remove button */}
+                      <div className="flex items-start gap-2">
+                        <span className="comet-body-s flex h-8 items-center pr-2">
+                          By
+                        </span>
+                        <FormField
+                          control={form.control}
+                          name="breakdown.field"
+                          render={({ field, formState }) => {
+                            const validationErrors = get(formState.errors, [
+                              "breakdown",
+                              "field",
+                            ]);
+                            return (
+                              <FormItem className="flex-1">
+                                <FormControl>
+                                  <SelectBox
+                                    className={cn({
+                                      "border-destructive": Boolean(
+                                        validationErrors?.message,
+                                      ),
+                                    })}
+                                    value={field.value || ""}
+                                    onChange={(value) => {
+                                      field.onChange(value);
+                                      handleBreakdownChange({
+                                        field: value as BREAKDOWN_FIELD,
+                                        metadataKey:
+                                          value === BREAKDOWN_FIELD.METADATA
+                                            ? breakdown.metadataKey
+                                            : undefined,
+                                      });
+                                    }}
+                                    options={breakdownFieldOptions}
+                                    placeholder="Select field"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="minimal"
+                          size="icon-xs"
+                          onClick={handleRemoveGroup}
+                          className="mt-1.5"
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+
+                      {/* Metadata key input when metadata field is selected */}
+                      {isMetadataBreakdown && (
+                        <FormField
+                          control={form.control}
+                          name="breakdown.metadataKey"
+                          render={({ field, formState }) => {
+                            const validationErrors = get(formState.errors, [
+                              "breakdown",
+                              "metadataKey",
+                            ]);
+                            return (
+                              <FormItem className="ml-8">
+                                <FormLabel>Metadata key</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    className={cn({
+                                      "border-destructive": Boolean(
+                                        validationErrors?.message,
+                                      ),
+                                    })}
+                                    value={field.value || ""}
+                                    onChange={(e) => {
+                                      field.onChange(e.target.value);
+                                      handleBreakdownChange({
+                                        metadataKey: e.target.value,
+                                      });
+                                    }}
+                                    placeholder="e.g., agent_id, environment"
+                                  />
+                                </FormControl>
+                                <Description>
+                                  The key to extract from the metadata JSON for
+                                  grouping.
+                                </Description>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddGroup}
+                      className="w-fit"
+                    >
+                      <Plus className="mr-1 size-3.5" />
+                      Add group
+                    </Button>
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
 
           <FormField
             control={form.control}
