@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-untyped-def, no-untyped-call"
 """Tests for optimizer progress tracking and display functionality.
 
 These tests verify that:
@@ -22,7 +23,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer import MetaPromptOptimizer
 class ConcreteOptimizer(BaseOptimizer):
     """Concrete implementation for testing base class behavior."""
 
-    def __init__(self, num_rounds: int = 3, **kwargs):
+    def __init__(self, num_rounds: int = 3, **kwargs: Any) -> None:
         kwargs.setdefault("model", "gpt-4o-mini")
         super().__init__(**kwargs)
         self.num_rounds = num_rounds
@@ -810,9 +811,9 @@ class TestProgressTrackingIntegration:
         self, mock_dataset, mock_metric, sample_prompt, mock_opik_client, monkeypatch
     ):
         """Test that early stop on perfect score updates context correctly."""
-        evaluations_done = [0]
-        should_stop_when_stopped = [None]
-        finish_reason_when_stopped = [None]
+        evaluations_done: list[int] = [0]
+        should_stop_when_stopped: list[bool | None] = [None]
+        finish_reason_when_stopped: list[str | None] = [None]
 
         def mock_evaluate(**kwargs):
             evaluations_done[0] += 1

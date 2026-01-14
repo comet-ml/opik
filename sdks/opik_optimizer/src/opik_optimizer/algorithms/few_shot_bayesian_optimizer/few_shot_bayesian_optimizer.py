@@ -168,6 +168,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
 
         # Default behavior: delegate to parent
+        # Note: This method always returns float, so we pass literal False
+        # to help mypy narrow the overload correctly
         return super().evaluate_prompt(
             prompt=prompt,
             dataset=dataset,
@@ -179,7 +181,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             n_samples=n_samples,
             seed=seed,
-            return_evaluation_result=return_evaluation_result,
+            return_evaluation_result=False,
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
