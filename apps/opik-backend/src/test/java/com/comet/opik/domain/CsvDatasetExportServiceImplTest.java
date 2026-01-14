@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -19,7 +20,8 @@ import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Duration;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -48,17 +50,20 @@ class CsvDatasetExportServiceImplTest {
     @Mock
     private LockService lockService;
 
+    @Mock
+    private FileService fileService;
+
     private CsvDatasetExportServiceImpl service;
 
     private static final String WORKSPACE_ID = "test-workspace";
     private static final String USER_NAME = "test-user";
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final UUID JOB_ID = UUID.randomUUID();
-    private static final Duration TTL = Duration.ofHours(24);
+    private static final io.dropwizard.util.Duration DEFAULT_TTL = io.dropwizard.util.Duration.hours(24);
 
     @BeforeEach
     void setUp() {
-        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService);
+        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService, fileService);
     }
 
     @Test
@@ -79,8 +84,11 @@ class CsvDatasetExportServiceImplTest {
                     return action;
                 });
 
+        // Mock: config returns default TTL
+        when(exportConfig.getDefaultTtl()).thenReturn(DEFAULT_TTL);
+
         // Mock: create new job
-        when(jobService.createJob(eq(DATASET_ID), eq(TTL))).thenReturn(Mono.just(newJob));
+        when(jobService.createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
 
         // Mock: Redis stream
         @SuppressWarnings("unchecked")
@@ -93,7 +101,7 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.getStreamName()).thenReturn("dataset-export-events");
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -109,7 +117,7 @@ class CsvDatasetExportServiceImplTest {
 
         // Verify the flow
         verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID)); // Initial check + double-check in lock
-        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(TTL));
+        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()));
 
         // Verify stream.add was called with correct message
         verify(mockStream, times(1)).add(any(StreamAddArgs.class));
@@ -124,7 +132,7 @@ class CsvDatasetExportServiceImplTest {
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -152,7 +160,7 @@ class CsvDatasetExportServiceImplTest {
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        service.startExport(DATASET_ID, TTL)
+        service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME))
@@ -169,7 +177,7 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.isEnabled()).thenReturn(false);
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -185,6 +193,63 @@ class CsvDatasetExportServiceImplTest {
         verify(jobService, never()).createJob(any(), any());
     }
 
+    @Test
+    void downloadExport_shouldReturnInputStream_whenJobIsCompleted() {
+        // Given
+        String filePath = "exports/test-file.csv";
+        DatasetExportJob completedJob = DatasetExportJob.builder()
+                .id(JOB_ID)
+                .datasetId(DATASET_ID)
+                .status(DatasetExportStatus.COMPLETED)
+                .filePath(filePath)
+                .createdAt(Instant.now())
+                .lastUpdatedAt(Instant.now())
+                .expiresAt(Instant.now().plus(DEFAULT_TTL.toJavaDuration()))
+                .createdBy(USER_NAME)
+                .build();
+
+        InputStream mockInputStream = new ByteArrayInputStream("test,data".getBytes());
+
+        when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(completedJob));
+        when(fileService.download(filePath)).thenReturn(mockInputStream);
+
+        // When
+        Mono<InputStream> result = service.downloadExport(JOB_ID)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .assertNext(inputStream -> assertThat(inputStream).isNotNull())
+                .verifyComplete();
+
+        verify(jobService).getJob(JOB_ID);
+        verify(fileService).download(filePath);
+    }
+
+    @Test
+    void downloadExport_shouldReturnError_whenJobIsNotCompleted() {
+        // Given
+        DatasetExportJob pendingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
+
+        when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(pendingJob));
+
+        // When
+        Mono<InputStream> result = service.downloadExport(JOB_ID)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.NotFoundException)
+                .verify();
+
+        verify(jobService).getJob(JOB_ID);
+        verify(fileService, never()).download(any());
+    }
+
     private DatasetExportJob createJob(UUID jobId, DatasetExportStatus status) {
         return DatasetExportJob.builder()
                 .id(jobId)
@@ -192,7 +257,7 @@ class CsvDatasetExportServiceImplTest {
                 .status(status)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
-                .expiresAt(Instant.now().plus(TTL))
+                .expiresAt(Instant.now().plus(DEFAULT_TTL.toJavaDuration()))
                 .createdBy(USER_NAME)
                 .build();
     }
