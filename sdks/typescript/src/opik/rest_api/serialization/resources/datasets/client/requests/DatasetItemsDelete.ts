@@ -14,6 +14,7 @@ export const DatasetItemsDelete: core.serialization.Schema<
     itemIds: core.serialization.property("item_ids", core.serialization.list(core.serialization.string()).optional()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     filters: core.serialization.list(DatasetItemFilter).optional(),
+    batchGroupId: core.serialization.property("batch_group_id", core.serialization.string().optional()),
 });
 
 export declare namespace DatasetItemsDelete {
@@ -21,5 +22,6 @@ export declare namespace DatasetItemsDelete {
         item_ids?: string[] | null;
         dataset_id?: string | null;
         filters?: DatasetItemFilter.Raw[] | null;
+        batch_group_id?: string | null;
     }
 }

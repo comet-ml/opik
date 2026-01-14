@@ -254,6 +254,7 @@ class DatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -268,6 +269,9 @@ class DatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -285,7 +289,11 @@ class DatasetsClient:
         }, )], )
         """
         _response = self._raw_client.create_or_update_dataset_items(
-            items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+            items=items,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            batch_group_id=batch_group_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -526,6 +534,7 @@ class DatasetsClient:
         item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -546,6 +555,9 @@ class DatasetsClient:
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
             Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -560,7 +572,11 @@ class DatasetsClient:
         client.datasets.delete_dataset_items()
         """
         _response = self._raw_client.delete_dataset_items(
-            item_ids=item_ids, dataset_id=dataset_id, filters=filters, request_options=request_options
+            item_ids=item_ids,
+            dataset_id=dataset_id,
+            filters=filters,
+            batch_group_id=batch_group_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1425,6 +1441,7 @@ class AsyncDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1439,6 +1456,9 @@ class AsyncDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1459,7 +1479,11 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_or_update_dataset_items(
-            items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+            items=items,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            batch_group_id=batch_group_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1725,6 +1749,7 @@ class AsyncDatasetsClient:
         item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1745,6 +1770,9 @@ class AsyncDatasetsClient:
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
             Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1762,7 +1790,11 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_dataset_items(
-            item_ids=item_ids, dataset_id=dataset_id, filters=filters, request_options=request_options
+            item_ids=item_ids,
+            dataset_id=dataset_id,
+            filters=filters,
+            batch_group_id=batch_group_id,
+            request_options=request_options,
         )
         return _response.data
 

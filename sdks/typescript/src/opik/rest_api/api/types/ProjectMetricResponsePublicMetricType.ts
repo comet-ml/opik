@@ -11,7 +11,11 @@ export type ProjectMetricResponsePublicMetricType =
     | "GUARDRAILS_FAILED_COUNT"
     | "THREAD_COUNT"
     | "THREAD_DURATION"
-    | "THREAD_FEEDBACK_SCORES";
+    | "THREAD_FEEDBACK_SCORES"
+    | "SPAN_FEEDBACK_SCORES"
+    | "SPAN_COUNT"
+    | "SPAN_DURATION"
+    | "SPAN_TOKEN_USAGE";
 export const ProjectMetricResponsePublicMetricType = {
     FeedbackScores: "FEEDBACK_SCORES",
     TraceCount: "TRACE_COUNT",
@@ -22,4 +26,8 @@ export const ProjectMetricResponsePublicMetricType = {
     ThreadCount: "THREAD_COUNT",
     ThreadDuration: "THREAD_DURATION",
     ThreadFeedbackScores: "THREAD_FEEDBACK_SCORES",
+    SpanFeedbackScores: "SPAN_FEEDBACK_SCORES",
+    SpanCount: "SPAN_COUNT",
+    SpanDuration: "SPAN_DURATION",
+    SpanTokenUsage: "SPAN_TOKEN_USAGE",
 } as const;

@@ -14,6 +14,7 @@ export const DatasetItemBatchWrite: core.serialization.Schema<
     datasetName: core.serialization.property("dataset_name", core.serialization.string().optional()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     items: core.serialization.list(DatasetItemWrite),
+    batchGroupId: core.serialization.property("batch_group_id", core.serialization.string().optional()),
 });
 
 export declare namespace DatasetItemBatchWrite {
@@ -21,5 +22,6 @@ export declare namespace DatasetItemBatchWrite {
         dataset_name?: string | null;
         dataset_id?: string | null;
         items: DatasetItemWrite.Raw[];
+        batch_group_id?: string | null;
     }
 }

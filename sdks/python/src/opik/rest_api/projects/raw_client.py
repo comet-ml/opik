@@ -21,6 +21,7 @@ from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.span_filter_public import SpanFilterPublic
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
@@ -400,6 +401,7 @@ class RawProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -418,6 +420,8 @@ class RawProjectsClient:
         interval_start : typing.Optional[dt.datetime]
 
         interval_end : typing.Optional[dt.datetime]
+
+        span_filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
 
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
@@ -439,6 +443,9 @@ class RawProjectsClient:
                 "interval": interval,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "span_filters": convert_and_respect_annotation_metadata(
+                    object_=span_filters, annotation=typing.Sequence[SpanFilterPublic], direction="write"
+                ),
                 "trace_filters": convert_and_respect_annotation_metadata(
                     object_=trace_filters, annotation=typing.Sequence[TraceFilterPublic], direction="write"
                 ),
@@ -992,6 +999,7 @@ class AsyncRawProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1010,6 +1018,8 @@ class AsyncRawProjectsClient:
         interval_start : typing.Optional[dt.datetime]
 
         interval_end : typing.Optional[dt.datetime]
+
+        span_filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
 
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
@@ -1031,6 +1041,9 @@ class AsyncRawProjectsClient:
                 "interval": interval,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "span_filters": convert_and_respect_annotation_metadata(
+                    object_=span_filters, annotation=typing.Sequence[SpanFilterPublic], direction="write"
+                ),
                 "trace_filters": convert_and_respect_annotation_metadata(
                     object_=trace_filters, annotation=typing.Sequence[TraceFilterPublic], direction="write"
                 ),

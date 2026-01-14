@@ -21,4 +21,6 @@ export interface DatasetItemBatchWrite {
     /** If null, dataset_name must be provided */
     datasetId?: string;
     items: OpikApi.DatasetItemWrite[];
+    /** Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one. */
+    batchGroupId?: string;
 }

@@ -15,4 +15,6 @@ export interface DatasetItemsDelete {
     datasetId?: string;
     /** Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'. */
     filters?: OpikApi.DatasetItemFilter[];
+    /** Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one. */
+    batchGroupId?: string;
 }

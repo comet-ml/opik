@@ -11,6 +11,7 @@ from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.span_filter_public import SpanFilterPublic
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .raw_client import AsyncRawProjectsClient, RawProjectsClient
@@ -268,6 +269,7 @@ class ProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -286,6 +288,8 @@ class ProjectsClient:
         interval_start : typing.Optional[dt.datetime]
 
         interval_end : typing.Optional[dt.datetime]
+
+        span_filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
 
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
@@ -311,6 +315,7 @@ class ProjectsClient:
             interval=interval,
             interval_start=interval_start,
             interval_end=interval_end,
+            span_filters=span_filters,
             trace_filters=trace_filters,
             thread_filters=thread_filters,
             request_options=request_options,
@@ -654,6 +659,7 @@ class AsyncProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -672,6 +678,8 @@ class AsyncProjectsClient:
         interval_start : typing.Optional[dt.datetime]
 
         interval_end : typing.Optional[dt.datetime]
+
+        span_filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
 
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
@@ -700,6 +708,7 @@ class AsyncProjectsClient:
             interval=interval,
             interval_start=interval_start,
             interval_end=interval_end,
+            span_filters=span_filters,
             trace_filters=trace_filters,
             thread_filters=thread_filters,
             request_options=request_options,

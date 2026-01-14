@@ -10,4 +10,6 @@ export interface DatasetItemBatch {
     /** If null, dataset_name must be provided */
     datasetId?: string;
     items: OpikApi.DatasetItem[];
+    /** Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one. */
+    batchGroupId?: string;
 }

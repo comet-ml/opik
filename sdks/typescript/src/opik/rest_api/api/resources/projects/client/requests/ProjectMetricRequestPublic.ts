@@ -13,6 +13,7 @@ export interface ProjectMetricRequestPublic {
     interval?: OpikApi.ProjectMetricRequestPublicInterval;
     intervalStart?: Date;
     intervalEnd?: Date;
+    spanFilters?: OpikApi.SpanFilterPublic[];
     traceFilters?: OpikApi.TraceFilterPublic[];
     threadFilters?: OpikApi.TraceThreadFilterPublic[];
 }
