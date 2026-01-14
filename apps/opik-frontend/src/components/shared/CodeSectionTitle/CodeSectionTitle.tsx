@@ -5,7 +5,7 @@ type CodeSectionTitleProps = {
 };
 
 const CodeSectionTitle: React.FC<CodeSectionTitleProps> = ({ children }) => (
-  <div className="comet-body-s-accented md:comet-body-s mb-3 overflow-x-auto whitespace-nowrap">
+  <div className="comet-body-s-accented md:comet-body-s mb-2 overflow-x-auto whitespace-nowrap">
     {children}
   </div>
 );
