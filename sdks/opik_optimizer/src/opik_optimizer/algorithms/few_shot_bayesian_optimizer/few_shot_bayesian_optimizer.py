@@ -15,13 +15,13 @@ import optuna.pruners
 from opik import Dataset, opik_context
 
 from ... import base_optimizer, _llm_calls, helpers
-from ...base_optimizer import OptimizationContext
+from ...base_optimizer import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
-from ... import _throttle, optimization_result, task_evaluator, reporting_utils
+from ... import _throttle, task_evaluator
 from ...utils.prompt_library import PromptOverrides
-from . import reporting, types
+from . import types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
 from collections.abc import Callable
@@ -113,6 +113,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         elif self.verbose == 2:
             logger.setLevel(logging.DEBUG)
 
+        # Instance state for custom evaluation (used by overridden evaluate_prompt)
+        self._custom_evaluated_task: Callable[..., dict[str, Any]] | None = None
+        self._custom_eval_item_ids: list[str] | None = None
+
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -124,6 +128,59 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "enable_multivariate_tpe": self.enable_multivariate_tpe,
             "enable_optuna_pruning": self.enable_optuna_pruning,
         }
+
+    def evaluate_prompt(  # type: ignore[override]
+        self,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
+        n_threads: int | None = None,
+        verbose: int = 1,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        seed: int | None = None,
+        return_evaluation_result: bool = False,
+    ) -> float:
+        """
+        Override evaluate_prompt to support custom evaluated_task.
+
+        When _custom_evaluated_task is set (during Bayesian optimization),
+        uses the pre-built task with few-shot examples injected instead of
+        building one from the prompt parameter.
+        """
+        if self._custom_evaluated_task is not None:
+            # Use the custom task (with few-shot examples already injected)
+            if n_threads is None:
+                n_threads = self.n_threads
+
+            return task_evaluator.evaluate(
+                dataset=dataset,
+                evaluated_task=self._custom_evaluated_task,
+                metric=metric,
+                num_threads=n_threads,
+                dataset_item_ids=self._custom_eval_item_ids,
+                project_name=self.project_name,
+                experiment_config=experiment_config,
+                optimization_id=self.current_optimization_id,
+                verbose=verbose,
+            )
+
+        # Default behavior: delegate to parent
+        return super().evaluate_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            agent=agent,
+            n_threads=n_threads,
+            verbose=verbose,
+            dataset_item_ids=dataset_item_ids,
+            experiment_config=experiment_config,
+            n_samples=n_samples,
+            seed=seed,
+            return_evaluation_result=return_evaluation_result,
+        )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
         """Return optimizer-specific configuration for display."""
@@ -143,11 +200,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         is being called - it just provides its current state.
         """
         return {
-            "total_trials": getattr(self, "_total_rounds", 0),
-            "total_rounds": getattr(self, "_total_rounds", 0),
+            "total_trials": context.max_trials,
+            "total_rounds": context.max_trials,
             "rounds": [],
-            "trials_completed": getattr(self, "_trials_completed", 0),
-            "rounds_completed": getattr(self, "_rounds_completed", 0),
+            "trials_completed": context.trials_completed,
+            "rounds_completed": context.trials_completed,
         }
 
     # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
@@ -424,6 +481,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _run_bayesian_optimization(
         self,
+        context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         original_prompts: dict[str, chat_prompt.ChatPrompt],
         fewshot_prompt_template: str,
@@ -437,15 +495,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         is_single_prompt_optimization: bool = False,
-    ) -> optimization_result.OptimizationResult:
-        # Initialize progress tracking
-        self._trials_completed = 0
-        self._rounds_completed = 0
-        self._total_rounds = n_trials
-        self._current_round = 0
-
-        reporting.start_optimization_run(verbose=self.verbose)
-
+    ) -> AlgorithmResult:
         # Load the dataset
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
@@ -488,11 +538,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Start Optuna Study
         def optimization_objective(trial: optuna.Trial) -> float:
-            # Update progress tracking for display
-            self._current_round = trial.number
-
             # Check should_stop flag at start of each trial
-            if self._context is not None and self._context.should_stop:
+            if context.should_stop:
                 raise optuna.exceptions.TrialPruned()
 
             n_examples = trial.suggest_int(
@@ -562,60 +609,31 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             logger.debug(f"Evaluating trial {trial.number}...")
 
-            # Display trial start
-            reporting.display_trial_start(
-                trial_number=trial.number,
-                total_trials=n_trials,
-                messages=messages_for_reporting,
-                verbose=self.verbose,
-                selection_summary=reporting_utils.summarize_selection_policy(
-                    prompts_with_examples
-                ),
-            )
+            # Set custom task for evaluate_prompt override
+            self._custom_evaluated_task = llm_task
+            self._custom_eval_item_ids = eval_dataset_item_ids
+            try:
+                # Use base optimizer's evaluate() which handles:
+                # - Trial counting (context.trials_completed)
+                # - Early stop checks (perfect score, max trials)
+                # - Progress display hooks
+                score = self.evaluate(prompts_with_examples, trial_config)
+            finally:
+                # Clear custom task state
+                self._custom_evaluated_task = None
+                self._custom_eval_item_ids = None
 
-            score = task_evaluator.evaluate(
-                dataset=evaluation_dataset,  # use right dataset for scoring
-                dataset_item_ids=eval_dataset_item_ids,
-                metric=metric,
-                evaluated_task=llm_task,
-                num_threads=self.n_threads,
-                project_name=self.project_name,
-                experiment_config=trial_config,
-                optimization_id=optimization_id,
-                verbose=self.verbose,
-            )
-
-            # Display trial score
-            reporting.display_trial_score(
-                trial_number=trial.number,
-                baseline_score=baseline_score,
-                score=score,
-                verbose=self.verbose,
-            )
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
 
-            # Trial results
-            trial_config = {
+            # Trial results for Optuna
+            trial_result_config = {
                 "demo_examples": demo_examples,
                 "message_list": messages_for_reporting,
             }
             if columnar_choices:
-                trial_config["columnar_choices"] = columnar_choices
+                trial_result_config["columnar_choices"] = columnar_choices
             trial.set_user_attr("score", score)
-            trial.set_user_attr("config", trial_config)
-
-            # Update progress tracking
-            self._trials_completed += 1
-            self._rounds_completed += 1
-
-            # Update context's trial count for early stop checking
-            if self._context is not None:
-                self._context.trials_completed = self._trials_completed
-
-                # Check for perfect score early stop
-                if self.skip_perfect_score and score >= self.perfect_score:
-                    self._context.should_stop = True
-                    self._context.finish_reason = "perfect_score"
+            trial.set_user_attr("config", trial_result_config)
 
             return score
 
@@ -720,68 +738,39 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 fewshot_prompt_template=fewshot_prompt_template,
             )
 
-        # Handle single vs. dict of prompts for result
-        result_best_prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompts: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        )
-        if is_single_prompt_optimization:
-            result_best_prompts = list(best_prompts.values())[0]
-            result_initial_prompts = list(original_prompts.values())[0]
-        else:
-            result_best_prompts = best_prompts
-            result_initial_prompts = original_prompts
-
-        trials_requested = n_trials
-
         # Set finish_reason if not already set by early stop
-        if self._context is not None and self._context.finish_reason is None:
-            self._context.finish_reason = "completed"
+        if context.finish_reason is None:
+            context.finish_reason = "completed"
 
-        finish_reason = self._context.finish_reason if self._context else "completed"
+        finish_reason = context.finish_reason
         stopped_early = finish_reason != "completed"
-        stop_reason_details = {"best_score": best_score}
 
-        return optimization_result.OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_best_prompts,
-            initial_prompt=result_initial_prompts,
-            initial_score=baseline_score,
-            score=best_score,
-            metric_name=metric.__name__,
-            details={
-                "initial_score": baseline_score,
+        return AlgorithmResult(
+            best_prompts=best_prompts,
+            best_score=best_score,
+            history=optuna_history_processed,
+            metadata={
                 "prompt_parameter": best_trial.user_attrs.get("config", {}),
                 "example_indices": best_example_indices,
                 "trial_number": best_trial.number,
                 "total_trials": n_trials,
                 "total_rounds": n_trials,
                 "rounds": [],
-                "trials_requested": trials_requested,
-                "trials_completed": self._trials_completed,
-                "rounds_completed": self._rounds_completed,
+                "trials_requested": n_trials,
+                "trials_completed": context.trials_completed,
+                "rounds_completed": context.trials_completed,
                 "stopped_early": stopped_early,
                 "stop_reason": finish_reason,
-                "stop_reason_details": stop_reason_details,
+                "stop_reason_details": {"best_score": best_score},
                 "model": self.model,
                 "temperature": self.model_parameters.get("temperature"),
             },
-            history=optuna_history_processed,
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
-            dataset_id=dataset.id,
-            optimization_id=optimization_id,
         )
 
     def run_optimization(
         self,
         context: OptimizationContext,
-    ) -> optimization_result.OptimizationResult:
-        # Initialize progress tracking for early stop reporting
-        self._trials_completed = 0
-        self._rounds_completed = 0
-        self._total_rounds = context.max_trials
-
+    ) -> AlgorithmResult:
         optimizable_prompts = context.prompts
         dataset = context.dataset
         validation_dataset = context.validation_dataset
@@ -805,14 +794,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
         )
 
-        reporting.display_few_shot_prompt_template(
-            prompts_with_placeholder=prompts_with_placeholder,
-            fewshot_template=fewshot_template,
-            placeholder=str(self.get_prompt("example_placeholder")),
-            verbose=self.verbose,
+        logger.info(
+            f"Generated few-shot prompt template with placeholder: {self.get_prompt('example_placeholder')}"
         )
 
         return self._run_bayesian_optimization(
+            context=context,
             prompts=prompts_with_placeholder,
             original_prompts=optimizable_prompts,
             fewshot_prompt_template=fewshot_template,

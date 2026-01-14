@@ -152,7 +152,9 @@ class TestGepaOptimizerEarlyStop:
         assert result.details["stop_reason"] == "baseline_score_met_threshold"
         assert result.details["perfect_score"] == 0.95
         assert result.initial_score == result.score
-        assert result.details["trials_used"] == 0
+        # Early stop happens before run_optimization, so only baseline was evaluated
+        # Framework sets trials_completed to 1 (baseline evaluation counts as 1 trial)
+        assert result.details["trials_completed"] == 1
 
     def test_early_stop_reports_at_least_one_trial(
         self,

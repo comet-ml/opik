@@ -20,9 +20,7 @@ from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
 
 if TYPE_CHECKING:
-    from opik import Dataset
-    from opik_optimizer.agents import OptimizableAgent
-    from opik_optimizer.api_objects.types import MetricFunction
+    pass
 
 
 class SimpleOptimizer(BaseOptimizer):
@@ -40,19 +38,19 @@ class SimpleOptimizer(BaseOptimizer):
         # Initialize tracking
         self._trials_completed = 0
         self._rounds_completed = 0
-        
+
         best_score = context.baseline_score or 0.0
         best_prompt = list(context.prompts.values())[0]
-        
+
         # Simulate multiple rounds of optimization
         for round_num in range(5):
             self._rounds_completed = round_num + 1
-            
+
             # Check should_stop at the start of each round
             if context.should_stop:
                 self.stopped_early = True
                 break
-            
+
             # Evaluate a candidate prompt
             score = self.evaluate_prompt(
                 prompt=best_prompt,
@@ -62,25 +60,25 @@ class SimpleOptimizer(BaseOptimizer):
                 n_samples=context.n_samples,
                 verbose=0,
             )
-            
+
             self._trials_completed += 1
             self.evaluation_count += 1
-            
+
             # Update context counters
             context.trials_completed = self._trials_completed
-            
+
             # Check for perfect score early stop
             if self.skip_perfect_score and score >= self.perfect_score:
                 context.should_stop = True
                 context.finish_reason = "perfect_score"
-            
+
             if score > best_score:
                 best_score = score
-        
+
         # Set finish_reason if not already set
         if context.finish_reason is None:
             context.finish_reason = "completed"
-        
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_prompt,
@@ -209,8 +207,10 @@ class TestMidOptimizationEarlyStop:
     @pytest.fixture
     def mock_metric(self):
         """Create a mock metric function."""
+
         def metric_fn(item, output):
             return MagicMock(value=0.8)
+
         metric_fn.__name__ = "test_metric"
         return metric_fn
 
@@ -338,8 +338,10 @@ class TestBaselineEarlyStop:
     @pytest.fixture
     def mock_metric(self):
         """Create a mock metric function."""
+
         def metric_fn(item, output):
             return MagicMock(value=0.95)
+
         metric_fn.__name__ = "test_metric"
         return metric_fn
 

@@ -22,7 +22,6 @@ from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
-from .evaluator import Evaluator
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -67,9 +66,6 @@ class OptimizationContext:
     - Input configuration (prompts, dataset, metric, etc.)
     - Runtime state (baseline_score, trials_completed, etc.)
     - Control flags (should_stop, finish_reason)
-
-    The evaluator is injected by the orchestrator and used by
-    BaseOptimizer.evaluate() for prompt scoring.
     """
 
     prompts: dict[str, "chat_prompt.ChatPrompt"]
@@ -89,8 +85,7 @@ class OptimizationContext:
     baseline_score: float | None = None
     extra_params: dict[str, Any] = field(default_factory=dict)
 
-    # Runtime state - set by orchestrator/evaluate()
-    evaluator: "Evaluator | None" = None  # Evaluator instance, injected by orchestrator
+    # Runtime state - set by evaluate()
     trials_completed: int = 0  # Number of evaluations completed
     should_stop: bool = False  # Flag to signal optimization should stop
     finish_reason: FinishReason | None = None  # Why optimization ended
@@ -98,6 +93,25 @@ class OptimizationContext:
     current_best_prompt: "dict[str, chat_prompt.ChatPrompt] | None" = (
         None  # Best prompt seen so far
     )
+
+
+@dataclass
+class AlgorithmResult:
+    """
+    Simplified return type for optimizer algorithms.
+
+    Optimizers return this from run_optimization() instead of building
+    the full OptimizationResult themselves. The framework (BaseOptimizer)
+    converts this to OptimizationResult with common fields.
+
+    This keeps optimizers focused on algorithm logic while the framework
+    handles result building, metadata, and common fields.
+    """
+
+    best_prompts: "dict[str, chat_prompt.ChatPrompt]"
+    best_score: float
+    history: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseOptimizer(ABC):
@@ -539,9 +553,13 @@ class BaseOptimizer(ABC):
                     break
         """
         context = self._context
-        score = context.evaluator.evaluate(  # type: ignore[union-attr]
+        score = self.evaluate_prompt(
             prompt=prompts,
+            dataset=context.evaluation_dataset,
+            metric=context.metric,
+            agent=context.agent,
             experiment_config=experiment_config,
+            n_samples=context.n_samples,
             verbose=0,
         )
 
@@ -716,22 +734,30 @@ class BaseOptimizer(ABC):
     def run_optimization(
         self,
         context: "OptimizationContext",
-    ) -> "optimization_result.OptimizationResult":
+    ) -> "AlgorithmResult | optimization_result.OptimizationResult":
         """
         Run the optimization algorithm.
 
-        This is the public interface that the orchestrator calls.
-        Default implementation delegates to _run_optimization for
-        backward compatibility.
+        This is the method optimizers override to implement their algorithm.
+        The method should:
+        1. Control the optimization loop (when/how to generate candidates)
+        2. Generate candidate prompts using algorithm-specific logic
+        3. Call self.evaluate(prompts) for each candidate
+        4. Check context.should_stop after evaluations
+        5. Return AlgorithmResult with best prompt and score
 
-        Subclasses implementing the new API should override this method
-        directly instead of _run_optimization.
+        The framework (BaseOptimizer.optimize_prompt) handles:
+        - Setup: validation, context creation, baseline computation
+        - Trial tracking: context.trials_completed++ happens in evaluate()
+        - Progress display: _on_evaluation() hook handles all display
+        - Early stop: evaluate() checks and sets context.should_stop
+        - Result building: converts AlgorithmResult to OptimizationResult
 
         Args:
-            context: The optimization context.
+            context: The optimization context with prompts, dataset, metric, etc.
 
         Returns:
-            OptimizationResult with the optimized prompt and metrics.
+            AlgorithmResult (preferred) or OptimizationResult (legacy).
         """
         return self._run_optimization(context)
 
@@ -764,6 +790,66 @@ class BaseOptimizer(ABC):
             llm_token_usage_total=kwargs.get("llm_token_usage_total"),
             dataset_id=kwargs.get("dataset_id"),
             optimization_id=kwargs.get("optimization_id"),
+        )
+
+    def _build_final_result(
+        self,
+        algorithm_result: "AlgorithmResult",
+        context: "OptimizationContext",
+    ) -> optimization_result.OptimizationResult:
+        """
+        Convert AlgorithmResult to OptimizationResult.
+
+        This method is called by optimize_prompt() after run_optimization()
+        completes. It adds common framework fields (optimizer name, initial
+        score, LLM counters, etc.) to the algorithm-specific result.
+
+        Args:
+            algorithm_result: The result returned by run_optimization()
+            context: The optimization context
+
+        Returns:
+            Complete OptimizationResult ready for return
+        """
+        # Select appropriate prompt format (single vs dict)
+        result_prompt, initial_prompt = self._select_result_prompts(
+            best_prompts=algorithm_result.best_prompts,
+            initial_prompts=context.initial_prompts,
+            is_single_prompt_optimization=context.is_single_prompt_optimization,
+        )
+
+        # Get optimizer-specific metadata
+        optimizer_metadata = self.get_metadata(context)
+
+        # Build details dict - framework fields + algorithm metadata
+        details = {
+            "initial_score": context.baseline_score,
+            "model": self.model,
+            "temperature": self.model_parameters.get("temperature"),
+            "trials_completed": context.trials_completed,
+            "rounds_completed": getattr(self, "_current_round", 0) + 1,
+            "finish_reason": context.finish_reason or "completed",
+        }
+
+        # Merge in optimizer-specific metadata
+        details.update(optimizer_metadata)
+
+        # Merge in algorithm-specific metadata (can override optimizer metadata)
+        details.update(algorithm_result.metadata)
+
+        return optimization_result.OptimizationResult(
+            optimizer=self.__class__.__name__,
+            prompt=result_prompt,
+            score=algorithm_result.best_score,
+            metric_name=context.metric.__name__,
+            initial_prompt=initial_prompt,
+            initial_score=context.baseline_score,
+            details=details,
+            history=algorithm_result.history,
+            llm_calls=self.llm_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
+            dataset_id=context.dataset.id,
+            optimization_id=context.optimization_id,
         )
 
     def cleanup(self) -> None:
@@ -1372,27 +1458,13 @@ class BaseOptimizer(ABC):
         # Subclasses should NOT do any display here
         self.pre_optimization(context)
 
-        # Create evaluator and inject into context
-        evaluator = Evaluator(
-            dataset=context.evaluation_dataset,
-            metric=context.metric,
-            agent=context.agent,
-            n_threads=getattr(self, "n_threads", 12),
-            n_samples=context.n_samples,
-            project_name=context.project_name,
-            optimization_id=context.optimization_id,
-            seed=getattr(self, "seed", None),
-        )
-        evaluator.set_optimizer_ref(self)
-        context.evaluator = evaluator
-
         # Store context for use by evaluate() method
         self._context = context
 
         # Calculate baseline score with display (subclasses can override _calculate_baseline)
         baseline_score = self._calculate_baseline(context)
 
-        # Update context with baseline score (preserve evaluator reference)
+        # Update context with baseline score
         context.baseline_score = baseline_score
 
         # Check for early stop if baseline meets threshold
@@ -1460,7 +1532,15 @@ class BaseOptimizer(ABC):
             )
 
         try:
-            result = self.run_optimization(context)
+            raw_result = self.run_optimization(context)
+
+            # Handle both new AlgorithmResult and legacy OptimizationResult
+            if isinstance(raw_result, AlgorithmResult):
+                # New API: convert AlgorithmResult to OptimizationResult
+                result = self._build_final_result(raw_result, context)
+            else:
+                # Legacy API: optimizer returned OptimizationResult directly
+                result = raw_result
 
             # Display result
             result_prompt, _ = self._select_result_prompts(

@@ -3,14 +3,13 @@ from typing import Any, cast
 
 from opik import Dataset
 
-from ...base_optimizer import BaseOptimizer, OptimizationContext
+from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
 from ...reporting_utils import (
     convert_tqdm_to_rich,
     suppress_opik_logs,
 )
 from ...api_objects import chat_prompt
 from ...api_objects.types import rebuild_content_with_new_text
-from ...optimization_result import OptimizationResult
 from ...utils import (
     unique_ordered_by_key,
 )
@@ -178,31 +177,35 @@ class GepaOptimizer(BaseOptimizer):
         """
         Return GEPA-specific metadata for the optimization result.
 
-        Provides iterations and trials tracking that can be used in any scenario
-        (early stop, completion, etc.). The optimizer doesn't know why this
-        is being called - it just provides its current state.
+        Provides algorithm-specific configuration. Trial counts come from context.
         """
         return {
             "optimizer": self.__class__.__name__,
             "max_trials": context.max_trials,
             "n_samples": context.n_samples or "all",
-            "iterations_completed": getattr(self, "_iterations_completed", 0),
-            "trials_used": getattr(self, "_trials_completed", 0),
-            "trials_completed": getattr(self, "_trials_completed", 0),
-            "rounds_completed": getattr(self, "_rounds_completed", 0),
         }
 
-    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
-        # Initialize progress tracking
-        self._trials_completed = 0
-        self._rounds_completed = 0
-        self._iterations_completed = 0
+    def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
+        """
+        Run the GEPA optimization algorithm.
+
+        Uses the external GEPA library for genetic-Pareto optimization. The algorithm:
+        1. Builds data instances from dataset
+        2. Runs GEPA's genetic optimization with the adapter
+        3. Rescores candidates using Opik's evaluation
+        4. Returns the best candidate
+
+        Args:
+            context: The optimization context with prompts, dataset, metric, etc.
+
+        Returns:
+            AlgorithmResult with best prompts, score, history, and metadata.
+        """
+        # Initialize progress tracking for display
         self._current_round = 0
         self._total_rounds = context.max_trials
 
         optimizable_prompts = context.prompts
-        is_single_prompt_optimization = context.is_single_prompt_optimization
-        initial_prompts = context.initial_prompts
         initial_score = cast(float, context.baseline_score)
         n_samples = context.n_samples
         max_trials = context.max_trials
@@ -470,15 +473,27 @@ class GepaOptimizer(BaseOptimizer):
         # Check if best matches initial seed
         best_matches_seed = best_candidate == seed_candidate
 
-        # Get summary text for display
-        best_prompt_text = self._get_candidate_summary_text(
-            best_candidate, optimizable_prompts
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            for idx, row in enumerate(candidate_rows):
+                logger.debug(
+                    "candidate=%s source=%s gepa=%s opik=%s",
+                    idx,
+                    row.get("source"),
+                    row.get("gepa_score"),
+                    row.get("opik_score"),
+                )
+            logger.debug(
+                "selected candidate idx=%s opik=%.4f",
+                best_idx,
+                best_score,
+            )
 
-        details: dict[str, Any] = {
-            "model": self.model,
-            "temperature": self.model_parameters.get("temperature"),
-            "optimizer": self.__class__.__name__,
+        # Set finish_reason if not already set
+        if context.finish_reason is None:
+            context.finish_reason = "completed"
+
+        # Build metadata for the result
+        metadata: dict[str, Any] = {
             "num_candidates": len(filtered_candidates),
             "num_components": len(seed_candidate),
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
@@ -499,74 +514,17 @@ class GepaOptimizer(BaseOptimizer):
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
             "dataset_item_ids": [item.get("id") for item in train_items],
-            "trials_requested": max_metric_calls,
-            "trials_completed": getattr(gepa_result, "total_metric_calls", None),
-            "rounds_completed": None,
-            "stopped_early": (
-                getattr(gepa_result, "total_metric_calls", 0) < max_metric_calls
-                if isinstance(max_metric_calls, int)
-                else None
-            ),
-            "stop_reason": "max_metric_calls"
-            if isinstance(max_metric_calls, int)
-            and getattr(gepa_result, "total_metric_calls", 0) >= max_metric_calls
-            else None,
-            "stop_reason_details": {"best_score": best_score},
         }
         if best_matches_seed:
-            details["final_evaluation_reused_baseline"] = True
+            metadata["final_evaluation_reused_baseline"] = True
         if experiment_config:
-            details["experiment"] = experiment_config
+            metadata["experiment"] = experiment_config
 
-        if self.verbose >= 1:
-            gepa_reporting.display_candidate_scores(
-                candidate_rows, verbose=self.verbose
-            )
-            gepa_reporting.display_selected_candidate(
-                best_prompt_text,
-                best_score,
-                verbose=self.verbose,
-                trial_info=None,
-            )
-
-        if logger.isEnabledFor(logging.DEBUG):
-            for idx, row in enumerate(candidate_rows):
-                logger.debug(
-                    "candidate=%s source=%s gepa=%s opik=%s",
-                    idx,
-                    row.get("source"),
-                    row.get("gepa_score"),
-                    row.get("opik_score"),
-                )
-            logger.debug(
-                "selected candidate idx=%s gepa=%s opik=%.4f",
-                best_idx,
-                details.get("selected_candidate_gepa_score"),
-                best_score,
-            )
-
-        result_prompt, result_initial_prompt = self._select_result_prompts(
+        return AlgorithmResult(
             best_prompts=final_prompts,
-            initial_prompts=initial_prompts,
-            is_single_prompt_optimization=is_single_prompt_optimization,
-        )
-
-        # Set finish_reason if not already set
-        if context.finish_reason is None:
-            context.finish_reason = "completed"
-
-        return OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_prompt,
-            score=best_score,
-            metric_name=metric.__name__,
-            optimization_id=context.optimization_id,
-            dataset_id=context.dataset.id,
-            initial_prompt=result_initial_prompt,
-            initial_score=initial_score,
-            details=details,
+            best_score=best_score,
             history=history,
-            llm_calls=None,
+            metadata=metadata,
         )
 
     # ------------------------------------------------------------------

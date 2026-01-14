@@ -5,14 +5,12 @@ from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
 from ... import _llm_calls
-from ...base_optimizer import BaseOptimizer, OptimizationContext
+from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
 
-from opik_optimizer.optimization_result import OptimizationResult
-from . import reporting
 from .hierarchical_root_cause_analyzer import HierarchicalRootCauseAnalyzer
 from .types import (
     FailureMode,
@@ -278,13 +276,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             validation_dataset if validation_dataset is not None else dataset
         )
 
-        # Generate improvement with progress indication
-        with reporting.display_prompt_improvement(
-            failure_mode_name=root_cause.name, verbose=self.verbose
-        ) as improvement_reporter:
-            improved_prompts_response = self._improve_prompt(
-                prompts=best_prompts, root_cause=root_cause, attempt=attempt
-            )
+        # Generate improvement
+        logger.debug(f"Generating improvement for failure mode: {root_cause.name}")
+        improved_prompts_response = self._improve_prompt(
+            prompts=best_prompts, root_cause=root_cause, attempt=attempt
+        )
 
         improved_chat_prompts_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
         candidate_reasonings: list[str] = []
@@ -316,41 +312,51 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             candidate_reasonings.append(response_reasoning)
 
         # Evaluate improved prompt
-        eval_message = f"Evaluating improvement for failure mode '{root_cause.name}'"
-        if max_attempts > 1:
-            eval_message += f" (attempt {attempt}/{max_attempts})"
-        eval_message += ":"
+        logger.debug(
+            f"Evaluating improvement for failure mode '{root_cause.name}' "
+            f"(attempt {attempt}/{max_attempts})"
+        )
 
-        with reporting.display_evaluation(
-            message=eval_message,
-            verbose=self.verbose,
-            indent="│   ",
-            baseline_score=best_score,  # Pass baseline for comparison
-        ) as improved_reporter:
-            if not improved_chat_prompts_candidates:
-                fallback_result = self.evaluate_prompt(
-                    prompt=best_prompts,
-                    dataset=evaluation_dataset,
-                    metric=metric,
-                    agent=agent,
-                    n_samples=n_samples,
-                    n_threads=self.n_threads,
-                    return_evaluation_result=True,
-                )
-                fallback_scores = [
-                    x.score_results[0].value for x in fallback_result.test_results
-                ]
-                fallback_score = (
-                    sum(fallback_scores) / len(fallback_scores)
-                    if fallback_scores
-                    else best_score
-                )
-                improved_reporter.set_score(fallback_score)
-                return best_prompts, fallback_score, fallback_result
+        if not improved_chat_prompts_candidates:
+            fallback_result = self.evaluate_prompt(
+                prompt=best_prompts,
+                dataset=evaluation_dataset,
+                metric=metric,
+                agent=agent,
+                n_samples=n_samples,
+                n_threads=self.n_threads,
+                return_evaluation_result=True,
+            )
+            fallback_scores = [
+                x.score_results[0].value for x in fallback_result.test_results
+            ]
+            fallback_score = (
+                sum(fallback_scores) / len(fallback_scores)
+                if fallback_scores
+                else best_score
+            )
+            return best_prompts, fallback_score, fallback_result
 
-            best_prompt_bundle = improved_chat_prompts_candidates[0]
-            best_result = self.evaluate_prompt(
-                prompt=best_prompt_bundle,
+        best_prompt_bundle = improved_chat_prompts_candidates[0]
+        best_result = self.evaluate_prompt(
+            prompt=best_prompt_bundle,
+            dataset=evaluation_dataset,  # use right dataset for scoring
+            metric=metric,
+            agent=agent,
+            n_samples=n_samples,
+            n_threads=self.n_threads,
+            return_evaluation_result=True,
+        )
+        best_score_local = sum(
+            [x.score_results[0].value for x in best_result.test_results]
+        ) / len(best_result.test_results)
+
+        # Evaluate remaining candidates and keep the best-scoring bundle.
+        for idx, improved_chat_prompts in enumerate(
+            improved_chat_prompts_candidates[1:], start=1
+        ):
+            improved_experiment_result = self.evaluate_prompt(
+                prompt=improved_chat_prompts,
                 dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 agent=agent,
@@ -358,43 +364,18 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 n_threads=self.n_threads,
                 return_evaluation_result=True,
             )
-            best_score_local = sum(
-                [x.score_results[0].value for x in best_result.test_results]
-            ) / len(best_result.test_results)
 
-            # Evaluate remaining candidates and keep the best-scoring bundle.
-            best_reasoning = candidate_reasonings[0] if candidate_reasonings else ""
-            for idx, improved_chat_prompts in enumerate(
-                improved_chat_prompts_candidates[1:], start=1
-            ):
-                improved_experiment_result = self.evaluate_prompt(
-                    prompt=improved_chat_prompts,
-                    dataset=evaluation_dataset,  # use right dataset for scoring
-                    metric=metric,
-                    agent=agent,
-                    n_samples=n_samples,
-                    n_threads=self.n_threads,
-                    return_evaluation_result=True,
-                )
+            improved_score = sum(
+                [
+                    x.score_results[0].value
+                    for x in improved_experiment_result.test_results
+                ]
+            ) / len(improved_experiment_result.test_results)
 
-                improved_score = sum(
-                    [
-                        x.score_results[0].value
-                        for x in improved_experiment_result.test_results
-                    ]
-                ) / len(improved_experiment_result.test_results)
-
-                if improved_score > best_score_local:
-                    best_score_local = improved_score
-                    best_prompt_bundle = improved_chat_prompts
-                    best_result = improved_experiment_result
-                    if idx < len(candidate_reasonings):
-                        best_reasoning = candidate_reasonings[idx]
-
-            improved_reporter.set_score(best_score_local)
-
-        if best_reasoning:
-            improvement_reporter.set_reasoning(best_reasoning)
+            if improved_score > best_score_local:
+                best_score_local = improved_score
+                best_prompt_bundle = improved_chat_prompts
+                best_result = improved_experiment_result
 
         return best_prompt_bundle, best_score_local, best_result
 
@@ -418,18 +399,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         is being called - it just provides its current state.
         """
         return {
-            "trials_completed": getattr(self, "_trials_completed", 0),
-            "rounds_completed": getattr(self, "_rounds_completed", 0),
-            "iterations_completed": getattr(self, "_iterations_completed", 0),
+            "trials_completed": context.trials_completed,
+            "rounds_completed": context.trials_completed,
+            "iterations_completed": context.trials_completed,
             "convergence_threshold": self.convergence_threshold,
         }
 
     def run_optimization(
         self,
         context: OptimizationContext,
-    ) -> OptimizationResult:
+    ) -> AlgorithmResult:
         optimizable_prompts = context.prompts
-        is_single_prompt_optimization = context.is_single_prompt_optimization
         dataset = context.dataset
         validation_dataset = context.validation_dataset
         metric = context.metric
@@ -446,25 +426,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         iteration = 0
         previous_iteration_score: float = initial_score
-        trials_used = 0
-        # Initialize progress tracking
-        self._trials_completed = 0
-        self._rounds_completed = 0
-        self._iterations_completed = 0
-        self._current_round = 0
-        self._total_rounds = (
-            max_trials  # Approximation - actual iterations may be fewer
-        )
 
-        while trials_used < max_trials:
+        while context.trials_completed < max_trials:
             # Check should_stop flag at start of each iteration
             if context.should_stop:
                 break
 
-            self._current_round = iteration
             iteration += 1
             logger.info(
-                f"Starting iteration {iteration} (trials: {trials_used}/{max_trials})"
+                f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
 
             if self._should_stop_optimization:
@@ -475,158 +445,124 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 context.finish_reason = "max_trials"
                 break
 
-            with reporting.display_optimization_iteration(
-                iteration=iteration, verbose=self.verbose
-            ) as iteration_reporter:
-                # Perform hierarchical root cause analysis
-                with reporting.display_root_cause_analysis(
-                    verbose=self.verbose
-                ) as analysis_reporter:
-                    train_dataset_experiment_result = self.evaluate_prompt(
-                        prompt=best_prompts,
-                        dataset=dataset,
-                        metric=metric,
-                        agent=agent,
-                        n_samples=n_samples,
-                        n_threads=self.n_threads,
-                        return_evaluation_result=True,
-                    )
-                    hierarchical_analysis = self._hierarchical_root_cause_analysis(
-                        train_dataset_experiment_result
-                    )
-                    analysis_reporter.set_completed(
-                        total_test_cases=hierarchical_analysis.total_test_cases,
-                        num_batches=hierarchical_analysis.num_batches,
-                    )
+            # Perform hierarchical root cause analysis
+            logger.debug("Performing hierarchical root cause analysis...")
+            train_dataset_experiment_result = self.evaluate_prompt(
+                prompt=best_prompts,
+                dataset=dataset,
+                metric=metric,
+                agent=agent,
+                n_samples=n_samples,
+                n_threads=self.n_threads,
+                return_evaluation_result=True,
+            )
+            hierarchical_analysis = self._hierarchical_root_cause_analysis(
+                train_dataset_experiment_result
+            )
+            logger.debug(
+                f"Root cause analysis complete: {hierarchical_analysis.total_test_cases} test cases, "
+                f"{hierarchical_analysis.num_batches} batches"
+            )
 
-                # Display hierarchical synthesis and failure modes
-                if self.verbose:
-                    reporting.display_hierarchical_synthesis(
-                        total_test_cases=hierarchical_analysis.total_test_cases,
-                        num_batches=hierarchical_analysis.num_batches,
-                        synthesis_notes=hierarchical_analysis.synthesis_notes,
-                        verbose=self.verbose,
-                    )
+            logger.debug(
+                f"Identified {len(hierarchical_analysis.unified_failure_modes)} failure modes"
+            )
 
-                reporting.display_failure_modes(
-                    failure_modes=hierarchical_analysis.unified_failure_modes,
-                    verbose=self.verbose,
+            # Generate improved prompt for each failure mode
+            for idx, root_cause in enumerate(
+                hierarchical_analysis.unified_failure_modes, 1
+            ):
+                logger.debug(
+                    f"Addressing failure mode {idx}/{len(hierarchical_analysis.unified_failure_modes)}: {root_cause.name}"
                 )
 
-                # Generate improved prompt for each failure mode
-                for idx, root_cause in enumerate(
-                    hierarchical_analysis.unified_failure_modes, 1
-                ):
-                    logger.debug(
-                        f"Addressing failure mode {idx}/{len(hierarchical_analysis.unified_failure_modes)}: {root_cause.name}"
-                    )
+                # Try multiple attempts if needed
+                max_attempts = max_retries + 1
+                improved_chat_prompts = None
+                improved_score = None
 
-                    # Try multiple attempts if needed
-                    max_attempts = max_retries + 1
-                    improved_chat_prompts = None
-                    improved_score = None
-
-                    for attempt in range(1, max_attempts + 1):
-                        # Check if we've reached the trial limit before starting a new trial
-                        if trials_used >= max_trials:
-                            logger.info(
-                                f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
-                                f"Stopping optimization."
-                            )
-                            self._should_stop_optimization = True
-                            break
-
-                        # Generate and evaluate improvement (this is 1 trial)
-                        (
-                            improved_chat_prompts,
-                            improved_score,
-                            improved_experiment_result,
-                        ) = self._generate_and_evaluate_improvement(
-                            root_cause=root_cause,
-                            best_prompts=best_prompts,
-                            best_score=best_score,
-                            original_prompts=optimizable_prompts,
-                            dataset=dataset,
-                            validation_dataset=validation_dataset,
-                            metric=metric,
-                            agent=agent,
-                            optimization_id=optimization.id if optimization else None,
-                            n_samples=n_samples,
-                            attempt=attempt,
-                            max_attempts=max_attempts,
+                for attempt in range(1, max_attempts + 1):
+                    # Check if we've reached the trial limit before starting a new trial
+                    if context.trials_completed >= max_trials:
+                        logger.info(
+                            f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
+                            f"Stopping optimization."
                         )
-                        trials_used += 1
-                        # Update progress tracking for early stop reporting
-                        self._trials_completed = trials_used
-                        context.trials_completed = trials_used
-
-                        # Check for perfect score early stop
-                        if (
-                            self.skip_perfect_score
-                            and improved_score >= self.perfect_score
-                        ):
-                            context.should_stop = True
-                            context.finish_reason = "perfect_score"
-                            break
-
-                        # Check if we got improvement
-                        if improved_score > best_score:
-                            logger.info(
-                                f"Improvement found for '{root_cause.name}' on attempt {attempt}"
-                            )
-                            break
-
-                        # No improvement - should we retry?
-                        if attempt < max_attempts and trials_used < max_trials:
-                            reporting.display_retry_attempt(
-                                attempt=attempt,
-                                max_attempts=max_attempts,
-                                failure_mode_name=root_cause.name,
-                                verbose=self.verbose,
-                            )
-                        else:
-                            logger.debug(
-                                f"No improvement after {attempt} attempts for '{root_cause.name}'"
-                            )
-
-                    # Break out of failure mode loop if flag is set
-                    if self._should_stop_optimization or context.should_stop:
+                        self._should_stop_optimization = True
                         break
 
-                    # Check if final result is an improvement
-                    if (
-                        improved_score is not None
-                        and improved_chat_prompts is not None
-                        and improved_score > best_score
-                    ):
-                        improvement = self._calculate_improvement(
-                            improved_score, best_score
-                        )
+                    # Generate and evaluate improvement (this is 1 trial)
+                    (
+                        improved_chat_prompts,
+                        improved_score,
+                        improved_experiment_result,
+                    ) = self._generate_and_evaluate_improvement(
+                        root_cause=root_cause,
+                        best_prompts=best_prompts,
+                        best_score=best_score,
+                        original_prompts=optimizable_prompts,
+                        dataset=dataset,
+                        validation_dataset=validation_dataset,
+                        metric=metric,
+                        agent=agent,
+                        optimization_id=optimization.id if optimization else None,
+                        n_samples=n_samples,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                    )
+                    # Increment context.trials_completed (single source of truth)
+                    context.trials_completed += 1
 
-                        # Display improvement for this iteration
-                        reporting.display_iteration_improvement(
-                            improvement=improvement,
-                            current_score=improved_score,
-                            best_score=best_score,
-                            verbose=self.verbose,
-                        )
+                    # Check for perfect score early stop
+                    if self.skip_perfect_score and improved_score >= self.perfect_score:
+                        context.should_stop = True
+                        context.finish_reason = "perfect_score"
+                        break
 
-                        # Update best
-                        best_score = improved_score
-                        best_prompts = improved_chat_prompts
+                    # Check if we got improvement
+                    if improved_score > best_score:
                         logger.info(
-                            f"Updated best prompt after addressing '{root_cause.name}'"
+                            f"Improvement found for '{root_cause.name}' on attempt {attempt}"
+                        )
+                        break
+
+                    # No improvement - should we retry?
+                    if attempt < max_attempts and context.trials_completed < max_trials:
+                        logger.debug(
+                            f"Retrying attempt {attempt + 1}/{max_attempts} for '{root_cause.name}'"
                         )
                     else:
                         logger.debug(
-                            f"Keeping previous best prompt, no improvement from '{root_cause.name}'"
+                            f"No improvement after {attempt} attempts for '{root_cause.name}'"
                         )
 
-                # Mark iteration complete
-                improved_since_start = best_score > initial_score
-                iteration_reporter.iteration_complete(
-                    best_score=best_score, improved=improved_since_start
-                )
+                # Break out of failure mode loop if flag is set
+                if self._should_stop_optimization or context.should_stop:
+                    break
+
+                # Check if final result is an improvement
+                if (
+                    improved_score is not None
+                    and improved_chat_prompts is not None
+                    and improved_score > best_score
+                ):
+                    improvement = self._calculate_improvement(
+                        improved_score, best_score
+                    )
+                    logger.info(
+                        f"Improvement {improvement:.2%}: {best_score:.4f} -> {improved_score:.4f}"
+                    )
+
+                    # Update best
+                    best_score = improved_score
+                    best_prompts = improved_chat_prompts
+                    logger.info(
+                        f"Updated best prompt after addressing '{root_cause.name}'"
+                    )
+                else:
+                    logger.debug(
+                        f"Keeping previous best prompt, no improvement from '{root_cause.name}'"
+                    )
 
             # Check for convergence after iteration
             iteration_improvement = self._calculate_improvement(
@@ -638,10 +574,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
-            # Update rounds/iterations tracking for early stop reporting
-            self._rounds_completed = iteration
-            self._iterations_completed = iteration
-
             # Stop if improvement is below convergence threshold
             if abs(iteration_improvement) < self.convergence_threshold:
                 logger.info(
@@ -650,82 +582,38 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     f"Stopping after {iteration} iterations."
                 )
                 # Do not break early; continue until max_trials are exhausted for stubborn cases
-                # break
 
             # Update previous score for next iteration
             previous_iteration_score = best_score
-
-        # Display final optimization result with diff for all prompts
-        for prompt_name in optimizable_prompts:
-            initial_prompt = optimizable_prompts[prompt_name]
-            best_prompt = best_prompts[prompt_name]
-            initial_messages = list(initial_prompt.get_messages())
-            optimized_messages = list(best_prompt.get_messages())
-            reporting.display_optimized_prompt_diff(
-                prompt_name=prompt_name,
-                initial_messages=initial_messages,
-                optimized_messages=optimized_messages,
-                initial_score=initial_score,
-                best_score=best_score,
-                verbose=self.verbose,
-            )
-
-        # Convert result format based on input type
-        result_best_prompt_final: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        )
-        result_initial_prompt_final: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        )
-        if is_single_prompt_optimization:
-            result_best_prompt_final = list(best_prompts.values())[0]
-            result_initial_prompt_final = list(optimizable_prompts.values())[0]
-        else:
-            result_best_prompt_final = best_prompts
-            result_initial_prompt_final = optimizable_prompts
 
         # Set finish_reason if not already set by early stop
         if context.finish_reason is None:
             context.finish_reason = "completed"
 
-        # Prepare details for the result
-        first_best_prompt = list(best_prompts.values())[0]
         stopped_early = context.finish_reason != "completed"
-        details = {
-            "model": self.model,
-            "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
-            or self.model_parameters.get("temperature"),
-            "n_threads": self.n_threads,
-            "max_parallel_batches": self.max_parallel_batches,
-            "max_retries": max_retries,
-            "n_samples": n_samples,
-            "auto_continue": auto_continue,
-            "max_trials": max_trials,
-            "convergence_threshold": self.convergence_threshold,
-            "iterations_completed": iteration,
-            "trials_used": trials_used,
-            "trials_requested": max_trials,
-            "trials_completed": trials_used,
-            "rounds_completed": iteration,
-            "stopped_early": stopped_early,
-            "stop_reason": context.finish_reason,
-            "stop_reason_details": {"best_score": best_score},
-            "llm_cost_total": getattr(self, "llm_cost_total", None),
-            "llm_token_usage_total": getattr(self, "llm_token_usage_total", None),
-        }
+        first_best_prompt = list(best_prompts.values())[0]
 
-        return OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_best_prompt_final,
-            score=best_score,
-            metric_name=metric.__name__,
-            initial_prompt=result_initial_prompt_final,
-            initial_score=initial_score,
-            details=details,
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
-            llm_cost_total=getattr(self, "llm_cost_total", None),
-            llm_token_usage_total=getattr(self, "llm_token_usage_total", None),
-            optimization_id=optimization.id if optimization else None,
-            dataset_id=dataset.id,
+        return AlgorithmResult(
+            best_prompts=best_prompts,
+            best_score=best_score,
+            history=[],  # HierarchicalReflective doesn't track per-round history
+            metadata={
+                "model": self.model,
+                "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
+                or self.model_parameters.get("temperature"),
+                "n_threads": self.n_threads,
+                "max_parallel_batches": self.max_parallel_batches,
+                "max_retries": max_retries,
+                "n_samples": n_samples,
+                "auto_continue": auto_continue,
+                "max_trials": max_trials,
+                "convergence_threshold": self.convergence_threshold,
+                "iterations_completed": iteration,
+                "trials_requested": max_trials,
+                "trials_completed": context.trials_completed,
+                "rounds_completed": iteration,
+                "stopped_early": stopped_early,
+                "stop_reason": context.finish_reason,
+                "stop_reason_details": {"best_score": best_score},
+            },
         )

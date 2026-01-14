@@ -7,7 +7,7 @@ from opik.evaluation.models.litellm import warning_filters
 from . import datasets
 from .agents.optimizable_agent import OptimizableAgent
 from .api_objects.chat_prompt import ChatPrompt
-from .base_optimizer import BaseOptimizer
+from .base_optimizer import AlgorithmResult, BaseOptimizer
 from .algorithms import (
     GepaOptimizer,
     MetaPromptOptimizer,
@@ -38,6 +38,7 @@ setup_logging(level=logging.WARNING)
 warning_filters.add_warning_filters()
 
 __all__ = [
+    "AlgorithmResult",
     "BaseOptimizer",
     "ChatPrompt",
     "FewShotBayesianOptimizer",

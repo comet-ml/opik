@@ -16,7 +16,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
     MetaPromptOptimizer,
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops import candidate_ops
-from opik_optimizer import evaluator as evaluator_module
+from opik_optimizer import task_evaluator
 
 
 pytestmark = pytest.mark.usefixtures(
@@ -65,9 +65,9 @@ def test_synthesis_prompts_called_on_schedule(
         candidate_ops, "generate_synthesis_prompts", fake_generate_synthesis_prompts
     )
 
-    # Mock task_evaluator.evaluate to return a fixed score (used by Evaluator)
+    # Mock task_evaluator.evaluate to return a fixed score
     monkeypatch.setattr(
-        evaluator_module.task_evaluator,
+        task_evaluator,
         "evaluate",
         lambda **kwargs: 0.1,
     )

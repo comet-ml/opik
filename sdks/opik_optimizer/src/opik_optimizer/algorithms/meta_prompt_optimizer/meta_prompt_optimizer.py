@@ -2,13 +2,16 @@ import logging
 from typing import Any, cast
 
 from opik import Dataset
-from ...base_optimizer import BaseOptimizer, OptimizationRound, OptimizationContext
+from ...base_optimizer import (
+    AlgorithmResult,
+    BaseOptimizer,
+    OptimizationRound,
+    OptimizationContext,
+)
 from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...optimization_result import OptimizationResult
 from ... import _throttle
-from . import reporting
 from .ops.halloffame_ops import PromptHallOfFame
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
@@ -158,10 +161,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
 
-        # Initialize progress tracking
-        self._trials_completed = 0
-        self._rounds_completed = 0
+        # Initialize progress tracking (used by get_progress_state for display)
         self._current_round = 0
+        self._total_rounds = 0
         self._current_candidate = 0
         self._total_candidates_in_round = 0
 
@@ -183,13 +185,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         """
         Return MetaPrompt-specific metadata for the optimization result.
 
-        Provides trials and rounds tracking that can be used in any scenario
-        (early stop, completion, etc.). The optimizer doesn't know why this
-        is being called - it just provides its current state.
+        Provides algorithm-specific configuration that can be used in any scenario
+        (early stop, completion, etc.). Trial/round counts come from context.
         """
         return {
-            "trials_completed": getattr(self, "_trials_completed", 0),
-            "rounds_completed": getattr(self, "_rounds_completed", 0),
             "prompts_per_round": self.prompts_per_round,
             "hall_of_fame_size": self.hall_of_fame_size if self.use_hall_of_fame else 0,
         }
@@ -261,7 +260,22 @@ class MetaPromptOptimizer(BaseOptimizer):
     def run_optimization(
         self,
         context: OptimizationContext,
-    ) -> OptimizationResult:
+    ) -> AlgorithmResult:
+        """
+        Run the MetaPrompt optimization algorithm.
+
+        Uses LLM-based meta-reasoning to iteratively improve prompts by:
+        1. Generating candidate prompts using reasoning about improvements
+        2. Evaluating candidates using self.evaluate()
+        3. Tracking best prompts and updating hall of fame
+        4. Repeating until max_trials or early stop
+
+        Args:
+            context: The optimization context with prompts, dataset, metric, etc.
+
+        Returns:
+            AlgorithmResult with best prompts, score, history, and metadata.
+        """
         prompts = context.prompts
         dataset = context.dataset
         metric = context.metric
@@ -272,281 +286,252 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         self.auto_continue = auto_continue
         self.dataset = dataset
-        initial_prompts = prompts
-        is_bundle = True
-        dataset_id = getattr(dataset, "id", None)
+        best_prompts = prompts
+        is_bundle = not is_single_prompt_optimization
 
         # Use baseline score from context (computed by base class)
         initial_score = cast(float, context.baseline_score)
         best_score = initial_score
-        best_prompts = initial_prompts
         rounds: list[OptimizationRound] = []
 
-        reporting.display_optimization_start_message(verbose=self.verbose)
-
-        # Calculate the maximum number of rounds, we will stop early if we hit the
-        # max_trials limit
+        # Calculate the maximum number of rounds
         self._total_rounds = max(1, max_trials // self.prompts_per_round + 1)
+        round_num = 0
 
-        with reporting.display_round_progress(
-            self._total_rounds, verbose=self.verbose
-        ) as round_reporter:
-            round_num = 0
-            trials_used = 0
+        while context.trials_completed < max_trials:
+            # Check should_stop flag at start of each round
+            if context.should_stop:
+                break
 
-            while trials_used < max_trials:
-                # Check should_stop flag at start of each round
-                if context.should_stop:
-                    break
+            self._current_round = round_num
+            previous_best_score = best_score
 
-                self._current_round = round_num
-                round_reporter.round_start(round_num)
-                previous_best_score = best_score
-
-                # Check if we should extract patterns from hall of fame
-                if self.hall_of_fame and self.hall_of_fame.should_extract_patterns(
-                    trials_used
-                ):
-                    logger.info(
-                        f"Extracting patterns from hall of fame at trial {trials_used}"
-                    )
-                    new_patterns = self.hall_of_fame.extract_patterns(
-                        model=self.model,
-                        model_parameters=self.model_parameters,
-                        metric_name=metric.__name__,
-                    )
-                    if new_patterns:
-                        logger.info(f"Extracted {len(new_patterns)} new patterns")
-                        for i, pattern in enumerate(new_patterns[:3], 1):
-                            logger.debug(f"  Pattern {i}: {pattern[:100]}...")
-
-                prompts_this_round = min(
-                    self.prompts_per_round, max_trials - trials_used
+            # Check if we should extract patterns from hall of fame
+            if self.hall_of_fame and self.hall_of_fame.should_extract_patterns(
+                context.trials_completed
+            ):
+                logger.info(
+                    f"Extracting patterns from hall of fame at trial {context.trials_completed}"
                 )
+                new_patterns = self.hall_of_fame.extract_patterns(
+                    model=self.model,
+                    model_parameters=self.model_parameters,
+                    metric_name=metric.__name__,
+                )
+                if new_patterns:
+                    logger.info(f"Extracted {len(new_patterns)} new patterns")
+                    for i, pattern in enumerate(new_patterns[:3], 1):
+                        logger.debug(f"  Pattern {i}: {pattern[:100]}...")
 
-                try:
-                    if is_single_prompt_optimization:
-                        single_candidates = candidate_ops.generate_candidate_prompts(
+            prompts_this_round = min(
+                self.prompts_per_round, max_trials - context.trials_completed
+            )
+
+            try:
+                if is_single_prompt_optimization:
+                    single_candidates = candidate_ops.generate_candidate_prompts(
+                        optimizer=self,
+                        current_prompt=list(best_prompts.values())[0],
+                        best_score=best_score,
+                        round_num=round_num,
+                        previous_rounds=rounds,
+                        metric=metric,
+                        optimization_id=optimization_id,
+                        project_name=self.project_name,
+                        build_history_context_fn=self._build_history_context,
+                        get_task_context_fn=self._get_task_context,
+                        winning_patterns=(
+                            self.hall_of_fame.get_patterns_for_injection()
+                            if self.hall_of_fame
+                            else None
+                        ),
+                    )
+                    prompt_key = next(iter(best_prompts.keys()))
+                    candidate_prompts = [
+                        {prompt_key: prompt}
+                        for prompt in single_candidates[:prompts_this_round]
+                    ]
+                else:
+                    bundle_candidates = candidate_ops.generate_agent_bundle_candidates(
+                        optimizer=self,
+                        current_prompts=best_prompts,
+                        best_score=best_score,
+                        round_num=round_num,
+                        previous_rounds=rounds,
+                        metric=metric,
+                        optimization_id=optimization_id,
+                        project_name=self.project_name,
+                        build_history_context_fn=self._build_history_context,
+                        get_task_context_fn=self._get_task_context,
+                    )
+                    # Extract prompts from bundle candidates and limit to prompts_this_round
+                    candidate_prompts = [
+                        bundle.prompts
+                        for bundle in bundle_candidates[:prompts_this_round]
+                    ]
+
+                synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+                if (
+                    is_single_prompt_optimization
+                    and self.synthesis_prompts_per_round > 0
+                    and round_num >= self.synthesis_start_round
+                    and self.synthesis_round_interval > 0
+                    and (round_num - self.synthesis_start_round)
+                    % self.synthesis_round_interval
+                    == 0
+                ):
+                    try:
+                        synthesis_prompts = candidate_ops.generate_synthesis_prompts(
                             optimizer=self,
                             current_prompt=list(best_prompts.values())[0],
                             best_score=best_score,
-                            round_num=round_num,
                             previous_rounds=rounds,
                             metric=metric,
+                            get_task_context_fn=self._get_task_context,
                             optimization_id=optimization_id,
                             project_name=self.project_name,
-                            build_history_context_fn=self._build_history_context,
-                            get_task_context_fn=self._get_task_context,
-                            winning_patterns=(
-                                self.hall_of_fame.get_patterns_for_injection()
-                                if self.hall_of_fame
-                                else None
-                            ),
                         )
                         prompt_key = next(iter(best_prompts.keys()))
-                        candidate_prompts = [
-                            {prompt_key: prompt}
-                            for prompt in single_candidates[:prompts_this_round]
+                        synthesis_candidates = [
+                            {prompt_key: prompt} for prompt in synthesis_prompts
                         ]
-                    else:
-                        bundle_candidates = (
-                            candidate_ops.generate_agent_bundle_candidates(
-                                optimizer=self,
-                                current_prompts=best_prompts,
-                                best_score=best_score,
-                                round_num=round_num,
-                                previous_rounds=rounds,
-                                metric=metric,
-                                optimization_id=optimization_id,
-                                project_name=self.project_name,
-                                build_history_context_fn=self._build_history_context,
-                                get_task_context_fn=self._get_task_context,
-                            )
-                        )
-                        # Extract prompts from bundle candidates and limit to prompts_this_round
-                        candidate_prompts = [
-                            bundle.prompts
-                            for bundle in bundle_candidates[:prompts_this_round]
-                        ]
-
-                    synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
-                    if (
-                        is_single_prompt_optimization
-                        and self.synthesis_prompts_per_round > 0
-                        and round_num >= self.synthesis_start_round
-                        and self.synthesis_round_interval > 0
-                        and (round_num - self.synthesis_start_round)
-                        % self.synthesis_round_interval
-                        == 0
-                    ):
-                        try:
-                            synthesis_prompts = (
-                                candidate_ops.generate_synthesis_prompts(
-                                    optimizer=self,
-                                    current_prompt=list(best_prompts.values())[0],
-                                    best_score=best_score,
-                                    previous_rounds=rounds,
-                                    metric=metric,
-                                    get_task_context_fn=self._get_task_context,
-                                    optimization_id=optimization_id,
-                                    project_name=self.project_name,
-                                )
-                            )
-                            prompt_key = next(iter(best_prompts.keys()))
-                            synthesis_candidates = [
-                                {prompt_key: prompt} for prompt in synthesis_prompts
-                            ]
-                        except Exception as synth_exc:
-                            if isinstance(
-                                synth_exc,
-                                (BadRequestError, StructuredOutputParsingError),
-                            ):
-                                raise
-                            logger.warning(
-                                "Synthesis prompt generation failed: %s", synth_exc
-                            )
-
-                    if synthesis_candidates:
-                        candidate_prompts = synthesis_candidates + candidate_prompts
-                        candidate_prompts = candidate_prompts[:prompts_this_round]
-
-                except Exception as e:
-                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
-                        raise
-                    round_reporter.failed_to_generate(prompts_this_round, str(e))
-                    # Regular generation failed - break to prevent infinite loop
-                    trials_used += prompts_this_round
-                    break
-
-                # Step 2. Score each candidate prompt
-                prompt_scores: list[tuple[Any, float]] = []
-                current_round_best_score = (
-                    best_score  # Track best score within this round
-                )
-                self._total_candidates_in_round = len(candidate_prompts)
-
-                for candidate_count, prompts in enumerate(candidate_prompts):
-                    # Check should_stop before each evaluation
-                    if context.should_stop:
-                        break
-
-                    # Update progress tracking for display
-                    self._current_candidate = candidate_count
-
-                    # self.evaluate() handles:
-                    # - Progress tracking (trials_completed++)
-                    # - Early stop checking (sets should_stop flag)
-                    # - Best score/prompt tracking
-                    # - Display via _on_evaluation -> get_progress_state
-                    prompt_score = self.evaluate(prompts)
-
-                    trials_used += 1
-                    self._trials_completed = trials_used
-
-                    # Update the round's best score if this candidate is better
-                    if prompt_score > current_round_best_score:
-                        current_round_best_score = prompt_score
-
-                    prompt_scores.append((prompts, prompt_score))
-
-                # Step 3. Identify potential improvements
-                if not prompt_scores:
-                    logger.warning(
-                        "No prompts were successfully evaluated in this round"
-                    )
-                    break
-
-                prompt_scores.sort(key=lambda x: x[1], reverse=True)
-                best_candidate_this_round, best_cand_score_avg = prompt_scores[0]
-                improvement = result_ops.calculate_improvement(
-                    best_cand_score_avg, best_score
-                )
-                round_reporter.round_end(round_num, best_cand_score_avg, best_score)
-
-                # Cast to ChatPrompt for use in round_data and hall of fame
-                best_candidate_chat = cast(
-                    chat_prompt.ChatPrompt, best_candidate_this_round
-                )
-
-                # Add best candidate to hall of fame if qualified
-                if self.hall_of_fame and best_cand_score_avg > 0 and not is_bundle:
-                    from .ops.halloffame_ops import HallOfFameEntry
-
-                    entry = HallOfFameEntry(
-                        prompt_messages=best_candidate_chat.get_messages(),
-                        score=best_cand_score_avg,
-                        trial_number=trials_used,
-                        improvement_over_baseline=(
-                            (best_cand_score_avg - initial_score) / initial_score
-                            if initial_score > 0
-                            else 0
-                        ),
-                        metric_name=metric.__name__,
-                    )
-                    if self.hall_of_fame.add(entry):
-                        logger.debug(
-                            f"Added to hall of fame: score={best_cand_score_avg:.3f}, "
-                            f"trial={trials_used}"
+                    except Exception as synth_exc:
+                        if isinstance(
+                            synth_exc,
+                            (BadRequestError, StructuredOutputParsingError),
+                        ):
+                            raise
+                        logger.warning(
+                            "Synthesis prompt generation failed: %s", synth_exc
                         )
 
-                round_data = self._create_round_data(
-                    round_num=round_num,
-                    current_best_prompt=best_candidate_chat,
-                    current_best_score=best_cand_score_avg,
-                    best_prompt_overall=best_prompts,
-                    evaluated_candidates=prompt_scores,
-                    previous_best_score=previous_best_score,
-                    improvement_this_round=improvement,
+                if synthesis_candidates:
+                    candidate_prompts = synthesis_candidates + candidate_prompts
+                    candidate_prompts = candidate_prompts[:prompts_this_round]
+
+            except Exception as e:
+                if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                    raise
+                logger.warning(
+                    f"Failed to generate {prompts_this_round} candidates: {e}"
                 )
-                rounds.append(round_data)
-                self._add_to_history(round_data)
-                # Update rounds tracking for early stop reporting
-                self._rounds_completed = len(rounds)
+                # Regular generation failed - break to prevent infinite loop
+                break
 
-                if best_cand_score_avg > best_score:
-                    best_score = best_cand_score_avg
-                    best_prompts = best_candidate_this_round
+            # Step 2. Score each candidate prompt
+            prompt_scores: list[tuple[Any, float]] = []
+            current_round_best_score = best_score
+            self._total_candidates_in_round = len(candidate_prompts)
 
-                # Increment counters
-                round_num += 1
+            for candidate_count, candidate in enumerate(candidate_prompts):
+                # Check should_stop before each evaluation
+                if context.should_stop:
+                    break
 
-        # Prepare result prompts based on single vs multi-prompt mode
-        result_prompt, result_initial_prompt = self._select_result_prompts(
-            best_prompts=best_prompts,
-            initial_prompts=initial_prompts,
-            is_single_prompt_optimization=is_single_prompt_optimization,
-        )
+                # Update progress tracking for display
+                self._current_candidate = candidate_count
 
-        trials_requested = max_trials
-        trials_completed = trials_used
+                # self.evaluate() handles:
+                # - Progress tracking (trials_completed++)
+                # - Early stop checking (sets should_stop flag)
+                # - Best score/prompt tracking
+                # - Display via _on_evaluation -> get_progress_state
+                prompt_score = self.evaluate(candidate)
+
+                # Update the round's best score if this candidate is better
+                if prompt_score > current_round_best_score:
+                    current_round_best_score = prompt_score
+
+                prompt_scores.append((candidate, prompt_score))
+
+            # Step 3. Identify potential improvements
+            if not prompt_scores:
+                logger.warning("No prompts were successfully evaluated in this round")
+                break
+
+            prompt_scores.sort(key=lambda x: x[1], reverse=True)
+            best_candidate_this_round, best_cand_score_avg = prompt_scores[0]
+            improvement = result_ops.calculate_improvement(
+                best_cand_score_avg, best_score
+            )
+
+            # Add best candidate to hall of fame if qualified (single prompt only)
+            if self.hall_of_fame and best_cand_score_avg > 0 and not is_bundle:
+                from .ops.halloffame_ops import HallOfFameEntry
+
+                # For single prompt optimization, extract the ChatPrompt from dict
+                if isinstance(best_candidate_this_round, dict):
+                    best_candidate_chat = list(best_candidate_this_round.values())[0]
+                else:
+                    best_candidate_chat = cast(
+                        chat_prompt.ChatPrompt, best_candidate_this_round
+                    )
+
+                entry = HallOfFameEntry(
+                    prompt_messages=best_candidate_chat.get_messages(),
+                    score=best_cand_score_avg,
+                    trial_number=context.trials_completed,
+                    improvement_over_baseline=(
+                        (best_cand_score_avg - initial_score) / initial_score
+                        if initial_score > 0
+                        else 0
+                    ),
+                    metric_name=metric.__name__,
+                )
+                if self.hall_of_fame.add(entry):
+                    logger.debug(
+                        f"Added to hall of fame: score={best_cand_score_avg:.3f}, "
+                        f"trial={context.trials_completed}"
+                    )
+
+            # Pass full candidate (dict for multi-prompt, or single prompt)
+            # _create_round_data handles both cases internally
+            round_data = self._create_round_data(
+                round_num=round_num,
+                current_best_prompt=best_candidate_this_round,
+                current_best_score=best_cand_score_avg,
+                best_prompt_overall=best_prompts,
+                evaluated_candidates=prompt_scores,
+                previous_best_score=previous_best_score,
+                improvement_this_round=improvement,
+            )
+            rounds.append(round_data)
+            self._add_to_history(round_data)
+
+            if best_cand_score_avg > best_score:
+                best_score = best_cand_score_avg
+                best_prompts = best_candidate_this_round
+
+            # Increment round counter
+            round_num += 1
 
         # Set finish_reason if not already set by early stop
         if context.finish_reason is None:
             context.finish_reason = "completed"
 
-        stopped_early = context.finish_reason != "completed"
-        stop_reason = context.finish_reason if stopped_early else "max_trials"
-        stop_reason_details = {"best_score": best_score}
+        # Build history for result (convert OptimizationRound to dicts)
+        history = [
+            {
+                "round": r.round_number,
+                "best_score": r.best_score,
+                "improvement": r.improvement,
+            }
+            for r in rounds
+        ]
 
-        return result_ops.create_result(
-            optimizer_class_name=self.__class__.__name__,
-            metric=metric,
-            prompt=result_prompt,
-            initial_prompt=result_initial_prompt,
+        return AlgorithmResult(
+            best_prompts=best_prompts
+            if isinstance(best_prompts, dict)
+            else {"prompt": best_prompts},
             best_score=best_score,
-            initial_score=initial_score,
-            rounds=rounds,
-            trials_requested=trials_requested,
-            trials_completed=trials_completed,
-            dataset_id=dataset_id,
-            optimization_id=optimization_id,
-            llm_call_counter=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
-            model=self.model,
-            temperature=self.model_parameters.get("temperature"),
-            stopped_early=stopped_early,
-            stop_reason=stop_reason,
-            stop_reason_details=stop_reason_details,
+            history=history,
+            metadata={
+                "rounds_completed": len(rounds),
+                "prompts_per_round": self.prompts_per_round,
+                "hall_of_fame_size": self.hall_of_fame_size
+                if self.use_hall_of_fame
+                else 0,
+            },
         )
 
     def _create_round_data(
