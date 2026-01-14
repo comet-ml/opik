@@ -21,16 +21,16 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.9.75
+version: 1.9.82
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
-appVersion: 1.9.75
+appVersion: 1.9.82
 
 dependencies:
 - name: mysql
-  version: 1.0.6
+  version: 1.0.7
   repository: "https://comet-ml.github.io/comet-mysql-helm/"
   condition: mysql.enabled
 - name: zookeeper
@@ -42,14 +42,11 @@ dependencies:
   repository: oci://registry-1.docker.io/cloudpirates
   condition: redis.enabled
 - name: minio
-  version: 0.5.6
+  version: 0.6.1
   repository: oci://registry-1.docker.io/cloudpirates
   condition: minio.enabled
 - name: altinity-clickhouse-operator
   version: 0.25.4
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
-- name: common
-  version: 2.x.x
-  repository: oci://registry-1.docker.io/bitnamicharts
 

@@ -10,7 +10,7 @@ import isArray from "lodash/isArray";
 
 import { Filter } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
-import FiltersAccordionSection from "@/components/shared/FiltersAccordionSection/FiltersAccordionSection";
+import FiltersSection from "@/components/shared/FiltersSection/FiltersSection";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -53,12 +53,18 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
 
   const filters = (controllerField.value as Filter[]) || [];
   const isThreadMetric = filterType === "thread";
+  const isSpanMetric = filterType === "span";
 
   const filterColumns = useMemo(() => {
     if (filterType === "thread") return THREAD_FILTER_COLUMNS;
     if (filterType === "span") return SPAN_FILTER_COLUMNS;
     return TRACE_FILTER_COLUMNS;
   }, [filterType]);
+
+  // Determine the data type for API calls based on filter type
+  const dataType = isSpanMetric
+    ? TRACE_DATA_TYPE.spans
+    : TRACE_DATA_TYPE.traces;
 
   const filtersConfig = useMemo(
     () => ({
@@ -73,7 +79,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: dataType,
             placeholder: "key",
             excludeRoot: true,
           },
@@ -88,7 +94,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: dataType,
             placeholder: "key",
             excludeRoot: false,
           },
@@ -111,7 +117,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             },
           keyComponentProps: {
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: dataType,
             placeholder: "Select score",
           },
         },
@@ -130,7 +136,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           : {}),
       },
     }),
-    [projectId, isThreadMetric],
+    [projectId, isThreadMetric, dataType],
   );
 
   useEffect(() => {
@@ -177,13 +183,13 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
       : undefined;
 
   return (
-    <FiltersAccordionSection
+    <FiltersSection
       columns={filterColumns as ColumnData<unknown>[]}
       config={filtersConfig}
       filters={filters}
       onChange={setFilters}
       label={label}
-      description="Add filters to focus the widget on specific properties."
+      description="Use filters to target specific traces, or leave empty to apply to all."
       className={className}
       errors={errors}
     />

@@ -1,4 +1,4 @@
-import { generateText, generateObject, type LanguageModel } from "ai";
+import { generateText, Output, type LanguageModel } from "ai";
 import type { z } from "zod";
 import { OpikBaseModel, type OpikMessage } from "./OpikBaseModel";
 import { ModelConfigurationError, ModelGenerationError } from "./errors";
@@ -52,13 +52,6 @@ export class VercelAIChatModel extends OpikBaseModel {
   ) => Promise<Awaited<ReturnType<typeof generateText>>>;
 
   /**
-   * Private tracked wrapper for generateObject SDK method.
-   */
-  private _generateObject: (
-    params: Parameters<typeof generateObject>[0]
-  ) => Promise<Awaited<ReturnType<typeof generateObject>>>;
-
-  /**
    * Creates a new VercelAIChatModel instance with a LanguageModel.
    *
    * @param model - A LanguageModel instance
@@ -107,19 +100,8 @@ export class VercelAIChatModel extends OpikBaseModel {
           },
           generateText
         );
-
-        this._generateObject = track(
-          {
-            name: "model.generateObject",
-            type: SpanType.Llm,
-            enrichSpan: (result) =>
-              enrichSpanFromResponse(result, this.modelName),
-          },
-          generateObject
-        );
       } else {
         this._generateText = generateText;
-        this._generateObject = generateObject;
       }
     } catch (error) {
       throw new ModelConfigurationError(
@@ -160,15 +142,15 @@ export class VercelAIChatModel extends OpikBaseModel {
     try {
       let LLMResult: string;
       if (responseFormat) {
-        // Use generateObject for structured output
+        // Use generateText with output.object() for structured output
         logger.debug(
           `Generating structured output with model ${this.modelName}, input length: ${input.length}`
         );
 
-        const result = await this._generateObject({
+        const result = await this._generateText({
           model: this.model,
           prompt: input,
-          schema: responseFormat,
+          output: Output.object({ schema: responseFormat }),
           ...options,
         });
 
@@ -176,7 +158,7 @@ export class VercelAIChatModel extends OpikBaseModel {
           `Generated structured output with model ${this.modelName}`
         );
 
-        LLMResult = JSON.stringify(result.object);
+        LLMResult = JSON.stringify(result.output);
       } else {
         logger.debug(
           `Generating text with model ${this.modelName}, input length: ${input.length}`

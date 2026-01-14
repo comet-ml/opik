@@ -318,6 +318,19 @@ onlineScoring:
       pendingMessageDuration: # Empty - will use global default
       maxRetries: # Empty - will use global default
 
+# Configuration for Dataset Export
+datasetExport:
+  enabled: true
+  streamName: 'dataset-export-test'
+  consumerGroupName: 'dataset-export-consumers-test'
+  consumerBatchSize: 10
+  poolingInterval: 1s
+  longPollingDuration: 5s
+  maxRetries: 3
+  claimIntervalRatio: 2
+  pendingMessageDuration: 5m
+  defaultTtl: 24h
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s
@@ -432,9 +445,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
-  # Default: true
-  # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: "false"
@@ -456,6 +466,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Vertex AI provider is enabled
   vertexaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Bedrock provider is enabled
+  bedrockProviderEnabled: "true"
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"

@@ -2,7 +2,6 @@ import type {
   LanguageModelUsage,
   LanguageModelResponseMetadata,
   GenerateTextResult,
-  GenerateObjectResult,
 } from "ai";
 import type { Span } from "@/rest_api/api";
 
@@ -18,8 +17,6 @@ const TOKEN_FIELD_MAPPINGS = {
   inputTokens: "prompt_tokens",
   outputTokens: "completion_tokens",
   totalTokens: "total_tokens",
-  reasoningTokens: "reasoning_tokens",
-  cachedInputTokens: "cached_input_tokens",
 } as const;
 
 /**
@@ -32,13 +29,12 @@ export type UsageInfo = Pick<
 >;
 
 /**
- * Union type for Vercel AI SDK response types
+ * Vercel AI SDK response type
  * GenerateTextResult requires TOOLS and OUTPUT type parameters
- * GenerateObjectResult requires OBJECT type parameter
+ * In AI SDK v6, structured outputs use GenerateTextResult with Output.object()
+ * Using never for OUTPUT since we handle both generateText and generateObject responses generically
  */
-type VercelAIResponse =
-  | GenerateTextResult<never, unknown>
-  | GenerateObjectResult<unknown>;
+type VercelAIResponse = GenerateTextResult<never, never>;
 
 /**
  * Type guard to check if a value is a valid Vercel AI SDK response
@@ -74,7 +70,7 @@ function isVercelAIResponse(value: unknown): value is VercelAIResponse {
  */
 export function enrichSpanFromResponse(
   response: unknown,
-  languageModelId: string
+  languageModelId: string,
 ): Partial<UsageInfo> {
   // Early return for invalid responses
   if (!isVercelAIResponse(response)) {
@@ -114,16 +110,17 @@ export function enrichSpanFromResponse(
  */
 function extractModelId(
   response: VercelAIResponse,
-  fallbackModelId: string
+  fallbackModelId: string,
 ): string {
   return response.response?.modelId ?? fallbackModelId;
 }
 
 /**
  * Extract token usage from LanguageModelUsage and map to Opik format
+ * In AI SDK v6, cached and reasoning tokens are nested in tokenDetails objects
  */
 function extractTokenUsage(
-  usage: LanguageModelUsage | undefined
+  usage: LanguageModelUsage | undefined,
 ): Record<string, number> | undefined {
   if (!usage) {
     return undefined;
@@ -135,9 +132,18 @@ function extractTokenUsage(
   for (const [vercelField, opikField] of Object.entries(TOKEN_FIELD_MAPPINGS)) {
     const tokenCount = usage[vercelField as keyof LanguageModelUsage];
 
-    if (tokenCount !== undefined) {
+    if (typeof tokenCount === "number") {
       opikUsage[opikField] = tokenCount;
     }
+  }
+  const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens;
+  if (typeof cacheReadTokens === "number") {
+    opikUsage.cached_input_tokens = cacheReadTokens;
+  }
+
+  const reasoningTokens = usage.outputTokenDetails?.reasoningTokens;
+  if (typeof reasoningTokens === "number") {
+    opikUsage.reasoning_tokens = reasoningTokens;
   }
 
   return Object.keys(opikUsage).length > 0 ? opikUsage : undefined;
@@ -159,7 +165,7 @@ function extractProvider(response: VercelAIResponse): string | undefined {
  * Extract response metadata (id, timestamp)
  */
 function extractResponseMetadata(
-  responseMetadata: LanguageModelResponseMetadata | undefined
+  responseMetadata: LanguageModelResponseMetadata | undefined,
 ): Record<string, unknown> | undefined {
   if (!responseMetadata) {
     return undefined;
@@ -192,7 +198,7 @@ function extractResponseMetadata(
  * with the API's JsonListString type.
  */
 function extractMetadata(
-  response: VercelAIResponse
+  response: VercelAIResponse,
 ): Record<string, unknown> | undefined {
   const metadata: Record<string, unknown> = {};
 
@@ -239,7 +245,7 @@ function extractMetadata(
  * @returns Output object with relevant fields, or undefined if no output
  */
 function extractOutputFromResponse(
-  response: VercelAIResponse
+  response: VercelAIResponse,
 ): Record<string, unknown> | undefined {
   const output: Record<string, unknown> = {};
 

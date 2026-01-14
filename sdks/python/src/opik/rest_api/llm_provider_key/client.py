@@ -103,7 +103,7 @@ class LlmProviderKeyClient:
         name : typing.Optional[str]
 
         provider_name : typing.Optional[str]
-            Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
+            Provider name - required for custom LLM and Bedrock providers to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1'). Must not be blank for custom and Bedrock providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -187,7 +187,7 @@ class LlmProviderKeyClient:
         name : typing.Optional[str]
 
         provider_name : typing.Optional[str]
-            Provider name - can be set to migrate legacy custom LLM providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM providers.
+            Provider name - can be set to migrate legacy custom LLM or Bedrock providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM and Bedrock providers.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -317,7 +317,7 @@ class AsyncLlmProviderKeyClient:
         name : typing.Optional[str]
 
         provider_name : typing.Optional[str]
-            Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
+            Provider name - required for custom LLM and Bedrock providers to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1'). Must not be blank for custom and Bedrock providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -407,7 +407,7 @@ class AsyncLlmProviderKeyClient:
         name : typing.Optional[str]
 
         provider_name : typing.Optional[str]
-            Provider name - can be set to migrate legacy custom LLM providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM providers.
+            Provider name - can be set to migrate legacy custom LLM or Bedrock providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM and Bedrock providers.
 
         headers : typing.Optional[typing.Dict[str, str]]
 

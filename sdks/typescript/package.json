@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "1.9.75",
+  "version": "1.9.82",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -87,11 +87,11 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.27",
-    "@ai-sdk/google": "^2.0.20",
-    "@ai-sdk/google-vertex": "^3.0.40",
-    "@ai-sdk/openai": "^2.0.52",
-    "ai": "^5.0.68",
+    "@ai-sdk/anthropic": "^3.0.1",
+    "@ai-sdk/google": "^3.0.5",
+    "@ai-sdk/google-vertex": "^4.0.1",
+    "@ai-sdk/openai": "^3.0.7",
+    "ai": "^6.0.13",
     "ansi-escapes": "^7.0.0",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",

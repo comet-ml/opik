@@ -821,6 +821,7 @@ class Opik:
             name=name,
             description=dataset_fern.description,
             rest_client=self._rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
         )
 
         dataset_.__internal_api__sync_hashes__()
@@ -906,6 +907,7 @@ class Opik:
             name=name,
             description=description,
             rest_client=self._rest_client,
+            dataset_items_count=0,
         )
 
         self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
@@ -941,6 +943,7 @@ class Opik:
         prompts: Optional[List[prompt_module.base_prompt.BasePrompt]] = None,
         type: Literal["regular", "trial", "mini-batch"] = "regular",
         optimization_id: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -954,6 +957,7 @@ class Opik:
             type: The type of the experiment. Can be "regular", "trial", or "mini-batch".
                 Defaults to "regular". "trial" and "mini-batch" are only relevant for prompt optimization experiments.
             optimization_id: Optional ID of the optimization associated with the experiment.
+            tags: Optional list of tags to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
@@ -978,6 +982,7 @@ class Opik:
             prompt_versions=prompt_versions,
             type=type,
             optimization_id=optimization_id,
+            tags=tags,
         )
 
         experiment_ = experiment.Experiment(
@@ -988,6 +993,7 @@ class Opik:
             streamer=self._streamer,
             experiments_client=self.get_experiments_client(),
             prompts=checked_prompts,
+            tags=tags,
         )
 
         return experiment_
@@ -1052,6 +1058,7 @@ class Opik:
             rest_client=self._rest_client,
             streamer=self._streamer,
             experiments_client=self.get_experiments_client(),
+            tags=experiment_public.tags,
         )
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
@@ -1078,6 +1085,7 @@ class Opik:
                 rest_client=self._rest_client,
                 streamer=self._streamer,
                 experiments_client=self.get_experiments_client(),
+                tags=public_experiment.tags,
             )
             result.append(experiment_)
 
@@ -1111,6 +1119,7 @@ class Opik:
             rest_client=self._rest_client,
             streamer=self._streamer,
             experiments_client=self.get_experiments_client(),
+            tags=experiment_public.tags,
         )
 
     def end(self, timeout: Optional[int] = None) -> None:

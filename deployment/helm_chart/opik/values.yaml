@@ -115,12 +115,22 @@ component:
       requests:
         ephemeral-storage: 10Gi
     livenessProbe:
-      path: /health-check?name=all&type=alive
-      port:  8080
+      httpGet:
+        path: /health-check?name=all&type=alive
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
     readinessProbe:
-      path: /health-check?name=all&type=ready
-      port:  8080
+      httpGet:
+        path: /health-check?name=all&type=ready
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
       initialDelaySeconds: 20
+    podDisruptionBudget:
+      enabled: false
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
@@ -188,6 +198,8 @@ component:
       enabled: false
     backendConfigMap:
       enabled: true
+    podDisruptionBudget:
+      enabled: false
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
@@ -332,6 +344,8 @@ component:
       # proxy_send_timeout: 60
       # proxy_buffering: 'on'
       # proxy_request_buffering: 'on'
+    podDisruptionBudget:
+      enabled: false
 
 mysql:
   enabled: true

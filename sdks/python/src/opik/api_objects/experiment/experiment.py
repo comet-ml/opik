@@ -26,6 +26,7 @@ class Experiment:
         streamer: streamer.Streamer,
         experiments_client: experiments_client.ExperimentsClient,
         prompts: Optional[List[base_prompt.BasePrompt]] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -34,6 +35,7 @@ class Experiment:
         self._prompts = prompts
         self._streamer = streamer
         self._experiments_client = experiments_client
+        self._tags = tags
 
     @property
     def id(self) -> str:
@@ -52,6 +54,10 @@ class Experiment:
         self._name = name
 
         return name
+
+    @property
+    def tags(self) -> Optional[List[str]]:
+        return self._tags
 
     @functools.cached_property
     def dataset_id(self) -> str:

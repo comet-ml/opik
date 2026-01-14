@@ -39,6 +39,7 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
               filters: [],
               groups: [],
               feedbackScores: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -52,6 +53,7 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
               filters: [],
               groups: [],
               feedbackScores: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -106,6 +108,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.TOKEN_USAGE,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -116,6 +119,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.COST,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -149,6 +153,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               chartType: CHART_TYPE.line,
               threadFilters: [],
               feedbackScores: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -159,6 +164,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_COUNT,
               chartType: CHART_TYPE.line,
               threadFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -169,6 +175,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_DURATION,
               chartType: CHART_TYPE.line,
               threadFilters: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -209,6 +216,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               chartType: CHART_TYPE.line,
               traceFilters: [],
               feedbackScores: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -219,6 +227,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.TRACE_COUNT,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -229,6 +238,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.TRACE_DURATION,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -239,6 +249,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.FAILED_GUARDRAILS,
               chartType: CHART_TYPE.bar,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -267,6 +278,69 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
           {
             i: "template-widget-9",
             x: 3,
+            y: 4,
+            w: 3,
+            h: 4,
+          },
+        ],
+      },
+      {
+        id: "template-section-4",
+        title: "Span metrics",
+        widgets: [
+          {
+            id: "template-widget-10",
+            title: "Span feedback scores",
+            type: WIDGET_TYPE.PROJECT_METRICS,
+            config: {
+              metricType: METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES,
+              chartType: CHART_TYPE.line,
+              spanFilters: [],
+              feedbackScores: [],
+              overrideDefaults: false,
+            },
+          },
+          {
+            id: "template-widget-11",
+            title: "Number of spans",
+            type: WIDGET_TYPE.PROJECT_METRICS,
+            config: {
+              metricType: METRIC_NAME_TYPE.SPAN_COUNT,
+              chartType: CHART_TYPE.line,
+              spanFilters: [],
+              overrideDefaults: false,
+            },
+          },
+          {
+            id: "template-widget-12",
+            title: "Span duration",
+            type: WIDGET_TYPE.PROJECT_METRICS,
+            config: {
+              metricType: METRIC_NAME_TYPE.SPAN_DURATION,
+              chartType: CHART_TYPE.line,
+              spanFilters: [],
+              overrideDefaults: false,
+            },
+          },
+        ],
+        layout: [
+          {
+            i: "template-widget-10",
+            x: 0,
+            y: 0,
+            w: 3,
+            h: 4,
+          },
+          {
+            i: "template-widget-11",
+            x: 3,
+            y: 0,
+            w: 3,
+            h: 4,
+          },
+          {
+            i: "template-widget-12",
+            x: 0,
             y: 4,
             w: 3,
             h: 4,
@@ -308,6 +382,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               projectId: "",
               metric: "trace_count",
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -319,6 +394,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               projectId: "",
               metric: "thread_count",
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -330,6 +406,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               projectId: "",
               metric: "error_count",
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -341,6 +418,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               projectId: "",
               metric: "duration.p50",
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -352,6 +430,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               projectId: "",
               metric: "total_estimated_cost_sum",
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -425,6 +504,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_COUNT,
               chartType: CHART_TYPE.bar,
               threadFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -435,6 +515,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.TRACE_COUNT,
               chartType: CHART_TYPE.bar,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -476,6 +557,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               chartType: CHART_TYPE.line,
               threadFilters: [],
               feedbackScores: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -487,6 +569,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               chartType: CHART_TYPE.line,
               traceFilters: [],
               feedbackScores: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -527,6 +610,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.TRACE_DURATION,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              overrideDefaults: false,
             },
           },
           {
@@ -537,6 +621,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_DURATION,
               chartType: CHART_TYPE.line,
               threadFilters: [],
+              overrideDefaults: false,
             },
           },
         ],
@@ -587,8 +672,11 @@ export const TEMPLATE_LIST: DashboardTemplate[] = [
   EXPERIMENT_COMPARISON_TEMPLATE,
 ];
 
-export const EXPERIMENTS_TEMPLATE_LIST: DashboardTemplate[] = [
-  EXPERIMENT_COMPARISON_TEMPLATE,
+export const PROJECT_TEMPLATE_LIST: DashboardTemplate[] = [
   PERFORMANCE_OVERVIEW_TEMPLATE,
   PROJECT_METRICS_TEMPLATE,
+];
+
+export const EXPERIMENTS_TEMPLATE_LIST: DashboardTemplate[] = [
+  EXPERIMENT_COMPARISON_TEMPLATE,
 ];

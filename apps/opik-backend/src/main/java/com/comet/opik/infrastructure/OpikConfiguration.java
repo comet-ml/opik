@@ -63,6 +63,9 @@ public class OpikConfiguration extends JobConfiguration {
     private OnlineScoringConfig onlineScoring = new OnlineScoringConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetExportConfig datasetExport = new DatasetExportConfig();
+
+    @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
     @Valid @NotNull @JsonProperty

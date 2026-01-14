@@ -59,11 +59,18 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const overrideDefaults = widget?.config?.overrideDefaults as
+    | boolean
+    | undefined;
 
   const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
     useMemo(() => {
       const { projectId: resolvedProjectId, infoMessage } =
-        resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
+        resolveProjectIdFromConfig(
+          widgetProjectId,
+          globalConfig.projectId,
+          overrideDefaults,
+        );
 
       const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
         globalConfig.dateRange,
@@ -76,18 +83,26 @@ const ProjectMetricsWidget: React.FunctionComponent<
         intervalStart,
         intervalEnd,
       };
-    }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+    }, [
+      widgetProjectId,
+      globalConfig.projectId,
+      globalConfig.dateRange,
+      overrideDefaults,
+    ]);
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
   const isCostMetric = metricName === METRIC_NAME_TYPE.COST;
   const isDurationMetric =
     metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
-    metricName === METRIC_NAME_TYPE.THREAD_DURATION;
+    metricName === METRIC_NAME_TYPE.THREAD_DURATION ||
+    metricName === METRIC_NAME_TYPE.SPAN_DURATION;
   const isCountMetric =
     metricName === METRIC_NAME_TYPE.TOKEN_USAGE ||
     metricName === METRIC_NAME_TYPE.TRACE_COUNT ||
-    metricName === METRIC_NAME_TYPE.THREAD_COUNT;
+    metricName === METRIC_NAME_TYPE.THREAD_COUNT ||
+    metricName === METRIC_NAME_TYPE.SPAN_COUNT ||
+    metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
 
@@ -95,7 +110,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
     (lineName: string) => {
       if (
         metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
-        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
+        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES &&
+        metricName !== METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES
       )
         return true;
       if (!feedbackScores || feedbackScores.length === 0) return true;
@@ -114,12 +130,13 @@ const ProjectMetricsWidget: React.FunctionComponent<
       CHART_TYPE.line;
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
+    const spanFilters = widget.config?.spanFilters as Filter[] | undefined;
 
     if (!projectId) {
       return (
         <DashboardWidget.EmptyState
           title="Project not configured"
-          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          message="This widget needs a project to display data. Select a default project for the dashboard or set a custom one in the widget settings."
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />
@@ -130,7 +147,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
-          message="Please configure this widget to display a metric"
+          message="Choose a metric to display in this widget"
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />
@@ -139,6 +156,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
     const validTraceFilters = traceFilters?.filter(isFilterValid);
     const validThreadFilters = threadFilters?.filter(isFilterValid);
+    const validSpanFilters = spanFilters?.filter(isFilterValid);
 
     const intervalType = interval as INTERVAL_TYPE;
     const description = interval
@@ -163,6 +181,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
+          spanFilters={validSpanFilters}
           filterLineCallback={filterLineCallback}
           renderValue={
             isCostMetric
@@ -189,7 +208,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
