@@ -19,7 +19,6 @@ import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -54,7 +53,7 @@ class CsvDatasetExportServiceImplTest {
     private static final String USER_NAME = "test-user";
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final UUID JOB_ID = UUID.randomUUID();
-    private static final Duration TTL = Duration.ofHours(24);
+    private static final io.dropwizard.util.Duration DEFAULT_TTL = io.dropwizard.util.Duration.hours(24);
 
     @BeforeEach
     void setUp() {
@@ -79,8 +78,11 @@ class CsvDatasetExportServiceImplTest {
                     return action;
                 });
 
+        // Mock: config returns default TTL
+        when(exportConfig.getDefaultTtl()).thenReturn(DEFAULT_TTL);
+
         // Mock: create new job
-        when(jobService.createJob(eq(DATASET_ID), eq(TTL))).thenReturn(Mono.just(newJob));
+        when(jobService.createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
 
         // Mock: Redis stream
         @SuppressWarnings("unchecked")
@@ -93,7 +95,7 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.getStreamName()).thenReturn("dataset-export-events");
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -109,7 +111,7 @@ class CsvDatasetExportServiceImplTest {
 
         // Verify the flow
         verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID)); // Initial check + double-check in lock
-        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(TTL));
+        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()));
 
         // Verify stream.add was called with correct message
         verify(mockStream, times(1)).add(any(StreamAddArgs.class));
@@ -124,7 +126,7 @@ class CsvDatasetExportServiceImplTest {
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -152,7 +154,7 @@ class CsvDatasetExportServiceImplTest {
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        service.startExport(DATASET_ID, TTL)
+        service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME))
@@ -169,7 +171,7 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.isEnabled()).thenReturn(false);
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, TTL)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -192,7 +194,7 @@ class CsvDatasetExportServiceImplTest {
                 .status(status)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
-                .expiresAt(Instant.now().plus(TTL))
+                .expiresAt(Instant.now().plus(DEFAULT_TTL.toJavaDuration()))
                 .createdBy(USER_NAME)
                 .build();
     }

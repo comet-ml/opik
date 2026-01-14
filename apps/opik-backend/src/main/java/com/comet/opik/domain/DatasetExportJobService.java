@@ -30,7 +30,25 @@ public interface DatasetExportJobService {
 
     Mono<List<DatasetExportJob>> findInProgressJobs(UUID datasetId);
 
+    /**
+     * Finds all export jobs for the current workspace.
+     * Returns all jobs regardless of status - the cleanup job handles removing old jobs.
+     * This is used to restore the export panel state after page refresh.
+     *
+     * @return Mono emitting list of all export jobs for the workspace
+     */
+    Mono<List<DatasetExportJob>> findAllJobs();
+
     Mono<DatasetExportJob> getJob(UUID jobId);
+
+    /**
+     * Marks a job as viewed by setting the viewed_at timestamp.
+     * This is used to track that a user has seen a failed job's error message.
+     *
+     * @param jobId The job ID to mark as viewed
+     * @return Mono completing when the job is marked as viewed
+     */
+    Mono<Void> markJobAsViewed(UUID jobId);
 
     Mono<Void> updateJobToProcessing(UUID jobId);
 
@@ -147,25 +165,60 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     }
 
     @Override
+    public Mono<List<DatasetExportJob>> findAllJobs() {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                List<DatasetExportJob> jobs = dao.findByWorkspace(workspaceId);
+
+                log.debug("Found '{}' export job(s) for workspace: '{}'", jobs.size(), workspaceId);
+
+                return jobs;
+            })).subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    @Override
     public Mono<DatasetExportJob> getJob(@NonNull UUID jobId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
 
-                // Find the job
+                return dao.findById(workspaceId, jobId)
+                        .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+            })).subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    @Override
+    public Mono<Void> markJobAsViewed(@NonNull UUID jobId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+
+                // Verify job exists
                 var job = dao.findById(workspaceId, jobId)
                         .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
 
-                // Update viewed_at only if it's not already set (first view only)
-                if (job.viewedAt() == null) {
-                    dao.updateViewedAt(workspaceId, jobId, Instant.now());
-                    log.debug("Marked export job '{}' as viewed for the first time", jobId);
+                // Idempotent: if already viewed, do nothing
+                if (job.viewedAt() != null) {
+                    log.debug("Export job '{}' already marked as viewed, skipping", jobId);
+                    return null;
                 }
 
-                return job;
-            })).subscribeOn(Schedulers.boundedElastic());
+                // Update viewed_at and last_updated_by
+                dao.updateViewedAt(workspaceId, jobId, Instant.now(), userName);
+                log.debug("Marked export job '{}' as viewed by '{}'", jobId, userName);
+
+                return null;
+            })).subscribeOn(Schedulers.boundedElastic()).then();
         });
     }
 
