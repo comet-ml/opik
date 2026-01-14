@@ -180,21 +180,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateStatus(workspaceId, jobId, DatasetExportStatus.PROCESSING, userName);
 
-                    // If no rows updated, check if job is already PROCESSING (idempotent operation for at-least-once delivery)
-                    if (updated == 0) {
-                        var job = dao.findById(workspaceId, jobId)
-                                .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
-
-                        if (job.status() == DatasetExportStatus.PROCESSING) {
-                            log.debug(
-                                    "Export job '{}' already in PROCESSING state, treating as successful (idempotent)",
-                                    jobId);
-                            return null; // Success - job already being processed
-                        }
-
-                        // Job exists but in wrong state (e.g., already COMPLETED or FAILED)
-                        throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
-                    }
+                    verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.PROCESSING, workspaceId, dao);
 
                     return null;
                 });
@@ -218,7 +204,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
                             downloadUrl, expiresAt, userName);
 
-                    verifyJobExistsOrThrow(updated, jobId);
+                    verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.COMPLETED, workspaceId, dao);
 
                     return null;
                 });
@@ -241,7 +227,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage,
                             userName);
 
-                    verifyJobExistsOrThrow(updated, jobId);
+                    verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.FAILED, workspaceId, dao);
 
                     return null;
                 });
@@ -253,17 +239,32 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     }
 
     /**
-     * Verifies that a job update operation affected at least one row.
-     * Throws NotFoundException if the job was not found or doesn't belong to the current workspace,
-     * or ConflictException if the update failed due to invalid state transition.
+     * Verifies that a job update operation succeeded, or checks for idempotency.
+     * <p>
+     * If the update affected 0 rows, checks if the job is already in the expected state
+     * (idempotent operation for at-least-once Redis Streams delivery). If the job is already
+     * in the expected state, the operation is treated as successful. Otherwise, throws NotFoundException.
      *
-     * @param updatedRows The number of rows affected by the update operation
-     * @param jobId       The ID of the job being updated
-     * @throws NotFoundException if no rows were updated (job not found or wrong workspace)
+     * @param updatedRows    The number of rows affected by the update operation
+     * @param jobId          The ID of the job being updated
+     * @param expectedStatus The expected status for idempotency check
+     * @param workspaceId    The workspace ID for security
+     * @param dao            The DAO to query the current job state
+     * @throws NotFoundException if the job doesn't exist, doesn't belong to workspace, or is in an unexpected state
      */
-    private void verifyJobExistsOrThrow(int updatedRows, UUID jobId) {
+    private void verifyUpdateOrCheckIdempotency(int updatedRows, UUID jobId, DatasetExportStatus expectedStatus,
+            String workspaceId, DatasetExportJobDAO dao) {
         if (updatedRows == 0) {
-            // Check if job exists at all to provide better error message
+            var job = dao.findById(workspaceId, jobId)
+                    .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+
+            if (job.status() == expectedStatus) {
+                log.debug("Export job '{}' already in '{}' state, treating as successful (idempotent)", jobId,
+                        expectedStatus);
+                return; // Success - job already in expected state
+            }
+
+            // Job exists but in wrong state
             throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
         }
     }
