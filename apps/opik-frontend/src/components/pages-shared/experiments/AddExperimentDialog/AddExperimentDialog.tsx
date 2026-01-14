@@ -5,6 +5,7 @@ import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/components/ui/checkbox";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import CodeBlockWithHeader from "@/components/shared/CodeBlockWithHeader/CodeBlockWithHeader";
+import CodeSectionTitle from "@/components/shared/CodeSectionTitle/CodeSectionTitle";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
@@ -167,16 +168,6 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 const DEMO_DATASET_NAME = "Opik Demo Questions";
 const INSTALL_COMMAND = "pip install opik";
-
-type SectionTitleProps = {
-  children: React.ReactNode;
-};
-
-const SectionTitle: React.FC<SectionTitleProps> = ({ children }) => (
-  <div className="comet-body-s-accented md:comet-body-s mb-3 overflow-x-auto whitespace-nowrap">
-    {children}
-  </div>
-);
 
 type AddExperimentDialogProps = {
   open: boolean;
@@ -386,7 +377,7 @@ eval_results = evaluate(
 
   const renderInstallSection = () => (
     <div>
-      <SectionTitle>2. Install the SDK</SectionTitle>
+      <CodeSectionTitle>2. Install the SDK</CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader title="Terminal" copyText={INSTALL_COMMAND}>
           <CodeHighlighter data={INSTALL_COMMAND} />
@@ -401,7 +392,7 @@ eval_results = evaluate(
 
   const renderExperimentCodeSection = () => (
     <div>
-      <SectionTitle>3. Create an Experiment</SectionTitle>
+      <CodeSectionTitle>3. Create an Experiment</CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
           <CodeHighlighter
@@ -495,7 +486,7 @@ eval_results = evaluate(
           {renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
-              <SectionTitle>1. Select dataset</SectionTitle>
+              <CodeSectionTitle>1. Select dataset</CodeSectionTitle>
               <LoadableSelectBox
                 options={options}
                 value={datasetName}

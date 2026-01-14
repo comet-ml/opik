@@ -1,6 +1,7 @@
 import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import CodeBlockWithHeader from "@/components/shared/CodeBlockWithHeader/CodeBlockWithHeader";
+import CodeSectionTitle from "@/components/shared/CodeSectionTitle/CodeSectionTitle";
 import useAppStore from "@/store/AppStore";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
@@ -17,16 +18,6 @@ type IntegrationTemplateProps = {
   withLineHighlights?: boolean;
   onRunCodeCallback?: () => void;
 };
-
-type SectionTitleProps = {
-  children: React.ReactNode;
-};
-
-const SectionTitle: React.FC<SectionTitleProps> = ({ children }) => (
-  <div className="comet-body-s-accented md:comet-body-s mb-3 overflow-x-auto whitespace-nowrap">
-    {children}
-  </div>
-);
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   apiKey,
@@ -86,9 +77,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderInstallSection = () => (
     <div>
-      <SectionTitle>
+      <CodeSectionTitle>
         1. Install Opik using pip from the command line
-      </SectionTitle>
+      </CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader title="Terminal" copyText={CODE_BLOCK_1}>
           <CodeHighlighter data={CODE_BLOCK_1} />
@@ -103,7 +94,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderRunCodeSection = () => (
     <div>
-      <SectionTitle>2. Run the following code to get started</SectionTitle>
+      <CodeSectionTitle>
+        2. Run the following code to get started
+      </CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader
           title="Python"
