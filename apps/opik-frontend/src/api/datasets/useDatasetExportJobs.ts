@@ -6,7 +6,7 @@ const getDatasetExportJobs = async ({
   signal,
 }: QueryFunctionContext): Promise<DatasetExportJob[]> => {
   const { data } = await api.get<DatasetExportJob[]>(
-    `${DATASETS_REST_ENDPOINT}export/jobs`,
+    `${DATASETS_REST_ENDPOINT}export-jobs`,
     { signal },
   );
 

@@ -19,6 +19,8 @@ import {
 } from "@/store/DatasetExportStore";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { useToast } from "@/components/ui/use-toast";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const DatasetRowActionsCell: React.FunctionComponent<
   CellContext<Dataset, unknown>
@@ -33,6 +35,9 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   const addExportJob = useAddExportJob();
   const setPanelExpanded = useSetPanelExpanded();
   const { toast } = useToast();
+  const isDatasetExportEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
+  );
 
   const deleteDatasetHandler = useCallback(() => {
     deleteDataset({
@@ -106,13 +111,15 @@ export const DatasetRowActionsCell: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={downloadDatasetHandler}
-            disabled={isExportStarting}
-          >
-            <Download className="mr-2 size-4" />
-            Download
-          </DropdownMenuItem>
+          {isDatasetExportEnabled && (
+            <DropdownMenuItem
+              onClick={downloadDatasetHandler}
+              disabled={isExportStarting}
+            >
+              <Download className="mr-2 size-4" />
+              Download
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={() => {
               setOpen(1);

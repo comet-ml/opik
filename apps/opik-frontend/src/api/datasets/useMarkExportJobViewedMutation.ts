@@ -13,7 +13,7 @@ type UseMarkExportJobViewedMutationParams = {
 const markExportJobViewed = async ({
   jobId,
 }: UseMarkExportJobViewedMutationParams): Promise<void> => {
-  await api.put(`${DATASETS_REST_ENDPOINT}export/jobs/${jobId}/viewed`);
+  await api.put(`${DATASETS_REST_ENDPOINT}export-jobs/${jobId}/viewed`);
 };
 
 export default function useMarkExportJobViewedMutation() {

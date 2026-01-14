@@ -3,16 +3,15 @@ import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { DatasetExportJob, DATASET_EXPORT_STATUS } from "@/types/datasets";
 
 type UseDatasetExportJobParams = {
-  datasetId: string;
   jobId: string;
 };
 
 const getDatasetExportJob = async (
   { signal }: QueryFunctionContext,
-  { datasetId, jobId }: UseDatasetExportJobParams,
+  { jobId }: UseDatasetExportJobParams,
 ): Promise<DatasetExportJob> => {
   const { data } = await api.get<DatasetExportJob>(
-    `${DATASETS_REST_ENDPOINT}${datasetId}/export/${jobId}`,
+    `${DATASETS_REST_ENDPOINT}export-jobs/${jobId}`,
     { signal },
   );
 
@@ -33,7 +32,7 @@ export default function useDatasetExportJob(
   return useQuery({
     queryKey: ["dataset-export-job", params],
     queryFn: (context) => getDatasetExportJob(context, params),
-    enabled: Boolean(params.datasetId && params.jobId),
+    enabled: Boolean(params.jobId),
     // Poll every 5 seconds until terminal status
     refetchInterval: (query) => {
       const status = query.state.data?.status;

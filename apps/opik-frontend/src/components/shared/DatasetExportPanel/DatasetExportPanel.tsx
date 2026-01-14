@@ -45,7 +45,6 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   // Poll for job status updates (every 5 seconds for PENDING/PROCESSING jobs)
   const { data: updatedJob } = useDatasetExportJob(
     {
-      datasetId: job.dataset_id,
       jobId: job.id,
     },
     {

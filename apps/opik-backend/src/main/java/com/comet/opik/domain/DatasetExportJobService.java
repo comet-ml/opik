@@ -200,28 +200,25 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return Mono.fromCallable(() -> {
-                template.inTransaction(WRITE, handle -> {
-                    var dao = handle.attach(DatasetExportJobDAO.class);
+            return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
 
-                    // Verify job exists
-                    var job = dao.findById(workspaceId, jobId)
-                            .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+                // Verify job exists
+                var job = dao.findById(workspaceId, jobId)
+                        .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
 
-                    // Idempotent: if already viewed, do nothing
-                    if (job.viewedAt() != null) {
-                        log.debug("Export job '{}' already marked as viewed, skipping", jobId);
-                        return null;
-                    }
-
-                    // Update viewed_at and last_updated_by
-                    dao.updateViewedAt(workspaceId, jobId, Instant.now(), userName);
-                    log.debug("Marked export job '{}' as viewed by '{}'", jobId, userName);
-
+                // Idempotent: if already viewed, do nothing
+                if (job.viewedAt() != null) {
+                    log.debug("Export job '{}' already marked as viewed, skipping", jobId);
                     return null;
-                });
+                }
+
+                // Update viewed_at and last_updated_by
+                dao.updateViewedAt(workspaceId, jobId, Instant.now(), userName);
+                log.debug("Marked export job '{}' as viewed by '{}'", jobId, userName);
+
                 return null;
-            }).subscribeOn(Schedulers.boundedElastic()).then();
+            })).subscribeOn(Schedulers.boundedElastic()).then();
         });
     }
 

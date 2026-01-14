@@ -816,32 +816,29 @@ public class DatasetsResource {
     }
 
     @GET
-    @Path("/{id}/export/{jobId}")
+    @Path("/export-jobs/{jobId}")
     @Operation(operationId = "getDatasetExportJob", summary = "Get dataset export job status", description = "Retrieves the current status of a dataset export job", responses = {
             @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
     @JsonView(DatasetExportJob.View.Public.class)
-    public Response getDatasetExportJob(
-            @PathParam("id") @NotNull UUID datasetId,
-            @PathParam("jobId") @NotNull UUID jobId) {
+    public Response getDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting export job '{}' for dataset '{}' on workspaceId '{}'", jobId, datasetId, workspaceId);
+        log.info("Getting export job '{}' on workspaceId '{}'", jobId, workspaceId);
 
         DatasetExportJob job = csvExportService.getJob(jobId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Found export job '{}' with status '{}' for dataset '{}' on workspaceId '{}'",
-                jobId, job.status(), datasetId, workspaceId);
+        log.info("Found export job '{}' with status '{}' on workspaceId '{}'", jobId, job.status(), workspaceId);
 
         return Response.ok(job).build();
     }
 
     @PUT
-    @Path("/export/jobs/{jobId}/viewed")
+    @Path("/export-jobs/{jobId}/viewed")
     @Operation(operationId = "markDatasetExportJobViewed", summary = "Mark dataset export job as viewed", description = "Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.", responses = {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
@@ -862,7 +859,7 @@ public class DatasetsResource {
     }
 
     @GET
-    @Path("/export/jobs")
+    @Path("/export-jobs")
     @Operation(operationId = "getDatasetExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
             @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetExportJob.class))))
     })
