@@ -32,9 +32,48 @@ public interface DatasetExportJobService {
 
     Mono<DatasetExportJob> getJob(UUID jobId);
 
-    Mono<Void> updateJobToCompleted(UUID jobId, String filePath);
+    Mono<Void> updateJobToProcessing(UUID jobId);
+
+    Mono<Void> updateJobToCompleted(UUID jobId, String filePath, Instant expiresAt);
 
     Mono<Void> updateJobToFailed(UUID jobId, String errorMessage);
+
+    /**
+     * Finds all expired export jobs across all workspaces.
+     *
+     * <p><strong>Security Note:</strong> This method operates across ALL workspaces and should ONLY be called
+     * by system-level cleanup jobs (e.g., {@code DatasetExportCleanupJob}). The caller MUST set
+     * {@link RequestContext#SYSTEM_USER} in the reactive context before calling this method.</p>
+     *
+     * @param now   The current timestamp to compare against expiration
+     * @param limit Maximum number of expired jobs to return
+     * @return Mono emitting list of expired export jobs across all workspaces
+     */
+    Mono<List<DatasetExportJob>> findExpiredCompletedJobs(Instant now, int limit);
+
+    /**
+     * Finds all failed export jobs that have been viewed by users across all workspaces.
+     *
+     * <p><strong>Security Note:</strong> This method operates across ALL workspaces and should ONLY be called
+     * by system-level cleanup jobs (e.g., {@code DatasetExportCleanupJob}). The caller MUST set
+     * {@link RequestContext#SYSTEM_USER} in the reactive context before calling this method.</p>
+     *
+     * @param limit Maximum number of viewed failed jobs to return
+     * @return Mono emitting list of viewed failed export jobs across all workspaces
+     */
+    Mono<List<DatasetExportJob>> findViewedFailedJobs(int limit);
+
+    /**
+     * Deletes expired export jobs by their IDs across all workspaces.
+     *
+     * <p><strong>Security Note:</strong> This method operates across ALL workspaces and should ONLY be called
+     * by system-level cleanup jobs (e.g., {@code DatasetExportCleanupJob}). The caller MUST set
+     * {@link RequestContext#SYSTEM_USER} in the reactive context before calling this method.</p>
+     *
+     * @param jobIds Set of job IDs to delete
+     * @return Mono emitting number of deleted records
+     */
+    Mono<Integer> deleteExpiredJobs(Set<UUID> jobIds);
 }
 
 @Slf4j
@@ -47,6 +86,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             DatasetExportStatus.PROCESSING);
 
     public static final String EXPORT_JOB_NOT_FOUND = "Export job not found: '%s'";
+    public static final String INVALID_STATE_TRANSITION = "Invalid state transition for export job: '%s'. Current status does not allow this operation.";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -113,6 +153,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
 
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
+
                 return dao.findById(workspaceId, jobId)
                         .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
             })).subscribeOn(Schedulers.boundedElastic());
@@ -120,7 +161,27 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     }
 
     @Override
-    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath) {
+    public Mono<Void> updateJobToProcessing(@NonNull UUID jobId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return Mono.fromCallable(() -> {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetExportJobDAO.class);
+                    int updated = dao.markPendingJobAsProcessing(workspaceId, jobId, DatasetExportStatus.PROCESSING,
+                            userName);
+                    verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.PROCESSING, workspaceId, dao);
+                    return null;
+                });
+                return null;
+            }).subscribeOn(Schedulers.boundedElastic()).then();
+        });
+    }
+
+    @Override
+    public Mono<Void> updateJobToCompleted(@NonNull UUID jobId, @NonNull String filePath,
+            @NonNull Instant expiresAt) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -129,14 +190,10 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
-                            userName);
-
-                    verifyJobExistsOrThrow(updated, jobId);
-
+                            expiresAt, userName);
+                    verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.COMPLETED, workspaceId, dao);
                     return null;
                 });
-
-                log.info("Updated export job: '{}' to status: 'COMPLETED'", jobId);
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });
@@ -153,29 +210,84 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage,
                             userName);
-
-                    verifyJobExistsOrThrow(updated, jobId);
-
+                    verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.FAILED, workspaceId, dao);
                     return null;
                 });
-
-                log.info("Updated export job: '{}' to status: 'FAILED'", jobId);
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });
     }
 
     /**
-     * Verifies that a job update operation affected at least one row.
-     * Throws NotFoundException if the job was not found or doesn't belong to the current workspace.
+     * Verifies that a job was successfully updated to the expected status and logs the transition.
+     * <p>
+     * If the update affected 0 rows, checks if the job is already in the expected state
+     * (idempotent). If not, throws an appropriate exception.
      *
-     * @param updatedRows The number of rows affected by the update operation
-     * @param jobId       The ID of the job being updated
-     * @throws NotFoundException if no rows were updated
+     * @param updatedRows    The number of rows affected by the update operation
+     * @param jobId          The ID of the job being updated
+     * @param expectedStatus The status the job should now be in
+     * @param workspaceId    The workspace ID for security
+     * @param dao            The DAO to query the current job state
+     * @throws NotFoundException     if the job doesn't exist or doesn't belong to workspace
+     * @throws IllegalStateException if the job exists but is in an unexpected state
      */
-    private void verifyJobExistsOrThrow(int updatedRows, UUID jobId) {
-        if (updatedRows == 0) {
-            throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
+    private void verifyJobUpdatedToStatus(int updatedRows, UUID jobId, DatasetExportStatus expectedStatus,
+            String workspaceId, DatasetExportJobDAO dao) {
+        if (updatedRows > 0) {
+            log.info("Export job '{}' transitioned to status '{}'", jobId, expectedStatus);
+            return;
         }
+
+        var job = dao.findById(workspaceId, jobId)
+                .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+
+        // Job already in expected state - idempotent success
+        if (job.status() == expectedStatus) {
+            log.debug("Export job '{}' already in '{}' state", jobId, expectedStatus);
+            return;
+        }
+
+        // Job exists but in wrong state - state machine violation
+        log.warn("Export job '{}' state transition failed: expected '{}' but found '{}'",
+                jobId, expectedStatus, job.status());
+        throw new IllegalStateException(INVALID_STATE_TRANSITION.formatted(jobId));
+    }
+
+    @Override
+    public Mono<List<DatasetExportJob>> findExpiredCompletedJobs(@NonNull Instant now, int limit) {
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.findExpiredCompletedJobs(userName, now, limit);
+            })).subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    @Override
+    public Mono<List<DatasetExportJob>> findViewedFailedJobs(int limit) {
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.findViewedFailedJobs(userName, limit);
+            })).subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    @Override
+    public Mono<Integer> deleteExpiredJobs(@NonNull Set<UUID> jobIds) {
+        if (jobIds.isEmpty()) {
+            return Mono.just(0);
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetExportJobDAO.class);
+                return dao.deleteJobsByIds(userName, jobIds);
+            })).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 }

@@ -462,6 +462,12 @@ datasetExport:
   # Default: 100
   # Description: Number of items to fetch per batch when streaming dataset items
   itemBatchSize: ${DATASET_EXPORT_ITEM_BATCH_SIZE:-100}
+  # Default: 5m
+  # Description: Timeout for cleanup job execution (how long the cleanup can run)
+  cleanupTimeout: ${DATASET_EXPORT_CLEANUP_TIMEOUT:-5m}
+  # Default: 1s
+  # Description: How long to wait for acquiring the distributed lock for cleanup
+  cleanupLockWaitTime: ${DATASET_EXPORT_CLEANUP_LOCK_WAIT_TIME:-1s}
 
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
