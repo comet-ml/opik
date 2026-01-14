@@ -86,7 +86,9 @@ def test_streaming_starts_evaluation_before_complete_download(
             "read_and_parse_stream",
             side_effect=tracked_read_and_parse_stream,
         ),
-        mock.patch.object(engine, "EVALUATION_STREAM_DATASET_BATCH_SIZE", TEST_BATCH_SIZE),
+        mock.patch.object(
+            engine, "EVALUATION_STREAM_DATASET_BATCH_SIZE", TEST_BATCH_SIZE
+        ),
     ):
         # Run evaluation with streaming
         evaluation_result = opik.evaluate(
