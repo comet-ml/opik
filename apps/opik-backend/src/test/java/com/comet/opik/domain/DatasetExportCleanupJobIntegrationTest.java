@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -52,25 +53,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DatasetExportCleanupJobIntegrationTest {
 
-    private static final String TEST_WORKSPACE_ID = "test-workspace";
+    private final String TEST_WORKSPACE_ID = "test-workspace";
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
-    private static final Network NETWORK = Network.newNetwork();
+    private final Network NETWORK = Network.newNetwork();
 
-    private static final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils
             .newZookeeperContainer(false, NETWORK);
 
-    private static final ClickHouseContainer CLICK_HOUSE = ClickHouseContainerUtils
+    private final ClickHouseContainer CLICK_HOUSE = ClickHouseContainerUtils
             .newClickHouseContainer(false, NETWORK, ZOOKEEPER_CONTAINER);
 
-    private static final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+
+    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 
     @RegisterApp
-    private static final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension APP;
 
-    static {
-        Startables.deepStart(REDIS, ZOOKEEPER_CONTAINER, CLICK_HOUSE, MYSQL).join();
+    {
+        Startables.deepStart(REDIS, ZOOKEEPER_CONTAINER, CLICK_HOUSE, MYSQL, MINIO).join();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICK_HOUSE, DATABASE_NAME);
@@ -78,17 +81,17 @@ class DatasetExportCleanupJobIntegrationTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE);
 
-        try {
-            APP = newTestDropwizardAppExtension(
-                    AppContextConfig.builder()
-                            .jdbcUrl(MYSQL.getJdbcUrl())
-                            .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                            .redisUrl(REDIS.getRedisURI())
-                            .build());
-        } catch (Exception e) {
-            log.error("Failed to initialize Dropwizard extension", e);
-            throw new RuntimeException(e);
-        }
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
+
+        APP = newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .minioUrl(minioUrl)
+                        .isMinIO(true)
+                        .build());
     }
 
     private TransactionTemplate transactionTemplate;
@@ -110,6 +113,7 @@ class DatasetExportCleanupJobIntegrationTest {
         CLICK_HOUSE.stop();
         ZOOKEEPER_CONTAINER.stop();
         REDIS.stop();
+        MINIO.stop();
         NETWORK.close();
     }
 
@@ -130,13 +134,13 @@ class DatasetExportCleanupJobIntegrationTest {
         UUID datasetId = UUID.randomUUID();
 
         UUID expiredJobId1 = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                null, Instant.now().minusSeconds(3600)); // No file path to avoid S3 dependency in tests
+                "exports/test/expired-job1.csv", Instant.now().minusSeconds(3600));
 
         UUID expiredJobId2 = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                null, Instant.now().minusSeconds(1800)); // No file path to avoid S3 dependency in tests
+                "exports/test/expired-job2.csv", Instant.now().minusSeconds(1800));
 
         UUID activeJobId = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                null, Instant.now().plusSeconds(3600)); // No file path to avoid S3 dependency in tests
+                "exports/test/active-job.csv", Instant.now().plusSeconds(3600));
 
         // Verify jobs exist before cleanup
         assertThat(findJobById(expiredJobId1)).isPresent();
@@ -166,15 +170,17 @@ class DatasetExportCleanupJobIntegrationTest {
         UUID datasetId = UUID.randomUUID();
 
         UUID viewedFailedJobId1 = createFailedJob(workspaceId, datasetId,
-                null, // No file path - failed jobs typically don't have files
+                "exports/test/failed-job1.csv",
                 "Export failed due to error",
                 Instant.now().minusSeconds(7200));
 
-        UUID viewedFailedJobId2 = createFailedJob(workspaceId, datasetId, null,
+        UUID viewedFailedJobId2 = createFailedJob(workspaceId, datasetId,
+                "exports/test/failed-job2.csv",
                 "Another export failure",
                 Instant.now().minusSeconds(3600));
 
-        UUID unviewedFailedJobId = createFailedJob(workspaceId, datasetId, null,
+        UUID unviewedFailedJobId = createFailedJob(workspaceId, datasetId,
+                "exports/test/unviewed-failed.csv",
                 "Not viewed yet", null);
 
         // Verify jobs exist before cleanup
@@ -205,7 +211,7 @@ class DatasetExportCleanupJobIntegrationTest {
         UUID datasetId = UUID.randomUUID();
 
         UUID expiredJobId = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                null, Instant.now().minusSeconds(3600)); // No file path to avoid S3 dependency in tests
+                "exports/test/security-test.csv", Instant.now().minusSeconds(3600));
 
         // Verify job exists
         assertThat(findJobById(expiredJobId)).isPresent();
