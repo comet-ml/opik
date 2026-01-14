@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -19,6 +20,8 @@ import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -47,6 +50,9 @@ class CsvDatasetExportServiceImplTest {
     @Mock
     private LockService lockService;
 
+    @Mock
+    private FileService fileService;
+
     private CsvDatasetExportServiceImpl service;
 
     private static final String WORKSPACE_ID = "test-workspace";
@@ -57,7 +63,7 @@ class CsvDatasetExportServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService);
+        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService, fileService);
     }
 
     @Test
@@ -185,6 +191,63 @@ class CsvDatasetExportServiceImplTest {
         // Verify no job service calls were made
         verify(jobService, never()).findInProgressJobs(any());
         verify(jobService, never()).createJob(any(), any());
+    }
+
+    @Test
+    void downloadExport_shouldReturnInputStream_whenJobIsCompleted() {
+        // Given
+        String filePath = "exports/test-file.csv";
+        DatasetExportJob completedJob = DatasetExportJob.builder()
+                .id(JOB_ID)
+                .datasetId(DATASET_ID)
+                .status(DatasetExportStatus.COMPLETED)
+                .filePath(filePath)
+                .createdAt(Instant.now())
+                .lastUpdatedAt(Instant.now())
+                .expiresAt(Instant.now().plus(DEFAULT_TTL.toJavaDuration()))
+                .createdBy(USER_NAME)
+                .build();
+
+        InputStream mockInputStream = new ByteArrayInputStream("test,data".getBytes());
+
+        when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(completedJob));
+        when(fileService.download(filePath)).thenReturn(mockInputStream);
+
+        // When
+        Mono<InputStream> result = service.downloadExport(JOB_ID)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .assertNext(inputStream -> assertThat(inputStream).isNotNull())
+                .verifyComplete();
+
+        verify(jobService).getJob(JOB_ID);
+        verify(fileService).download(filePath);
+    }
+
+    @Test
+    void downloadExport_shouldReturnError_whenJobIsNotCompleted() {
+        // Given
+        DatasetExportJob pendingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
+
+        when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(pendingJob));
+
+        // When
+        Mono<InputStream> result = service.downloadExport(JOB_ID)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.NotFoundException)
+                .verify();
+
+        verify(jobService).getJob(JOB_ID);
+        verify(fileService, never()).download(any());
     }
 
     private DatasetExportJob createJob(UUID jobId, DatasetExportStatus status) {

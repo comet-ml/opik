@@ -838,7 +838,7 @@ public class DatasetsResource {
     }
 
     @PUT
-    @Path("/export-jobs/{jobId}/viewed")
+    @Path("/export-jobs/{jobId}/mark-viewed")
     @Operation(operationId = "markDatasetExportJobViewed", summary = "Mark dataset export job as viewed", description = "Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.", responses = {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
@@ -877,5 +877,41 @@ public class DatasetsResource {
         log.info("Found '{}' export job(s) for workspaceId '{}'", jobs.size(), workspaceId);
 
         return Response.ok(jobs).build();
+    }
+
+    @GET
+    @Path("/export-jobs/{jobId}/download")
+    @Produces("text/csv")
+    @Operation(operationId = "downloadDatasetExport", summary = "Download dataset export file", description = "Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.", responses = {
+            @ApiResponse(responseCode = "200", description = "CSV file content", content = @Content(schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "400", description = "Export job is not ready for download"),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    public Response downloadDatasetExport(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Downloading export file for job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        // Get job to extract dataset name for filename
+        DatasetExportJob job = csvExportService.getJob(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        var inputStream = csvExportService.downloadExport(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        // Generate filename from dataset name or fallback to job ID
+        String filename = job != null && job.datasetName() != null
+                ? job.datasetName() + ".csv"
+                : "dataset-export-" + jobId + ".csv";
+
+        log.info("Completed download for export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        return Response.ok(inputStream)
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Type", "text/csv")
+                .build();
     }
 }

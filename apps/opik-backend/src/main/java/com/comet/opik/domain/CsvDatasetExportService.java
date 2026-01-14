@@ -1,20 +1,25 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetExportJob;
+import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,6 +47,17 @@ public interface CsvDatasetExportService {
      * @return Mono emitting list of all export jobs for the workspace
      */
     Mono<List<DatasetExportJob>> findAllJobs();
+
+    /**
+     * Downloads the exported CSV file for a completed job.
+     * This proxies access to the file storage (MinIO/S3) to avoid exposing internal URLs.
+     *
+     * @param jobId The job ID to download
+     * @return Mono emitting InputStream of the CSV file content
+     * @throws NotFoundException if job doesn't exist or file is not available
+     * @throws IllegalStateException if job is not in COMPLETED status
+     */
+    Mono<InputStream> downloadExport(UUID jobId);
 }
 
 @Slf4j
@@ -54,17 +70,20 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     private final RedissonReactiveClient redisClient;
     private final DatasetExportConfig exportConfig;
     private final LockService lockService;
+    private final FileService fileService;
 
     @Inject
     public CsvDatasetExportServiceImpl(
             @NonNull DatasetExportJobService jobService,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("datasetExport") DatasetExportConfig exportConfig,
-            @NonNull LockService lockService) {
+            @NonNull LockService lockService,
+            @NonNull FileService fileService) {
         this.jobService = jobService;
         this.redisClient = redisClient;
         this.exportConfig = exportConfig;
         this.lockService = lockService;
+        this.fileService = fileService;
     }
 
     @Override
@@ -155,5 +174,22 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     @Override
     public Mono<List<DatasetExportJob>> findAllJobs() {
         return jobService.findAllJobs();
+    }
+
+    @Override
+    public Mono<InputStream> downloadExport(@NonNull UUID jobId) {
+        return jobService.getJob(jobId)
+                .flatMap(job -> {
+
+                    if (job.status() != DatasetExportStatus.COMPLETED) {
+                        return Mono
+                                .error(new NotFoundException("Export file not found for job: '%s'".formatted(jobId)));
+                    }
+
+                    log.info("Downloading export file for job: '{}', filePath: '{}'", jobId, job.filePath());
+
+                    return Mono.fromCallable(() -> fileService.download(job.filePath()))
+                            .subscribeOn(Schedulers.boundedElastic());
+                });
     }
 }

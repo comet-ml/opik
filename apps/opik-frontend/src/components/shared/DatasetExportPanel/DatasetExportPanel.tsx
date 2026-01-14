@@ -28,6 +28,7 @@ import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewe
 import { DATASET_EXPORT_STATUS } from "@/types/datasets";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useToast } from "@/components/ui/use-toast";
+import { BASE_API_URL, DATASETS_REST_ENDPOINT } from "@/api/api";
 
 interface ExportJobItemProps {
   jobInfo: ExportJobInfo;
@@ -123,10 +124,9 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   const isFailed = job.status === DATASET_EXPORT_STATUS.FAILED;
 
   const handleDownload = () => {
-    if (job.download_url) {
-      window.open(job.download_url, "_blank");
-      removeJob(job.id);
-    }
+    // Use the proxy download endpoint instead of direct MinIO URL
+    const downloadUrl = `${BASE_API_URL}${DATASETS_REST_ENDPOINT}export-jobs/${job.id}/download`;
+    window.open(downloadUrl, "_blank");
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
@@ -150,23 +150,8 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     return null;
   };
 
-  // Render action button (shown on hover or for failed state)
+  // Render action button (shown on hover for completed, always for failed)
   const renderActionButton = () => {
-    if (isLoading && isHovered) {
-      return (
-        <TooltipWrapper content="Cancel">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleDismiss}
-            className="size-5"
-          >
-            <X className="size-4 text-muted-foreground" />
-          </Button>
-        </TooltipWrapper>
-      );
-    }
-
     if (isCompleted && isHovered) {
       return (
         <TooltipWrapper content="Download">
@@ -283,7 +268,8 @@ const DatasetExportPanel: React.FC = () => {
   const handleClosePanel = (e: React.MouseEvent) => {
     e.stopPropagation();
     // Remove all jobs when closing panel
-    activeJobs.forEach((jobInfo) => removeJob(jobInfo.job.id));
+    // Use slice() to create a defensive copy to avoid skipping items during iteration
+    activeJobs.slice().forEach((jobInfo) => removeJob(jobInfo.job.id));
   };
 
   return (

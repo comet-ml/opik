@@ -30,8 +30,15 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
 
   addJob: (job, datasetName) =>
     set((state) => {
-      const newJobs = new Map(state.activeJobs);
+      // Create new Map with the new job first (most recent at top)
+      const newJobs = new Map<string, ExportJobInfo>();
       newJobs.set(job.id, { job, datasetName });
+      // Then add existing jobs
+      for (const [id, jobInfo] of state.activeJobs) {
+        if (id !== job.id) {
+          newJobs.set(id, jobInfo);
+        }
+      }
       return { activeJobs: newJobs, isPanelExpanded: true };
     }),
 
@@ -62,15 +69,26 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
       // Only hydrate once and don't overwrite existing jobs
       if (state.isHydrated) return state;
 
-      const newJobs = new Map(state.activeJobs);
+      // Create a new Map preserving the order from the API (most recent first)
+      // First add all jobs from API in order, then merge any existing jobs
+      const newJobs = new Map<string, ExportJobInfo>();
+
+      // Add API jobs first (they come ordered from backend)
       for (const job of jobs) {
-        if (!newJobs.has(job.id)) {
-          newJobs.set(job.id, {
-            job,
-            datasetName: job.dataset_name || "Unknown Dataset",
-          });
+        newJobs.set(job.id, {
+          job,
+          datasetName: job.dataset_name || "Unknown Dataset",
+        });
+      }
+
+      // Merge any existing jobs that aren't in the API response
+      // (these would be jobs added during the current session before hydration)
+      for (const [id, jobInfo] of state.activeJobs) {
+        if (!newJobs.has(id)) {
+          newJobs.set(id, jobInfo);
         }
       }
+
       return {
         activeJobs: newJobs,
         isHydrated: true,
