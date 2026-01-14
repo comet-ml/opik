@@ -10,9 +10,7 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
-import CodeExecutor from "@/components/pages-shared/onboarding/CodeExecutor/CodeExecutor";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
-import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { buildDocsUrl } from "@/lib/utils";
 import { SquareArrowOutUpRight } from "lucide-react";
@@ -169,15 +167,6 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 const DEMO_DATASET_NAME = "Opik Demo Questions";
 const INSTALL_COMMAND = "pip install opik";
-
-// Execution logs for CodeExecutor
-const EXECUTION_LOGS = [
-  "%cmd% pip install opik",
-  "Installing opik...",
-  "Successfully installed opik",
-  "%cmd% python experiment.py",
-  "Running experiment...",
-];
 
 type SectionTitleProps = {
   children: React.ReactNode;
@@ -344,8 +333,6 @@ eval_results = evaluate(
     apiKey,
   });
 
-  const canExecuteCode = apiKey && Boolean(CODE_EXECUTOR_SERVICE_URL);
-
   const { data, isLoading } = useDatasetsList(
     {
       workspaceName,
@@ -427,25 +414,6 @@ eval_results = evaluate(
     );
   };
 
-  const renderCodeSection = () => {
-    if (canExecuteCode) {
-      return (
-        <CodeExecutor
-          executionUrl="/api/execute/experiment"
-          executionLogs={EXECUTION_LOGS}
-          data={codeWithConfig}
-          copyData={codeWithConfigToCopy}
-          apiKey={apiKey}
-          workspaceName={workspaceName}
-        />
-      );
-    }
-
-    return (
-      <CodeHighlighter data={codeWithConfig} copyData={codeWithConfigToCopy} />
-    );
-  };
-
   const renderInstallSection = () => (
     <div>
       <SectionTitle>2. Install the SDK</SectionTitle>
@@ -465,14 +433,17 @@ eval_results = evaluate(
     <div>
       <SectionTitle>3. Create an Experiment</SectionTitle>
       {isPhonePortrait ? (
-        <CodeBlockWithHeader
-          title="Python"
-          copyText={canExecuteCode ? undefined : codeWithConfigToCopy}
-        >
-          {renderCodeSection()}
+        <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
+          <CodeHighlighter
+            data={codeWithConfig}
+            copyData={codeWithConfigToCopy}
+          />
         </CodeBlockWithHeader>
       ) : (
-        renderCodeSection()
+        <CodeHighlighter
+          data={codeWithConfig}
+          copyData={codeWithConfigToCopy}
+        />
       )}
     </div>
   );
