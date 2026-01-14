@@ -66,8 +66,8 @@ class CsvDatasetExportProcessorImplTest {
 
     @Test
     void generateAndUploadCsv_shouldGenerateCsvAndUpload_whenItemsExist() {
-        // Given
-        Map<String, List<String>> columns = new HashMap<>();
+        // Given - Use LinkedHashMap to preserve insertion order (as DAO now does)
+        Map<String, List<String>> columns = new LinkedHashMap<>();
         columns.put("name", List.of("String"));
         columns.put("age", List.of("Int"));
 
@@ -102,11 +102,11 @@ class CsvDatasetExportProcessorImplTest {
         verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
         // Verify CSV content in uploaded part
-        // Columns are sorted alphabetically: age, name
+        // Columns preserve insertion order from LinkedHashMap: name, age
         String csvContent = new String(dataCaptor.getValue());
-        assertThat(csvContent).contains("age,name"); // Headers (alphabetically sorted)
-        assertThat(csvContent).contains("30,Alice"); // First row (values in header order)
-        assertThat(csvContent).contains("25,Bob"); // Second row
+        assertThat(csvContent).contains("name,age"); // Headers (insertion order)
+        assertThat(csvContent).contains("Alice,30"); // First row (values in header order)
+        assertThat(csvContent).contains("Bob,25"); // Second row
 
         // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
@@ -178,11 +178,11 @@ class CsvDatasetExportProcessorImplTest {
         verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
         String csvContent = new String(dataCaptor.getValue());
-        // Verify headers are present (sorted alphabetically: age, city, name)
-        assertThat(csvContent).containsPattern("age.*city.*name");
-        // Verify data row with empty city value (values in header order: age, city, name)
-        assertThat(csvContent).contains("30"); // age
+        // Verify headers are present (insertion order from LinkedHashMap: name, age, city)
+        assertThat(csvContent).containsPattern("name.*age.*city");
+        // Verify data row with empty city value
         assertThat(csvContent).contains("Alice"); // name
+        assertThat(csvContent).contains("30"); // age
 
         // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
@@ -246,10 +246,9 @@ class CsvDatasetExportProcessorImplTest {
     }
 
     @Test
-    void generateAndUploadCsv_shouldSortColumnsAlphabetically_whenColumnsAreUnordered() {
-        // Given - Use HashMap which doesn't guarantee order
-        // This simulates the real behavior where DAO returns HashMap
-        Map<String, List<String>> columns = new HashMap<>();
+    void generateAndUploadCsv_shouldPreserveColumnInsertionOrder_whenUsingLinkedHashMap() {
+        // Given - Use LinkedHashMap to preserve insertion order (as DAO now does)
+        Map<String, List<String>> columns = new LinkedHashMap<>();
         columns.put("zebra", List.of("String"));
         columns.put("apple", List.of("String"));
         columns.put("mango", List.of("String"));
@@ -274,18 +273,18 @@ class CsvDatasetExportProcessorImplTest {
                 .assertNext(filePath -> assertThat(filePath).isNotEmpty())
                 .verifyComplete();
 
-        // Verify CSV content has columns sorted alphabetically
+        // Verify CSV content preserves insertion order from LinkedHashMap
         ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
         String csvContent = new String(dataCaptor.getValue());
         String[] lines = csvContent.split("\n");
 
-        // First line should be header with columns in alphabetical order
-        assertThat(lines[0].trim()).isEqualTo("apple,banana,mango,zebra");
+        // First line should be header with columns in insertion order
+        assertThat(lines[0].trim()).isEqualTo("zebra,apple,mango,banana");
 
         // Second line should have values in the same order as headers
-        assertThat(lines[1].trim()).isEqualTo("a-value,b-value,m-value,z-value");
+        assertThat(lines[1].trim()).isEqualTo("z-value,a-value,m-value,b-value");
     }
 
     private DatasetItem createItem(UUID id, Map<String, JsonNode> data) {
