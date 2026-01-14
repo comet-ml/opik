@@ -53,5 +53,6 @@ WHERE dataset_id NOT IN (
     FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
 );
 
---rollback DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions WHERE dataset_version_id = dataset_id;
+--rollback empty
+--rollback -- Note: Backfilled version-1 snapshots cannot be safely rolled back. Manual cleanup required if needed.
 

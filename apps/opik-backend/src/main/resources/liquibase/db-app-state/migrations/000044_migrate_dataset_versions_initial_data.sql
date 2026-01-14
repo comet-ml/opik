@@ -42,6 +42,7 @@ WHERE d.id NOT IN (
     WHERE tag = 'latest'
 );
 
---rollback DELETE FROM dataset_version_tags WHERE tag = 'latest' AND version_id = dataset_id;
---rollback DELETE FROM dataset_versions WHERE id = dataset_id;
+--rollback empty
+--rollback -- Note: Initial dataset version and 'latest' tag backfill is irreversible and cannot be safely rolled back.
+--rollback -- Manual cleanup required if rollback is necessary.
 
