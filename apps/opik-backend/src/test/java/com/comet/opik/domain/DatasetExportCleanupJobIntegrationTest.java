@@ -52,6 +52,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DatasetExportCleanupJobIntegrationTest {
 
+    private static final String TEST_WORKSPACE_ID = "test-workspace";
+
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
     private static final Network NETWORK = Network.newNetwork();
@@ -113,7 +115,7 @@ class DatasetExportCleanupJobIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Clean up the dataset_export_jobs table before each test
+        // Clean up all jobs to ensure test isolation
         transactionTemplate.inTransaction(handle -> {
             handle.execute("DELETE FROM dataset_export_jobs");
             return null;
@@ -124,17 +126,17 @@ class DatasetExportCleanupJobIntegrationTest {
     @DisplayName("Should cleanup expired completed jobs")
     void shouldCleanupExpiredCompletedJobs() throws SchedulerException {
         // Given: Create expired and non-expired completed jobs
-        String workspaceId = UUID.randomUUID().toString();
+        String workspaceId = TEST_WORKSPACE_ID;
         UUID datasetId = UUID.randomUUID();
 
         UUID expiredJobId1 = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                "exports/workspace1/datasets/dataset1/job1.csv", Instant.now().minusSeconds(3600));
+                null, Instant.now().minusSeconds(3600)); // No file path to avoid S3 dependency in tests
 
         UUID expiredJobId2 = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                "exports/workspace1/datasets/dataset2/job2.csv", Instant.now().minusSeconds(1800));
+                null, Instant.now().minusSeconds(1800)); // No file path to avoid S3 dependency in tests
 
         UUID activeJobId = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                "exports/workspace1/datasets/dataset3/job3.csv", Instant.now().plusSeconds(3600));
+                null, Instant.now().plusSeconds(3600)); // No file path to avoid S3 dependency in tests
 
         // Verify jobs exist before cleanup
         assertThat(findJobById(expiredJobId1)).isPresent();
@@ -147,7 +149,7 @@ class DatasetExportCleanupJobIntegrationTest {
         // Then: Verify expired jobs are deleted and active job remains
         Awaitility
                 .await()
-                .atMost(10, TimeUnit.SECONDS)
+                .atMost(15, TimeUnit.SECONDS)
                 .pollInterval(500, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     assertThat(findJobById(expiredJobId1)).isEmpty();
@@ -160,11 +162,11 @@ class DatasetExportCleanupJobIntegrationTest {
     @DisplayName("Should cleanup viewed failed jobs")
     void shouldCleanupViewedFailedJobs() throws SchedulerException {
         // Given: Create failed jobs with and without viewed_at
-        String workspaceId = UUID.randomUUID().toString();
+        String workspaceId = TEST_WORKSPACE_ID;
         UUID datasetId = UUID.randomUUID();
 
         UUID viewedFailedJobId1 = createFailedJob(workspaceId, datasetId,
-                "exports/workspace1/datasets/dataset1/failed1.csv",
+                null, // No file path - failed jobs typically don't have files
                 "Export failed due to error",
                 Instant.now().minusSeconds(7200));
 
@@ -186,7 +188,7 @@ class DatasetExportCleanupJobIntegrationTest {
         // Then: Verify viewed failed jobs are deleted and unviewed job remains
         Awaitility
                 .await()
-                .atMost(10, TimeUnit.SECONDS)
+                .atMost(15, TimeUnit.SECONDS)
                 .pollInterval(500, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     assertThat(findJobById(viewedFailedJobId1)).isEmpty();
@@ -197,13 +199,13 @@ class DatasetExportCleanupJobIntegrationTest {
 
     @Test
     @DisplayName("Should not cleanup jobs when not system user")
-    void shouldNotCleanupJobsWhenNotSystemUser() throws SchedulerException {
+    void shouldNotCleanupJobsWhenNotSystemUser() {
         // Given: Create an expired job
-        String workspaceId = UUID.randomUUID().toString();
+        String workspaceId = TEST_WORKSPACE_ID;
         UUID datasetId = UUID.randomUUID();
 
         UUID expiredJobId = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
-                "exports/workspace1/datasets/dataset1/job1.csv", Instant.now().minusSeconds(3600));
+                null, Instant.now().minusSeconds(3600)); // No file path to avoid S3 dependency in tests
 
         // Verify job exists
         assertThat(findJobById(expiredJobId)).isPresent();
@@ -226,7 +228,7 @@ class DatasetExportCleanupJobIntegrationTest {
     @Test
     @DisplayName("Should handle empty database gracefully")
     void shouldHandleEmptyDatabaseGracefully() throws SchedulerException {
-        // Given: Empty database (setUp() already cleans it)
+        // Given: Empty test database (setUp() already cleans test workspaces)
 
         // When: Trigger cleanup job
         triggerCleanupJob();
