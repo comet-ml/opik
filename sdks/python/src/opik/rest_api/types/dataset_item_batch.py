@@ -19,6 +19,10 @@ class DatasetItemBatch(UniversalBaseModel):
     """
 
     items: typing.List[DatasetItem]
+    batch_group_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
