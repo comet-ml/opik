@@ -8,6 +8,8 @@ import React, {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
+import isNumber from "lodash/isNumber";
 import { Filter, ListChecks } from "lucide-react";
 
 import {
@@ -50,13 +52,14 @@ import {
   parseMetadataKeys,
   formatConfigColumnName,
   PREDEFINED_COLUMNS,
+  DEFAULT_MAX_ROWS,
+  MIN_MAX_ROWS,
+  MAX_MAX_ROWS,
 } from "./helpers";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
 import { COLUMN_METADATA_ID, COLUMN_TYPE } from "@/types/shared";
-
-const DEFAULT_ROW_COUNT = 20;
 
 const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
   (_, ref) => {
@@ -95,7 +98,7 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
       () => config.metadataColumnsOrder || [],
       [config.metadataColumnsOrder],
     );
-    const maxRows = config.maxRows || DEFAULT_ROW_COUNT;
+    const maxRows = config.maxRows || DEFAULT_MAX_ROWS;
 
     const form = useForm<ExperimentLeaderboardWidgetFormData>({
       resolver: zodResolver(ExperimentLeaderboardWidgetSchema),
@@ -111,7 +114,7 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
         columnsOrder,
         scoresColumnsOrder,
         metadataColumnsOrder,
-        maxRows,
+        maxRows: String(maxRows),
       },
     });
 
@@ -206,6 +209,9 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
     const handleEnableRankingChange = (checked: boolean) => {
       form.setValue("enableRanking", checked);
+      if (!checked) {
+        form.clearErrors("rankingMetric");
+      }
       updatePreviewWidget({
         config: {
           ...config,
@@ -261,16 +267,13 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
     );
 
     const handleMaxRowsChange = (value: string) => {
-      const numValue = parseInt(value, 10);
-      if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
-        form.setValue("maxRows", numValue);
-        updatePreviewWidget({
-          config: {
-            ...config,
-            maxRows: numValue,
-          },
-        });
-      }
+      const numValue = isEmpty(value) ? undefined : parseInt(value, 10);
+      updatePreviewWidget({
+        config: {
+          ...config,
+          maxRows: isNumber(numValue) ? numValue : undefined,
+        },
+      });
     };
 
     const dynamicMetadataColumns = useMemo(() => {
@@ -423,12 +426,13 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                             <FormControl>
                               <Input
                                 type="number"
-                                min={1}
-                                max={100}
-                                value={field.value || DEFAULT_ROW_COUNT}
+                                min={MIN_MAX_ROWS}
+                                max={MAX_MAX_ROWS}
+                                value={field.value ?? ""}
                                 onChange={(e) => {
-                                  field.onChange(e.target.value);
-                                  handleMaxRowsChange(e.target.value);
+                                  const value = e.target.value;
+                                  field.onChange(value);
+                                  handleMaxRowsChange(value);
                                 }}
                                 className={cn({
                                   "border-destructive": Boolean(
@@ -438,7 +442,8 @@ const ExperimentLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               />
                             </FormControl>
                             <Description>
-                              Number of experiments to display (1-100)
+                              Number of experiments to display ({MIN_MAX_ROWS}-
+                              {MAX_MAX_ROWS})
                             </Description>
                             <FormMessage />
                           </FormItem>

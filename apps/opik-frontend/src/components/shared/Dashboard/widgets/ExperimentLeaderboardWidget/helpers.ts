@@ -9,6 +9,10 @@ import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import { getJSONPaths } from "@/lib/utils";
 
+export const DEFAULT_MAX_ROWS = 20;
+export const MIN_MAX_ROWS = 1;
+export const MAX_MAX_ROWS = 100;
+
 export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   {
     id: COLUMN_ID_ID,
@@ -70,7 +74,7 @@ export const getDefaultConfig = () => ({
   scoresColumnsOrder: [],
   metadataColumnsOrder: [],
   columnsWidth: {},
-  maxRows: 20,
+  maxRows: DEFAULT_MAX_ROWS,
   sorting: [],
 });
 

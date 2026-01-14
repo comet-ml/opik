@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import get from "lodash/get";
+import isNumber from "lodash/isNumber";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -39,7 +40,12 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import RankingCell from "@/components/shared/DataTableCells/RankingCell";
 import RankingHeader from "@/components/shared/DataTableHeaders/RankingHeader";
-import { formatConfigColumnName, PREDEFINED_COLUMNS } from "./helpers";
+import {
+  formatConfigColumnName,
+  PREDEFINED_COLUMNS,
+  DEFAULT_MAX_ROWS,
+  MAX_MAX_ROWS,
+} from "./helpers";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -89,11 +95,17 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     enableRanking = true,
     rankingMetric,
     columnsWidth = {},
+    columnsOrder = [],
     scoresColumnsOrder = [],
-    maxRows = 20,
+    metadataColumnsOrder = [],
+    maxRows,
     sorting: savedSorting = [],
     overrideDefaults = false,
   } = config;
+
+  const maxRowsValue = useMemo(() => {
+    return isNumber(maxRows) ? maxRows : DEFAULT_MAX_ROWS;
+  }, [maxRows]);
 
   const experimentIds = useMemo(() => {
     if (overrideDefaults) {
@@ -165,7 +177,9 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       sorting: apiSorting,
       page: 1,
       size:
-        dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP ? maxRows : 100,
+        dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
+          ? maxRowsValue
+          : MAX_MAX_ROWS,
     },
     {
       placeholderData: keepPreviousData,
@@ -186,7 +200,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
           : undefined,
       sorting: rankingMetric ? [{ id: rankingMetric, desc: true }] : undefined,
       page: 1,
-      size: 100,
+      size: MAX_MAX_ROWS,
       queryKey: "experiments-ranking",
     },
     {
@@ -339,6 +353,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     // 3. Predefined columns (using helper)
     allColumns.push(
       ...convertColumnDataToColumn<Experiment, Experiment>(PREDEFINED_COLUMNS, {
+        columnsOrder,
         selectedColumns,
         sortableColumns,
       }),
@@ -349,6 +364,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
       ...convertColumnDataToColumn<Experiment, Experiment>(
         metadataColumnsData,
         {
+          columnsOrder: metadataColumnsOrder,
           sortableColumns,
         },
       ),
@@ -357,6 +373,7 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     // 5. Feedback score columns (using helper)
     allColumns.push(
       ...convertColumnDataToColumn<Experiment, Experiment>(scoresColumnsData, {
+        columnsOrder: scoresColumnsOrder,
         sortableColumns,
       }),
     );
@@ -366,8 +383,11 @@ const ExperimentLeaderboardWidget: React.FunctionComponent<
     enableRanking,
     rankingMap,
     selectedColumns,
+    columnsOrder,
     metadataColumnsData,
+    metadataColumnsOrder,
     scoresColumnsData,
+    scoresColumnsOrder,
     sortableColumns,
   ]);
 
