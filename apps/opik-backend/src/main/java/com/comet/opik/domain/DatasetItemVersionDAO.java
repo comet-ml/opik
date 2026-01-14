@@ -344,6 +344,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
               <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
+    private static final String COUNT_ITEMS_BY_IDS = """
+            SELECT count(DISTINCT dataset_item_id) as count
+            FROM dataset_item_versions
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              AND dataset_item_id IN :item_ids
+            """;
+
     /**
      * Counts dataset items with experiment items, applying all filters from search criteria.
      * This ensures pagination totals match the filtered results.
@@ -2155,27 +2164,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "remove_items_from_version");
 
-            var statement = connection.createStatement(DELETE_ITEMS_FROM_VERSION)
-                    .bind("dataset_id", datasetId.toString())
-                    .bind("version_id", versionId.toString())
-                    .bind("workspace_id", workspaceId);
+            // First, count how many items actually exist (to handle non-existent IDs)
+            return countItemsByIds(datasetId, versionId, itemIds, workspaceId)
+                    .flatMap(existingCount -> {
+                        if (existingCount == 0) {
+                            log.info("No items found to delete for version '{}'", versionId);
+                            return Mono.just(0L);
+                        }
 
-            // Bind the item IDs array
-            String[] itemIdStrings = itemIds.stream()
-                    .map(UUID::toString)
-                    .toArray(String[]::new);
-            statement.bind("item_ids", itemIdStrings);
+                        var statement = connection.createStatement(DELETE_ITEMS_FROM_VERSION)
+                                .bind("dataset_id", datasetId.toString())
+                                .bind("version_id", versionId.toString())
+                                .bind("workspace_id", workspaceId);
 
-            // Return the count of items we're deleting
-            long deletedCount = itemIds.size();
+                        // Bind the item IDs array
+                        String[] itemIdStrings = itemIds.stream()
+                                .map(UUID::toString)
+                                .toArray(String[]::new);
+                        statement.bind("item_ids", itemIdStrings);
 
-            return Flux.from(statement.execute())
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum)
-                    .map(results -> deletedCount) // Return the count of items we deleted
-                    .doOnSuccess(count -> log.info("Removed '{}' items from version '{}'", count, versionId))
-                    .doOnError(e -> log.error("Failed to remove items from version '{}' for dataset '{}'",
-                            versionId, datasetId, e))
+                        // ClickHouse ALTER TABLE DELETE is async and returns 0, so return the count we calculated
+                        return Flux.from(statement.execute())
+                                .flatMap(Result::getRowsUpdated)
+                                .reduce(0L, Long::sum)
+                                .map(results -> existingCount) // Return the actual count of existing items
+                                .doOnSuccess(count -> log.info(
+                                        "Removed '{}' items from version '{}' (requested '{}' IDs, '{}' existed)",
+                                        count, versionId, itemIds.size(), existingCount))
+                                .doOnError(e -> log.error("Failed to remove items from version '{}' for dataset '{}'",
+                                        versionId, datasetId, e));
+                    })
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -2264,6 +2282,25 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             if (CollectionUtils.isNotEmpty(filters)) {
                 statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
             }
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    /**
+     * Counts items by their IDs in a specific version.
+     * Used to determine how many of the requested IDs actually exist before deletion.
+     */
+    private Mono<Long> countItemsByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds, String workspaceId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(COUNT_ITEMS_BY_IDS)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId)
+                    .bind("item_ids", itemIds.toArray(UUID[]::new));
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
