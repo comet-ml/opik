@@ -1,7 +1,10 @@
 import React from "react";
 import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import { PIP_INSTALL_OPIK_COMMAND } from "@/constants/shared";
+import {
+  INSTALL_OPIK_SECTION_TITLE,
+  PIP_INSTALL_OPIK_COMMAND,
+} from "@/constants/shared";
 
 type GuardrailConfigCodeProps = {
   codeImportNames: string[];
@@ -17,7 +20,7 @@ const GuardrailConfigCode: React.FC<GuardrailConfigCodeProps> = ({
   return (
     <>
       <div className="comet-body-s text-foreground-secondary">
-        1. Install Opik using pip from the command line
+        {INSTALL_OPIK_SECTION_TITLE}
       </div>
       <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
       <div className="comet-body-s mt-4 text-foreground-secondary">

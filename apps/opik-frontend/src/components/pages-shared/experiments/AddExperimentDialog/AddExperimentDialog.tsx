@@ -165,7 +165,10 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   },
 ];
 
-import { PIP_INSTALL_OPIK_COMMAND } from "@/constants/shared";
+import {
+  INSTALL_SDK_SECTION_TITLE,
+  PIP_INSTALL_OPIK_COMMAND,
+} from "@/constants/shared";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 const DEMO_DATASET_NAME = "Opik Demo Questions";
@@ -378,7 +381,7 @@ eval_results = evaluate(
 
   const renderInstallSection = () => (
     <div>
-      <CodeSectionTitle>2. Install the SDK</CodeSectionTitle>
+      <CodeSectionTitle>{INSTALL_SDK_SECTION_TITLE}</CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader
           title="Terminal"

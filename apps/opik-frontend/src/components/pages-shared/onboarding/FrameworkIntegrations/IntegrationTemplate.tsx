@@ -7,7 +7,10 @@ import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { useIsPhone } from "@/hooks/useIsPhone";
-import { PIP_INSTALL_OPIK_COMMAND } from "@/constants/shared";
+import {
+  INSTALL_OPIK_SECTION_TITLE,
+  PIP_INSTALL_OPIK_COMMAND,
+} from "@/constants/shared";
 
 type IntegrationTemplateProps = {
   apiKey?: string;
@@ -76,9 +79,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   const renderInstallSection = () => (
     <div>
-      <CodeSectionTitle>
-        1. Install Opik using pip from the command line
-      </CodeSectionTitle>
+      <CodeSectionTitle>{INSTALL_OPIK_SECTION_TITLE}</CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader
           title="Terminal"
