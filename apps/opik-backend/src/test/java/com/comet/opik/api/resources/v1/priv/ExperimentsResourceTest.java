@@ -5008,7 +5008,8 @@ class ExperimentsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
                 var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
 
-                assertThat(errorMessage.errors()).contains("items Experiment items list size must be between 1 and 1000");
+                assertThat(errorMessage.errors())
+                        .contains("items Experiment items list size must be between 1 and 1000");
             }
         }
 
