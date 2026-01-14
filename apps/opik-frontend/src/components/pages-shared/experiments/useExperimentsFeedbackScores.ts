@@ -10,13 +10,24 @@ import {
 } from "@/types/shared";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 
-export const useExperimentsFeedbackScores = () => {
+interface UseExperimentsFeedbackScoresOptions {
+  experimentIds?: string[];
+  refetchInterval?: number;
+}
+
+export const useExperimentsFeedbackScores = (
+  options: UseExperimentsFeedbackScoresOptions = {},
+) => {
+  const { experimentIds, refetchInterval = 30000 } = options;
+
   const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
     useExperimentsFeedbackScoresNames(
-      {},
+      {
+        experimentsIds: experimentIds,
+      },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: 30000,
+        refetchInterval,
       },
     );
 
