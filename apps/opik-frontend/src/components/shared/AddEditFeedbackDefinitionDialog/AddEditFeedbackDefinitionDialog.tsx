@@ -69,22 +69,28 @@ function isValidFeedbackDefinition(
   return false;
 }
 
+type FeedbackDefinitionDialogMode = "create" | "edit" | "clone";
+
 type AddEditFeedbackDefinitionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   feedbackDefinition?: FeedbackDefinition;
+  mode?: FeedbackDefinitionDialogMode;
 };
 
 const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   AddEditFeedbackDefinitionDialogProps
-> = ({ open, setOpen, feedbackDefinition }) => {
+> = ({ open, setOpen, feedbackDefinition, mode = "create" }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const feedbackDefinitionCreateMutation =
     useFeedbackDefinitionCreateMutation();
   const feedbackDefinitionUpdateMutation =
     useFeedbackDefinitionUpdateMutation();
+
   const [name, setName] = useState<CreateFeedbackDefinition["name"]>(
-    feedbackDefinition?.name ?? "",
+    mode === "clone" && feedbackDefinition
+      ? `${feedbackDefinition.name} (Copy)`
+      : feedbackDefinition?.name ?? "",
   );
   const [description, setDescription] = useState<
     CreateFeedbackDefinition["description"]
@@ -96,10 +102,13 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
     CreateFeedbackDefinition["details"] | undefined
   >(feedbackDefinition?.details ?? undefined);
 
-  const isEdit = Boolean(feedbackDefinition);
-  const title = isEdit
-    ? "Edit feedback definition"
-    : "Create a new feedback definition";
+  const isEdit = mode === "edit";
+  const getDialogTitle = () => {
+    if (mode === "clone") return "Clone feedback definition";
+    if (mode === "edit") return "Edit feedback definition";
+    return "Create a new feedback definition";
+  };
+  const title = getDialogTitle();
   const submitText = isEdit
     ? "Update feedback definition"
     : "Create feedback definition";
