@@ -565,5 +565,197 @@ describe("ChatPrompt", () => {
         chatPrompt.format({ name: "Alice" });
       }).toThrow(PromptValidationError);
     });
+
+    it("should preserve video_url metadata fields as-is without formatting", () => {
+      const messages: ChatMessage[] = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: "{{video_url}}",
+                mime_type: "video/{{format}}",
+                detail: "{{detailLevel}}",
+                format: "{{videoFormat}}",
+                duration: 120,
+              },
+            },
+          ],
+        },
+      ];
+
+      const data: ChatPromptData = {
+        promptId: "prompt-123",
+        versionId: "version-456",
+        name: "test-prompt",
+        messages,
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({
+        video_url: "https://example.com/video.mp4",
+      });
+
+      // Metadata fields should be preserved as-is, even if they contain template variables
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: "https://example.com/video.mp4",
+                mime_type: "video/{{format}}",
+                detail: "{{detailLevel}}",
+                format: "{{videoFormat}}",
+                duration: 120,
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("should throw PromptValidationError for jinja2 syntax errors with malformed expressions", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: "Result: {{ name |",
+          },
+        ],
+        type: "jinja2",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      // Jinja2 will throw syntax error for malformed filter expression
+      expect(() => {
+        chatPrompt.format({ name: "Alice" });
+      }).toThrow(PromptValidationError);
+    });
+
+    it("should throw PromptValidationError for invalid mustache syntax", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: "Hello {{#unclosed",
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      // Invalid Mustache syntax should throw during parsing
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+    });
+
+    it("should throw PromptValidationError for invalid content type (object instead of string/array)", () => {
+      const data = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: { invalid: "object" }, // Invalid content type
+          },
+        ],
+        type: "mustache",
+      } as unknown as ChatPromptData;
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(/Invalid message content type/);
+    });
+
+    it("should throw PromptValidationError for null content", () => {
+      const data = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: null, // Invalid null content
+          },
+        ],
+        type: "mustache",
+      } as unknown as ChatPromptData;
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(/Invalid message content type/);
+    });
+
+    it("should throw PromptValidationError for undefined content", () => {
+      const data = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: undefined, // Invalid undefined content
+          },
+        ],
+        type: "mustache",
+      } as unknown as ChatPromptData;
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(/Invalid message content type/);
+    });
+
+    it("should throw PromptValidationError for number content", () => {
+      const data = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: 123, // Invalid number content
+          },
+        ],
+        type: "mustache",
+      } as unknown as ChatPromptData;
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(PromptValidationError);
+      expect(() => {
+        chatPrompt.format({});
+      }).toThrow(/Invalid message content type/);
+    });
   });
 });

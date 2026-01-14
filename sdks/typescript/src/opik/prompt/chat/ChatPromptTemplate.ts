@@ -10,6 +10,7 @@ import type {
   VideoUrlContentPart,
 } from "../types";
 import { formatPromptTemplate } from "../formatting";
+import { PromptValidationError } from "../errors";
 
 /**
  * Template for chat-style prompts with multimodal content support.
@@ -71,7 +72,9 @@ export class ChatPromptTemplate {
           modalities,
         );
       } else {
-        renderedContent = "";
+        throw new PromptValidationError(
+          `Invalid message content type. Expected string or array of content parts, got: ${typeof content}`,
+        );
       }
 
       renderedMessages.push({
