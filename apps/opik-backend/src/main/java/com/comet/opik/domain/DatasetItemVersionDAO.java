@@ -179,6 +179,19 @@ public interface DatasetItemVersionDAO {
     Mono<Long> removeItemsFromVersion(UUID datasetId, UUID versionId, Set<UUID> itemIds, String workspaceId);
 
     /**
+     * Removes items from an existing version in ClickHouse based on filters.
+     * This is used for filter-based delete operations where items matching the filters should be removed.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to remove items from
+     * @param filters the filters to match items to remove
+     * @param workspaceId the workspace ID
+     * @return the number of items removed
+     */
+    Mono<Long> removeItemsFromVersionByFilters(UUID datasetId, UUID versionId, List<DatasetItemFilter> filters,
+            String workspaceId);
+
+    /**
      * Resolves which dataset contains the given item by looking across all versions.
      * This is used for initial lookup when only the item ID is known.
      *
@@ -312,6 +325,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
               AND dataset_version_id = :version_id
               AND dataset_item_id IN (:item_ids)
               AND workspace_id = :workspace_id
+            """;
+
+    private static final String DELETE_ITEMS_FROM_VERSION_BY_FILTERS = """
+            ALTER TABLE dataset_item_versions DELETE
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            """;
+
+    private static final String COUNT_ITEMS_MATCHING_FILTERS = """
+            SELECT count(DISTINCT dataset_item_id) as count
+            FROM dataset_item_versions
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
     /**
@@ -2147,6 +2177,105 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnError(e -> log.error("Failed to remove items from version '{}' for dataset '{}'",
                             versionId, datasetId, e))
                     .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> removeItemsFromVersionByFilters(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull List<DatasetItemFilter> filters, @NonNull String workspaceId) {
+
+        if (CollectionUtils.isEmpty(filters)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Removing items from version '{}' for dataset '{}' using '{}' filters", versionId, datasetId,
+                filters.size());
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "remove_items_from_version_by_filters");
+
+            // First, count how many items will be deleted
+            return countItemsMatchingFilters(datasetId, versionId, filters, workspaceId)
+                    .flatMap(deletedCount -> {
+                        if (deletedCount == 0) {
+                            log.info("No items match filters for version '{}'", versionId);
+                            return Mono.just(0L);
+                        }
+
+                        // Build the filter query using StringTemplate
+                        Optional<String> filterConditionsOpt = FilterQueryBuilder.toAnalyticsDbFilters(filters,
+                                FilterStrategy.DATASET_ITEM);
+
+                        if (filterConditionsOpt.isEmpty()) {
+                            log.warn("No filter conditions generated for version '{}'", versionId);
+                            return Mono.just(0L);
+                        }
+
+                        String filterConditions = filterConditionsOpt.get();
+
+                        // Use StringTemplate to generate query with filter conditions
+                        var template = new ST(DELETE_ITEMS_FROM_VERSION_BY_FILTERS);
+                        template.add("dataset_item_filters", filterConditions);
+                        String deleteQuery = template.render();
+
+                        var statement = connection.createStatement(deleteQuery)
+                                .bind("dataset_id", datasetId.toString())
+                                .bind("version_id", versionId.toString())
+                                .bind("workspace_id", workspaceId);
+
+                        // Bind filter parameters using FilterQueryBuilder
+                        statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+
+                        return Flux.from(statement.execute())
+                                .flatMap(Result::getRowsUpdated)
+                                .reduce(0L, Long::sum)
+                                .map(results -> deletedCount) // Return the count we calculated earlier
+                                .doOnSuccess(
+                                        count -> log.info("Removed '{}' items from version '{}'", count, versionId))
+                                .doOnError(e -> log.error(
+                                        "Failed to remove items from version '{}' for dataset '{}' using filters",
+                                        versionId, datasetId, e));
+                    })
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    /**
+     * Counts items matching the given filters in a specific version.
+     * Used to determine how many items will be deleted before performing the deletion.
+     */
+    private Mono<Long> countItemsMatchingFilters(UUID datasetId, UUID versionId, List<DatasetItemFilter> filters,
+            String workspaceId) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Optional<String> filterConditionsOpt = FilterQueryBuilder.toAnalyticsDbFilters(filters,
+                    FilterStrategy.DATASET_ITEM);
+
+            if (filterConditionsOpt.isEmpty()) {
+                return Mono.just(0L);
+            }
+
+            String filterConditions = filterConditionsOpt.get();
+
+            // Use StringTemplate to generate query with filter conditions
+            var template = new ST(COUNT_ITEMS_MATCHING_FILTERS);
+            template.add("dataset_item_filters", filterConditions);
+            String countQuery = template.render();
+
+            var statement = connection.createStatement(countQuery)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            // Bind filter parameters
+            statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
         });
     }
 

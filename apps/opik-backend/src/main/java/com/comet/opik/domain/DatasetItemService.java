@@ -1007,15 +1007,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return dao.delete(null, datasetId, filters).then();
         }
 
-        // If createVersion=false, we would normally mutate the latest version,
-        // but for filter-based deletion we cannot mutate in place efficiently
+        // Handle in-place mutation for filter-based deletions when createVersion=false
         if (!createVersion) {
-            log.warn(
-                    "Filter-based deletion with createVersion=false not supported for dataset '{}', creating new version instead",
+            log.info("Mutating latest version '{}' for dataset '{}' (createVersion=false)", latestVersion.get().id(),
                     datasetId);
-            // Fall through to create version logic
+
+            return deleteItemsFromExistingVersionByFilters(datasetId, latestVersion.get().id(), filters, workspaceId);
         }
 
+        // Create a new version with deletions
         UUID baseVersionId = latestVersion.get().id();
         int baseItemsCount = latestVersion.get().itemsTotal();
         UUID newVersionId = idGenerator.generateId();
@@ -2063,6 +2063,53 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
+     * Deletes items from an existing version using filters.
+     * This is used for filter-based deletions when createVersion=false.
+     */
+    private Mono<Void> deleteItemsFromExistingVersionByFilters(UUID datasetId, UUID versionId,
+            List<DatasetItemFilter> filters, String workspaceId) {
+
+        log.info("Deleting items from existing version '{}' for dataset '{}' using filters", versionId, datasetId);
+
+        if (CollectionUtils.isEmpty(filters)) {
+            log.warn("No filters provided for filter-based deletion");
+            return Mono.empty();
+        }
+
+        return Mono.defer(() -> {
+            // Get current version to update counts
+            DatasetVersion currentVersion = versionService.getVersionById(workspaceId, datasetId, versionId);
+
+            log.info(
+                    "deleteItemsFromExistingVersionByFilters: currentVersion itemsTotal='{}', itemsDeleted='{}', versionId='{}'",
+                    currentVersion.itemsTotal(), currentVersion.itemsDeleted(), versionId);
+
+            // Remove items matching filters from the version
+            return versionDao.removeItemsFromVersionByFilters(datasetId, versionId, filters, workspaceId)
+                    .flatMap(deletedCount -> {
+                        log.info(
+                                "deleteItemsFromExistingVersionByFilters: removeItemsFromVersionByFilters returned deletedCount='{}'",
+                                deletedCount);
+
+                        if (deletedCount == 0) {
+                            log.info("No items deleted from version '{}'", versionId);
+                            return Mono.<Void>empty();
+                        }
+
+                        // Update version counts in MySQL
+                        return Mono.fromCallable(() -> {
+                            updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
+                                    deletedCount.intValue());
+                            log.info("Deleted '{}' items from version '{}', new total '{}'",
+                                    deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
+                            return null;
+                        }).subscribeOn(Schedulers.boundedElastic());
+                    })
+                    .then();
+        });
+    }
+
+    /**
      * Creates a new version with deletions for a new batch_group_id.
      * This is the first batch of deletions for this batch_group_id.
      */
@@ -2109,6 +2156,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> handleGroupedDeletion(UUID batchGroupId, Set<UUID> ids, UUID datasetId,
             List<DatasetItemFilter> filters, String workspaceId, String userName, boolean createVersion) {
+
+        // For filter-based deletions, ids is null - skip mapping and proceed directly
+        if (ids == null) {
+            return proceedWithGroupedDeletion(batchGroupId, Set.of(), datasetId, filters, workspaceId, userName,
+                    createVersion);
+        }
 
         // First, map row IDs to dataset_item_ids
         return versionDao.mapRowIdsToDatasetItemIds(ids)
