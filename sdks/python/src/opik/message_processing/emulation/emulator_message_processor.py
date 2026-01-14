@@ -79,12 +79,12 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             self._span_to_feedback_scores: Dict[
                 str, List[models.FeedbackScoreModel]
             ] = collections.defaultdict(list)
-            self._trace_to_attachments: Dict[
-                str, List[models.AttachmentModel]
-            ] = collections.defaultdict(list)
-            self._span_to_attachments: Dict[
-                str, List[models.AttachmentModel]
-            ] = collections.defaultdict(list)
+            self._trace_to_attachments: Dict[str, List[models.AttachmentModel]] = (
+                collections.defaultdict(list)
+            )
+            self._span_to_attachments: Dict[str, List[models.AttachmentModel]] = (
+                collections.defaultdict(list)
+            )
             self._experiment_items: List[models.ExperimentItemModel] = []
 
     def is_active(self) -> bool:
@@ -569,7 +569,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self, message: messages.CreateAttachmentMessage
     ) -> None:
         """Handle attachment messages by adding them to the appropriate span or trace.
-        
+
         Attachments are stored in temporary dictionaries and will be connected to their
         spans/traces when the trace trees are built, similar to how feedback scores work.
         """

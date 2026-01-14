@@ -46,7 +46,7 @@ class AttachmentModel:
 
     file_path: str
     file_name: str
-    content_type: str
+    content_type: Optional[str] = None
 
 
 @dataclasses.dataclass
