@@ -53,10 +53,7 @@ const createMockStore = () => {
     }),
     setState: (
       newState: Partial<{
-        activeJobs: Map<
-          string,
-          { job: DatasetExportJob; datasetName: string }
-        >;
+        activeJobs: Map<string, { job: DatasetExportJob; datasetName: string }>;
         isPanelExpanded: boolean;
         isHydrated: boolean;
       }>,
@@ -77,7 +74,8 @@ const createMockStore = () => {
 const mockStore = createMockStore();
 
 vi.mock("@/store/DatasetExportStore", () => ({
-  useActiveExportJobs: () => Array.from(mockStore.getState().activeJobs.values()),
+  useActiveExportJobs: () =>
+    Array.from(mockStore.getState().activeJobs.values()),
   useHasActiveExportJobs: () => mockStore.getState().activeJobs.size > 0,
   useIsPanelExpanded: () => mockStore.getState().isPanelExpanded,
   useTogglePanelExpanded: () => () =>
@@ -440,4 +438,3 @@ describe("DatasetExportPanel", () => {
     });
   });
 });
-
