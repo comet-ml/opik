@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.CsvDatasetExportService;
 import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
@@ -66,17 +67,22 @@ class DatasetsResourceIntegrationTest {
     private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
     private static final FeatureFlags featureFlags = mock(FeatureFlags.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
+    private static final CsvDatasetExportService csvExportService = mock(CsvDatasetExportService.class);
+    private static final ResourceExtension EXT;
 
-    private static final ResourceExtension EXT = ResourceExtension.builder()
-            .addResource(new DatasetsResource(
-                    service, itemService, expansionService, versionService, () -> requestContext,
-                    new FiltersFactory(new FilterQueryBuilder()),
-                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
-                    featureFlags))
-            .addProvider(JsonNodeMessageBodyWriter.class)
-            .addProvider(MultiPartFeature.class)
-            .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-            .build();
+    static {
+
+        EXT = ResourceExtension.builder()
+                .addResource(new DatasetsResource(
+                        service, itemService, expansionService, versionService, () -> requestContext,
+                        new FiltersFactory(new FilterQueryBuilder()),
+                        new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
+                        featureFlags, csvExportService))
+                .addProvider(JsonNodeMessageBodyWriter.class)
+                .addProvider(MultiPartFeature.class)
+                .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+                .build();
+    }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
