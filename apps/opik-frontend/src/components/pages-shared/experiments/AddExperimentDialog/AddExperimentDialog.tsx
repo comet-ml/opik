@@ -286,16 +286,18 @@ eval_results = evaluate(
   task=evaluation_task${metricsParam}
 )`;
 
-  const { code: codeWithConfig } = putConfigInCode({
+  const { code: codeWithConfig, lines: highlightedLines } = putConfigInCode({
     code: experimentCode,
     workspaceName,
     apiKey,
     shouldMaskApiKey: true,
+    withHighlight: true,
   });
   const { code: codeWithConfigToCopy } = putConfigInCode({
     code: experimentCode,
     workspaceName,
     apiKey,
+    withHighlight: true,
   });
 
   const { data, isLoading } = useDatasetsList(
@@ -402,12 +404,16 @@ eval_results = evaluate(
       <CodeSectionTitle>3. Create an Experiment</CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
-          <CodeHighlighter data={codeWithConfig} />
+          <CodeHighlighter
+            data={codeWithConfig}
+            highlightedLines={highlightedLines}
+          />
         </CodeBlockWithHeader>
       ) : (
         <CodeHighlighter
           data={codeWithConfig}
           copyData={codeWithConfigToCopy}
+          highlightedLines={highlightedLines}
         />
       )}
     </div>
