@@ -22,6 +22,7 @@ from opik.rest_api.types import (
 from opik.rest_api.core.api_error import ApiError
 from opik.message_processing.batching import sequence_splitter
 from opik.rate_limit import rate_limit
+from opik import id_helpers
 import opik.exceptions as exceptions
 import opik.config as config
 from opik.rest_client_configurator import retry_decorator
@@ -133,12 +134,21 @@ class Dataset:
         return self._dataset_items_count
 
     def _insert_batch_with_retry(
-        self, batch: List[rest_dataset_item.DatasetItemWrite]
+        self,
+        batch: List[rest_dataset_item.DatasetItemWrite],
+        batch_group_id: str,
     ) -> None:
-        """Insert a batch of dataset items with automatic retry on rate limit errors."""
+        """Insert a batch of dataset items with automatic retry on rate limit errors.
+
+        Args:
+            batch: List of dataset items to insert.
+            batch_group_id: UUIDv7 identifier that groups all batches from a single
+                user operation together. All batches sent as part of one insert/update
+                call share the same batch_group_id.
+        """
         _ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name, items=batch
+                dataset_name=self._name, items=batch, batch_group_id=batch_group_id
             )
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
@@ -179,13 +189,15 @@ class Dataset:
             max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
         )
 
+        batch_group_id = id_helpers.generate_id()
+
         for batch in batches:
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
-            self._insert_batch_with_retry(batch)
+            self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
 
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
         """
-        Insert new items into the dataset.
+        Insert new items into the dataset. A new dataset version will be created.
 
         Args:
             items: List of dicts (which will be converted to dataset items)
@@ -232,9 +244,29 @@ class Dataset:
 
         self.insert(items)
 
+    def _delete_batch_with_retry(
+        self,
+        batch: List[str],
+        batch_group_id: str,
+    ) -> None:
+        """Delete a batch of dataset items with automatic retry on rate limit errors.
+
+        Args:
+            batch: List of item IDs to delete.
+            batch_group_id: UUIDv7 identifier that groups all batches from a single
+                user operation together. All batches sent as part of one delete
+                call share the same batch_group_id.
+        """
+        _ensure_rest_api_call_respecting_rate_limit(
+            lambda: self._rest_client.datasets.delete_dataset_items(
+                item_ids=batch, batch_group_id=batch_group_id
+            )
+        )
+        LOGGER.debug("Successfully deleted dataset items batch of size %d", len(batch))
+
     def delete(self, items_ids: List[str]) -> None:
         """
-        Delete items from the dataset.
+        Delete items from the dataset. A new dataset version will be created.
 
         Args:
             items_ids: List of item ids to delete.
@@ -243,9 +275,11 @@ class Dataset:
             items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
+        batch_group_id = id_helpers.generate_id()
+
         for batch in batches:
             LOGGER.debug("Deleting dataset items batch: %s", batch)
-            self._rest_client.datasets.delete_dataset_items(item_ids=batch)
+            self._delete_batch_with_retry(batch, batch_group_id=batch_group_id)
 
             for item_id in batch:
                 if item_id in self._id_to_hash:
@@ -258,7 +292,7 @@ class Dataset:
 
     def clear(self) -> None:
         """
-        Delete all items from the given dataset.
+        Delete all items from the given dataset. A new dataset version will be created.
         """
         item_ids = [
             item.id

@@ -108,21 +108,18 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
      * Reactive wrapper for cleanup operation.
      */
     private Mono<Void> cleanupExpiredJobsReactive() {
-        return Mono.defer(() -> {
-            Instant now = Instant.now();
-            log.debug("Starting cleanup of expired dataset export jobs at: '{}'", now);
+        Instant now = Instant.now();
 
-            if (interrupted.get()) {
-                log.info("Job interrupted during execution");
-                return Mono.empty();
-            }
+        if (interrupted.get()) {
+            log.info("Job interrupted during execution");
+            return Mono.empty();
+        }
 
-            // Execute both cleanup operations concurrently
-            Mono<Integer> completedCleanup = cleanupExpiredCompletedJobsBatch(now, 0).then(Mono.just(0));
-            Mono<Integer> failedCleanup = cleanupViewedFailedJobsBatch(0).then(Mono.just(0));
+        // Execute both cleanup operations concurrently
+        Mono<Integer> completedCleanup = cleanupExpiredCompletedJobsBatch(now, 0).then(Mono.just(0));
+        Mono<Integer> failedCleanup = cleanupViewedFailedJobsBatch(0).then(Mono.just(0));
 
-            return Mono.zip(completedCleanup, failedCleanup).then();
-        });
+        return Mono.zip(completedCleanup, failedCleanup).then();
     }
 
     /**
