@@ -103,12 +103,12 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   >(feedbackDefinition?.details ?? undefined);
 
   const isEdit = mode === "edit";
-  const getDialogTitle = () => {
-    if (mode === "clone") return "Clone feedback definition";
-    if (mode === "edit") return "Edit feedback definition";
-    return "Create a new feedback definition";
-  };
-  const title = getDialogTitle();
+  const title =
+    mode === "clone"
+      ? "Clone feedback definition"
+      : mode === "edit"
+        ? "Edit feedback definition"
+        : "Create a new feedback definition";
   const submitText = isEdit
     ? "Update feedback definition"
     : "Create feedback definition";

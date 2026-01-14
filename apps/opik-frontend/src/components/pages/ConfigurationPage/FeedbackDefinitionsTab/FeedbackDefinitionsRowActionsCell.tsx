@@ -42,16 +42,9 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
       <AddEditFeedbackDefinitionDialog
         key={`edit-${resetKeyRef.current}`}
         feedbackDefinition={feedbackDefinition}
-        open={open === 2}
+        open={open === 2 || open === 3}
         setOpen={setOpen}
-        mode="edit"
-      />
-      <AddEditFeedbackDefinitionDialog
-        key={`clone-${resetKeyRef.current}`}
-        feedbackDefinition={feedbackDefinition}
-        open={open === 3}
-        setOpen={setOpen}
-        mode="clone"
+        mode={open === 2 ? "edit" : "clone"}
       />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
