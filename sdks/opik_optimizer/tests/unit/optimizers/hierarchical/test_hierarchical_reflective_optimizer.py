@@ -239,9 +239,8 @@ class TestHierarchicalReflectiveOptimizerEarlyStop:
         dataset = _make_dataset()
         optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o", perfect_score=0.95)
 
-        monkeypatch.setattr(
-            optimizer, "evaluate_prompt", lambda **kwargs: _mock_experiment_result(0.96)
-        )
+        # Mock the base class's evaluate_prompt for baseline computation (returns float)
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
 
         prompt = ChatPrompt(system="baseline", user="{question}")
         result = optimizer.optimize_prompt(
@@ -255,4 +254,3 @@ class TestHierarchicalReflectiveOptimizerEarlyStop:
         assert result.details["stop_reason"] == "baseline_score_met_threshold"
         assert result.details["perfect_score"] == 0.95
         assert result.initial_score == result.score
-        assert result.details["trials_used"] == 0

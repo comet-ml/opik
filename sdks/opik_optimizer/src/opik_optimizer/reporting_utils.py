@@ -620,3 +620,116 @@ def display_configuration(
         console.print(parameter_text)
 
     console.print("\n")
+
+
+@contextmanager
+def display_evaluation(
+    message: str = "First we will establish the baseline performance:",
+    verbose: int = 1,
+    dataset_name: str | None = None,
+    is_validation: bool = False,
+    selection_summary: str | None = None,
+) -> Any:
+    """
+    Context manager to display messages during an evaluation phase.
+
+    Args:
+        message: The message to display before evaluation
+        verbose: Verbosity level (0 = silent, 1+ = display)
+        dataset_name: Optional name of the dataset being evaluated
+        is_validation: Whether this is a validation dataset
+        selection_summary: Optional summary of evaluation settings (n, policy)
+
+    Yields:
+        A Reporter object with a set_score method to display the result
+    """
+    console = get_console()
+
+    if verbose >= 1:
+        console.print(Text(f"> {message}"))
+        if dataset_name:
+            dataset_type = "validation" if is_validation else "training"
+            console.print(
+                Text(
+                    f"  Using {dataset_type} dataset: {dataset_name}",
+                    style="dim",
+                )
+            )
+        if selection_summary:
+            console.print(
+                Text(
+                    f"  Evaluation settings: {selection_summary}",
+                    style="dim",
+                )
+            )
+
+    class Reporter:
+        def set_score(self, score: float) -> None:
+            if verbose >= 1:
+                console.print(
+                    Text(f"\r  Baseline score was: {score:.4f}.\n", style="green")
+                )
+
+    with suppress_opik_logs():
+        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
+            try:
+                yield Reporter()
+            finally:
+                pass
+
+
+def display_evaluation_progress(
+    prefix: str,
+    score_text: str,
+    style: str,
+    prompts: "dict[str, chat_prompt.ChatPrompt]",
+    verbose: int = 1,
+    dataset_name: str | None = None,
+    dataset_type: str | None = None,
+    evaluation_settings: str | None = None,
+) -> None:
+    """
+    Display progress after evaluating a prompt candidate.
+
+    Args:
+        prefix: Progress prefix (e.g., "Round 1/5 - Candidate 2/10")
+        score_text: Formatted score text (e.g., "0.8500 (+5.00%)")
+        style: Rich style for the score (e.g., "green", "red", "dim")
+        prompts: The prompts that were evaluated
+        verbose: Verbosity level (0 = silent, 1+ = display)
+        dataset_name: Optional name of the dataset being used for evaluation
+        dataset_type: Optional type of dataset ("training" or "validation")
+        evaluation_settings: Optional description of evaluation settings
+    """
+    if verbose < 1:
+        return
+
+    console = get_console()
+
+    # Display prefix
+    console.print(Text(f"│    {prefix}:"))
+
+    # Display evaluation settings if provided
+    if evaluation_settings:
+        console.print(
+            Text(f"│         Evaluation settings: {evaluation_settings}", style="dim")
+        )
+
+    # Display dataset info if provided
+    if dataset_name:
+        ds_type = dataset_type or "training"
+        console.print(
+            Text(
+                f"│         (using {ds_type} dataset: {dataset_name} for ranking)",
+                style="dim",
+            )
+        )
+
+    # Display prompts
+    for name, prompt in prompts.items():
+        console.print(Text(f"│         {name}:"))
+        display_messages(prompt.get_messages(), "│         ")
+
+    # Display score
+    console.print(Text(f"│         Score: {score_text}", style=style))
+    console.print(Text("│"))

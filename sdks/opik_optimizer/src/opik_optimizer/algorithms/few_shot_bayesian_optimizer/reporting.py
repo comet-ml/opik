@@ -1,6 +1,5 @@
-from contextlib import contextmanager
 from io import StringIO
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from rich.panel import Panel
 from rich.text import Text
@@ -9,59 +8,15 @@ if TYPE_CHECKING:
     from ...api_objects.chat_prompt import ChatPrompt
 
 from ...reporting_utils import (  # noqa: F401
-    convert_tqdm_to_rich,
     display_configuration,
     display_header,
     display_messages,
     display_result,
     get_console,
-    suppress_opik_logs,
 )
 
 PANEL_WIDTH = 70
 console = get_console()
-
-
-@contextmanager
-def display_evaluation(
-    message: str = "First we will establish the baseline performance:",
-    verbose: int = 1,
-    selection_summary: str | None = None,
-) -> Any:
-    """Context manager to display messages during an evaluation phase."""
-    score = None
-
-    # Entry point
-    if verbose >= 1:
-        console.print(Text(f"> {message}"))
-        if selection_summary:
-            console.print(
-                Text(f"  Evaluation settings: {selection_summary}", style="dim")
-            )
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def set_score(self, s: float) -> None:
-            nonlocal score
-            score = s
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich(verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                if verbose >= 1:
-                    if score is not None:
-                        console.print(
-                            Text(
-                                f"\r  Baseline score was: {score:.4f}.\n", style="green"
-                            )
-                        )
-                    else:
-                        console.print(
-                            Text("\r  Baseline score was: None\n", style="red")
-                        )
 
 
 def display_few_shot_prompt_template(

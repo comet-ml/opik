@@ -97,8 +97,8 @@ class OptimizationContextManager:
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
+        _exc_val: BaseException | None,
+        _exc_tb: TracebackType | None,
     ) -> Literal[False]:
         """Update optimization status based on context exit."""
         if self.optimization is None:

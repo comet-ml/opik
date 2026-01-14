@@ -5,10 +5,10 @@ from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
 from ... import _llm_calls
-from ...base_optimizer import BaseOptimizer
+from ...base_optimizer import BaseOptimizer, OptimizationContext
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...agents import OptimizableAgent, LiteLLMAgent
+from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
 
 from opik_optimizer.optimization_result import OptimizationResult
@@ -59,6 +59,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
     DEFAULT_MAX_ITERATIONS = 5
     DEFAULT_CONVERGENCE_THRESHOLD = 0.01  # Stop if improvement is less than 1%
+
+    # Reuse existing optimization run when optimization_id is provided
+    REUSE_EXISTING_OPTIMIZATION: bool = True
 
     def __init__(
         self,
@@ -242,7 +245,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         validation_dataset: opik.Dataset | None,
         metric: MetricFunction,
         agent: OptimizableAgent,
-        optimization_id: str,
+        optimization_id: str | None,
         n_samples: int | None,
         attempt: int,
         max_attempts: int,
@@ -395,181 +398,81 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         return best_prompt_bundle, best_score_local, best_result
 
-    def optimize_prompt(  # type: ignore[override]
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer-specific configuration for display."""
+        return {
+            "optimizer": self.__class__.__name__,
+            "n_samples": context.n_samples,
+            "auto_continue": context.extra_params.get("auto_continue", False),
+            "max_retries": context.extra_params.get("max_retries", 2),
+            "max_trials": context.max_trials,
+            "convergence_threshold": self.convergence_threshold,
+        }
+
+    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
+        """
+        Return HierarchicalReflective-specific metadata for the optimization result.
+
+        Provides iterations and trials tracking that can be used in any scenario
+        (early stop, completion, etc.). The optimizer doesn't know why this
+        is being called - it just provides its current state.
+        """
+        return {
+            "trials_completed": getattr(self, "_trials_completed", 0),
+            "rounds_completed": getattr(self, "_rounds_completed", 0),
+            "iterations_completed": getattr(self, "_iterations_completed", 0),
+            "convergence_threshold": self.convergence_threshold,
+        }
+
+    def run_optimization(
         self,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        dataset: opik.Dataset,
-        metric: MetricFunction,
-        agent: OptimizableAgent | None = None,
-        experiment_config: dict | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        project_name: str = "Optimization",
-        optimization_id: str | None = None,
-        validation_dataset: opik.Dataset | None = None,
-        max_trials: int = DEFAULT_MAX_ITERATIONS,
-        max_retries: int = 2,
-        *args: Any,
-        **kwargs: Any,
+        context: OptimizationContext,
     ) -> OptimizationResult:
-        """
-        Optimize a prompt using hierarchical reflective refinement.
+        optimizable_prompts = context.prompts
+        is_single_prompt_optimization = context.is_single_prompt_optimization
+        dataset = context.dataset
+        validation_dataset = context.validation_dataset
+        metric = context.metric
+        agent = context.agent
+        n_samples = context.n_samples
+        max_trials = context.max_trials
+        auto_continue = context.extra_params.get("auto_continue", False)
+        max_retries = context.extra_params.get("max_retries", 2)
+        optimization = context.optimization
 
-        Args:
-            prompt: The chat prompt(s) to optimize. Can be a single ChatPrompt or a dict of ChatPrompts.
-            dataset: Dataset containing evaluation examples.
-            metric: Callable that scores `(dataset_item, llm_output)`.
-
-        Optional Arguments:
-            experiment_config: Additional configuration for experiment logging.
-            n_samples: Number of dataset samples to evaluate per prompt (None for all).
-            auto_continue: Whether to continue optimization automatically after each round.
-            agent_class: Optional agent implementation to execute prompt evaluations.
-            project_name: Opik project name for trace logging (default: "Optimization").
-            optimization_id: Optional ID for the Opik optimization run; when provided it must
-                be a valid UUIDv7 string.
-            max_trials: Maximum number of optimization iterations to run.
-            max_retries: Maximum retries allowed for addressing a failure mode.
-            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
-                the optimizer uses the training dataset for understanding failure modes and generating
-                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
-        """
-        # Normalize prompt input using base class helper
-        optimizable_prompts, is_single_prompt_optimization = (
-            self._normalize_prompt_input(prompt)
-        )
-
-        # Validate inputs
-        self._validate_optimization_inputs(
-            optimizable_prompts, dataset, metric, support_content_parts=True
-        )
-
-        self._reset_counters()
-        self._should_stop_optimization = False  # Reset stop flag
-
-        # Set project name from parameter
-        self.project_name = project_name
-
-        # If optimization_id is provided (e.g., from Optimization Studio), fetch the existing
-        # optimization instead of creating a new one
-        if optimization_id:
-            optimization = self.opik_client.get_optimization_by_id(optimization_id)
-            logger.debug(f"Using existing optimization with ID: {optimization.id}")
-            self.current_optimization_id = optimization.id
-        else:
-            optimization = self._create_optimization_run(dataset, metric)
-
-        reporting.display_header(
-            algorithm=self.__class__.__name__,
-            optimization_id=optimization.id if optimization is not None else None,
-            dataset_id=dataset.id,
-            verbose=self.verbose,
-        )
-        reporting.display_configuration(
-            messages=optimizable_prompts,
-            optimizer_config={
-                "optimizer": self.__class__.__name__,
-                "n_samples": n_samples,
-                "auto_continue": auto_continue,
-                "max_retries": max_retries,
-                "max_trials": max_trials,
-                "convergence_threshold": self.convergence_threshold,
-            },
-            verbose=self.verbose,
-        )
-
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
-        )
-
-        # Create agent for prompt execution
-        if agent is None:
-            agent = LiteLLMAgent(project_name=project_name)
-
-        # First we will evaluate the prompt on the dataset
-        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
-            experiment_result = self.evaluate_prompt(
-                prompt=optimizable_prompts,
-                dataset=evaluation_dataset,  # use right dataset for scoring
-                metric=metric,
-                agent=agent,
-                n_samples=n_samples,
-                n_threads=self.n_threads,
-                return_evaluation_result=True,
-            )
-
-            avg_scores = sum(
-                [x.score_results[0].value for x in experiment_result.test_results]
-            ) / len(experiment_result.test_results)
-            baseline_reporter.set_score(avg_scores)
-
-        # Track baseline and best scores
-        initial_score = avg_scores
+        initial_score = float(context.baseline_score or 0.0)
         best_score = initial_score
         best_prompts = optimizable_prompts
 
-        if self._should_skip_optimization(best_score):
-            logger.info(
-                "Baseline score %.4f >= %.4f; skipping HRPO iterations.",
-                best_score,
-                self.perfect_score,
-            )
-            first_best_prompt = list(best_prompts.values())[0]
-            details = {
-                "model": self.model,
-                "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
-                or self.model_parameters.get("temperature"),
-                "n_threads": self.n_threads,
-                "max_parallel_batches": self.max_parallel_batches,
-                "max_retries": max_retries,
-                "n_samples": n_samples,
-                "auto_continue": auto_continue,
-                "max_trials": max_trials,
-                "convergence_threshold": self.convergence_threshold,
-                "iterations_completed": 0,
-                "trials_used": 0,
-                "stopped_early": True,
-                "stop_reason": "baseline_score_met_threshold",
-                "stop_reason_details": {"best_score": best_score},
-                "perfect_score": self.perfect_score,
-                "skip_perfect_score": self.skip_perfect_score,
-            }
-            result_best_prompt, result_initial_prompt = self._select_result_prompts(
-                best_prompts=best_prompts,
-                initial_prompts=optimizable_prompts,
-                is_single_prompt_optimization=is_single_prompt_optimization,
-            )
-            return self._build_early_result(
-                optimizer_name=self.__class__.__name__,
-                prompt=result_best_prompt,
-                initial_prompt=result_initial_prompt,
-                score=best_score,
-                metric_name=metric.__name__,
-                details=details,
-                llm_calls=self.llm_call_counter,
-                llm_calls_tools=self.llm_calls_tools_counter,
-                llm_cost_total=getattr(self, "llm_cost_total", None),
-                llm_token_usage_total=getattr(self, "llm_token_usage_total", None),
-                optimization_id=optimization.id,
-                dataset_id=dataset.id,
-            )
-
-        # Multi-iteration optimization loop
         iteration = 0
-        previous_iteration_score = initial_score
+        previous_iteration_score: float = initial_score
         trials_used = 0
+        # Initialize progress tracking
+        self._trials_completed = 0
+        self._rounds_completed = 0
+        self._iterations_completed = 0
+        self._current_round = 0
+        self._total_rounds = (
+            max_trials  # Approximation - actual iterations may be fewer
+        )
 
         while trials_used < max_trials:
+            # Check should_stop flag at start of each iteration
+            if context.should_stop:
+                break
+
+            self._current_round = iteration
             iteration += 1
             logger.info(
                 f"Starting iteration {iteration} (trials: {trials_used}/{max_trials})"
             )
 
-            # Check if we should stop (flag set by inner loops)
             if self._should_stop_optimization:
                 logger.info(
                     f"Stopping optimization: reached max_trials limit ({max_trials})."
                 )
+                context.should_stop = True
+                context.finish_reason = "max_trials"
                 break
 
             with reporting.display_optimization_iteration(
@@ -647,12 +550,24 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             validation_dataset=validation_dataset,
                             metric=metric,
                             agent=agent,
-                            optimization_id=optimization.id,
+                            optimization_id=optimization.id if optimization else None,
                             n_samples=n_samples,
                             attempt=attempt,
                             max_attempts=max_attempts,
                         )
                         trials_used += 1
+                        # Update progress tracking for early stop reporting
+                        self._trials_completed = trials_used
+                        context.trials_completed = trials_used
+
+                        # Check for perfect score early stop
+                        if (
+                            self.skip_perfect_score
+                            and improved_score >= self.perfect_score
+                        ):
+                            context.should_stop = True
+                            context.finish_reason = "perfect_score"
+                            break
 
                         # Check if we got improvement
                         if improved_score > best_score:
@@ -675,7 +590,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             )
 
                     # Break out of failure mode loop if flag is set
-                    if self._should_stop_optimization:
+                    if self._should_stop_optimization or context.should_stop:
                         break
 
                     # Check if final result is an improvement
@@ -699,7 +614,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                         # Update best
                         best_score = improved_score
                         best_prompts = improved_chat_prompts
-                        experiment_result = improved_experiment_result
                         logger.info(
                             f"Updated best prompt after addressing '{root_cause.name}'"
                         )
@@ -723,6 +637,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Iteration {iteration} complete. Score: {best_score:.4f}, "
                 f"Improvement: {iteration_improvement:.2%}"
             )
+
+            # Update rounds/iterations tracking for early stop reporting
+            self._rounds_completed = iteration
+            self._iterations_completed = iteration
 
             # Stop if improvement is below convergence threshold
             if abs(iteration_improvement) < self.convergence_threshold:
@@ -752,13 +670,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 verbose=self.verbose,
             )
 
-        # Update optimization status to completed
-        try:
-            optimization.update(status="completed")
-            logger.info(f"Optimization {optimization.id} status updated to completed.")
-        except Exception as e:
-            logger.warning(f"Failed to update optimization status: {e}")
-
         # Convert result format based on input type
         result_best_prompt_final: (
             chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
@@ -773,8 +684,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             result_best_prompt_final = best_prompts
             result_initial_prompt_final = optimizable_prompts
 
+        # Set finish_reason if not already set by early stop
+        if context.finish_reason is None:
+            context.finish_reason = "completed"
+
         # Prepare details for the result
         first_best_prompt = list(best_prompts.values())[0]
+        stopped_early = context.finish_reason != "completed"
         details = {
             "model": self.model,
             "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
@@ -791,8 +707,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "trials_requested": max_trials,
             "trials_completed": trials_used,
             "rounds_completed": iteration,
-            "stopped_early": trials_used < max_trials,
-            "stop_reason": "max_trials" if trials_used >= max_trials else None,
+            "stopped_early": stopped_early,
+            "stop_reason": context.finish_reason,
             "stop_reason_details": {"best_score": best_score},
             "llm_cost_total": getattr(self, "llm_cost_total", None),
             "llm_token_usage_total": getattr(self, "llm_token_usage_total", None),
@@ -810,6 +726,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             llm_calls_tools=self.llm_calls_tools_counter,
             llm_cost_total=getattr(self, "llm_cost_total", None),
             llm_token_usage_total=getattr(self, "llm_token_usage_total", None),
-            optimization_id=optimization.id,
+            optimization_id=optimization.id if optimization else None,
             dataset_id=dataset.id,
         )

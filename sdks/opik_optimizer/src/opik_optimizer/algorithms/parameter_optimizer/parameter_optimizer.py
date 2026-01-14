@@ -13,7 +13,7 @@ from optuna.trial import Trial, TrialState
 
 from opik import Dataset
 
-from ...base_optimizer import BaseOptimizer
+from ...base_optimizer import BaseOptimizer, OptimizationContext
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -105,6 +105,20 @@ class ParameterOptimizer(BaseOptimizer):
             "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
             "where parameter_space is a ParameterSearchSpace or dict defining the parameters to optimize."
         )
+
+    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
+        raise NotImplementedError(
+            "ParameterOptimizer does not use the standard run_optimization flow. "
+            "Use optimize_parameter() instead."
+        )
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer-specific configuration for display."""
+        return {
+            "optimizer": self.__class__.__name__,
+            "n_trials": self.default_n_trials,
+            "n_samples": context.n_samples,
+        }
 
     def optimize_parameter(
         self,
@@ -640,7 +654,6 @@ class ParameterOptimizer(BaseOptimizer):
                 completed_trials, expanded_parameter_space.parameters
             )
 
-        # Display final results - use first prompt for single, dict for multi
         display_prompt = (
             list(best_tuned_prompts.values())[0]
             if is_single_prompt_optimization
@@ -653,15 +666,22 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
-        # Update optimization status to completed
-        try:
-            if optimization is not None:
-                optimization.update(status="completed")
-                logger.info(
-                    f"Optimization {self.current_optimization_id} status updated to completed."
-                )
-        except Exception as e:
-            logger.warning(f"Failed to update optimization status: {e}")
+        if optimization is not None:
+            count = 0
+            while count < 3:
+                try:
+                    optimization.update(status="completed")
+                    logger.info(
+                        f"Optimization {self.current_optimization_id} status updated to completed."
+                    )
+                    break
+                except Exception:
+                    count += 1
+                    import time
+
+                    time.sleep(5)
+            if count == 3:
+                logger.warning("Unable to update optimization status; continuing...")
 
         details = {
             "initial_score": baseline_score,

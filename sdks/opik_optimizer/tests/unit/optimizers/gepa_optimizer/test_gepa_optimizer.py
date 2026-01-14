@@ -153,3 +153,96 @@ class TestGepaOptimizerEarlyStop:
         assert result.details["perfect_score"] == 0.95
         assert result.initial_score == result.score
         assert result.details["trials_used"] == 0
+
+    def test_early_stop_reports_at_least_one_trial(
+        self,
+        mock_opik_client: Callable[..., MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify GepaOptimizer early stop reports at least 1 trial."""
+        mock_opik_client()
+        dataset = _make_dataset()
+        optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
+
+        prompt = ChatPrompt(system="baseline", user="{question}")
+        result = optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+        )
+
+        assert result.details["stopped_early"] is True
+        # Early stop happens before run_optimization, so only baseline was evaluated
+        # The optimizer returns 0 from get_metadata (no optimization trials yet)
+        # The base class defaults this to 1 to reflect the baseline evaluation
+        assert result.details["trials_completed"] == 1
+        assert result.details["rounds_completed"] == 1
+
+
+class TestGepaOptimizerAgentUsage:
+    """Test that self.agent is properly set and used by GEPA adapter."""
+
+    def test_agent_set_inpre_optimization(self, monkeypatch) -> None:
+        """
+        Verify that self.agent is set during pre_optimization.
+
+        This test ensures that when pre_optimization is called,
+        self.agent is properly assigned from context.agent for use
+        in OpikGEPAAdapter and reflection operations.
+        """
+        from opik_optimizer.optimizable_agent import OptimizableAgent
+        from opik_optimizer.base_optimizer import OptimizationContext
+
+        optimizer = GepaOptimizer(
+            model="gpt-4o-mini",
+            verbose=0,
+            seed=42,
+        )
+
+        # Verify agent is not set initially
+        assert not hasattr(optimizer, "agent") or optimizer.agent is None
+
+        # Create a mock context with an agent
+        mock_agent = MagicMock(spec=OptimizableAgent)
+        mock_context = MagicMock(spec=OptimizationContext)
+        mock_context.agent = mock_agent
+        mock_context.extra_params = {}
+
+        # Call pre_optimization
+        optimizer.pre_optimization(mock_context)
+
+        # Verify self.agent is now set
+        assert hasattr(optimizer, "agent"), "pre_optimization should set self.agent"
+        assert optimizer.agent is mock_agent, "self.agent should be context.agent"
+
+    def test_self_agent_available_for_adapter(self) -> None:
+        """
+        Verify that self.agent is available after optimize_prompt starts.
+
+        This test documents that GepaOptimizer needs self.agent because
+        it creates OpikGEPAAdapter which accesses the agent via the optimizer instance.
+        The agent is passed in run_optimization to the adapter as self.agent.
+        """
+        from opik_optimizer.base_optimizer import OptimizationContext
+
+        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+
+        # Verify agent is not set before pre_optimization
+        assert not hasattr(optimizer, "agent") or optimizer.agent is None
+
+        # Create a mock context
+        mock_agent = MagicMock()
+        mock_context = MagicMock(spec=OptimizationContext)
+        mock_context.agent = mock_agent
+        mock_context.extra_params = {}
+
+        # Call pre_optimization
+        optimizer.pre_optimization(mock_context)
+
+        # Verify self.agent is set and can be accessed in run_optimization
+        assert optimizer.agent is mock_agent
+        # This confirms that adapter creation in run_optimization
+        # can access self.agent successfully

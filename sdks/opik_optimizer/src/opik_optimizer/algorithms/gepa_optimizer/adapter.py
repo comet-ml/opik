@@ -222,6 +222,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 scores.append(score)
                 try:
                     self._optimizer._gepa_live_metric_calls += 1
+                    self._optimizer._trials_completed += 1
                 except Exception:
                     pass
 
@@ -332,6 +333,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             scores.append(score_value)
             try:
                 self._optimizer._gepa_live_metric_calls += 1
+                self._optimizer._trials_completed += 1
             except Exception:
                 pass
 

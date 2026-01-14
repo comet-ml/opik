@@ -7,18 +7,19 @@ import sys
 import warnings
 
 import numpy as np
-import opik
 
 # DEAP imports
 from deap import base, tools
 from deap import creator as _creator
 
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+from opik_optimizer.base_optimizer import (
+    BaseOptimizer,
+    OptimizationRound,
+    OptimizationContext,
+)
 from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
-from ...api_objects.types import MetricFunction
 from opik_optimizer.optimization_result import OptimizationResult
-from opik_optimizer.agents import OptimizableAgent, LiteLLMAgent
 
 from . import reporting, helpers
 from . import prompts as evo_prompts
@@ -96,6 +97,38 @@ class EvolutionaryOptimizer(BaseOptimizer):
         "mutation_strategy_focus": evo_prompts.MUTATION_STRATEGY_FOCUS,
         "mutation_strategy_increase_complexity_and_detail": evo_prompts.MUTATION_STRATEGY_INCREASE_COMPLEXITY,
     }
+
+    # Validation dataset is not supported by this optimizer
+    WARN_VALIDATION_UNSUPPORTED: bool = True
+
+    def pre_optimization(self, context: OptimizationContext) -> None:
+        """Store agent reference for use in evaluation_ops."""
+        self.agent = context.agent
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer-specific configuration for display."""
+        return {
+            "optimizer": f"{'DEAP MOO' if self.enable_moo else 'DEAP SO'} Evolutionary Optimization",
+            "population_size": self.population_size,
+            "generations": self.num_generations,
+            "mutation_rate": self.mutation_rate,
+            "crossover_rate": self.crossover_rate,
+        }
+
+    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
+        """
+        Return Evolutionary-specific metadata for the optimization result.
+
+        Provides trials and rounds tracking that can be used in any scenario
+        (early stop, completion, etc.). The optimizer doesn't know why this
+        is being called - it just provides its current state.
+        """
+        return {
+            "trials_completed": getattr(self, "_trials_completed", 0),
+            "rounds_completed": getattr(self, "_rounds_completed", 0),
+            "generations_run": getattr(self, "_rounds_completed", 0),
+            "population_size": self.population_size,
+        }
 
     DEFAULT_POPULATION_SIZE = 30
     DEFAULT_NUM_GENERATIONS = 15
@@ -423,94 +456,33 @@ class EvolutionaryOptimizer(BaseOptimizer):
         ]
         return max(valid_scores, default=0.0)
 
-    def optimize_prompt(
+    def run_optimization(
         self,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        dataset: opik.Dataset,
-        metric: MetricFunction,
-        agent: OptimizableAgent | None = None,
-        experiment_config: dict | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        project_name: str = "Optimization",
-        optimization_id: str | None = None,
-        validation_dataset: opik.Dataset | None = None,
-        max_trials: int = 10,
-        *args: Any,
-        **kwargs: Any,
+        context: OptimizationContext,
     ) -> OptimizationResult:
-        """
-        Args:
-            prompt: The prompt to optimize (single ChatPrompt or dict of ChatPrompts).
-            dataset: Dataset used to evaluate each candidate prompt.
-            metric: Objective function receiving `(dataset_item, llm_output)`.
-            agent: Optional agent instance for executing prompts. If None, uses LiteLLMAgent.
-            experiment_config: Optional experiment configuration metadata.
-            n_samples: Optional number of dataset items to evaluate per prompt.
-            auto_continue: Whether to continue automatically after each generation.
-            project_name: Opik project name for logging traces (default: "Optimization").
-            optimization_id: Optional ID for the Opik optimization run; when provided it
-                must be a valid UUIDv7 string.
-            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
-            max_trials: Maximum number of prompt evaluations allowed.
-        """
-        # Normalize prompt input using base class helper
-        optimizable_prompts, is_single_prompt_optimization = (
-            self._normalize_prompt_input(prompt)
-        )
-
-        # Select evaluation dataset using base class helper
-        evaluation_dataset = self._select_evaluation_dataset(
-            dataset, validation_dataset, warn_unsupported=True
-        )
-
-        # Validate inputs
-        self._validate_optimization_inputs(
-            optimizable_prompts, dataset, metric, support_content_parts=True
-        )
-
-        if agent is None:
-            agent = LiteLLMAgent(project_name=project_name)
-        self.agent = agent
+        optimizable_prompts = context.prompts
+        is_single_prompt_optimization = context.is_single_prompt_optimization
+        dataset = context.dataset
+        evaluation_dataset = context.evaluation_dataset
+        metric = context.metric
+        n_samples = context.n_samples
+        experiment_config = context.experiment_config
+        max_trials = context.max_trials
         evaluation_kwargs: dict[str, Any] = {}
 
-        # Set project name from parameter
-        self.project_name = project_name
+        trials_used = [0]
+        # Initialize progress tracking for early stop reporting
+        self._trials_completed = 0
+        self._rounds_completed = 0
+        self._current_round = 0
+        self._total_rounds = self.num_generations
 
-        # Create Opik optimization run using base class helper
-        opik_optimization_run = self._create_optimization_run(
-            dataset, metric, optimization_id
-        )
-
-        reporting.display_header(
-            algorithm=self.__class__.__name__,
-            optimization_id=self.current_optimization_id,
-            dataset_id=dataset.id,
-            verbose=self.verbose,
-        )
-
-        reporting.display_configuration(
-            optimizable_prompts,
-            {
-                "optimizer": f"{'DEAP MOO' if self.enable_moo else 'DEAP SO'} Evolutionary Optimization",
-                "population_size": self.population_size,
-                "generations": self.num_generations,
-                "mutation_rate": self.mutation_rate,
-                "crossover_rate": self.crossover_rate,
-            },
-            verbose=self.verbose,
-        )
-
-        # Step 1. Step variables and define fitness function
-        self._reset_counters()  # Reset counters for run
-        trials_used = [0]  # Use list for closure mutability
         self._history: list[OptimizationRound] = []
         self._best_fitness_history = []
         self._generations_without_improvement = 0
         self._current_population = []
         self._generations_without_overall_improvement = 0
 
-        # Store prompts metadata for fitness evaluation (closure capture)
         prompts_metadata = {
             name: {
                 "tools": copy.deepcopy(p.tools),
@@ -525,16 +497,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
             def _deap_evaluate_individual_fitness(
                 individual: Any,
             ) -> tuple[float, ...]:
-                # Check if we've hit the limit
                 if trials_used[0] >= max_trials:
                     logger.debug(
                         f"Skipping evaluation - max_trials ({max_trials}) reached"
                     )
-                    return (-float("inf"), float("inf"))  # Worst possible fitness
+                    return (-float("inf"), float("inf"))
 
                 trials_used[0] += 1
+                self._trials_completed = trials_used[0]
+                context.trials_completed = trials_used[0]
 
-                # Individual is a dict mapping prompt_name -> messages
                 primary_fitness_score = evaluation_ops.evaluate_bundle(
                     self,
                     bundle_messages=dict(individual),
@@ -548,23 +520,32 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     **evaluation_kwargs,
                 )
                 prompt_length = float(len(str(json.dumps(dict(individual)))))
+
+                # Check for perfect score early stop
+                if (
+                    self.skip_perfect_score
+                    and primary_fitness_score >= self.perfect_score
+                ):
+                    context.should_stop = True
+                    context.finish_reason = "perfect_score"
+
                 return (primary_fitness_score, prompt_length)
 
         else:
-            # Single-objective
+
             def _deap_evaluate_individual_fitness(
                 individual: Any,
             ) -> tuple[float, ...]:
-                # Check if we've hit the limit
                 if trials_used[0] >= max_trials:
                     logger.debug(
                         f"Skipping evaluation - max_trials ({max_trials}) reached"
                     )
-                    return (-float("inf"),)  # Worst possible fitness
+                    return (-float("inf"),)
 
                 trials_used[0] += 1
+                self._trials_completed = trials_used[0]
+                context.trials_completed = trials_used[0]
 
-                # Individual is a dict mapping prompt_name -> messages
                 fitness_score = evaluation_ops.evaluate_bundle(
                     self,
                     bundle_messages=dict(individual),
@@ -577,80 +558,25 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     verbose=0,
                     **evaluation_kwargs,
                 )
+
+                # Check for perfect score early stop
+                if self.skip_perfect_score and fitness_score >= self.perfect_score:
+                    context.should_stop = True
+                    context.finish_reason = "perfect_score"
+
                 return (fitness_score,)
 
         self._deap_evaluate_individual_fitness = _deap_evaluate_individual_fitness
 
-        # Step 2. Compute the initial performance of the prompt
-        with reporting.baseline_performance(
-            verbose=self.verbose
-        ) as report_baseline_performance:
-            # Create initial individual from all prompts
-            initial_individual = self._create_individual_from_prompts(
-                optimizable_prompts
-            )
-            initial_eval_result = self._deap_evaluate_individual_fitness(
-                initial_individual
-            )
-            initial_primary_score = initial_eval_result[0]
-            initial_prompts_messages = {
-                name: p.get_messages() for name, p in optimizable_prompts.items()
-            }
-            initial_length = (
-                initial_eval_result[1]
-                if self.enable_moo
-                else float(len(json.dumps(initial_prompts_messages)))
-            )
+        # Use baseline score from context (computed by base class)
+        initial_primary_score = cast(float, context.baseline_score)
+        initial_prompts_messages = {
+            name: p.get_messages() for name, p in optimizable_prompts.items()
+        }
+        initial_length = float(len(json.dumps(initial_prompts_messages)))
 
-            trials_used[0] = 0
-            best_primary_score_overall = initial_primary_score
-            best_prompts_overall = optimizable_prompts
-            report_baseline_performance.set_score(initial_primary_score)
-
-        if self._should_skip_optimization(initial_primary_score):
-            logger.info(
-                "Baseline score %.4f >= %.4f; skipping evolutionary optimization.",
-                initial_primary_score,
-                self.perfect_score,
-            )
-            early_result_prompt, early_initial_prompt = self._select_result_prompts(
-                best_prompts=optimizable_prompts,
-                initial_prompts=optimizable_prompts,
-                is_single_prompt_optimization=is_single_prompt_optimization,
-            )
-
-            reporting.display_result(
-                initial_score=initial_primary_score,
-                best_score=initial_primary_score,
-                prompt=early_result_prompt,
-                verbose=self.verbose,
-            )
-
-            early_details: dict[str, Any] = {
-                "initial_primary_score": initial_primary_score,
-                "initial_length": initial_length,
-                "final_prompts": optimizable_prompts,
-                "final_score": initial_primary_score,
-                "stopped_early": True,
-                "stop_reason": "baseline_score_met_threshold",
-                "stop_reason_details": {"best_score": initial_primary_score},
-                "perfect_score": self.perfect_score,
-                "skip_perfect_score": self.skip_perfect_score,
-                "trials_used": 0,
-            }
-            return self._build_early_result(
-                optimizer_name=self.__class__.__name__,
-                prompt=early_result_prompt,
-                initial_prompt=early_initial_prompt,
-                score=initial_primary_score,
-                metric_name=metric.__name__,
-                details=early_details,
-                history=[],
-                llm_calls=self.llm_call_counter,
-                llm_calls_tools=self.llm_calls_tools_counter,
-                dataset_id=dataset.id,
-                optimization_id=self.current_optimization_id,
-            )
+        best_primary_score_overall = initial_primary_score
+        best_prompts_overall = optimizable_prompts
 
         # Step 3. Define the output style guide
         effective_output_style_guidance = self.output_style_guidance
@@ -788,11 +714,20 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose
         ) as report_evolutionary_algo:
             for generation_idx in range(1, self.num_generations + 1):
+                # Update progress tracking for display
+                self._current_round = generation_idx - 1  # 0-based internally
+
+                # Check should_stop flag at start of each generation
+                if context.should_stop:
+                    break
+
                 # Check if we've exhausted our evaluation budget
                 if trials_used[0] >= max_trials:
                     logger.info(
                         f"Stopping optimization: max_trials ({max_trials}) reached after {generation_idx - 1} generations"
                     )
+                    context.should_stop = True
+                    context.finish_reason = "max_trials"
                     break
 
                 report_evolutionary_algo.start_gen(generation_idx, self.num_generations)
@@ -895,11 +830,20 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     ),
                 )
                 self._add_to_history(gen_round_data)
+                # Update rounds tracking for early stop reporting
+                self._rounds_completed = len(self._history)
 
-        stopped_early_flag = (
-            self._generations_without_overall_improvement
-            >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
-        )
+        # Set finish_reason if not already set by early stop
+        if context.finish_reason is None:
+            if (
+                self._generations_without_overall_improvement
+                >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
+            ):
+                context.finish_reason = "no_improvement"
+            else:
+                context.finish_reason = "completed"
+
+        stopped_early_flag = context.finish_reason != "completed"
         final_details = {}
         initial_score_for_display = initial_primary_score
 
@@ -988,15 +932,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         logger.info(f"Total LLM calls during optimization: {self.llm_call_counter}")
         logger.info(f"Total prompt evaluations: {trials_used[0]}")
-        if opik_optimization_run:
-            try:
-                opik_optimization_run.update(status="completed")
-                logger.info(
-                    f"Opik Optimization run {self.current_optimization_id} status updated to completed."
-                )
-            except Exception as e:
-                logger.warning(f"Failed to update Opik Optimization run status: {e}")
-
         # Add final details
         final_details.update(
             {
@@ -1029,7 +964,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "trials_requested": max_trials,
                 "trials_completed": trials_used[0],
                 "rounds_completed": len(self.get_history()),
-                "stop_reason": "max_trials" if trials_used[0] >= max_trials else None,
+                "stop_reason": context.finish_reason,
                 "stop_reason_details": {"best_score": final_primary_score},
             }
         )
@@ -1041,13 +976,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             initial_prompts=final_best_prompts,
             is_single_prompt_optimization=is_single_prompt_optimization,
         )
-        reporting.display_result(
-            initial_score=initial_score_for_display,
-            best_score=final_primary_score,
-            prompt=display_prompt,
-            verbose=self.verbose,
-        )
-
         # Collect tools from all final prompts
         all_final_tools = {}
         for name, p in final_best_prompts.items():
