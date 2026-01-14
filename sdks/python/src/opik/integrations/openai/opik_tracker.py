@@ -27,6 +27,7 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.audio.speech.create()` (Text-to-Speech)
 
     Can be used within other Opik-tracked functions.
 
@@ -46,6 +47,9 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
+
+    if hasattr(openai_client, "audio"):
+        _patch_openai_audio(openai_client, project_name)
 
     return openai_client
 
@@ -142,4 +146,28 @@ def _patch_openai_responses(
         )
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
+        )
+
+
+def _patch_openai_audio(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    """Patch OpenAI audio.speech methods for TTS tracking."""
+    from . import openai_audio_speech_decorator
+
+    audio_speech_decorator_factory = (
+        openai_audio_speech_decorator.OpenaiAudioSpeechTrackDecorator()
+    )
+    if openai_client.base_url.host != "api.openai.com":
+        audio_speech_decorator_factory.provider = openai_client.base_url.host
+
+    if hasattr(openai_client.audio, "speech"):
+        speech_create_decorator = audio_speech_decorator_factory.track(
+            type="llm",
+            name="audio_speech_create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = speech_create_decorator(
+            openai_client.audio.speech.create
         )

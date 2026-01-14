@@ -9,6 +9,7 @@ import java.util.Map;
 @UtilityClass
 class SpanCostCalculator {
     private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
+    private static final String CHARACTER_COUNT_KEY = "total_tokens";
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
@@ -98,6 +99,26 @@ class SpanCostCalculator {
             return BigDecimal.ZERO;
         }
         return videoPrice.multiply(BigDecimal.valueOf(durationSeconds));
+    }
+
+    /**
+     * Calculates the cost for audio speech (TTS) models.
+     * TTS models are billed by character count, not by token count.
+     * For compatibility, the SDK logs character count in the total_tokens field.
+     *
+     * @param modelPrice The pricing model for the characters
+     * @param usage Map containing usage counts (total_tokens holds character count for TTS)
+     * @return The calculated cost as a BigDecimal
+     */
+    public static BigDecimal audioSpeechCost(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+        // For TTS, character count is stored in total_tokens for compatibility
+        int characterCount = usage.getOrDefault(CHARACTER_COUNT_KEY, 0);
+        BigDecimal pricePerCharacter = modelPrice.inputPricePerCharacter();
+        if (characterCount <= 0 || !isPositive(pricePerCharacter)) {
+            return BigDecimal.ZERO;
+        }
+        return pricePerCharacter.multiply(BigDecimal.valueOf(characterCount));
     }
 
     private static boolean isPositive(BigDecimal value) {

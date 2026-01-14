@@ -14,6 +14,7 @@ public record ModelCostData(String litellmProvider,
         String outputCostPerVideoPerSecond,
         String cacheCreationInputTokenCost,
         String cacheReadInputTokenCost,
+        String inputCostPerCharacter,
         String mode,
         boolean supportsVision) {
 }

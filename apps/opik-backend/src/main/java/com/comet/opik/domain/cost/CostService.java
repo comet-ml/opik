@@ -155,16 +155,19 @@ public class CostService {
                 BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
+                BigDecimal inputPricePerCharacter = Optional.ofNullable(modelCost.inputCostPerCharacter())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
                 ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
                         inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
-                        videoOutputPrice);
+                        videoOutputPrice, inputPricePerCharacter);
 
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                cacheReadInputTokenPrice, videoOutputPrice, calculator));
+                                cacheReadInputTokenPrice, videoOutputPrice, inputPricePerCharacter, calculator));
             }
         });
 
@@ -196,10 +199,15 @@ public class CostService {
             BigDecimal outputPrice,
             BigDecimal cacheCreationInputTokenPrice,
             BigDecimal cacheReadInputTokenPrice,
-            BigDecimal videoOutputPrice) {
+            BigDecimal videoOutputPrice,
+            BigDecimal inputPricePerCharacter) {
 
         if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
             return SpanCostCalculator::videoGenerationCost;
+        }
+
+        if (mode.isAudioSpeech() && isPositive(inputPricePerCharacter)) {
+            return SpanCostCalculator::audioSpeechCost;
         }
 
         if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
@@ -250,6 +258,10 @@ public class CostService {
 
         boolean isVideoGeneration() {
             return this == VIDEO_GENERATION;
+        }
+
+        boolean isAudioSpeech() {
+            return this == AUDIO_SPEECH;
         }
     }
 }
