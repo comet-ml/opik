@@ -80,7 +80,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
 
     EXPECTED_CREATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_create_and_poll",
+        name="videos.create_and_poll",
         input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
         output={
             "id": ANY_BUT_NONE,
@@ -101,7 +101,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_create_and_poll",
+                name="videos.create_and_poll",
                 input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
                 output={
                     "id": ANY_BUT_NONE,
@@ -130,7 +130,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="videos_create",
+                        name="videos.create",
                         input={
                             "prompt": prompt,
                             "seconds": "4",
@@ -164,7 +164,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="general",
-                        name="videos_poll",
+                        name="videos.poll",
                         input=ANY_DICT,
                         output=ANY_DICT,
                         tags=["openai"],
@@ -189,7 +189,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
 
     EXPECTED_DOWNLOAD_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_download_content",
+        name="videos.download_content",
         input={"video_id": video.id},
         output=ANY,
         tags=["openai"],
@@ -202,7 +202,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_download_content",
+                name="videos.download_content",
                 input={"video_id": video.id},
                 output=ANY,
                 tags=["openai"],
@@ -225,7 +225,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
 
     EXPECTED_WRITE_TO_FILE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_write_to_file",
+        name="videos.write_to_file",
         input={"file": ANY_BUT_NONE},
         output=None,
         tags=["openai"],
@@ -245,7 +245,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_write_to_file",
+                name="videos.write_to_file",
                 input={"file": ANY_BUT_NONE},
                 output=None,
                 tags=["openai"],
@@ -275,13 +275,13 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
 
     # Find traces by name
     create_trace = next(
-        t for t in fake_backend.trace_trees if t.name == "videos_create_and_poll"
+        t for t in fake_backend.trace_trees if t.name == "videos.create_and_poll"
     )
     download_trace = next(
-        t for t in fake_backend.trace_trees if t.name == "videos_download_content"
+        t for t in fake_backend.trace_trees if t.name == "videos.download_content"
     )
     write_to_file_trace = next(
-        t for t in fake_backend.trace_trees if t.name == "videos_write_to_file"
+        t for t in fake_backend.trace_trees if t.name == "videos.write_to_file"
     )
 
     assert_equal(EXPECTED_CREATE_TRACE, create_trace)
@@ -317,7 +317,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_create_and_poll",
+        name="videos.create_and_poll",
         input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
         output=None,
         tags=["openai"],
@@ -335,7 +335,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_create_and_poll",
+                name="videos.create_and_poll",
                 input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
                 output=None,
                 tags=["openai"],
@@ -360,7 +360,7 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="videos_create",
+                        name="videos.create",
                         input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
                         output=None,
                         tags=["openai"],
@@ -434,7 +434,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
 
     EXPECTED_CREATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_create_and_poll",
+        name="videos.create_and_poll",
         input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
         output={
             "id": ANY_BUT_NONE,
@@ -455,7 +455,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_create_and_poll",
+                name="videos.create_and_poll",
                 input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
                 output={
                     "id": ANY_BUT_NONE,
@@ -484,7 +484,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="videos_create",
+                        name="videos.create",
                         input={
                             "prompt": prompt,
                             "seconds": "4",
@@ -518,7 +518,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="general",
-                        name="videos_poll",
+                        name="videos.poll",
                         input=ANY_DICT,
                         output=ANY_DICT,
                         tags=["openai"],
@@ -543,7 +543,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
 
     EXPECTED_DOWNLOAD_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_download_content",
+        name="videos.download_content",
         input={"video_id": video.id},
         output=ANY,
         tags=["openai"],
@@ -556,7 +556,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_download_content",
+                name="videos.download_content",
                 input={"video_id": video.id},
                 output=ANY,
                 tags=["openai"],
@@ -579,7 +579,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
 
     EXPECTED_WRITE_TO_FILE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_write_to_file",
+        name="videos.write_to_file",
         input={"file": ANY_BUT_NONE},
         output=None,
         tags=["openai"],
@@ -599,7 +599,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_write_to_file",
+                name="videos.write_to_file",
                 input={"file": ANY_BUT_NONE},
                 output=None,
                 tags=["openai"],
@@ -629,13 +629,13 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
 
     # Find traces by name
     create_trace = next(
-        t for t in fake_backend.trace_trees if t.name == "videos_create_and_poll"
+        t for t in fake_backend.trace_trees if t.name == "videos.create_and_poll"
     )
     download_trace = next(
-        t for t in fake_backend.trace_trees if t.name == "videos_download_content"
+        t for t in fake_backend.trace_trees if t.name == "videos.download_content"
     )
     write_to_file_trace = next(
-        t for t in fake_backend.trace_trees if t.name == "videos_write_to_file"
+        t for t in fake_backend.trace_trees if t.name == "videos.write_to_file"
     )
 
     assert_equal(EXPECTED_CREATE_TRACE, create_trace)
@@ -669,7 +669,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="videos_create_and_poll",
+        name="videos.create_and_poll",
         input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
         output=None,
         tags=["openai"],
@@ -687,7 +687,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="videos_create_and_poll",
+                name="videos.create_and_poll",
                 input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
                 output=None,
                 tags=["openai"],
@@ -712,7 +712,7 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="videos_create",
+                        name="videos.create",
                         input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
                         output=None,
                         tags=["openai"],

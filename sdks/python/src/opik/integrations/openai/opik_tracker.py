@@ -29,7 +29,8 @@ def track_openai(
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
     * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
-      `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`
+      `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
+      and `write_to_file()` on downloaded content
 
     Can be used within other Opik-tracked functions.
 
@@ -185,7 +186,7 @@ def _patch_openai_videos(
     if hasattr(openai_client.videos, "create"):
         decorator = create_decorator_factory.track(
             type="llm",
-            name="videos_create",
+            name="videos.create",
             project_name=project_name,
         )
         openai_client.videos.create = decorator(openai_client.videos.create)
@@ -195,7 +196,7 @@ def _patch_openai_videos(
     if hasattr(openai_client.videos, "create_and_poll"):
         decorator = create_decorator_factory.track(
             type="general",
-            name="videos_create_and_poll",
+            name="videos.create_and_poll",
             project_name=project_name,
         )
         openai_client.videos.create_and_poll = decorator(
@@ -206,16 +207,19 @@ def _patch_openai_videos(
     if hasattr(openai_client.videos, "remix"):
         decorator = create_decorator_factory.track(
             type="llm",
-            name="videos_remix",
+            name="videos.remix",
             project_name=project_name,
         )
         openai_client.videos.remix = decorator(openai_client.videos.remix)
+
+    # Note: videos.retrieve is intentionally NOT patched to avoid too many spans
+    # since it's called frequently during polling operations.
 
     # Patch videos.poll - poll for video completion
     if hasattr(openai_client.videos, "poll"):
         decorator = retrieve_decorator_factory.track(
             type="general",
-            name="videos_poll",
+            name="videos.poll",
             project_name=project_name,
         )
         openai_client.videos.poll = decorator(openai_client.videos.poll)
@@ -224,7 +228,7 @@ def _patch_openai_videos(
     if hasattr(openai_client.videos, "delete"):
         decorator = retrieve_decorator_factory.track(
             type="general",
-            name="videos_delete",
+            name="videos.delete",
             project_name=project_name,
         )
         openai_client.videos.delete = decorator(openai_client.videos.delete)
@@ -234,7 +238,7 @@ def _patch_openai_videos(
     if hasattr(openai_client.videos, "download_content"):
         decorator = download_decorator_factory.track(
             type="general",
-            name="videos_download_content",
+            name="videos.download_content",
             project_name=project_name,
         )
         openai_client.videos.download_content = decorator(
@@ -244,7 +248,7 @@ def _patch_openai_videos(
     # Patch videos.list - list videos (uses default @opik.track)
     if hasattr(openai_client.videos, "list"):
         decorator = opik.track(
-            name="videos_list",
+            name="videos.list",
             tags=video_tags,
             metadata=video_metadata,
             project_name=project_name,
