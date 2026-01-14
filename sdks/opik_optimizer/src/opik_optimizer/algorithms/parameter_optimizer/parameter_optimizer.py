@@ -5,6 +5,7 @@ from typing import Any
 
 import copy
 import logging
+import warnings
 from datetime import datetime, timezone
 
 import optuna
@@ -97,6 +98,8 @@ class ParameterOptimizer(BaseOptimizer):
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
+        optimize_prompt: bool = True,
+        optimize_tools: bool | dict[str, bool] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -125,6 +128,8 @@ class ParameterOptimizer(BaseOptimizer):
         local_trials: int | None = None,
         local_search_scale: float | None = None,
         optimization_id: str | None = None,
+        optimize_prompt: bool = True,
+        optimize_tools: bool | dict[str, bool] | None = None,
     ) -> OptimizationResult:
         """
         Optimize model parameters using Bayesian optimization.
@@ -160,6 +165,18 @@ class ParameterOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result describing the best parameters found
         """
+        if optimize_tools:
+            warnings.warn(
+                "optimize_tools is not supported by ParameterOptimizer; ignoring tool optimization.",
+                UserWarning,
+                stacklevel=2,
+            )
+        if not optimize_prompt:
+            warnings.warn(
+                "optimize_prompt is not supported by ParameterOptimizer; parameter optimization will proceed.",
+                UserWarning,
+                stacklevel=2,
+            )
         # Set project name
         self.project_name = project_name
         self._reset_counters()
