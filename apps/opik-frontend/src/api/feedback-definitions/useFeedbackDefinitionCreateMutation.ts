@@ -31,10 +31,14 @@ const useFeedbackDefinitionCreateMutation = () => {
         ["response", "data", "message"],
         error.message,
       );
+ 
+      const errorMessage = error.response?.status === 409
+        ? "A feedback definition with this name already exists. Please choose a different name."
+        : message;
 
       toast({
         title: "Error",
-        description: message,
+        description: errorMessage,
         variant: "destructive",
       });
     },
