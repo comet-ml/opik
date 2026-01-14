@@ -1,4 +1,10 @@
-import React, { ReactNode, useRef, useEffect, useCallback } from "react";
+import React, {
+  ReactNode,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -54,7 +60,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     codeOutput,
   });
 
-  const base64Extension = createBase64ExpandExtension();
+  const base64Extension = useMemo(() => createBase64ExpandExtension(), []);
 
   // Keep latest onScroll callback in ref to avoid stale closures
   const onScrollRef = useRef(onScroll);
