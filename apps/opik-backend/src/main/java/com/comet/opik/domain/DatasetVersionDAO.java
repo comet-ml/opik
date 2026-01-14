@@ -351,13 +351,15 @@ public interface DatasetVersionDAO {
     @SqlUpdate("""
             UPDATE dataset_versions
             SET batch_group_id = :batch_group_id,
-                last_updated_at = NOW()
+                last_updated_at = NOW(),
+                last_updated_by = :last_updated_by
             WHERE id = :version_id
                 AND workspace_id = :workspace_id
             """)
     void updateBatchGroupId(@Bind("version_id") UUID versionId,
             @Bind("batch_group_id") UUID batchGroupId,
-            @Bind("workspace_id") String workspaceId);
+            @Bind("workspace_id") String workspaceId,
+            @Bind("last_updated_by") String lastUpdatedBy);
 
     @SqlUpdate("""
             UPDATE dataset_versions
@@ -365,7 +367,8 @@ public interface DatasetVersionDAO {
                 items_added = :items_added,
                 items_modified = :items_modified,
                 items_deleted = :items_deleted,
-                last_updated_at = NOW()
+                last_updated_at = NOW(),
+                last_updated_by = :last_updated_by
             WHERE id = :version_id
               AND workspace_id = :workspace_id
             """)
@@ -374,5 +377,6 @@ public interface DatasetVersionDAO {
             @Bind("items_added") int itemsAdded,
             @Bind("items_modified") int itemsModified,
             @Bind("items_deleted") int itemsDeleted,
-            @Bind("workspace_id") String workspaceId);
+            @Bind("workspace_id") String workspaceId,
+            @Bind("last_updated_by") String lastUpdatedBy);
 }

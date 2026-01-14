@@ -349,7 +349,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             // Associate batch_group_id if provided
             if (batchGroupId != null) {
-                datasetVersionDAO.updateBatchGroupId(newVersionId, batchGroupId, workspaceId);
+                datasetVersionDAO.updateBatchGroupId(newVersionId, batchGroupId, workspaceId, userName);
                 log.info("Associated batch_group_id '{}' with version '{}' for dataset '{}'",
                         batchGroupId, versionHash, datasetId);
             }

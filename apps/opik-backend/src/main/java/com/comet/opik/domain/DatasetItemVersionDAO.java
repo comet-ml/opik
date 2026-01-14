@@ -320,37 +320,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String DELETE_ITEMS_FROM_VERSION = """
-            ALTER TABLE dataset_item_versions DELETE
-            WHERE dataset_id = :dataset_id
-              AND dataset_version_id = :version_id
-              AND dataset_item_id IN (:item_ids)
-              AND workspace_id = :workspace_id
-            """;
-
-    private static final String DELETE_ITEMS_FROM_VERSION_BY_FILTERS = """
-            ALTER TABLE dataset_item_versions DELETE
+            DELETE FROM dataset_item_versions
             WHERE dataset_id = :dataset_id
               AND dataset_version_id = :version_id
               AND workspace_id = :workspace_id
+              <if(item_ids)>AND dataset_item_id IN (:item_ids)<endif>
               <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
-    private static final String COUNT_ITEMS_MATCHING_FILTERS = """
+    private static final String COUNT_ITEMS = """
             SELECT count(DISTINCT dataset_item_id) as count
             FROM dataset_item_versions
             WHERE dataset_id = :dataset_id
               AND dataset_version_id = :version_id
               AND workspace_id = :workspace_id
+              <if(item_ids)>AND dataset_item_id IN :item_ids<endif>
               <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            """;
-
-    private static final String COUNT_ITEMS_BY_IDS = """
-            SELECT count(DISTINCT dataset_item_id) as count
-            FROM dataset_item_versions
-            WHERE dataset_id = :dataset_id
-              AND dataset_version_id = :version_id
-              AND workspace_id = :workspace_id
-              AND dataset_item_id IN :item_ids
             """;
 
     /**
@@ -2172,7 +2157,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             return Mono.just(0L);
                         }
 
-                        var statement = connection.createStatement(DELETE_ITEMS_FROM_VERSION)
+                        // Use StringTemplate to generate query with item_ids condition
+                        var template = new ST(DELETE_ITEMS_FROM_VERSION);
+                        template.add("item_ids", true); // Enable item_ids condition
+                        String deleteQuery = template.render();
+
+                        var statement = connection.createStatement(deleteQuery)
                                 .bind("dataset_id", datasetId.toString())
                                 .bind("version_id", versionId.toString())
                                 .bind("workspace_id", workspaceId);
@@ -2183,7 +2173,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .toArray(String[]::new);
                         statement.bind("item_ids", itemIdStrings);
 
-                        // ClickHouse ALTER TABLE DELETE is async and returns 0, so return the count we calculated
+                        // delete async and returns 0, so return the count we calculated
                         return Flux.from(statement.execute())
                                 .flatMap(Result::getRowsUpdated)
                                 .reduce(0L, Long::sum)
@@ -2226,7 +2216,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 : FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
 
                         // Use StringTemplate to generate query with optional filter conditions
-                        var template = new ST(DELETE_ITEMS_FROM_VERSION_BY_FILTERS);
+                        var template = new ST(DELETE_ITEMS_FROM_VERSION);
                         filterConditionsOpt.ifPresent(filterConditions -> template.add("dataset_item_filters",
                                 filterConditions));
                         String deleteQuery = template.render();
@@ -2269,7 +2259,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     : FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
 
             // Use StringTemplate to generate query with optional filter conditions
-            var template = new ST(COUNT_ITEMS_MATCHING_FILTERS);
+            var template = new ST(COUNT_ITEMS);
             filterConditionsOpt.ifPresent(filterConditions -> template.add("dataset_item_filters", filterConditions));
             String countQuery = template.render();
 
@@ -2296,7 +2286,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      */
     private Mono<Long> countItemsByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds, String workspaceId) {
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(COUNT_ITEMS_BY_IDS)
+            var template = new ST(COUNT_ITEMS);
+            template.add("item_ids", true); // Enable item_ids condition
+            String countQuery = template.render();
+
+            var statement = connection.createStatement(countQuery)
                     .bind("dataset_id", datasetId.toString())
                     .bind("version_id", versionId.toString())
                     .bind("workspace_id", workspaceId)

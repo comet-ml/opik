@@ -1012,7 +1012,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Mutating latest version '{}' for dataset '{}' (createVersion=false)", latestVersion.get().id(),
                     datasetId);
 
-            return deleteItemsFromExistingVersionByFilters(datasetId, latestVersion.get().id(), filters, workspaceId);
+            return deleteItemsFromExistingVersionByFilters(datasetId, latestVersion.get().id(), filters, workspaceId,
+                    userName);
         }
 
         // Create a new version with deletions
@@ -1727,7 +1728,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             .insertItems(datasetId, versionId, normalizedItems, workspaceId, userName)
                                             .then(Mono.fromCallable(() -> {
                                                 updateVersionCountsForInsert(versionId, workspaceId, finalNewItemsCount,
-                                                        finalUpdatedItemsCount);
+                                                        finalUpdatedItemsCount, userName);
                                                 return versionService.getVersionById(workspaceId, datasetId, versionId);
                                             }).subscribeOn(Schedulers.boundedElastic()));
                                 });
@@ -1744,9 +1745,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param workspaceId The workspace ID
      * @param newItemsCount Number of new items inserted
      * @param updatedItemsCount Number of items updated
+     * @param userName The user performing the update
      */
     private void updateVersionCountsForInsert(UUID versionId, String workspaceId, int newItemsCount,
-            int updatedItemsCount) {
+            int updatedItemsCount, String userName) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
             var currentVersion = dao.findById(versionId, workspaceId)
@@ -1759,7 +1761,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int newModified = currentVersion.itemsModified() + updatedItemsCount;
 
             dao.updateCounts(versionId, newTotal, newAdded, newModified,
-                    currentVersion.itemsDeleted(), workspaceId);
+                    currentVersion.itemsDeleted(), workspaceId, userName);
             return null;
         });
     }
@@ -1772,9 +1774,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param workspaceId The workspace ID
      * @param currentVersion The current version before deletion
      * @param deletedCount Number of items deleted
+     * @param userName The user performing the update
      */
     private void updateVersionCountsForDelete(UUID versionId, String workspaceId, DatasetVersion currentVersion,
-            int deletedCount) {
+            int deletedCount, String userName) {
         int newTotal = currentVersion.itemsTotal() - deletedCount;
         int newDeleted = currentVersion.itemsDeleted() + deletedCount;
 
@@ -1784,7 +1787,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
             dao.updateCounts(versionId, newTotal, currentVersion.itemsAdded(),
-                    currentVersion.itemsModified(), newDeleted, workspaceId);
+                    currentVersion.itemsModified(), newDeleted, workspaceId, userName);
             return null;
         });
     }
@@ -2052,7 +2055,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
                             updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
-                                    deletedCount.intValue());
+                                    deletedCount.intValue(), userName);
                             log.info("Deleted '{}' items from version '{}', new total '{}'",
                                     deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
                             return null;
@@ -2068,7 +2071,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Empty filter list means "delete all" (no filters = match everything).
      */
     private Mono<Void> deleteItemsFromExistingVersionByFilters(UUID datasetId, UUID versionId,
-            List<DatasetItemFilter> filters, String workspaceId) {
+            List<DatasetItemFilter> filters, String workspaceId, String userName) {
 
         log.info("Deleting items from existing version '{}' for dataset '{}' using filters (empty = delete all)",
                 versionId, datasetId);
@@ -2096,7 +2099,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
                             updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
-                                    deletedCount.intValue());
+                                    deletedCount.intValue(), userName);
                             log.info("Deleted '{}' items from version '{}', new total '{}'",
                                     deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
                             return null;

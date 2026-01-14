@@ -3,7 +3,7 @@
 --comment: Add batch_group_id column to dataset_versions table for SDK batch operation tracking
 
 ALTER TABLE dataset_versions
-    ADD COLUMN batch_group_id VARCHAR(36) DEFAULT NULL;
+    ADD COLUMN batch_group_id CHAR(36) DEFAULT NULL;
 
 -- Add index for efficient lookup by batch_group_id
 CREATE INDEX idx_dataset_versions_batch_group_id
