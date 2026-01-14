@@ -2833,9 +2833,9 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
-    @DisplayName("SDK Batch Versioning with batch_group_id:")
+    @DisplayName("Batch Versioning with batch_group_id:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class SdkBatchVersioning {
+    class BatchVersioningTests {
 
         @Test
         @DisplayName("Success: Multiple INSERT batches with same batch_group_id create single version")
@@ -2933,9 +2933,9 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
-    @DisplayName("SDK Batch Versioning - DELETE Operations")
+    @DisplayName("Batch Versioning - DELETE Operations")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class SdkBatchVersioningDelete {
+    class BatchVersioningDeleteTests {
 
         @Test
         @DisplayName("Success: Same batch_group_id for multiple DELETE batches creates single version")
