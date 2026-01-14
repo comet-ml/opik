@@ -263,7 +263,9 @@ const AddExperimentDialog: React.FunctionComponent<
 
     return result`;
 
-  const experimentCode = `import os
+  const experimentCode =
+    "" +
+    `import os
 from opik import Opik
 from opik.evaluation import evaluate
 
@@ -271,10 +273,11 @@ from opik.evaluation import evaluate
 
 # INJECT_OPIK_CONFIGURATION
 
-${importString}client = Opik()
+${importString}
+client = Opik()
 dataset = client.get_dataset(name="${
-    datasetName || "dataset name placeholder"
-  }")
+      datasetName || "dataset name placeholder"
+    }")
 
 ${evaluationTaskCode}
 ${metricsString}
@@ -465,7 +468,7 @@ eval_results = evaluate(
   return (
     <SideDialog open={open} setOpen={openChangeHandler}>
       <div className="pb-20">
-        <div className="pb-4 md:pb-8">
+        <div className="pb-8">
           <SheetTitle>Create a new experiment</SheetTitle>
           <div className="comet-body-s mx-auto mt-4 max-w-[468px] text-center text-muted-slate">
             Select a dataset, assign the relevant evaluators, and follow the
