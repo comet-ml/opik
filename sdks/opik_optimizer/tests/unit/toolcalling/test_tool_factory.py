@@ -1,17 +1,23 @@
 from typing import Any
 
+import pytest
+
 from opik_optimizer import ChatPrompt
 from opik_optimizer.utils.toolcalling.mcp import ToolSignature
 from opik_optimizer.utils.toolcalling.tool_factory import (
     ToolCallingFactory,
+    cursor_mcp_config_to_tools,
     resolve_toolcalling_tools,
 )
 
 
-def test_tool_factory__resolves_mcp_tools(monkeypatch) -> None:
-    factory = ToolCallingFactory()
-
-    def _fake_get_signature(self, server, tool_name, signature_override):
+def test_tool_factory__resolves_mcp_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_get_signature(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        signature_override: dict[str, Any] | None,
+    ) -> ToolSignature:
         return ToolSignature(
             name=tool_name,
             description="mcp tool",
@@ -22,30 +28,25 @@ def test_tool_factory__resolves_mcp_tools(monkeypatch) -> None:
 
     tools = [
         {
-            "mcp": {
-                "name": "context7.get-library-docs",
-                "server": {
-                    "type": "stdio",
-                    "name": "context7-docs",
-                    "command": "echo",
-                    "args": [],
-                    "env": {},
-                },
-                "tool": {"name": "get-library-docs"},
-            }
+            "type": "mcp",
+            "server_label": "context7",
+            "command": "echo",
+            "args": [],
+            "env": {},
+            "allowed_tools": ["get-library-docs"],
         }
     ]
 
     resolved_tools, function_map = resolve_toolcalling_tools(tools, {})
-    assert resolved_tools[0]["function"]["name"] == "context7.get-library-docs"
+    assert resolved_tools[0]["function"]["name"] == "get-library-docs"
     assert resolved_tools[0]["function"]["description"] == "mcp tool"
-    assert "context7.get-library-docs" in function_map
+    assert "get-library-docs" in function_map
 
 
-def test_tool_factory__keeps_pre_resolved_tools(monkeypatch) -> None:
-    factory = ToolCallingFactory()
-
-    def _fake_callable(**_kwargs):
+def test_tool_factory__keeps_pre_resolved_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_callable(**_kwargs: Any) -> str:
         return "ok"
 
     monkeypatch.setattr(
@@ -55,15 +56,14 @@ def test_tool_factory__keeps_pre_resolved_tools(monkeypatch) -> None:
     tool = {
         "type": "function",
         "function": {
-            "name": "context7.get-library-docs",
+            "name": "get-library-docs",
             "description": "existing",
             "parameters": {"type": "object", "properties": {}},
         },
         "mcp": {
-            "name": "context7.get-library-docs",
+            "server_label": "context7",
             "server": {
                 "type": "stdio",
-                "name": "context7-docs",
                 "command": "echo",
                 "args": [],
                 "env": {},
@@ -74,10 +74,12 @@ def test_tool_factory__keeps_pre_resolved_tools(monkeypatch) -> None:
 
     resolved_tools, function_map = resolve_toolcalling_tools([tool], {})
     assert resolved_tools[0]["function"]["description"] == "existing"
-    assert "context7.get-library-docs" in function_map
+    assert "get-library-docs" in function_map
 
 
-def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
+def test_tool_factory__resolves_remote_mcp_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class FakeTool:
         def __init__(self, name: str, description: str, input_schema: dict[str, Any]):
             self.name = name
@@ -99,7 +101,10 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
             FakeTool(
                 name="get-library-docs",
                 description="remote docs tool",
-                input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
+                input_schema={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
             )
         ]
 
@@ -108,7 +113,10 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
             self.output = output
 
     def _fake_call_tool(
-        url: str, headers: dict[str, str], tool_name: str, arguments: dict[str, Any]
+        url: str,
+        headers: dict[str, str],
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> FakeResponse:
         assert tool_name == "get-library-docs"
         assert arguments == {"query": "opik"}
@@ -125,15 +133,11 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
 
     tools = [
         {
-            "mcp": {
-                "name": "context7.get-library-docs",
-                "server": {
-                    "type": "remote",
-                    "url": "https://mcp.context7.com/mcp",
-                    "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
-                },
-                "tool": {"name": "get-library-docs"},
-            }
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+            "allowed_tools": ["get-library-docs"],
         }
     ]
 
@@ -143,4 +147,25 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
     assert resolved_prompt.tools[0]["function"]["description"] == "remote docs tool"
 
     _, function_map = resolve_toolcalling_tools(resolved_prompt.tools, {})
-    assert function_map["context7.get-library-docs"](query="opik") == "docs response"
+    assert function_map["get-library-docs"](query="opik") == "docs response"
+
+
+def test_tool_factory__converts_cursor_config() -> None:
+    config = {
+        "mcpServers": {
+            "context7": {
+                "url": "https://mcp.context7.com/mcp",
+                "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+            }
+        }
+    }
+
+    tools = cursor_mcp_config_to_tools(config)
+    assert tools == [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        }
+    ]

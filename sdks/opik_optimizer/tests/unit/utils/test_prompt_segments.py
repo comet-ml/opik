@@ -23,6 +23,7 @@ def test_prompt_segments__update_tool_description() -> None:
     )
     assert updated.tools is not None
     assert updated.tools[0]["function"]["description"] == "new description"
+    assert prompt.tools is not None
     assert prompt.tools[0]["function"]["description"] == "old description"
 
 
@@ -69,5 +70,8 @@ def test_prompt_segments__update_multiple_segments() -> None:
     assert updated.messages[0]["content"] == "Updated system guidance"
     assert updated.messages[1]["content"] == "Ask about {topic} and cite sources"
     assert updated.tools is not None
-    assert updated.tools[0]["function"]["description"] == "Search the docs and return citations"
+    assert (
+        updated.tools[0]["function"]["description"]
+        == "Search the docs and return citations"
+    )
     assert updated.tools[0]["function"]["parameters"]["required"] == ["query"]

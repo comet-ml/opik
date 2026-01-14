@@ -65,16 +65,12 @@ def test_chat_prompt_accepts_mcp_stdio_tool() -> None:
         system="System",
         tools=[
             {
-                "mcp": {
-                    "name": "context7_docs",
-                    "server": {
-                        "type": "stdio",
-                        "command": "npx",
-                        "args": [],
-                        "env": {},
-                    },
-                    "tool": {"name": "get-library-docs"},
-                }
+                "type": "mcp",
+                "server_label": "context7",
+                "command": "npx",
+                "args": [],
+                "env": {},
+                "allowed_tools": ["get-library-docs"],
             }
         ],
     )
@@ -87,11 +83,10 @@ def test_chat_prompt_accepts_mcp_remote_tool() -> None:
         system="System",
         tools=[
             {
-                "mcp": {
-                    "name": "remote_docs",
-                    "server": {"type": "remote", "url": "https://mcp.example.com"},
-                    "tool": {"name": "search-docs"},
-                }
+                "type": "mcp",
+                "server_label": "remote-docs",
+                "server_url": "https://mcp.example.com",
+                "allowed_tools": ["search-docs"],
             }
         ],
     )
@@ -105,11 +100,8 @@ def test_chat_prompt_rejects_remote_mcp_without_url() -> None:
             system="System",
             tools=[
                 {
-                    "mcp": {
-                        "name": "remote_docs",
-                        "server": {"type": "remote"},
-                        "tool": {"name": "search-docs"},
-                    }
+                    "type": "mcp",
+                    "server_label": "remote-docs",
                 }
             ],
         )
