@@ -27,14 +27,10 @@ export type PromptTemplateStructure =
   (typeof PromptTemplateStructure)[keyof typeof PromptTemplateStructure];
 
 /**
- * Configuration options for creating a new prompt
- * Extends REST API PromptWrite with renamed 'prompt' field
+ * Common options shared between text and chat prompts
+ * Used internally for prompt creation logic
  */
-export interface CreatePromptOptions {
-  /** Name of the prompt (unique identifier) */
-  name: string;
-  /** Template text content with placeholders */
-  prompt: string;
+export interface CommonPromptOptions {
   /** Optional prompt ID (generated if not provided) */
   promptId?: string;
   /** Optional description for the prompt */
@@ -47,6 +43,17 @@ export interface CreatePromptOptions {
   type?: PromptType;
   /** Optional tags for categorization */
   tags?: string[];
+}
+
+/**
+ * Configuration options for creating a new prompt
+ * Extends REST API PromptWrite with renamed 'prompt' field
+ */
+export interface CreatePromptOptions extends CommonPromptOptions {
+  /** Name of the prompt (unique identifier) */
+  name: string;
+  /** Template text content with placeholders */
+  prompt: string;
 }
 
 /**
@@ -146,23 +153,11 @@ export type SupportedModalities = Partial<Record<ModalityName, boolean>>;
 /**
  * Configuration options for creating a new chat prompt
  */
-export interface CreateChatPromptOptions {
+export interface CreateChatPromptOptions extends CommonPromptOptions {
   /** Name of the prompt (unique identifier) */
   name: string;
   /** Array of chat messages with role and content */
   messages: ChatMessage[];
-  /** Optional prompt ID (generated if not provided) */
-  promptId?: string;
-  /** Optional description for the prompt */
-  description?: string;
-  /** Optional metadata for tracking and filtering */
-  metadata?: OpikApi.JsonNodeWrite;
-  /** Optional change description for version tracking */
-  changeDescription?: string;
-  /** Template engine type, defaults to mustache */
-  type?: PromptType;
-  /** Optional tags for categorization */
-  tags?: string[];
   /** Whether to validate template placeholders */
   validatePlaceholders?: boolean;
 }
