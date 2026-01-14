@@ -234,6 +234,48 @@ class CsvDatasetExportProcessorImplTest {
                 .verify();
     }
 
+    @Test
+    void generateAndUploadCsv_shouldPreserveColumnInsertionOrder_whenUsingLinkedHashMap() {
+        // Given - Use LinkedHashMap to preserve insertion order (as DAO now does)
+        Map<String, List<String>> columns = new LinkedHashMap<>();
+        columns.put("zebra", List.of("String"));
+        columns.put("apple", List.of("String"));
+        columns.put("mango", List.of("String"));
+        columns.put("banana", List.of("String"));
+
+        List<DatasetItem> items = new ArrayList<>();
+        items.add(createItem(UUID.randomUUID(), Map.of(
+                "zebra", JsonUtils.valueToTree("z-value"),
+                "apple", JsonUtils.valueToTree("a-value"),
+                "mango", JsonUtils.valueToTree("m-value"),
+                "banana", JsonUtils.valueToTree("b-value"))));
+
+        when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
+        when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
+
+        // When
+        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+
+        // Then
+        StepVerifier.create(result)
+                .assertNext(filePath -> assertThat(filePath).isNotEmpty())
+                .verifyComplete();
+
+        // Verify CSV content preserves insertion order from LinkedHashMap
+        ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
+
+        String csvContent = new String(dataCaptor.getValue());
+        String[] lines = csvContent.split("\n");
+
+        // First line should be header with columns in insertion order
+        assertThat(lines[0].trim()).isEqualTo("zebra,apple,mango,banana");
+
+        // Second line should have values in the same order as headers
+        assertThat(lines[1].trim()).isEqualTo("z-value,a-value,m-value,b-value");
+    }
+
     private DatasetItem createItem(UUID id, Map<String, JsonNode> data) {
         return DatasetItem.builder()
                 .id(id)

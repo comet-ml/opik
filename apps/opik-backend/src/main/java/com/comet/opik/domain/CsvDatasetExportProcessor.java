@@ -112,7 +112,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     /**
      * Discovers all unique column names from the dataset items.
-     * Columns are returned in the order provided by the database.
+     * Columns are returned in the order provided by the DAO (LinkedHashMap preserves insertion order).
      *
      * @param datasetId The dataset ID
      * @return A Mono containing an ordered set of column names
@@ -122,7 +122,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
         return datasetItemDao.getColumns(datasetId)
                 .map(columnsMap -> {
-                    // Extract column names from the map and maintain database order
+                    // LinkedHashMap from DAO preserves insertion order
                     Set<String> columnNames = new LinkedHashSet<>(columnsMap.keySet());
                     log.debug("Found columns for dataset '{}': '{}'", datasetId, columnNames);
                     return columnNames;
@@ -276,8 +276,8 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                         "Failed to generate and upload CSV for dataset '{}', aborting multipart upload",
                                         datasetId, error);
                                 return abortMultipartUpload(filePath, uploadId)
-                                        .then(Mono.error(new IllegalStateException("Failed to generate and upload CSV",
-                                                error)));
+                                        .then(Mono.error(new InternalServerErrorException(
+                                                "Failed to export dataset. Please try again later.")));
                             });
                 });
     }

@@ -19,6 +19,10 @@ export const ProjectMetricResponsePublicMetricType: core.serialization.Schema<
     "THREAD_COUNT",
     "THREAD_DURATION",
     "THREAD_FEEDBACK_SCORES",
+    "SPAN_FEEDBACK_SCORES",
+    "SPAN_COUNT",
+    "SPAN_DURATION",
+    "SPAN_TOKEN_USAGE",
 ]);
 
 export declare namespace ProjectMetricResponsePublicMetricType {
@@ -31,5 +35,9 @@ export declare namespace ProjectMetricResponsePublicMetricType {
         | "GUARDRAILS_FAILED_COUNT"
         | "THREAD_COUNT"
         | "THREAD_DURATION"
-        | "THREAD_FEEDBACK_SCORES";
+        | "THREAD_FEEDBACK_SCORES"
+        | "SPAN_FEEDBACK_SCORES"
+        | "SPAN_COUNT"
+        | "SPAN_DURATION"
+        | "SPAN_TOKEN_USAGE";
 }
