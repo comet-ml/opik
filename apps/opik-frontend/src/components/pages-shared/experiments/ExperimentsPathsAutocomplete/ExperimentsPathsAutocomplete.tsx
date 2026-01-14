@@ -17,6 +17,7 @@ type ExperimentsPathsAutocompleteProps = {
   sorting?: Sorting;
   filters?: Filters;
   placeholder?: string;
+  className?: string;
   excludeRoot?: boolean;
 };
 
@@ -31,6 +32,7 @@ const ExperimentsPathsAutocomplete: React.FC<
   filters,
   placeholder = "Select a key from recent experiments",
   excludeRoot = false,
+  className,
 }) => {
   const { data, isPending } = useExperimentsList({
     promptId,
@@ -68,6 +70,7 @@ const ExperimentsPathsAutocomplete: React.FC<
       hasError={hasError}
       isLoading={isPending}
       placeholder={placeholder}
+      className={className}
     />
   );
 };
