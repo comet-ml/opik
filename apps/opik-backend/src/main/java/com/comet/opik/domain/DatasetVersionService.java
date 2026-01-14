@@ -167,7 +167,7 @@ public interface DatasetVersionService {
      * @param workspaceId the workspace ID
      * @return Optional containing the version if found, empty otherwise
      */
-    Optional<DatasetVersion> findByBatchGroupId(String batchGroupId, UUID datasetId, String workspaceId);
+    Optional<DatasetVersion> findByBatchGroupId(UUID batchGroupId, UUID datasetId, String workspaceId);
 
     /**
      * Creates a new version from the result of applying delta changes.
@@ -186,7 +186,7 @@ public interface DatasetVersionService {
      */
     DatasetVersion createVersionFromDelta(UUID datasetId, UUID newVersionId, int itemsTotal,
             UUID baseVersionId, List<String> tags, String changeDescription,
-            String batchGroupId, String workspaceId, String userName);
+            UUID batchGroupId, String workspaceId, String userName);
 
     /**
      * Restores a dataset to a previous version state by creating a new version.
@@ -254,7 +254,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
-    public Optional<DatasetVersion> findByBatchGroupId(@NonNull String batchGroupId, @NonNull UUID datasetId,
+    public Optional<DatasetVersion> findByBatchGroupId(@NonNull UUID batchGroupId, @NonNull UUID datasetId,
             @NonNull String workspaceId) {
         log.info("Finding version by batch_group_id '{}' for dataset '{}'", batchGroupId, datasetId);
 
@@ -301,7 +301,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
-            String batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
+            UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
 
         log.info(
                 "Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}', batchGroupId '{}'",
@@ -348,7 +348,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
 
             // Associate batch_group_id if provided
-            if (StringUtils.isNotBlank(batchGroupId)) {
+            if (batchGroupId != null) {
                 datasetVersionDAO.updateBatchGroupId(newVersionId, batchGroupId, workspaceId);
                 log.info("Associated batch_group_id '{}' with version '{}' for dataset '{}'",
                         batchGroupId, versionHash, datasetId);

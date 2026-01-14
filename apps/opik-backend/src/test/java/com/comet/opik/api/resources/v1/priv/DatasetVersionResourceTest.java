@@ -177,7 +177,7 @@ class DatasetVersionResourceTest {
         var batch = DatasetItemBatch.builder()
                 .datasetId(datasetId)
                 .items(itemsList)
-                .batchGroupId(UUID.randomUUID().toString()) // Unique batch_group_id to create new version
+                .batchGroupId(UUID.randomUUID()) // Unique batch_group_id to create new version
                 .build();
 
         datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
@@ -210,7 +210,7 @@ class DatasetVersionResourceTest {
         // Create a delete request with a unique batchGroupId to create a new version
         var deleteRequest = DatasetItemsDelete.builder()
                 .itemIds(Set.of(itemId))
-                .batchGroupId(UUID.randomUUID().toString())
+                .batchGroupId(UUID.randomUUID())
                 .build();
         datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
     }
@@ -649,7 +649,7 @@ class DatasetVersionResourceTest {
                     DatasetItemBatch.builder()
                             .datasetId(dataset1Id)
                             .items(List.of(item))
-                            .batchGroupId(UUID.randomUUID().toString())
+                            .batchGroupId(UUID.randomUUID())
                             .build(),
                     TEST_WORKSPACE,
                     API_KEY);
@@ -658,7 +658,7 @@ class DatasetVersionResourceTest {
                     DatasetItemBatch.builder()
                             .datasetId(dataset2Id)
                             .items(List.of(item))
-                            .batchGroupId(UUID.randomUUID().toString())
+                            .batchGroupId(UUID.randomUUID())
                             .build(),
                     TEST_WORKSPACE,
                     API_KEY);
@@ -697,7 +697,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .items(items)
                     .datasetId(datasetId)
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -758,7 +758,7 @@ class DatasetVersionResourceTest {
             var batch1 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(originalItems)
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
@@ -864,7 +864,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(originalItems)
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1069,7 +1069,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(originalItems)
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1270,7 +1270,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(item1, item2, item3))
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1548,7 +1548,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(item1, item2))
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1675,7 +1675,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(item1, item2, item3))
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1945,7 +1945,7 @@ class DatasetVersionResourceTest {
                     .build();
 
             var batch = DatasetItemBatch.builder().datasetId(datasetId)
-                    .items(List.of(item1, item2, item3, item4, item5)).batchGroupId(UUID.randomUUID().toString())
+                    .items(List.of(item1, item2, item3, item4, item5)).batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -2044,7 +2044,7 @@ class DatasetVersionResourceTest {
                     .build();
 
             var batch = DatasetItemBatch.builder().datasetId(datasetId).items(List.of(item1, item2, item3))
-                    .batchGroupId(UUID.randomUUID().toString()).build();
+                    .batchGroupId(UUID.randomUUID()).build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             var version1 = getLatestVersion(datasetId);
@@ -2342,7 +2342,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(itemsList)
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
@@ -2700,7 +2700,7 @@ class DatasetVersionResourceTest {
             var batch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(items)
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
 
             // when - PUT without query param (default behavior)
@@ -2842,7 +2842,7 @@ class DatasetVersionResourceTest {
         void putItems_whenSameBatchId_thenSingleVersion() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchGroupId = UUID.randomUUID().toString();
+            var batchGroupId = UUID.randomUUID();
 
             // When - Send 3 batches with same batch_group_id
             var batch1Items = generateDatasetItems(2);
@@ -2893,8 +2893,8 @@ class DatasetVersionResourceTest {
         void putItems_whenDifferentBatchIds_thenMultipleVersions() {
             // Given - Create dataset
             var datasetId = createDataset(UUID.randomUUID().toString());
-            var batchGroupId1 = UUID.randomUUID().toString();
-            var batchGroupId2 = UUID.randomUUID().toString();
+            var batchGroupId1 = UUID.randomUUID();
+            var batchGroupId2 = UUID.randomUUID();
 
             // When - Send batch with batchGroupId1
             var batch1Items = generateDatasetItems(2);
@@ -2957,7 +2957,7 @@ class DatasetVersionResourceTest {
                     .map(DatasetItem::datasetItemId)
                     .toList();
 
-            var batchGroupId = UUID.randomUUID().toString();
+            var batchGroupId = UUID.randomUUID();
 
             // When - Delete items in multiple batches with same batch_group_id
             // First batch: delete 3 items (itemIds is mutually exclusive with datasetId)
@@ -3010,8 +3010,8 @@ class DatasetVersionResourceTest {
                     .map(DatasetItem::datasetItemId)
                     .toList();
 
-            var batchGroupId1 = UUID.randomUUID().toString();
-            var batchGroupId2 = UUID.randomUUID().toString();
+            var batchGroupId1 = UUID.randomUUID();
+            var batchGroupId2 = UUID.randomUUID();
 
             // When - Delete with first batch_group_id (itemIds is mutually exclusive with datasetId)
             var deleteRequest1 = DatasetItemsDelete.builder()
@@ -3073,13 +3073,13 @@ class DatasetVersionResourceTest {
             // itemIds is mutually exclusive with datasetId
             var deleteRequest1 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(0, 3)))
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
 
             var deleteRequest2 = DatasetItemsDelete.builder()
                     .itemIds(Set.copyOf(itemIds.subList(3, 5)))
-                    .batchGroupId(UUID.randomUUID().toString())
+                    .batchGroupId(UUID.randomUUID())
                     .build();
             datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
 

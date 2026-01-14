@@ -73,7 +73,7 @@ public interface DatasetItemService {
 
     Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
-    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId);
+    Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, UUID batchGroupId);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
@@ -923,7 +923,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, String batchGroupId) {
+    public Mono<Void> delete(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, UUID batchGroupId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -966,7 +966,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * </ul>
      */
     private Mono<Void> deleteItemsWithVersion(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters,
-            String workspaceId, String userName, String batchGroupId, boolean createVersion) {
+            String workspaceId, String userName, UUID batchGroupId, boolean createVersion) {
 
         // Case 1: Deleting by item IDs
         if (ids != null && !ids.isEmpty()) {
@@ -989,7 +989,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * to the new version, avoiding the need to load all item IDs into memory.
      */
     private Mono<Void> deleteByDatasetIdWithVersion(UUID datasetId, List<DatasetItemFilter> filters,
-            String workspaceId, String userName, String batchGroupId, boolean createVersion) {
+            String workspaceId, String userName, UUID batchGroupId, boolean createVersion) {
         log.info(
                 "Deleting items by datasetId '{}' with versioning, filtersSize='{}', batchGroupId='{}', createVersion='{}'",
                 datasetId, filters != null ? filters.size() : 0, batchGroupId, createVersion);
@@ -1067,7 +1067,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Deletes items by item IDs, creating a new version or mutating the latest version.
      */
     private Mono<Void> deleteByItemIdsWithVersion(Set<UUID> ids, String workspaceId, String userName,
-            String batchGroupId, boolean createVersion) {
+            UUID batchGroupId, boolean createVersion) {
         log.info("Deleting '{}' items by IDs with versioning, batchGroupId='{}', createVersion='{}'",
                 ids.size(), batchGroupId, createVersion);
 
@@ -1110,7 +1110,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Deletes items by dataset_item_id values within a known dataset.
      */
     private Mono<Void> deleteByDatasetItemIdsInDataset(Set<UUID> datasetItemIds, UUID datasetId,
-            String workspaceId, String userName, String batchGroupId, boolean createVersion) {
+            String workspaceId, String userName, UUID batchGroupId, boolean createVersion) {
         log.info("Deleting '{}' items from dataset '{}' with versioning, batchGroupId='{}', createVersion='{}'",
                 datasetItemIds.size(), datasetId, batchGroupId, createVersion);
 
@@ -1152,7 +1152,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Creates a new version with the specified items deleted (excluded from the new version).
      */
     private Mono<Void> createVersionWithDeletion(UUID datasetId, UUID baseVersionId, UUID newVersionId,
-            Set<UUID> deletedIds, int baseVersionItemCount, String batchGroupId,
+            Set<UUID> deletedIds, int baseVersionItemCount, UUID batchGroupId,
             String workspaceId, String userName) {
 
         // Generate UUIDs for unchanged items (items that are NOT being deleted)
@@ -1617,7 +1617,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             }
 
             UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
-            String batchGroupId = batch.batchGroupId();
+            UUID batchGroupId = batch.batchGroupId();
 
             if (batchGroupId == null) {
                 // No batch_group_id: mutate the latest version (backwards compatibility)
@@ -1767,7 +1767,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dataset.id();
     }
 
-    private Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId, String batchGroupId) {
+    private Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId, UUID batchGroupId) {
         if (batch.items() == null || batch.items().isEmpty()) {
             log.debug("Empty batch, skipping version creation for dataset '{}'", datasetId);
             return Mono.empty();
@@ -1809,7 +1809,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private Mono<DatasetVersion> createFirstVersion(UUID datasetId, List<DatasetItem> items,
-            String batchGroupId, String workspaceId, String userName) {
+            UUID batchGroupId, String workspaceId, String userName) {
         log.info("Creating first version for dataset '{}' with '{}' items", datasetId, items.size());
 
         UUID newVersionId = idGenerator.generateId();
@@ -1857,7 +1857,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private Mono<DatasetVersion> createVersionWithDelta(UUID datasetId, UUID baseVersionId,
-            List<DatasetItem> items, String batchGroupId, String workspaceId, String userName) {
+            List<DatasetItem> items, UUID batchGroupId, String workspaceId, String userName) {
         log.info("Creating version with delta for dataset '{}', baseVersion '{}', itemCount '{}'",
                 datasetId, baseVersionId, items.size());
 
@@ -2078,7 +2078,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param userName the user name
      * @return Mono completing when deletion is done
      */
-    private Mono<Void> handleGroupedDeletion(String batchGroupId, Set<UUID> ids, UUID datasetId,
+    private Mono<Void> handleGroupedDeletion(UUID batchGroupId, Set<UUID> ids, UUID datasetId,
             List<DatasetItemFilter> filters, String workspaceId, String userName, boolean createVersion) {
 
         // First, map row IDs to dataset_item_ids
@@ -2130,7 +2130,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Proceeds with grouped deletion after row IDs have been mapped to dataset_item_ids.
      */
-    private Mono<Void> proceedWithGroupedDeletion(String batchGroupId, Set<UUID> datasetItemIds, UUID datasetId,
+    private Mono<Void> proceedWithGroupedDeletion(UUID batchGroupId, Set<UUID> datasetItemIds, UUID datasetId,
             List<DatasetItemFilter> filters, String workspaceId, String userName, boolean createVersion) {
         return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
                 .flatMap(optionalVersion -> {
@@ -2163,7 +2163,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param userName the user name
      * @return Mono emitting the dataset version
      */
-    private Mono<DatasetVersion> handleGroupedInsertion(String batchGroupId, DatasetItemBatch batch,
+    private Mono<DatasetVersion> handleGroupedInsertion(UUID batchGroupId, DatasetItemBatch batch,
             UUID datasetId, String workspaceId, String userName) {
         return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
                 .flatMap(optionalVersion -> {

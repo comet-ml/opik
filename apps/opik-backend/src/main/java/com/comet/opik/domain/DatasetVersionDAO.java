@@ -110,7 +110,7 @@ public interface DatasetVersionDAO {
                 AND dv.dataset_id = :dataset_id
                 AND dv.workspace_id = :workspace_id
             """)
-    Optional<DatasetVersion> findByBatchGroupId(@Bind("batch_group_id") String batchGroupId,
+    Optional<DatasetVersion> findByBatchGroupId(@Bind("batch_group_id") UUID batchGroupId,
             @Bind("dataset_id") UUID datasetId,
             @Bind("workspace_id") String workspaceId);
 
@@ -356,7 +356,7 @@ public interface DatasetVersionDAO {
                 AND workspace_id = :workspace_id
             """)
     void updateBatchGroupId(@Bind("version_id") UUID versionId,
-            @Bind("batch_group_id") String batchGroupId,
+            @Bind("batch_group_id") UUID batchGroupId,
             @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
