@@ -421,7 +421,7 @@ onlineScoring:
 
 # Configuration for Dataset Export
 datasetExport:
-  # Default: true
+  # Default: false
   # Description: Whether dataset export feature is enabled
   enabled: ${DATASET_EXPORT_ENABLED:-false}
   # Default: dataset-export

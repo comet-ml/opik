@@ -36,7 +36,7 @@ jobs:
       fail-fast: true
       matrix:
         # 3.14+ is not supported by the legacy langchain (langchain<1.0.0)
-        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python_version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code

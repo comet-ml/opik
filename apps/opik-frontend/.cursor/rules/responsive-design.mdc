@@ -1,0 +1,289 @@
+---
+description: Guidelines for responsive design - when to use Tailwind CSS breakpoints vs useIsPhone hook
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+
+# Responsive Design Guidelines
+
+This document provides clear guidelines on when to use **Tailwind CSS breakpoints** vs the **`useIsPhone` JavaScript hook** for responsive design.
+
+## ⚠️ When to Add Phone/Mobile Support
+
+**Phone responsiveness is NOT required by default.** Only add mobile support when:
+
+1. **Explicitly requested in the Jira ticket** - The ticket specifically mentions phone/mobile support
+2. **Explicitly requested by the user in a prompt** - The user asks for phone/mobile support in their message
+3. **Working on onboarding features** - When adding or modifying onboarding components, ensure mobile support by default for new user discovery
+4. **Working on a component that already has phone support** - Maintain consistency with existing responsive behavior
+
+**Do NOT proactively add phone support** to features unless the ticket explicitly requires it. Most Opik features are desktop-first and don't need mobile optimization.
+
+```tsx
+// ❌ DON'T: Add phone support "just in case"
+const { isPhonePortrait } = useIsPhone(); // Only if explicitly requested!
+
+// ✅ DO: Only add when explicitly requested
+// - Jira ticket: "OPIK-1234: Add mobile responsiveness for Log a trace SideDialog"
+// - User prompt: "Make this dialog work on mobile" or "Add phone support"
+```
+
+---
+
+## Key Concept: Mobile-First & Breakpoint Mapping
+
+### Tailwind is Mobile-First
+
+Tailwind CSS uses a **mobile-first** approach:
+- **No prefix** = Applies to **all sizes** (including mobile/phone)
+- **`md:` prefix** = Applies at **768px and above** (tablet/desktop only)
+
+### Mapping Between Tailwind and `useIsPhone`
+
+| Tailwind | `useIsPhone` equivalent | Applies to |
+|----------|-------------------------|------------|
+| No prefix (base) | `isPhonePortrait === true` | Phone/mobile (default) |
+| `md:` | `isPhonePortrait === false` | Tablet and desktop |
+
+**Important**: `md:` is effectively the **opposite** of `isPhonePortrait`:
+- When `isPhonePortrait` is `true` → `md:` styles do NOT apply
+- When `isPhonePortrait` is `false` → `md:` styles DO apply
+
+```tsx
+// These are equivalent approaches:
+
+// Tailwind (preferred for styling)
+<div className="w-full px-4 md:w-[468px] md:px-0">
+  {/* w-full px-4 = phone styles (isPhonePortrait === true) */}
+  {/* md:w-[468px] md:px-0 = desktop styles (isPhonePortrait === false) */}
+</div>
+
+// JavaScript (only when structural changes needed)
+<div className={isPhonePortrait ? "w-full px-4" : "w-[468px] px-0"}>
+```
+
+---
+
+## Decision Framework
+
+**Once phone support IS required**, use this framework to choose the right approach:
+
+### Use Tailwind CSS Breakpoints When:
+
+1. **Styling-only changes** - width, padding, margins, colors, borders
+2. **Layout direction changes** - `flex-col` to `flex-row`
+3. **Visibility changes** - showing/hiding with same DOM structure
+4. **Typography changes** - font size, weight, spacing
+5. **Spacing adjustments** - responsive gaps, margins, padding
+
+```tsx
+// ✅ Good - Pure CSS responsive styling
+<div className="w-full px-4 md:mx-auto md:w-[468px] md:px-0">
+  Content
+</div>
+
+// ✅ Good - Layout direction change
+<div className="flex flex-col gap-4 md:flex-row md:gap-6">
+  <div>Left</div>
+  <div>Right</div>
+</div>
+
+// ✅ Good - Visibility toggle with same structure
+<div className="hidden md:block">Desktop only</div>
+<div className="block md:hidden">Mobile only</div>
+
+// ✅ Good - Typography changes
+<h1 className="text-lg md:text-2xl font-medium">Title</h1>
+```
+
+```tsx
+// ❌ Avoid - Unnecessary JavaScript for styling
+className={cn(
+  isPhonePortrait ? "w-full px-4" : "mx-auto w-[468px]"
+)}
+
+// ❌ Avoid - JavaScript for simple layout changes
+className={cn(
+  isPhonePortrait ? "flex-col gap-4" : "flex-row gap-6"
+)}
+```
+
+### Use `useIsPhone` Hook When:
+
+1. **Different components** - Select dropdown on mobile vs Tabs on desktop
+2. **Conditional wrappers** - Wrapping content in a component only on mobile
+3. **Different props** - Passing different values based on device
+4. **Structural DOM changes** - Completely different element trees
+5. **JavaScript logic dependencies** - When responsive behavior affects state or logic
+
+```tsx
+import { useIsPhone } from "@/hooks/useIsPhone";
+
+const MyComponent = () => {
+  const { isPhonePortrait } = useIsPhone();
+
+  // ✅ Good - Different components needed
+  if (isPhonePortrait) {
+    return (
+      <Select value={selected} onValueChange={handleChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  return (
+    <Tabs value={selected} onValueChange={handleChange}>
+      <TabsList>
+        {options.map((opt) => (
+          <TabsTrigger key={opt.value} value={opt.value}>
+            {opt.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+};
+```
+
+```tsx
+// ✅ Good - Conditional wrapper
+const CodeDisplay = ({ content }: { content: string }) => {
+  const { isPhonePortrait } = useIsPhone();
+
+  if (isPhonePortrait) {
+    return (
+      <CodeBlockWithHeader title="Python">
+        {content}
+      </CodeBlockWithHeader>
+    );
+  }
+
+  return <code>{content}</code>;
+};
+```
+
+```tsx
+// ✅ Good - Different props based on device
+const MyDialog = () => {
+  const { isPhonePortrait } = useIsPhone();
+
+  return (
+    <Dialog>
+      <DialogContent
+        side={isPhonePortrait ? "bottom" : "right"}
+        size={isPhonePortrait ? "full" : "md"}
+      >
+        Content
+      </DialogContent>
+    </Dialog>
+  );
+};
+```
+
+## Available Hooks and Constants
+
+### `useIsPhone` Hook
+
+Located at `src/hooks/useIsPhone.ts`:
+
+```tsx
+import { useIsPhone } from "@/hooks/useIsPhone";
+
+const { isPhone, isPhonePortrait, isPhoneLandscape } = useIsPhone();
+
+// isPhone: true if device is a phone in either orientation
+// isPhonePortrait: true only if phone is upright (portrait)
+// isPhoneLandscape: true only if phone is sideways (landscape)
+```
+
+### `useMediaQuery` Hook
+
+Located at `src/hooks/useMediaQuery.ts` - for custom media queries:
+
+```tsx
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+
+const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1023px)");
+const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+```
+
+### Responsiveness Constants
+
+Located at `src/constants/responsiveness.ts`:
+
+```tsx
+import {
+  QUERY_IS_PHONE_PORTRAIT,
+  QUERY_IS_PHONE_LANDSCAPE,
+  QUERY_CAN_HOVER,
+} from "@/constants/responsiveness";
+
+// QUERY_IS_PHONE_PORTRAIT: Touch device in portrait with max-width 767px
+// QUERY_IS_PHONE_LANDSCAPE: Touch device in landscape with max-height 480px
+// QUERY_CAN_HOVER: Device supports hover interactions
+```
+
+## Performance Considerations
+
+### Why Prefer Tailwind CSS Breakpoints
+
+1. **No JavaScript execution** - CSS media queries are handled by the browser's rendering engine
+2. **No React re-renders** - CSS changes don't trigger component re-renders
+3. **Better initial paint** - Styles are applied immediately without waiting for JavaScript
+4. **Simpler code** - Single className string vs conditional logic
+5. **SSR friendly** - Works correctly during server-side rendering
+
+### When JavaScript is Necessary
+
+Using `useIsPhone` causes:
+- Initial render with default value (may cause layout shift)
+- Component re-render when screen size changes
+- Additional JavaScript bundle size
+
+**Only use JavaScript-based responsive detection when CSS cannot achieve the desired result.**
+
+## Tailwind Breakpoints Reference
+
+| Breakpoint | Min Width | CSS |
+|------------|-----------|-----|
+| `sm:` | 640px | `@media (min-width: 640px)` |
+| `md:` | 768px | `@media (min-width: 768px)` |
+| `lg:` | 1024px | `@media (min-width: 1024px)` |
+| `xl:` | 1280px | `@media (min-width: 1280px)` |
+| `2xl:` | 1536px | `@media (min-width: 1536px)` |
+
+**Note**: Tailwind uses a mobile-first approach. Base classes apply to all sizes, breakpoint prefixes apply at that size and above.
+
+```tsx
+// Mobile-first example
+<div className="text-sm md:text-base lg:text-lg">
+  {/* text-sm on mobile, text-base on tablet+, text-lg on desktop+ */}
+</div>
+```
+
+## Quick Reference
+
+| Scenario | Use |
+|----------|-----|
+| Change padding/margins | `md:px-6` |
+| Change flex direction | `md:flex-row` |
+| Show/hide element | `hidden md:block` |
+| Change font size | `md:text-lg` |
+| Different component | `useIsPhone` |
+| Wrap in container | `useIsPhone` |
+| Different prop values | `useIsPhone` |
+| Structural DOM changes | `useIsPhone` |
+
+## Related Rules
+
+- [UI Components](mdc:apps/opik-frontend/.cursor/rules/ui-components.mdc) - Component patterns and design system
+- [Performance](mdc:apps/opik-frontend/.cursor/rules/performance.mdc) - Performance optimization guidelines
