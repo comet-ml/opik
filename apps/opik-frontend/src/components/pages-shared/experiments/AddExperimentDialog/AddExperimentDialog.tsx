@@ -502,7 +502,7 @@ eval_results = evaluate(
       {isPhonePortrait ? (
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="evaluators" className="border-b-0">
-            <AccordionTrigger className="h-auto py-2 hover:no-underline">
+            <AccordionTrigger className="h-auto px-0 py-2 hover:no-underline">
               <span className="comet-title-s">
                 Select evaluators{" "}
                 {models.length > 0 && (
