@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:000042_migrate_dataset_versions_initial_data
+--changeset idoberko2:000044_migrate_dataset_versions_initial_data
 --comment: Create version 1 for all existing datasets using dataset_id as version_id
 
 -- Step 1: Create version 1 for datasets that don't have versions yet
@@ -14,7 +14,7 @@ SELECT
     0,                                       -- items_added (initial version has no delta)
     0,                                       -- items_modified (initial version has no delta)
     0,                                       -- items_deleted (initial version has no delta)
-    'Initial version (migrated from draft)', -- change_description
+    'Initial version', -- change_description
     NULL,                                    -- metadata (no custom metadata for migration)
     d.created_at,                            -- preserve original creation time
     d.created_by,                            -- preserve original creator
@@ -43,5 +43,5 @@ WHERE d.id NOT IN (
 );
 
 --rollback DELETE FROM dataset_version_tags WHERE tag = 'latest' AND version_id = dataset_id;
---rollback DELETE FROM dataset_versions WHERE id = dataset_id AND change_description = 'Initial version (migrated from draft)';
+--rollback DELETE FROM dataset_versions WHERE id = dataset_id;
 

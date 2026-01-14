@@ -1,10 +1,10 @@
 --liquibase formatted sql
---changeset idoberko2:000050_migrate_dataset_item_versions_initial_data
---comment: Copy items from dataset_items (draft) to dataset_item_versions for version 1
+--changeset idoberko2:000052_migrate_dataset_item_versions_initial_data
+--comment: Copy items from dataset_items (legacy) to dataset_item_versions for version 1
 
--- Step 3: Copy items from draft table to versioned table
+-- Step 3: Copy items from legacy table to versioned table
 -- dataset_version_id = dataset_id (matches version 1 ID from MySQL migration)
--- This creates immutable snapshots of all existing draft items
+-- This creates immutable snapshots of all existing legacy items
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
 (
     id,
