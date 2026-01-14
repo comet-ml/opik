@@ -27,6 +27,12 @@ public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
+
+    record ProcessedBreakdownEntries(
+            int totalGroups,
+            int groupsShown,
+            List<ProjectMetricResponse.Results<Number>> results) {
+    }
 }
 
 @Slf4j
@@ -96,10 +102,9 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .interval(request.interval());
 
         if (request.hasBreakdown()) {
-            var breakdownConfig = request.breakdown();
-            var processedEntries = processBreakdownEntries(entries, breakdownConfig);
+            var processedEntries = processBreakdownEntries(entries);
 
-            builder.breakdownField(breakdownConfig.field())
+            builder.breakdownField(request.breakdown().field())
                     .totalGroups(processedEntries.totalGroups())
                     .groupsShown(processedEntries.groupsShown())
                     .results(processedEntries.results());
@@ -110,14 +115,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         return builder.build();
     }
 
-    private record ProcessedBreakdownEntries(
-            int totalGroups,
-            int groupsShown,
-            List<ProjectMetricResponse.Results<Number>> results) {
-    }
-
-    private ProcessedBreakdownEntries processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries,
-            BreakdownConfig config) {
+    private ProcessedBreakdownEntries processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries) {
         if (entries.isEmpty()) {
             return new ProcessedBreakdownEntries(0, 0, List.of());
         }
