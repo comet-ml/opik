@@ -600,6 +600,22 @@ public class DatasetResourceClient {
                 .post(Entity.json(deleteRequest));
     }
 
+    public void deleteDatasetItems(DatasetItemsDelete deleteRequest, String workspaceName, String apiKey) {
+        try (var response = callDeleteDatasetItems(deleteRequest, workspaceName, apiKey)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteDatasetItems(DatasetItemsDelete deleteRequest, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
+    }
+
     public void deleteDatasetItem(UUID itemId, String apiKey, String workspaceName) {
         try (var response = callDeleteDatasetItem(itemId, apiKey, workspaceName)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);

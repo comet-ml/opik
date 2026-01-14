@@ -602,8 +602,10 @@ class RateLimitE2ETest {
                         BASE_RESOURCE_URI.formatted(baseURI) + "/batch", HttpMethod.POST),
                 Arguments.of(new SpanBatch(spans), new SpanBatch(List.of(spans.getFirst())),
                         "%s/v1/private/spans".formatted(baseURI) + "/batch", HttpMethod.POST),
-                Arguments.of(new DatasetItemBatch(projectName, null, datasetItems),
-                        new DatasetItemBatch(projectName, null, List.of(datasetItems.getFirst())),
+                Arguments.of(
+                        DatasetItemBatch.builder().datasetName(projectName).items(datasetItems).build(),
+                        DatasetItemBatch.builder().datasetName(projectName)
+                                .items(List.of(datasetItems.getFirst())).build(),
                         "%s/v1/private/datasets".formatted(baseURI) + "/items", HttpMethod.PUT),
                 Arguments.of(FeedbackScoreBatch.builder().scores(tracesFeedbackScores).build(),
                         FeedbackScoreBatch.builder().scores(List.of(tracesFeedbackScores.getFirst())).build(),
