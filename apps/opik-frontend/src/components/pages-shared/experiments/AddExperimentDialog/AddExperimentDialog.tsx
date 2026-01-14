@@ -165,9 +165,10 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   },
 ];
 
+import { PIP_INSTALL_OPIK_COMMAND } from "@/constants/shared";
+
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 const DEMO_DATASET_NAME = "Opik Demo Questions";
-const INSTALL_COMMAND = "pip install opik";
 
 type AddExperimentDialogProps = {
   open: boolean;
@@ -379,12 +380,15 @@ eval_results = evaluate(
     <div>
       <CodeSectionTitle>2. Install the SDK</CodeSectionTitle>
       {isPhonePortrait ? (
-        <CodeBlockWithHeader title="Terminal" copyText={INSTALL_COMMAND}>
-          <CodeHighlighter data={INSTALL_COMMAND} />
+        <CodeBlockWithHeader
+          title="Terminal"
+          copyText={PIP_INSTALL_OPIK_COMMAND}
+        >
+          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
         </CodeBlockWithHeader>
       ) : (
         <div className="min-h-7">
-          <CodeHighlighter data={INSTALL_COMMAND} />
+          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
         </div>
       )}
     </div>

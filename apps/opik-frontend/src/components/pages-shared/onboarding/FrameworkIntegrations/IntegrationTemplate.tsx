@@ -7,8 +7,7 @@ import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { useIsPhone } from "@/hooks/useIsPhone";
-
-const CODE_BLOCK_1 = "pip install opik";
+import { PIP_INSTALL_OPIK_COMMAND } from "@/constants/shared";
 
 type IntegrationTemplateProps = {
   apiKey?: string;
@@ -81,12 +80,15 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         1. Install Opik using pip from the command line
       </CodeSectionTitle>
       {isPhonePortrait ? (
-        <CodeBlockWithHeader title="Terminal" copyText={CODE_BLOCK_1}>
-          <CodeHighlighter data={CODE_BLOCK_1} />
+        <CodeBlockWithHeader
+          title="Terminal"
+          copyText={PIP_INSTALL_OPIK_COMMAND}
+        >
+          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
         </CodeBlockWithHeader>
       ) : (
         <div className="min-h-7">
-          <CodeHighlighter data={CODE_BLOCK_1} />
+          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
         </div>
       )}
     </div>
