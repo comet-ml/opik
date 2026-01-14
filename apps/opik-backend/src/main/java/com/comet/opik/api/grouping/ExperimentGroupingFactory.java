@@ -36,6 +36,8 @@ public class ExperimentGroupingFactory extends GroupingFactory {
                     throw new BadRequestException(formattedErrorMessage);
                 }
                 break;
+            default:
+                throw new BadRequestException(formattedErrorMessage);
         }
     }
 }
