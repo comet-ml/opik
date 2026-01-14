@@ -180,7 +180,21 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateStatus(workspaceId, jobId, DatasetExportStatus.PROCESSING, userName);
 
-                    verifyJobExistsOrThrow(updated, jobId);
+                    // If no rows updated, check if job is already PROCESSING (idempotent operation for at-least-once delivery)
+                    if (updated == 0) {
+                        var job = dao.findById(workspaceId, jobId)
+                                .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+
+                        if (job.status() == DatasetExportStatus.PROCESSING) {
+                            log.debug(
+                                    "Export job '{}' already in PROCESSING state, treating as successful (idempotent)",
+                                    jobId);
+                            return null; // Success - job already being processed
+                        }
+
+                        // Job exists but in wrong state (e.g., already COMPLETED or FAILED)
+                        throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
+                    }
 
                     return null;
                 });

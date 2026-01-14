@@ -54,6 +54,7 @@ public class DatasetExportConfig implements StreamConfiguration {
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS)
+    @MaxDuration(value = 7, unit = TimeUnit.DAYS)
     private Duration defaultTtl = Duration.hours(24);
 
     /**

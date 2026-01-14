@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
@@ -136,7 +137,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
                     // Delete files from S3/MinIO
                     Set<String> filePaths = expiredJobs.stream()
                             .map(DatasetExportJob::filePath)
-                            .filter(path -> path != null && !path.isBlank())
+                            .filter(StringUtils::isNotBlank)
                             .collect(Collectors.toSet());
 
                     if (!filePaths.isEmpty()) {
@@ -187,7 +188,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
                     // Delete any files that may exist (in case failure happened after partial upload)
                     Set<String> filePaths = viewedFailedJobs.stream()
                             .map(DatasetExportJob::filePath)
-                            .filter(path -> path != null && !path.isBlank())
+                            .filter(StringUtils::isNotBlank)
                             .collect(Collectors.toSet());
 
                     if (!filePaths.isEmpty()) {
