@@ -11,6 +11,7 @@ import com.comet.opik.api.ExperimentGroupWithTime;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.grouping.GroupBy;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
@@ -26,10 +27,24 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 
 public class ExperimentResponseBuilder {
 
     public static final String DELETED_DATASET = "__DELETED";
+    public static final String DELETED_PROJECT = "__DELETED";
+
+    private static boolean isValidUUID(String value) {
+        if (value == null || value.trim().isEmpty() || value.contains("\u0000")) {
+            return false;
+        }
+        try {
+            UUID.fromString(value.trim());
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 
     public ExperimentGroupResponse buildGroupResponse(List<ExperimentGroupItem> groupItems,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
@@ -126,12 +141,21 @@ public class ExperimentResponseBuilder {
         return switch (group.field()) {
             case DATASET_ID -> {
                 Map<UUID, Dataset> datasetMap = enrichInfoHolder.datasetMap();
-                if (datasetMap == null) {
+                if (datasetMap == null || !isValidUUID(groupingValue)) {
                     yield DELETED_DATASET;
                 }
-                yield Optional.ofNullable(datasetMap.get(UUID.fromString(groupingValue)))
+                yield Optional.ofNullable(datasetMap.get(UUID.fromString(groupingValue.trim())))
                         .map(Dataset::name)
                         .orElse(DELETED_DATASET);
+            }
+            case PROJECT_ID -> {
+                Map<UUID, Project> projectMap = enrichInfoHolder.projectMap();
+                if (projectMap == null || !isValidUUID(groupingValue)) {
+                    yield DELETED_PROJECT;
+                }
+                yield Optional.ofNullable(projectMap.get(UUID.fromString(groupingValue.trim())))
+                        .map(Project::name)
+                        .orElse(DELETED_PROJECT);
             }
             default -> groupingValue;
         };
@@ -327,9 +351,25 @@ public class ExperimentResponseBuilder {
         return switch (group.field()) {
             case DATASET_ID ->
                 ExperimentGroupResponse.GroupContent.builder()
-                        .label(Optional.ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
-                                .map(Dataset::name)
-                                .orElse(DELETED_DATASET))
+                        .label(isValidUUID(groupingValue)
+                                ? Optional
+                                        .ofNullable(enrichInfoHolder.datasetMap()
+                                                .get(UUID.fromString(groupingValue.trim())))
+                                        .map(Dataset::name)
+                                        .orElse(DELETED_DATASET)
+                                : DELETED_DATASET)
+                        .groups(new HashMap<>())
+                        .build();
+
+            case PROJECT_ID ->
+                ExperimentGroupResponse.GroupContent.builder()
+                        .label(isValidUUID(groupingValue)
+                                ? Optional
+                                        .ofNullable(enrichInfoHolder.projectMap()
+                                                .get(UUID.fromString(groupingValue.trim())))
+                                        .map(Project::name)
+                                        .orElse(DELETED_PROJECT)
+                                : DELETED_PROJECT)
                         .groups(new HashMap<>())
                         .build();
 
@@ -351,9 +391,21 @@ public class ExperimentResponseBuilder {
                 if (groupingValue != null) {
                     String label = switch (groups.get(i).field()) {
                         case DATASET_ID ->
-                            Optional.ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
-                                    .map(Dataset::name)
-                                    .orElse(DELETED_DATASET);
+                            isValidUUID(groupingValue)
+                                    ? Optional
+                                            .ofNullable(enrichInfoHolder.datasetMap()
+                                                    .get(UUID.fromString(groupingValue.trim())))
+                                            .map(Dataset::name)
+                                            .orElse(DELETED_DATASET)
+                                    : DELETED_DATASET;
+                        case PROJECT_ID ->
+                            isValidUUID(groupingValue)
+                                    ? Optional
+                                            .ofNullable(enrichInfoHolder.projectMap()
+                                                    .get(UUID.fromString(groupingValue.trim())))
+                                            .map(Project::name)
+                                            .orElse(DELETED_PROJECT)
+                                    : DELETED_PROJECT;
                         default -> groupingValue;
                     };
                     groupsWithTime.get(i).add(

@@ -120,6 +120,7 @@ public class ExperimentsResource {
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -147,6 +148,7 @@ public class ExperimentsResource {
                 .entityType(EntityType.TRACE)
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
+                .projectId(projectId)
                 .sortingFields(sortingFields)
                 .optimizationId(optimizationId)
                 .types(types)
@@ -178,6 +180,7 @@ public class ExperimentsResource {
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -195,6 +198,7 @@ public class ExperimentsResource {
                 .name(name)
                 .types(types)
                 .filters(experimentFilters)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding experiment groups by criteria '{}'", experimentGroupCriteria);
@@ -216,6 +220,7 @@ public class ExperimentsResource {
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -233,6 +238,7 @@ public class ExperimentsResource {
                 .name(name)
                 .types(types)
                 .filters(experimentFilters)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding experiment groups aggregations by criteria '{}'", experimentGroupCriteria);

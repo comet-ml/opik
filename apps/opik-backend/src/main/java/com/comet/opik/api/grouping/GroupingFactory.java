@@ -10,8 +10,10 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.filter.FieldType.DICTIONARY;
+import static com.comet.opik.api.filter.FieldType.STRING;
 
 @Slf4j
 public abstract class GroupingFactory {
@@ -24,6 +26,7 @@ public abstract class GroupingFactory {
 
     public static final String METADATA = "metadata";
     public static final String DATASET_ID = "dataset_id";
+    public static final String PROJECT_ID = "project_id";
 
     private static final TypeReference<List<GroupBy>> GROUP_BY_LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
@@ -46,9 +49,38 @@ public abstract class GroupingFactory {
             throw new BadRequestException(ERR_EMPTY_GROUPING);
         }
 
-        validateGroups(groups);
+        // Enrich groups with types if not provided
+        var enrichedGroups = groups.stream()
+                .map(this::enrichGroupWithType)
+                .collect(Collectors.toList());
 
-        return groups;
+        validateGroups(enrichedGroups);
+
+        return enrichedGroups;
+    }
+
+    private GroupBy enrichGroupWithType(GroupBy group) {
+        // If type is already set, return as is
+        if (group.type() != null) {
+            return group;
+        }
+
+        // Determine type based on field name
+        var fieldType = getFieldType(group.field());
+        return group.toBuilder().type(fieldType).build();
+    }
+
+    private com.comet.opik.api.filter.FieldType getFieldType(String field) {
+        // metadata is always DICTIONARY
+        if (METADATA.equals(field)) {
+            return DICTIONARY;
+        }
+        // dataset_id and project_id are STRING
+        if (DATASET_ID.equals(field) || PROJECT_ID.equals(field)) {
+            return STRING;
+        }
+        // Default to STRING for unknown fields
+        return STRING;
     }
 
     private void validateGroups(@NonNull List<GroupBy> groups) {

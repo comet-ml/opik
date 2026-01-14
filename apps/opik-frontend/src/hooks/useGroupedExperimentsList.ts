@@ -41,7 +41,8 @@ import {
 } from "@/lib/groups";
 import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { COLUMN_DATASET_ID } from "@/types/shared";
+import useProjectsList from "@/api/projects/useProjectsList";
+import { COLUMN_DATASET_ID, COLUMN_PROJECT_ID } from "@/types/shared";
 
 export type GroupedExperiment = Record<string, string> & Experiment;
 
@@ -52,6 +53,14 @@ const DATASETS_SORTING: Sorting = [
   },
 ];
 const MAX_AMOUNT_OF_DATASET_FOR_SORTING = 1000;
+
+const PROJECTS_SORTING: Sorting = [
+  {
+    id: "last_updated_at",
+    desc: true,
+  },
+];
+const MAX_AMOUNT_OF_PROJECTS_FOR_SORTING = 1000;
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
@@ -97,6 +106,7 @@ const buildGroupPath = (
   accumulatedFilters: Filters = [],
   accumulatedRowGroupData: Record<string, unknown> = {},
   datasetOrderMap?: Record<string, number>,
+  projectOrderMap?: Record<string, number>,
 ): FlattenGroup[] => {
   if (groupIndex >= groups.length) {
     return [];
@@ -107,6 +117,7 @@ const buildGroupPath = (
 
   const entries = Object.entries(currentGroupsMap);
   const isDatasetGroup = currentGroup.field === COLUMN_DATASET_ID;
+  const isProjectGroup = currentGroup.field === COLUMN_PROJECT_ID;
 
   const sortedEntries = entries.sort(([a], [b]) => {
     const labelA = currentGroupsMap[a].label ?? a;
@@ -123,6 +134,13 @@ const buildGroupPath = (
     if (isDatasetGroup && datasetOrderMap) {
       const orderA = datasetOrderMap[a] ?? Number.MAX_SAFE_INTEGER;
       const orderB = datasetOrderMap[b] ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB;
+    }
+
+    // If grouping by project and we have project order map, use it
+    if (isProjectGroup && projectOrderMap) {
+      const orderA = projectOrderMap[a] ?? Number.MAX_SAFE_INTEGER;
+      const orderB = projectOrderMap[b] ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     }
 
@@ -181,6 +199,7 @@ const buildGroupPath = (
         currentFilters,
         currentRowGroupData,
         datasetOrderMap,
+        projectOrderMap,
       );
       result.push(...nestedGroups);
     }
@@ -193,12 +212,23 @@ const flattenExperimentsGroups = (
   groupsMap: Record<string, ExperimentsGroupNode>,
   groups: Groups,
   datasetOrderMap?: Record<string, number>,
+  projectOrderMap?: Record<string, number>,
 ): FlattenGroup[] => {
   if (!groups.length || !Object.keys(groupsMap).length) {
     return [];
   }
 
-  return buildGroupPath(groupsMap, groups, "", 0, [], [], {}, datasetOrderMap);
+  return buildGroupPath(
+    groupsMap,
+    groups,
+    "",
+    0,
+    [],
+    [],
+    {},
+    datasetOrderMap,
+    projectOrderMap,
+  );
 };
 
 const buildAggregationMap = (
@@ -292,6 +322,25 @@ export default function useGroupedExperimentsList(
     () => groups?.some((g) => g.field === COLUMN_DATASET_ID) ?? false,
     [groups],
   );
+  const isGroupingByProject = useMemo(
+    () => groups?.some((g) => g.field === COLUMN_PROJECT_ID) ?? false,
+    [groups],
+  );
+
+  // Extract project_id from filters and pass it as a separate parameter
+  // because project_id filtering requires a special SQL query (join with traces)
+  const { projectId, filtersWithoutProjectId } = useMemo(() => {
+    const projectFilter = params.filters?.find(
+      (f) => f.field === COLUMN_PROJECT_ID,
+    );
+    const otherFilters = params.filters?.filter(
+      (f) => f.field !== COLUMN_PROJECT_ID,
+    );
+    return {
+      projectId: projectFilter?.value as string | undefined,
+      filtersWithoutProjectId: otherFilters,
+    };
+  }, [params.filters]);
 
   const {
     data: groupsData,
@@ -301,10 +350,11 @@ export default function useGroupedExperimentsList(
   } = useExperimentsGroups(
     {
       workspaceName: params.workspaceName,
-      filters: params.filters,
+      filters: filtersWithoutProjectId,
       groups: groups!,
       search: params.search,
       promptId: params.promptId,
+      projectId,
     },
     {
       placeholderData: keepPreviousData,
@@ -317,10 +367,11 @@ export default function useGroupedExperimentsList(
     useExperimentsGroupsAggregations(
       {
         workspaceName: params.workspaceName,
-        filters: params.filters,
+        filters: filtersWithoutProjectId,
         groups: groups!,
         search: params.search,
         promptId: params.promptId,
+        projectId,
       },
       {
         placeholderData: keepPreviousData,
@@ -348,13 +399,32 @@ export default function useGroupedExperimentsList(
     },
   );
 
+  const {
+    data: projectsData,
+    isPending: isProjectsPending,
+    refetch: refetchProjects,
+  } = useProjectsList(
+    {
+      workspaceName: params.workspaceName,
+      page: 1,
+      size: MAX_AMOUNT_OF_PROJECTS_FOR_SORTING,
+      sorting: PROJECTS_SORTING,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: hasGroups && isGroupingByProject,
+      refetchInterval,
+    },
+  );
+
   const { data, isPending, isPlaceholderData, refetch } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
-      filters: params.filters,
+      filters: filtersWithoutProjectId,
       sorting: params.sorting,
       search: params.search,
       promptId: params.promptId,
+      projectId,
       page: params.page,
       size: params.size,
     },
@@ -378,9 +448,26 @@ export default function useGroupedExperimentsList(
     return orderMap;
   }, [datasetsData?.content]);
 
+  const projectOrderMap = useMemo(() => {
+    if (!projectsData?.content) return undefined;
+
+    const orderMap: Record<string, number> = {};
+    projectsData.content.forEach((project, index) => {
+      orderMap[project.id] = index;
+    });
+
+    return orderMap;
+  }, [projectsData?.content]);
+
   const flattenGroups = useMemo(
-    () => flattenExperimentsGroups(groupsMap, groups, datasetOrderMap),
-    [groupsMap, groups, datasetOrderMap],
+    () =>
+      flattenExperimentsGroups(
+        groupsMap,
+        groups,
+        datasetOrderMap,
+        projectOrderMap,
+      ),
+    [groupsMap, groups, datasetOrderMap, projectOrderMap],
   );
 
   const aggregationMap = useMemo(() => {
@@ -403,12 +490,30 @@ export default function useGroupedExperimentsList(
 
   const experimentsResponses = useQueries({
     queries: expandedGroups.map(({ id, filters }) => {
+      // Combine top-level filters with group-specific filters
+      const combinedFilters = [...(params.filters ?? []), ...filters];
+
+      // Extract project_id from combined filters and pass it as a separate parameter
+      const projectFilter = combinedFilters.find(
+        (f) => f.field === COLUMN_PROJECT_ID,
+      );
+      const filtersWithoutProject = combinedFilters.filter(
+        (f) => f.field !== COLUMN_PROJECT_ID,
+      );
+
+      // Only pass projectId if it's a valid non-empty string
+      const projectIdValue = projectFilter?.value as string | undefined;
+      const validProjectId = projectIdValue?.trim()
+        ? projectIdValue
+        : undefined;
+
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
-        filters: [...(params.filters ?? []), ...filters],
+        filters: filtersWithoutProject,
         sorting: params.sorting,
         search: params.search,
         promptId: params.promptId,
+        projectId: validProjectId,
         page: 1,
         size: extractPageSize(id, params.groupLimit),
       };
@@ -528,6 +633,11 @@ export default function useGroupedExperimentsList(
         refetchPromises.push(refetchDatasets(options));
       }
 
+      // Only refetch projects when grouping by project
+      if (isGroupingByProject) {
+        refetchPromises.push(refetchProjects(options));
+      }
+
       return Promise.all(refetchPromises);
     },
     [
@@ -535,7 +645,9 @@ export default function useGroupedExperimentsList(
       refetchGroups,
       refetchGroupsAggregations,
       refetchDatasets,
+      refetchProjects,
       isGroupingByDataset,
+      isGroupingByProject,
     ],
   );
 
@@ -564,11 +676,13 @@ export default function useGroupedExperimentsList(
     ],
   );
 
-  // When groups are active, we're only pending if the initial groups/datasets queries are pending
+  // When groups are active, we're only pending if the initial groups/datasets/projects queries are pending
   // The individual experiment queries for expanded groups will load separately
-  // Only check isDatasetsPending if the datasets query is actually enabled
+  // Only check isDatasetsPending/isProjectsPending if the respective queries are actually enabled
   const groupedIsPending =
-    isGroupsPending || (isGroupingByDataset && isDatasetsPending);
+    isGroupsPending ||
+    (isGroupingByDataset && isDatasetsPending) ||
+    (isGroupingByProject && isProjectsPending);
 
   return {
     data: transformedData,
