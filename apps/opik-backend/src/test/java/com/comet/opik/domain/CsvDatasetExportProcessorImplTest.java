@@ -236,12 +236,14 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
         // When
-        Mono<String> result = processor.generateAndUploadCsv(DATASET_ID)
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
         StepVerifier.create(result)
-                .assertNext(filePath -> assertThat(filePath).isNotEmpty())
+                .assertNext(exportResult -> {
+                    assertThat(exportResult.filePath()).isNotEmpty();
+                })
                 .verifyComplete();
 
         // Verify CSV content preserves insertion order from LinkedHashMap

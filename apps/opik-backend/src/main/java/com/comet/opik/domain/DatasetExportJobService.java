@@ -169,14 +169,11 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.updateStatus(workspaceId, jobId, DatasetExportStatus.PROCESSING, userName);
-
-                    verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.PROCESSING, workspaceId, dao);
-
+                    int updated = dao.markPendingJobAsProcessing(workspaceId, jobId, DatasetExportStatus.PROCESSING,
+                            userName);
+                    verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.PROCESSING, workspaceId, dao);
                     return null;
                 });
-
-                log.info("Updated export job: '{}' to status: 'PROCESSING'", jobId);
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });
@@ -194,13 +191,9 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateToCompleted(workspaceId, jobId, DatasetExportStatus.COMPLETED, filePath,
                             expiresAt, userName);
-
-                    verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.COMPLETED, workspaceId, dao);
-
+                    verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.COMPLETED, workspaceId, dao);
                     return null;
                 });
-
-                log.info("Updated export job: '{}' to status: 'COMPLETED'", jobId);
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });
@@ -217,59 +210,48 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     var dao = handle.attach(DatasetExportJobDAO.class);
                     int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage,
                             userName);
-
-                    verifyUpdateOrCheckIdempotency(updated, jobId, DatasetExportStatus.FAILED, workspaceId, dao);
-
+                    verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.FAILED, workspaceId, dao);
                     return null;
                 });
-
-                log.info("Updated export job: '{}' to status: 'FAILED'", jobId);
                 return null;
             }).subscribeOn(Schedulers.boundedElastic()).then();
         });
     }
 
     /**
-     * Verifies that a job update operation succeeded, or checks for idempotency.
+     * Verifies that a job was successfully updated to the expected status and logs the transition.
      * <p>
      * If the update affected 0 rows, checks if the job is already in the expected state
-     * (idempotent operation for at-least-once Redis Streams delivery). If the job is already
-     * in the expected state, the operation is treated as successful. Otherwise, throws NotFoundException.
-     * <p>
-     * <strong>Design Note:</strong> For COMPLETED state, this intentionally does NOT compare or update
-     * payload fields (filePath, expiresAt). The first successful completion is authoritative.
-     * Subsequent replays with potentially different values are ignored.
-     * This is correct because:
-     * <ul>
-     *   <li>The original completion already has valid data that users may have received</li>
-     *   <li>Overwriting with replay data could cause inconsistencies</li>
-     *   <li>True idempotency means the same logical operation produces the same result</li>
-     * </ul>
+     * (idempotent). If not, throws an appropriate exception.
      *
      * @param updatedRows    The number of rows affected by the update operation
      * @param jobId          The ID of the job being updated
-     * @param expectedStatus The expected status for idempotency check
+     * @param expectedStatus The status the job should now be in
      * @param workspaceId    The workspace ID for security
      * @param dao            The DAO to query the current job state
-     * @throws NotFoundException if the job doesn't exist, doesn't belong to workspace, or is in an unexpected state
+     * @throws NotFoundException     if the job doesn't exist or doesn't belong to workspace
+     * @throws IllegalStateException if the job exists but is in an unexpected state
      */
-    private void verifyUpdateOrCheckIdempotency(int updatedRows, UUID jobId, DatasetExportStatus expectedStatus,
+    private void verifyJobUpdatedToStatus(int updatedRows, UUID jobId, DatasetExportStatus expectedStatus,
             String workspaceId, DatasetExportJobDAO dao) {
-        if (updatedRows == 0) {
-            var job = dao.findById(workspaceId, jobId)
-                    .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
-
-            if (job.status() == expectedStatus) {
-                log.info("Export job '{}' already in '{}' state, treating as successful (idempotent replay detected)",
-                        jobId, expectedStatus);
-                return; // Success - job already in expected state
-            }
-
-            // Job exists but in wrong state - this indicates a state machine violation
-            log.warn("Export job '{}' state transition failed: expected to transition to '{}' but job is in '{}' state",
-                    jobId, expectedStatus, job.status());
-            throw new IllegalStateException(INVALID_STATE_TRANSITION.formatted(jobId));
+        if (updatedRows > 0) {
+            log.info("Export job '{}' transitioned to status '{}'", jobId, expectedStatus);
+            return;
         }
+
+        var job = dao.findById(workspaceId, jobId)
+                .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+
+        // Job already in expected state - idempotent success
+        if (job.status() == expectedStatus) {
+            log.debug("Export job '{}' already in '{}' state", jobId, expectedStatus);
+            return;
+        }
+
+        // Job exists but in wrong state - state machine violation
+        log.warn("Export job '{}' state transition failed: expected '{}' but found '{}'",
+                jobId, expectedStatus, job.status());
+        throw new IllegalStateException(INVALID_STATE_TRANSITION.formatted(jobId));
     }
 
     @Override
@@ -304,7 +286,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             String userName = ctx.get(RequestContext.USER_NAME);
             return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
-                return dao.deleteExpiredJobs(userName, jobIds);
+                return dao.deleteJobsByIds(userName, jobIds);
             })).subscribeOn(Schedulers.boundedElastic());
         });
     }

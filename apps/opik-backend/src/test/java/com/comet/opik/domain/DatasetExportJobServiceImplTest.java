@@ -213,7 +213,7 @@ class DatasetExportJobServiceImplTest {
     @Test
     void updateJobToProcessing_shouldUpdateStatusToProcessing() {
         // Given
-        when(exportJobDAO.updateStatus(any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobToProcessing(JOB_ID)
@@ -225,15 +225,15 @@ class DatasetExportJobServiceImplTest {
         StepVerifier.create(result)
                 .verifyComplete();
 
-        // Verify DAO.updateStatus() was called
-        verify(exportJobDAO, times(1)).updateStatus(eq(WORKSPACE_ID), eq(JOB_ID),
+        // Verify DAO.markPendingJobAsProcessing() was called
+        verify(exportJobDAO, times(1)).markPendingJobAsProcessing(eq(WORKSPACE_ID), eq(JOB_ID),
                 eq(DatasetExportStatus.PROCESSING), eq(USER_NAME));
     }
 
     @Test
     void updateJobToProcessing_shouldThrowNotFoundException_whenJobNotPending() {
         // Given - DAO returns 0 because job is not in PENDING state
-        when(exportJobDAO.updateStatus(any(), any(), any(), any())).thenReturn(0);
+        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any(), any())).thenReturn(0);
 
         // When
         Mono<Void> result = service.updateJobToProcessing(JOB_ID)

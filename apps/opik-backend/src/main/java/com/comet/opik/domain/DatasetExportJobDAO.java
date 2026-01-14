@@ -52,15 +52,15 @@ public interface DatasetExportJobDAO {
     void save(@BindMethods("job") DatasetExportJob job, @Bind("workspaceId") String workspaceId);
 
     /**
-     * Updates a dataset export job status (e.g., to PROCESSING).
+     * Marks a PENDING dataset export job as PROCESSING.
      * Sets status and last_updated_by.
      * Only allows transition from PENDING to PROCESSING.
      *
      * @param workspaceId The workspace ID for security
      * @param id The job ID to update
-     * @param status The new status (e.g., PROCESSING)
+     * @param status The new status (should be PROCESSING)
      * @param lastUpdatedBy The user who updated the job
-     * @return The number of rows updated (0 if job not found or doesn't belong to workspace or invalid state transition)
+     * @return The number of rows updated (0 if job not found or doesn't belong to workspace or not in PENDING state)
      */
     @SqlUpdate("""
             UPDATE dataset_export_jobs
@@ -70,7 +70,7 @@ public interface DatasetExportJobDAO {
                 AND workspace_id = :workspaceId
                 AND status = 'PENDING'
             """)
-    int updateStatus(@Bind("workspaceId") String workspaceId,
+    int markPendingJobAsProcessing(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetExportStatus status,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
@@ -253,6 +253,7 @@ public interface DatasetExportJobDAO {
 
     /**
      * Deletes export jobs by their IDs across all workspaces.
+     * Used by cleanup job to delete both expired completed jobs and viewed failed jobs.
      *
      * <p><strong>Security Warning:</strong> This operation affects ALL workspaces without filtering.
      * It should ONLY be called by system-level cleanup jobs. The userName parameter MUST be
@@ -266,7 +267,7 @@ public interface DatasetExportJobDAO {
             DELETE FROM dataset_export_jobs
             WHERE id IN (<ids>)
             AND :userName = '""" + RequestContext.SYSTEM_USER + "'")
-    int deleteExpiredJobs(@Bind("userName") String userName, @BindList("ids") Set<UUID> ids);
+    int deleteJobsByIds(@Bind("userName") String userName, @BindList("ids") Set<UUID> ids);
 
     @SqlUpdate("""
             UPDATE dataset_export_jobs
