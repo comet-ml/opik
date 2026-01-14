@@ -88,7 +88,7 @@ const FiltersAccordionSection = <TColumnData,>({
                 setFilters={onChange}
                 columns={columns as ColumnData<unknown>[]}
                 config={config}
-                className="py-0"
+                className="overflow-x-auto py-0"
               />
             )}
 

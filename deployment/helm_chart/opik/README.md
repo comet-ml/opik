@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.75](https://img.shields.io/badge/Version-1.9.75-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.75](https://img.shields.io/badge/AppVersion-1.9.75-informational?style=flat-square)
+![Version: 1.9.81](https://img.shields.io/badge/Version-1.9.81-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.81](https://img.shields.io/badge/AppVersion-1.9.81-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -81,10 +81,9 @@ Call opik api on http://localhost:5173/api
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.6 |
+| https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
-| oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
-| oci://registry-1.docker.io/cloudpirates | minio | 0.5.6 |
+| oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
 | oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.10 |
 
@@ -244,6 +243,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.livenessProbe.httpGet.path | string | `"/health-check?name=all&type=alive"` |  |
 | component.backend.livenessProbe.httpGet.port | int | `8080` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
+| component.backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.backend.readinessProbe.httpGet.httpHeaders[0].name | string | `"Accept"` |  |
 | component.backend.readinessProbe.httpGet.httpHeaders[0].value | string | `"application/json"` |  |
 | component.backend.readinessProbe.httpGet.path | string | `"/health-check?name=all&type=ready"` |  |
@@ -291,6 +291,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
+| component.frontend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
 | component.frontend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.frontend.service.ports[0].name | string | `"http"` |  |
@@ -340,6 +341,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.networkPolicy.engineEgress.except[4] | string | `"198.18.0.0/15"` |  |
 | component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
 | component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
+| component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
 | component.python-backend.securityContext.privileged | bool | `true` |  |
