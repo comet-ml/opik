@@ -119,15 +119,6 @@ class SpanData(ObservationData):
             "attachments": self.attachments,
         }
 
-    def as_trace_parameters(self) -> Dict[str, Any]:
-        return {
-            "id": self.trace_id,
-            "name": self.name,
-            "start_time": self.start_time,
-            "end_time": self.end_time,
-            "metadata": self.metadata,
-        }
-
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
         return DistributedTraceHeadersDict(
             opik_trace_id=self.trace_id,
