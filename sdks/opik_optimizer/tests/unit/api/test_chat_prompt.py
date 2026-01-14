@@ -60,6 +60,61 @@ def test_chat_prompt_rejects_empty_multimodal_message() -> None:
         )
 
 
+def test_chat_prompt_accepts_mcp_stdio_tool() -> None:
+    prompt = ChatPrompt(
+        system="System",
+        tools=[
+            {
+                "mcp": {
+                    "name": "context7_docs",
+                    "server": {
+                        "type": "stdio",
+                        "command": "npx",
+                        "args": [],
+                        "env": {},
+                    },
+                    "tool": {"name": "get-library-docs"},
+                }
+            }
+        ],
+    )
+
+    assert prompt.tools is not None
+
+
+def test_chat_prompt_accepts_mcp_remote_tool() -> None:
+    prompt = ChatPrompt(
+        system="System",
+        tools=[
+            {
+                "mcp": {
+                    "name": "remote_docs",
+                    "server": {"type": "remote", "url": "https://mcp.example.com"},
+                    "tool": {"name": "search-docs"},
+                }
+            }
+        ],
+    )
+
+    assert prompt.tools is not None
+
+
+def test_chat_prompt_rejects_remote_mcp_without_url() -> None:
+    with pytest.raises(ValueError):
+        ChatPrompt(
+            system="System",
+            tools=[
+                {
+                    "mcp": {
+                        "name": "remote_docs",
+                        "server": {"type": "remote"},
+                        "tool": {"name": "search-docs"},
+                    }
+                }
+            ],
+        )
+
+
 def test_chat_prompt_get_messages_with_content_parts() -> None:
     prompt = ChatPrompt(
         messages=[
