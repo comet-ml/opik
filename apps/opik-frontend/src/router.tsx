@@ -44,6 +44,7 @@ import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import PrettyLLMMessageDemoPage from "@/components/pages/PrettyLLMMessageDemoPage/PrettyLLMMessageDemoPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -474,6 +475,15 @@ const automationLogsRoute = createRoute({
   component: AutomationLogsPage,
 });
 
+const prettyLLMMessageDemoRoute = createRoute({
+  path: "/$workspaceName/pretty-llm-message-demo",
+  getParentRoute: () => workspaceGuardRoute,
+  component: PrettyLLMMessageDemoPage,
+  staticData: {
+    title: "PrettyLLMMessage Demo",
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
@@ -485,6 +495,7 @@ const routeTree = rootRoute.addChildren([
     baseRoute,
     homeRoute,
     homeRouteNew,
+    prettyLLMMessageDemoRoute,
     workspaceRoute.addChildren([
       dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
       projectsRoute.addChildren([
