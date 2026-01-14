@@ -1,19 +1,28 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import AddEditFeedbackDefinitionDialog from "./AddEditFeedbackDefinitionDialog";
-import { FEEDBACK_DEFINITION_TYPE, FeedbackDefinition } from "@/types/feedback-definitions";
+import {
+  FEEDBACK_DEFINITION_TYPE,
+  FeedbackDefinition,
+} from "@/types/feedback-definitions";
 
-vi.mock("@/api/feedback-definitions/useFeedbackDefinitionCreateMutation", () => ({
-  default: () => ({
-    mutate: vi.fn(),
+vi.mock(
+  "@/api/feedback-definitions/useFeedbackDefinitionCreateMutation",
+  () => ({
+    default: () => ({
+      mutate: vi.fn(),
+    }),
   }),
-}));
+);
 
-vi.mock("@/api/feedback-definitions/useFeedbackDefinitionUpdateMutation", () => ({
-  default: () => ({
-    mutate: vi.fn(),
+vi.mock(
+  "@/api/feedback-definitions/useFeedbackDefinitionUpdateMutation",
+  () => ({
+    default: () => ({
+      mutate: vi.fn(),
+    }),
   }),
-}));
+);
 
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) =>
