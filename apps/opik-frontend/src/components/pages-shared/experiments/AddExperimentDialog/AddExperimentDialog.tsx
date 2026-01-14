@@ -379,10 +379,6 @@ eval_results = evaluate(
     );
   };
 
-  const renderInstallSection = () => (
-    <InstallOpikSection title={INSTALL_SDK_SECTION_TITLE} />
-  );
-
   const renderExperimentCodeSection = () => (
     <div>
       <CodeSectionTitle>3. Create an Experiment</CodeSectionTitle>
@@ -496,7 +492,7 @@ eval_results = evaluate(
                 autoFocus={!isPhonePortrait}
               />
             </div>
-            {renderInstallSection()}
+            <InstallOpikSection title={INSTALL_SDK_SECTION_TITLE} />
             {renderExperimentCodeSection()}
           </div>
           {renderSidebarSection()}

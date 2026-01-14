@@ -75,10 +75,6 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     );
   };
 
-  const renderInstallSection = () => (
-    <InstallOpikSection title={INSTALL_OPIK_SECTION_TITLE} />
-  );
-
   const renderRunCodeSection = () => (
     <div>
       <CodeSectionTitle>
@@ -99,7 +95,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 
   return (
     <div className="flex flex-col gap-6 md:rounded-md md:border md:bg-background md:p-6">
-      {renderInstallSection()}
+      <InstallOpikSection title={INSTALL_OPIK_SECTION_TITLE} />
       {renderRunCodeSection()}
     </div>
   );
