@@ -80,6 +80,9 @@ const useDatasetItemBatchUpdateMutation = () => {
       queryClient.invalidateQueries({
         queryKey: ["dataset-items", { datasetId: variables.datasetId }],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
+      });
     },
   });
 };

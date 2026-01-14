@@ -76,9 +76,12 @@ const useDatasetItemBatchDeleteMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: () => {
-      return queryClient.invalidateQueries({
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({
         queryKey: ["dataset-items"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
       });
     },
   });
