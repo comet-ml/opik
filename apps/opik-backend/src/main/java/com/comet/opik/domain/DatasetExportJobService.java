@@ -244,6 +244,16 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
      * If the update affected 0 rows, checks if the job is already in the expected state
      * (idempotent operation for at-least-once Redis Streams delivery). If the job is already
      * in the expected state, the operation is treated as successful. Otherwise, throws NotFoundException.
+     * <p>
+     * <strong>Design Note:</strong> For COMPLETED state, this intentionally does NOT compare or update
+     * payload fields (downloadUrl, filePath, expiresAt). The first successful completion is authoritative.
+     * Subsequent replays with potentially different values (e.g., new presigned URLs) are ignored.
+     * This is correct because:
+     * <ul>
+     *   <li>The original completion already has valid data that users may have received</li>
+     *   <li>Overwriting with replay data could cause inconsistencies</li>
+     *   <li>True idempotency means the same logical operation produces the same result</li>
+     * </ul>
      *
      * @param updatedRows    The number of rows affected by the update operation
      * @param jobId          The ID of the job being updated
@@ -259,13 +269,15 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
 
             if (job.status() == expectedStatus) {
-                log.debug("Export job '{}' already in '{}' state, treating as successful (idempotent)", jobId,
-                        expectedStatus);
+                log.info("Export job '{}' already in '{}' state, treating as successful (idempotent replay detected)",
+                        jobId, expectedStatus);
                 return; // Success - job already in expected state
             }
 
-            // Job exists but in wrong state
-            throw new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId));
+            // Job exists but in wrong state - this indicates a state machine violation
+            log.warn("Export job '{}' state transition failed: expected to transition to '{}' but job is in '{}' state",
+                    jobId, expectedStatus, job.status());
+            throw new IllegalStateException(INVALID_STATE_TRANSITION.formatted(jobId));
         }
     }
 
@@ -276,7 +288,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
                 return dao.findExpiredCompletedJobs(userName, now, limit);
-            }));
+            })).subscribeOn(Schedulers.boundedElastic());
         });
     }
 
@@ -287,7 +299,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
                 return dao.findViewedFailedJobs(userName, limit);
-            }));
+            })).subscribeOn(Schedulers.boundedElastic());
         });
     }
 
@@ -302,7 +314,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
                 return dao.deleteExpiredJobs(userName, jobIds);
-            }));
+            })).subscribeOn(Schedulers.boundedElastic());
         });
     }
 }
