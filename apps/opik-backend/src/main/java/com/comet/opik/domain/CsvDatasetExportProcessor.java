@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Service responsible for generating CSV files from dataset items and uploading them to S3/MinIO.
@@ -83,18 +85,21 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     /**
      * Discovers all unique column names from the dataset items.
-     * Columns are returned in the order provided by the database.
+     * Columns are sorted alphabetically to ensure deterministic ordering across exports.
      *
      * @param datasetId The dataset ID
-     * @return A Mono containing an ordered set of column names
+     * @return A Mono containing an ordered set of column names (sorted alphabetically)
      */
     private Mono<Set<String>> discoverColumns(@NonNull UUID datasetId) {
         log.debug("Discovering columns for dataset: '{}'", datasetId);
 
         return datasetItemDao.getColumns(datasetId)
                 .map(columnsMap -> {
-                    // Extract column names from the map and maintain database order
-                    Set<String> columnNames = new LinkedHashSet<>(columnsMap.keySet());
+                    // Sort columns alphabetically for deterministic ordering
+                    // HashMap from DAO doesn't guarantee order, so we sort explicitly
+                    Set<String> columnNames = columnsMap.keySet().stream()
+                            .sorted()
+                            .collect(Collectors.toCollection(LinkedHashSet::new));
                     log.debug("Found columns for dataset '{}': '{}'", datasetId, columnNames);
                     return columnNames;
                 });
@@ -247,8 +252,8 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                         "Failed to generate and upload CSV for dataset '{}', aborting multipart upload",
                                         datasetId, error);
                                 return abortMultipartUpload(filePath, uploadId)
-                                        .then(Mono.error(new IllegalStateException("Failed to generate and upload CSV",
-                                                error)));
+                                        .then(Mono.error(new InternalServerErrorException(
+                                                "Failed to export dataset. Please try again later.")));
                             });
                 });
     }
