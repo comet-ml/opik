@@ -39,6 +39,8 @@ interface BaseLoadableSelectBoxProps {
   align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
+  /** Whether to auto-focus the search input when the popover opens. Defaults to true. */
+  autoFocus?: boolean;
 }
 
 interface SingleSelectProps extends BaseLoadableSelectBoxProps {
@@ -80,6 +82,7 @@ export const LoadableSelectBox = ({
   multiselect = false,
   showTooltip = false,
   emptyState,
+  autoFocus = true,
   ...props
 }: LoadableSelectBoxProps) => {
   const showSelectAll =
@@ -273,6 +276,11 @@ export const LoadableSelectBox = ({
         }
         className="relative p-1 pt-12"
         hideWhenDetached
+        onOpenAutoFocus={(e) => {
+          if (!autoFocus) {
+            e.preventDefault();
+          }
+        }}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
         <div className="absolute inset-x-1 top-0 h-12">

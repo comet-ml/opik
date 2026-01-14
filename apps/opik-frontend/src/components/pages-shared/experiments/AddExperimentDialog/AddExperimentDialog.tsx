@@ -517,7 +517,12 @@ eval_results = evaluate(
         </Accordion>
       ) : (
         <>
-          <div className="comet-title-s">Select evaluators</div>
+          <div className="comet-title-s">
+            Select evaluators{" "}
+            {models.length > 0 && (
+              <span className="text-muted-slate">({models.length})</span>
+            )}
+          </div>
           {renderEvaluatorsContent()}
         </>
       )}
@@ -558,6 +563,7 @@ eval_results = evaluate(
                 }
                 isLoading={isLoading}
                 optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
+                autoFocus={!isPhonePortrait}
               />
             </div>
             {renderInstallSection()}
