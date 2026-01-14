@@ -670,6 +670,8 @@ class BaseOptimizer(ABC):
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
+        optimize_prompt: bool = True,
+        optimize_tools: bool | dict[str, bool] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -694,6 +696,9 @@ class BaseOptimizer(ABC):
                and generating improvements, then evaluates candidates on the validation dataset to select
                the best one. This helps prevent overfitting to the training data. If not provided, uses
                the same dataset for both training and validation, which may lead to overfitting.
+           optimize_prompt: Whether to optimize prompt text (system/user/messages). Defaults to True.
+           optimize_tools: Optional tool optimization selector. Only supported by optimizers that
+               explicitly document tool optimization support.
            **kwargs: Additional arguments for optimization
         """
         pass
