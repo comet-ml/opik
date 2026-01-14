@@ -505,10 +505,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                 ) s ON s.trace_id = t.id
             )
-            SELECT <bucket_spans_dedup> AS bucket,
+            SELECT <bucket> AS bucket,
                    group_name,
                    nullIf(sum(value), 0) AS value
-            FROM spans_dedup sd
+            FROM spans_dedup
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name;
             """.formatted(TRACE_FILTERED_PREFIX);
@@ -1004,9 +1004,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             // Add breakdown group expression if breakdown is enabled
             if (request.hasBreakdown()) {
                 template.add("group_expression", getBreakdownGroupExpression(request.breakdown()));
-                // For cost query with breakdown, we need a different bucket expression that uses sd.trace_time
-                template.add("bucket_spans_dedup", wrapWeekly(request.interval(),
-                        "toStartOfInterval(sd.trace_time, %s)".formatted(intervalToSql(request.interval()))));
             }
 
             // Add uuid flags for conditional SQL generation
