@@ -11,13 +11,14 @@ import asyncio
 import copy
 import importlib
 import json
-import textwrap
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 from types import TracebackType
 from typing import Any, TypeVar, cast
 from collections.abc import Coroutine, Iterable, Mapping
+
+from . import prompts as mcp_prompts
 
 ClientSession: type[Any] | None = None
 StdioClientFactory: type[Any] | None = None
@@ -298,6 +299,7 @@ def run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
 
 def list_tools_from_manifest(manifest: ToolCallingManifest) -> Any:
     """List tools from a stdio MCP server defined by the manifest."""
+
     async def _inner() -> Any:
         async with ToolCallingClient(manifest) as client:
             return await client.list_tools()
@@ -309,6 +311,7 @@ def call_tool_from_manifest(
     manifest: ToolCallingManifest, tool_name: str, arguments: dict[str, Any]
 ) -> Any:
     """Invoke a tool on a stdio MCP server defined by the manifest."""
+
     async def _inner() -> Any:
         async with ToolCallingClient(manifest) as client:
             return await client.call_tool(tool_name, arguments)
@@ -332,9 +335,6 @@ def response_to_text(response: object) -> str:
     if hasattr(response, "output"):
         return str(getattr(response, "output"))
     return str(response)
-
-
-from . import prompts as mcp_prompts
 
 
 def _format_json_block(data: Mapping[str, Any]) -> str:

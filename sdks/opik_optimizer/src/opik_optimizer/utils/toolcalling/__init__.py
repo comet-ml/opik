@@ -14,7 +14,11 @@ from .mcp import (
     tools_from_signatures,
     validate_tool_arguments,
 )
-from .tool_factory import ToolCallingFactory, resolve_toolcalling_tools
+from .tool_factory import (
+    ToolCallingFactory,
+    cursor_mcp_config_to_tools,
+    resolve_toolcalling_tools,
+)
 from .toolcalling import generate_tool_description_candidates, prepare_tool_optimization
 from . import prompts as toolcalling_prompts
 
@@ -23,6 +27,7 @@ __all__ = [
     "ToolCallingManifest",
     "ToolSignature",
     "ToolCallingFactory",
+    "cursor_mcp_config_to_tools",
     "call_tool_from_manifest",
     "dump_mcp_signature",
     "list_tools_from_manifest",
