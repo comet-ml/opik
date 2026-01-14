@@ -70,6 +70,7 @@ import {
 import {
   AnnotationQueue,
   ANNOTATION_QUEUE_SCOPE,
+  ANNOTATION_QUEUE_TYPE,
 } from "@/types/annotation-queues";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { capitalizeFirstLetter } from "@/lib/utils";
@@ -91,6 +92,18 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
       nameKey: "project_name",
       idKey: "project_id",
       resource: RESOURCE_TYPE.project,
+    },
+  },
+  {
+    id: "queue_type",
+    label: "Type",
+    type: COLUMN_TYPE.category,
+    cell: TagCell as never,
+    accessorFn: (row) =>
+      row.queue_type === ANNOTATION_QUEUE_TYPE.DYNAMIC ? "Dynamic" : "Manual",
+    customMeta: {
+      colored: true,
+      variant: (value: string) => (value === "Dynamic" ? "amber" : "default"),
     },
   },
   {
@@ -178,6 +191,7 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "queue_type",
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
   "progress",
@@ -188,6 +202,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  "queue_type",
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
   "last_updated_at",

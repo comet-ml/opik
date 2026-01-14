@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -38,6 +39,10 @@ public record AnnotationQueue(
                 AnnotationQueue.View.Write.class}) @Nullable Boolean commentsEnabled,
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable List<String> feedbackDefinitionNames,
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable QueueType queueType,
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable JsonNode filterCriteria,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
         @JsonView({
@@ -68,6 +73,27 @@ public record AnnotationQueue(
                     .filter(scope -> scope.value.equals(value))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown annotation scope '%s'".formatted(value)));
+        }
+    }
+
+    @Getter
+    @RequiredArgsConstructor
+    public enum QueueType {
+        MANUAL("manual"),
+        DYNAMIC("dynamic");
+
+        @JsonValue
+        private final String value;
+
+        @JsonCreator
+        public static QueueType fromString(String value) {
+            if (value == null) {
+                return MANUAL; // Default to manual for backwards compatibility
+            }
+            return Arrays.stream(values())
+                    .filter(type -> type.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown queue type '%s'".formatted(value)));
         }
     }
 

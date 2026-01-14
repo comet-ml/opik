@@ -29,11 +29,14 @@ import { Textarea } from "@/components/ui/textarea";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import FeedbackDefinitionsSelectBox from "@/components/pages-shared/annotation-queues/FeedbackDefinitionsSelectBox";
+import AnnotationQueueFilterSection from "@/components/pages-shared/annotation-queues/AnnotationQueueFilterSection";
 
 import {
   ANNOTATION_QUEUE_SCOPE,
+  ANNOTATION_QUEUE_TYPE,
   AnnotationQueue,
 } from "@/types/annotation-queues";
+import { Filter } from "@/types/filters";
 import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
 import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
 import { Separator } from "@/components/ui/separator";
@@ -52,6 +55,16 @@ const SCOPE_OPTIONS = [
   },
 ];
 
+const filterSchema = z.object({
+  id: z.string(),
+  field: z.string(),
+  type: z.string(),
+  operator: z.string(),
+  key: z.string().optional(),
+  value: z.union([z.string(), z.number()]),
+  error: z.string().optional(),
+});
+
 const formSchema = z.object({
   project_id: z.string().min(1, "Project is required"),
   name: z
@@ -63,6 +76,7 @@ const formSchema = z.object({
   scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
   comments_enabled: z.boolean(),
   feedback_definition_names: z.array(z.string()).default([]),
+  filter_criteria: z.array(filterSchema).default([]),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -95,6 +109,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       scope: defaultQueue?.scope || scope || ANNOTATION_QUEUE_SCOPE.TRACE,
       feedback_definition_names: defaultQueue?.feedback_definition_names || [],
       comments_enabled: defaultQueue?.comments_enabled || true,
+      filter_criteria: (defaultQueue?.filter_criteria as Filter[]) || [],
     },
   });
 
@@ -111,9 +126,15 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const getQueue = useCallback(() => {
     const formData = form.getValues();
+    const hasFilters =
+      formData.filter_criteria && formData.filter_criteria.length > 0;
     return {
       ...formData,
       project_id: formData.project_id,
+      queue_type: hasFilters
+        ? ANNOTATION_QUEUE_TYPE.DYNAMIC
+        : ANNOTATION_QUEUE_TYPE.MANUAL,
+      filter_criteria: hasFilters ? formData.filter_criteria : undefined,
     };
   }, [form]);
 
@@ -245,6 +266,14 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   )}
                 />
               </div>
+              <Separator orientation="horizontal" className="my-4" />
+              <AnnotationQueueFilterSection
+                form={form}
+                disabled={
+                  isEdit &&
+                  defaultQueue?.queue_type === ANNOTATION_QUEUE_TYPE.DYNAMIC
+                }
+              />
               <Separator orientation="horizontal" className="my-4" />
               <div className="space-y-4">
                 <div className="comet-body-s text-muted-slate">
