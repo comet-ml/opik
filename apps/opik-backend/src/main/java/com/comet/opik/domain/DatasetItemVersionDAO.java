@@ -42,7 +42,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -115,9 +114,23 @@ public interface DatasetItemVersionDAO {
      * @param baseVersionItemCount the item count in the base version (for UUID pool sizing)
      * @return the total number of items in the new version
      */
+    /**
+     * Apply delta changes to create a new dataset version.
+     * Added and edited items should already have their row IDs (id field) set.
+     * Unchanged items will be copied with UUIDs from unchangedUuids.
+     *
+     * @param datasetId         Dataset ID
+     * @param baseVersionId     Base version ID to copy unchanged items from
+     * @param newVersionId      New version ID to create
+     * @param addedItems        Items to add (with id already set)
+     * @param editedItems       Items to edit (with id already set)
+     * @param deletedIds        Stable dataset_item_ids to delete
+     * @param unchangedUuids    UUIDs to assign to unchanged items (pre-generated in correct order)
+     * @return Number of items in the new version
+     */
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             List<DatasetItem> addedItems, List<DatasetItem> editedItems, Set<UUID> deletedIds,
-            int baseVersionItemCount);
+            List<UUID> unchangedUuids);
 
     /**
      * Applies batch updates to items from a base version, creating updated copies in a new version.
@@ -152,6 +165,31 @@ public interface DatasetItemVersionDAO {
      */
     Mono<Long> insertItems(UUID datasetId, UUID versionId, List<DatasetItem> items,
             String workspaceId, String userName);
+
+    /**
+     * Removes items from an existing version in ClickHouse.
+     * This is used for batch delete operations where multiple batches share the same batch_group_id.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to remove items from
+     * @param itemIds the set of dataset_item_id values to remove
+     * @param workspaceId the workspace ID
+     * @return the number of items removed
+     */
+    Mono<Long> removeItemsFromVersion(UUID datasetId, UUID versionId, Set<UUID> itemIds, String workspaceId);
+
+    /**
+     * Removes items from an existing version in ClickHouse based on filters.
+     * This is used for filter-based delete operations where items matching the filters should be removed.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to remove items from
+     * @param filters the filters to match items to remove
+     * @param workspaceId the workspace ID
+     * @return the number of items removed
+     */
+    Mono<Long> removeItemsFromVersionByFilters(UUID datasetId, UUID versionId, List<DatasetItemFilter> filters,
+            String workspaceId);
 
     /**
      * Resolves which dataset contains the given item by looking across all versions.
@@ -264,6 +302,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId<endif>
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             <if(lastRetrievedId)>
             LIMIT :limit
             <else>
@@ -278,6 +317,25 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            """;
+
+    private static final String DELETE_ITEMS_FROM_VERSION = """
+            DELETE FROM dataset_item_versions
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              <if(item_ids)>AND dataset_item_id IN (:item_ids)<endif>
+              <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            """;
+
+    private static final String COUNT_ITEMS = """
+            SELECT count(DISTINCT dataset_item_id) as count
+            FROM dataset_item_versions
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              <if(item_ids)>AND dataset_item_id IN :item_ids<endif>
+              <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
     /**
@@ -1003,7 +1061,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                arrayElement(:uuids, row_number() OVER ()) as id,
+                arrayElement(:uuids, row_number() OVER (ORDER BY src.id DESC)) as id,
                 src.dataset_item_id,
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
@@ -1037,6 +1095,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS src
+            ORDER BY src.id DESC
             """;
 
     private static final String RESOLVE_DATASET_ID_FROM_ITEM_ID = """
@@ -1417,9 +1476,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMap(result -> result.map((row, metadata) -> {
                         var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
                         var hash = row.get("data_hash", Long.class);
-                        var tags = Optional.ofNullable(row.get("tags", String[].class))
-                                .map(Arrays::asList)
-                                .orElse(List.of());
+                        Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
+                                .map(arr -> new HashSet<>(Arrays.asList(arr)))
+                                .orElseGet(HashSet::new);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
@@ -1832,12 +1891,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull List<DatasetItem> addedItems,
             @NonNull List<DatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
-            int baseVersionItemCount) {
+            @NonNull List<UUID> unchangedUuids) {
 
         log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
-                "added='{}', edited='{}', deleted='{}', baseItemCount='{}'",
+                "added='{}', edited='{}', deleted='{}'",
                 datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(),
-                deletedIds.size(), baseVersionItemCount);
+                deletedIds.size());
 
         // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
@@ -1848,29 +1907,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         Set<UUID> excludedIds = new HashSet<>(deletedIds);
         excludedIds.addAll(editedItemIds);
 
-        // Generate UUID pool for worst-case scenario (all base items copied)
-        // We can't know how many excludedIds actually exist in base version,
-        // so we generate enough UUIDs for all items to prevent running out during copy
-        List<UUID> unchangedUuids = generateUuidPool(idGenerator, baseVersionItemCount);
-
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Step 1: Copy unchanged items from base version (excluding deleted and edited)
+            // Step 1: Insert added items (will sort first due to latest/largest UUIDs)
+            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
+
+            // Step 2: Insert edited items (will sort after added due to middle UUIDs)
+            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
+
+            // Step 3: Copy unchanged items (will sort last due to earliest/smallest UUIDs)
             Mono<Long> copyUnchanged = copyUnchangedItems(datasetId, baseVersionId, newVersionId,
                     excludedIds, unchangedUuids, workspaceId, userName);
 
-            // Step 2: Insert edited items
-            Mono<Long> insertEdited = insertItems(datasetId, newVersionId, editedItems, workspaceId, userName);
-
-            // Step 3: Insert added items
-            Mono<Long> insertAdded = insertItems(datasetId, newVersionId, addedItems, workspaceId, userName);
-
             // Execute all operations and sum the results
-            return copyUnchanged
+            return insertAdded
                     .zipWith(insertEdited, Long::sum)
-                    .zipWith(insertAdded, Long::sum)
+                    .zipWith(copyUnchanged, Long::sum)
                     .doOnSuccess(total -> log.info("Applied delta for dataset '{}': total items in new version '{}'",
                             datasetId, total));
         });
@@ -1928,7 +1982,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Early return ONLY if IDs are explicitly empty AND filters are null (not provided at all)
         // Note: empty filters list means "select all items", so we should NOT early return in that case
-        boolean hasIds = batchUpdate.ids() != null && !batchUpdate.ids().isEmpty();
+        boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
         boolean hasFilters = batchUpdate.filters() != null; // null means not provided, empty list means "select all"
 
         if (!hasIds && !hasFilters) {
@@ -2078,6 +2132,174 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
                             datasetId, newVersionId, e))
                     .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> removeItemsFromVersion(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull Set<UUID> itemIds, @NonNull String workspaceId) {
+
+        if (itemIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        log.info("Removing '{}' items from version '{}' for dataset '{}'", itemIds.size(), versionId, datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "remove_items_from_version");
+
+            // First, count how many items actually exist (to handle non-existent IDs)
+            return countItemsByIds(datasetId, versionId, itemIds, workspaceId)
+                    .flatMap(existingCount -> {
+                        if (existingCount == 0) {
+                            log.info("No items found to delete for version '{}'", versionId);
+                            return Mono.just(0L);
+                        }
+
+                        // Use StringTemplate to generate query with item_ids condition
+                        var template = new ST(DELETE_ITEMS_FROM_VERSION);
+                        template.add("item_ids", true); // Enable item_ids condition
+                        String deleteQuery = template.render();
+
+                        var statement = connection.createStatement(deleteQuery)
+                                .bind("dataset_id", datasetId.toString())
+                                .bind("version_id", versionId.toString())
+                                .bind("workspace_id", workspaceId);
+
+                        // Bind the item IDs array
+                        String[] itemIdStrings = itemIds.stream()
+                                .map(UUID::toString)
+                                .toArray(String[]::new);
+                        statement.bind("item_ids", itemIdStrings);
+
+                        // delete async and returns 0, so return the count we calculated
+                        return Flux.from(statement.execute())
+                                .flatMap(Result::getRowsUpdated)
+                                .reduce(0L, Long::sum)
+                                .map(results -> existingCount) // Return the actual count of existing items
+                                .doOnSuccess(count -> log.info(
+                                        "Removed '{}' items from version '{}' (requested '{}' IDs, '{}' existed)",
+                                        count, versionId, itemIds.size(), existingCount))
+                                .doOnError(e -> log.error("Failed to remove items from version '{}' for dataset '{}'",
+                                        versionId, datasetId, e));
+                    })
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> removeItemsFromVersionByFilters(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull List<DatasetItemFilter> filters, @NonNull String workspaceId) {
+
+        // Empty filter list means "delete all" (no filters = match everything)
+        log.info("Removing items from version '{}' for dataset '{}' using '{}' filters (empty = delete all)",
+                versionId, datasetId, filters != null ? filters.size() : 0);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "remove_items_from_version_by_filters");
+
+            // First, count how many items will be deleted
+            return countItemsMatchingFilters(datasetId, versionId, filters, workspaceId)
+                    .flatMap(deletedCount -> {
+                        if (deletedCount == 0) {
+                            log.info("No items match filters for version '{}'", versionId);
+                            return Mono.just(0L);
+                        }
+
+                        // Build the filter query using StringTemplate
+                        // Empty filters means "delete all" - no filter conditions
+                        Optional<String> filterConditionsOpt = CollectionUtils.isEmpty(filters)
+                                ? Optional.empty()
+                                : FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
+
+                        // Use StringTemplate to generate query with optional filter conditions
+                        var template = new ST(DELETE_ITEMS_FROM_VERSION);
+                        filterConditionsOpt.ifPresent(filterConditions -> template.add("dataset_item_filters",
+                                filterConditions));
+                        String deleteQuery = template.render();
+
+                        var statement = connection.createStatement(deleteQuery)
+                                .bind("dataset_id", datasetId.toString())
+                                .bind("version_id", versionId.toString())
+                                .bind("workspace_id", workspaceId);
+
+                        // Bind filter parameters using FilterQueryBuilder (only if filters exist)
+                        if (CollectionUtils.isNotEmpty(filters)) {
+                            statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+                        }
+
+                        return Flux.from(statement.execute())
+                                .flatMap(Result::getRowsUpdated)
+                                .reduce(0L, Long::sum)
+                                .map(results -> deletedCount) // Return the count we calculated earlier
+                                .doOnSuccess(
+                                        count -> log.info("Removed '{}' items from version '{}'", count, versionId))
+                                .doOnError(e -> log.error(
+                                        "Failed to remove items from version '{}' for dataset '{}' using filters",
+                                        versionId, datasetId, e));
+                    })
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    /**
+     * Counts items matching the given filters in a specific version.
+     * Used to determine how many items will be deleted before performing the deletion.
+     */
+    private Mono<Long> countItemsMatchingFilters(UUID datasetId, UUID versionId, List<DatasetItemFilter> filters,
+            String workspaceId) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            // Empty filters means "count all" - no filter conditions
+            Optional<String> filterConditionsOpt = CollectionUtils.isEmpty(filters)
+                    ? Optional.empty()
+                    : FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
+
+            // Use StringTemplate to generate query with optional filter conditions
+            var template = new ST(COUNT_ITEMS);
+            filterConditionsOpt.ifPresent(filterConditions -> template.add("dataset_item_filters", filterConditions));
+            String countQuery = template.render();
+
+            var statement = connection.createStatement(countQuery)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            // Bind filter parameters (only if filters exist)
+            if (CollectionUtils.isNotEmpty(filters)) {
+                statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    /**
+     * Counts items by their IDs in a specific version.
+     * Used to determine how many of the requested IDs actually exist before deletion.
+     */
+    private Mono<Long> countItemsByIds(UUID datasetId, UUID versionId, Set<UUID> itemIds, String workspaceId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var template = new ST(COUNT_ITEMS);
+            template.add("item_ids", true); // Enable item_ids condition
+            String countQuery = template.render();
+
+            var statement = connection.createStatement(countQuery)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId)
+                    .bind("item_ids", itemIds.toArray(UUID[]::new));
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
         });
     }
 

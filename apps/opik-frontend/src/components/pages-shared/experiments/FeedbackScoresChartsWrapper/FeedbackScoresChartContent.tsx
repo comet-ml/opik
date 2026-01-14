@@ -67,8 +67,8 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
     yTickFormatter,
     interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
-    tickPrecision: 2,
-    numberOfTicks: 3,
+    maxTickPrecision: 2,
+    targetTickCount: 3,
   });
 
   const legendWidth = Math.max(

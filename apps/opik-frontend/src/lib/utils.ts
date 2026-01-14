@@ -6,6 +6,7 @@ import get from "lodash/get";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
+import isInteger from "lodash/isInteger";
 import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
@@ -228,12 +229,15 @@ export const formatNumberInK = (value: number, precision = 1): string => {
     { threshold: 1000, suffix: "K", divider: 1000 },
   ];
 
+  const formatValue = (num: number): string =>
+    isInteger(num) ? num.toString() : num.toFixed(precision);
+
   const range = ranges.find((r) => value >= r.threshold);
 
   return range
-    ? `${(value / range.divider).toFixed(precision)}${range.suffix}`
+    ? `${formatValue(value / range.divider)}${range.suffix}`
     : isNumber(value)
-      ? value.toFixed(precision)
+      ? formatValue(value)
       : String(value);
 };
 

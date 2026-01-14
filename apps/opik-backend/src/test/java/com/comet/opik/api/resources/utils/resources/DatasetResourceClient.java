@@ -67,17 +67,20 @@ public class DatasetResourceClient {
     }
 
     public Dataset getDatasetById(UUID datasetId, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = callGetDatasetById(datasetId, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(Dataset.class);
+        }
+    }
+
+    public Response callGetDatasetById(UUID datasetId, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            return actualResponse.readEntity(Dataset.class);
-        }
+                .get();
     }
 
     public DatasetPage getDatasets(String workspaceName, String apiKey) {
@@ -96,18 +99,21 @@ public class DatasetResourceClient {
     }
 
     public void createDatasetItems(DatasetItemBatch batch, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = callCreateDatasetItems(batch, workspaceName, apiKey)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callCreateDatasetItems(DatasetItemBatch batch, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(jakarta.ws.rs.core.HttpHeaders.AUTHORIZATION, apiKey)
                 .header(jakarta.ws.rs.core.HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(batch))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+                .put(Entity.json(batch));
     }
 
     public void createDatasetItemsFromTraces(UUID datasetId, CreateDatasetItemsFromTracesRequest request,
@@ -291,17 +297,20 @@ public class DatasetResourceClient {
     }
 
     public void deleteDataset(UUID id, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = callDeleteDataset(id, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callDeleteDataset(UUID id, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+                .delete();
     }
 
     public void deleteDatasetByName(String name, String apiKey, String workspaceName) {
@@ -581,6 +590,63 @@ public class DatasetResourceClient {
     public Response callDeleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
         var deleteRequest = DatasetItemsDelete.builder()
                 .itemIds(new HashSet<>(itemIds))
+                .build();
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
+    }
+
+    public void deleteDatasetItems(DatasetItemsDelete deleteRequest, String workspaceName, String apiKey) {
+        try (var response = callDeleteDatasetItems(deleteRequest, workspaceName, apiKey)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteDatasetItems(DatasetItemsDelete deleteRequest, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
+    }
+
+    public void deleteDatasetItem(UUID itemId, String apiKey, String workspaceName) {
+        try (var response = callDeleteDatasetItem(itemId, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteDatasetItem(UUID itemId, String apiKey, String workspaceName) {
+        var deleteRequest = DatasetItemsDelete.builder()
+                .itemIds(Set.of(itemId))
+                .build();
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
+    }
+
+    public void deleteDatasetItemsByFilters(UUID datasetId, List<com.comet.opik.api.filter.DatasetItemFilter> filters,
+            String apiKey, String workspaceName) {
+        try (var response = callDeleteDatasetItemsByFilters(datasetId, filters, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteDatasetItemsByFilters(UUID datasetId,
+            List<com.comet.opik.api.filter.DatasetItemFilter> filters, String apiKey, String workspaceName) {
+        var deleteRequest = DatasetItemsDelete.builder()
+                .datasetId(datasetId)
+                .filters(filters)
                 .build();
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
