@@ -257,7 +257,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       { vision: false, video: true }
     );
     const noVision = analyzeContentParts(formattedNoVision[0].content);
-    // Should have text part with image placeholder, video part preserved
+    // Should have text part with image placeholder, video url preserved (but flattened)
     expect(noVision.textContent).toContain("<<<image>>>");
     expect(noVision.textContent).not.toContain("<<<video>>>");
     expect(noVision.hasVideoPart).toBe(false); // Since vision is disabled, flattening should occur
@@ -269,7 +269,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       { vision: true, video: false }
     );
     const noVideo = analyzeContentParts(formattedNoVideo[0].content);
-    // Should have text part with video placeholder, image part preserved
+    // Should have text part with video placeholder, image url preserved (but flattened)
     expect(noVideo.textContent).not.toContain("<<<image>>>");
     expect(noVideo.textContent).toContain("<<<video>>>");
     expect(noVideo.hasImagePart).toBe(false); // Since video is disabled, flattening should occur
