@@ -13,7 +13,10 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dataset } from "@/types/datasets";
 import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
-import { useAddExportJob, useSetPanelExpanded } from "@/store/DatasetExportStore";
+import {
+  useAddExportJob,
+  useSetPanelExpanded,
+} from "@/store/DatasetExportStore";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -54,7 +57,14 @@ export const DatasetRowActionsCell: React.FunctionComponent<
         },
       },
     );
-  }, [dataset.id, dataset.name, startExport, addExportJob, setPanelExpanded, toast]);
+  }, [
+    dataset.id,
+    dataset.name,
+    startExport,
+    addExportJob,
+    setPanelExpanded,
+    toast,
+  ]);
 
   return (
     <CellWrapper

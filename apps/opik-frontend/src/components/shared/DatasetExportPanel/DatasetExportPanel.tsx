@@ -78,7 +78,15 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
         markAsViewed({ jobId: job.id });
       }
     }
-  }, [updatedJob, job.status, updateJob, datasetName, toast, markAsViewed, job.id]);
+  }, [
+    updatedJob,
+    job.status,
+    updateJob,
+    datasetName,
+    toast,
+    markAsViewed,
+    job.id,
+  ]);
 
   // Show error toast for failed jobs that were loaded from API (after page refresh)
   // and haven't been viewed yet (viewed_at is null)
@@ -99,8 +107,15 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
       // Mark as viewed so it won't show again
       markAsViewed({ jobId: job.id });
     }
-  }, [job.status, job.viewed_at, job.error_message, job.id, datasetName, toast, markAsViewed]);
-
+  }, [
+    job.status,
+    job.viewed_at,
+    job.error_message,
+    job.id,
+    datasetName,
+    toast,
+    markAsViewed,
+  ]);
 
   const isLoading =
     job.status === DATASET_EXPORT_STATUS.PENDING ||
@@ -123,13 +138,15 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   // Render status indicator icon
   const renderStatusIndicator = () => {
     if (isLoading) {
-      return <Loader2 className="size-4 animate-spin text-muted-foreground shrink-0" />;
+      return (
+        <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+      );
     }
     if (isCompleted) {
-      return <CheckCircle2 className="size-4 text-green-600 shrink-0" />;
+      return <CheckCircle2 className="size-4 shrink-0 text-green-600" />;
     }
     if (isFailed) {
-      return <AlertCircle className="size-4 text-destructive shrink-0" />;
+      return <AlertCircle className="size-4 shrink-0 text-destructive" />;
     }
     return null;
   };
@@ -188,26 +205,28 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     <div
       className={cn(
         "flex items-center gap-2 py-2 border-b last:border-b-0",
-        isCompleted && "cursor-pointer hover:bg-muted/50"
+        isCompleted && "cursor-pointer hover:bg-muted/50",
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={isCompleted ? handleDownload : undefined}
     >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         {renderStatusIndicator()}
-        <span className="text-sm truncate">{datasetName}</span>
+        <span className="truncate text-sm">{datasetName}</span>
         {isFailed && (
-          <span className="text-xs text-destructive shrink-0">Failed</span>
+          <span className="shrink-0 text-xs text-destructive">Failed</span>
         )}
         {isCompleted && (
-          <span className="text-xs text-green-600 shrink-0">Ready</span>
+          <span className="shrink-0 text-xs text-green-600">Ready</span>
         )}
         {isLoading && (
-          <span className="text-xs text-muted-foreground shrink-0">Exporting...</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            Exporting...
+          </span>
         )}
       </div>
-      <div className="flex items-center shrink-0">{renderActionButton()}</div>
+      <div className="flex shrink-0 items-center">{renderActionButton()}</div>
     </div>
   );
 };
@@ -276,7 +295,7 @@ const DatasetExportPanel: React.FC = () => {
       )}
     >
       <CardHeader
-        className="flex flex-row items-center justify-between py-2.5 px-3 cursor-pointer border-b"
+        className="flex cursor-pointer flex-row items-center justify-between border-b px-3 py-2.5"
         onClick={togglePanelExpanded}
       >
         <div className="flex items-center gap-2">
@@ -320,4 +339,3 @@ const DatasetExportPanel: React.FC = () => {
 };
 
 export default DatasetExportPanel;
-
