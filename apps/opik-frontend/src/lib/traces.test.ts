@@ -327,4 +327,53 @@ describe("prettifyMessage", () => {
       prettified: true,
     });
   });
+
+  it("handles LangGraph input with system message last, returning last human message", () => {
+    const message = {
+      messages: [
+        {
+          content: [
+            {
+              type: "text",
+              text: "[2026-01-12 19:22:36] Hi there",
+            },
+          ],
+          additional_kwargs: {
+            timestamp: 1768245756358,
+          },
+          response_metadata: {},
+          type: "human",
+          name: null,
+          id: null,
+        },
+        { type: "system", content: "System instructions" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "[2026-01-12 19:22:36] Hi there",
+      prettified: true,
+    });
+  });
+
+  it("handles LangGraph input with content as array containing text objects", () => {
+    const message = {
+      messages: [
+        {
+          content: [
+            {
+              type: "text",
+              text: "[2026-01-12 19:22:36] Hi there",
+            },
+          ],
+          type: "human",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "[2026-01-12 19:22:36] Hi there",
+      prettified: true,
+    });
+  });
 });
