@@ -1,7 +1,9 @@
 """
-Decorator for OpenAI video creation methods (create, create_and_poll, remix).
+Decorator for OpenAI video creation methods (create, remix).
 
 Output type: openai.types.video.Video
+
+This decorator is used only for LLM spans that generate videos.
 """
 
 import logging
@@ -53,14 +55,14 @@ VIDEO_RESPONSE_KEYS_TO_LOG_AS_OUTPUT = [
 
 class VideosCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
-    Decorator for tracking OpenAI video creation methods.
+    Decorator for tracking OpenAI video creation methods (LLM spans).
 
-    Handles: videos.create, videos.create_and_poll, videos.remix
+    Handles: videos.create, videos.remix
     """
 
-    def __init__(self) -> None:
+    def __init__(self, provider: str) -> None:
         super().__init__()
-        self.provider = "openai"
+        self.provider = provider
 
     @override
     def _start_span_inputs_preprocessor(

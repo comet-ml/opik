@@ -46,7 +46,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
     1. Trace and span structure with proper nesting
     2. Input/output logging for all video methods
     3. Metadata contains video_seconds and video_size for cost calculation
-    4. Model and provider are correctly populated
+    4. Model and provider are correctly populated for LLM spans only
     5. Tags are applied correctly
     6. Download and write_to_file spans are created
     """
@@ -81,18 +81,17 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
     EXPECTED_CREATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
         name="videos.create_and_poll",
-        input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
-        output={
-            "id": ANY_BUT_NONE,
-            "status": "completed",
-            "prompt": prompt,
-            "seconds": "4",
-            "size": VIDEO_SIZE_FOR_TESTS,
-            "progress": ANY,
-            "error": ANY,
-        },
+        input=ANY_DICT.containing(
+            {"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS}
+        ),
+        output=ANY_DICT,
         tags=["openai"],
-        metadata=ANY_DICT,
+        metadata=ANY_DICT.containing(
+            {
+                "created_from": "openai",
+                "type": "openai_videos",
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -102,30 +101,23 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 id=ANY_BUT_NONE,
                 type="general",
                 name="videos.create_and_poll",
-                input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
-                output={
-                    "id": ANY_BUT_NONE,
-                    "status": ANY_STRING,
-                    "prompt": prompt,
-                    "seconds": "4",
-                    "size": VIDEO_SIZE_FOR_TESTS,
-                    "progress": ANY,
-                    "error": ANY,
-                },
+                input=ANY_DICT.containing(
+                    {"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS}
+                ),
+                output=ANY_DICT,
                 tags=["openai"],
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "openai",
                         "type": "openai_videos",
-                        "video_seconds": 4,
                     }
                 ),
                 usage=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
-                model=VIDEO_MODEL_FOR_TESTS,
-                provider="openai",
+                model=None,
+                provider=None,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -178,8 +170,8 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=OPIK_PROJECT_DEFAULT_NAME,
-                        model=ANY,
-                        provider="openai",
+                        model=None,
+                        provider=None,
                         spans=[],
                     ),
                 ],
@@ -217,7 +209,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 model=None,
-                provider="openai",
+                provider=None,
                 spans=[],
             )
         ],
@@ -260,7 +252,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 model=None,
-                provider="openai",
+                provider=None,
                 spans=[],
                 attachments=[
                     AttachmentModel(
@@ -321,7 +313,12 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
         input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
         output=None,
         tags=["openai"],
-        metadata=ANY_DICT,
+        metadata=ANY_DICT.containing(
+            {
+                "created_from": "openai",
+                "type": "openai_videos",
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -349,8 +346,8 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
-                model="invalid-model-name",
-                provider="openai",
+                model=None,
+                provider=None,
                 error_info={
                     "exception_type": "BadRequestError",
                     "message": ANY_STRING,
@@ -435,18 +432,17 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
     EXPECTED_CREATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
         name="videos.create_and_poll",
-        input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
-        output={
-            "id": ANY_BUT_NONE,
-            "status": "completed",
-            "prompt": prompt,
-            "seconds": "4",
-            "size": VIDEO_SIZE_FOR_TESTS,
-            "progress": ANY,
-            "error": ANY,
-        },
+        input=ANY_DICT.containing(
+            {"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS}
+        ),
+        output=ANY_DICT,
         tags=["openai"],
-        metadata=ANY_DICT,
+        metadata=ANY_DICT.containing(
+            {
+                "created_from": "openai",
+                "type": "openai_videos",
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -456,30 +452,23 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                 id=ANY_BUT_NONE,
                 type="general",
                 name="videos.create_and_poll",
-                input={"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS},
-                output={
-                    "id": ANY_BUT_NONE,
-                    "status": ANY_STRING,
-                    "prompt": prompt,
-                    "seconds": "4",
-                    "size": VIDEO_SIZE_FOR_TESTS,
-                    "progress": ANY,
-                    "error": ANY,
-                },
+                input=ANY_DICT.containing(
+                    {"prompt": prompt, "seconds": "4", "size": VIDEO_SIZE_FOR_TESTS}
+                ),
+                output=ANY_DICT,
                 tags=["openai"],
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "openai",
                         "type": "openai_videos",
-                        "video_seconds": 4,
                     }
                 ),
                 usage=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
-                model=VIDEO_MODEL_FOR_TESTS,
-                provider="openai",
+                model=None,
+                provider=None,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -532,8 +521,8 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=OPIK_PROJECT_DEFAULT_NAME,
-                        model=ANY,
-                        provider="openai",
+                        model=None,
+                        provider=None,
                         spans=[],
                     ),
                 ],
@@ -571,7 +560,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 model=None,
-                provider="openai",
+                provider=None,
                 spans=[],
             )
         ],
@@ -614,7 +603,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 model=None,
-                provider="openai",
+                provider=None,
                 spans=[],
                 attachments=[
                     AttachmentModel(
@@ -673,7 +662,12 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
         input=ANY_DICT.containing({"prompt": prompt, "seconds": "4"}),
         output=None,
         tags=["openai"],
-        metadata=ANY_DICT,
+        metadata=ANY_DICT.containing(
+            {
+                "created_from": "openai",
+                "type": "openai_videos",
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -701,8 +695,8 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
-                model="invalid-model-name",
-                provider="openai",
+                model=None,
+                provider=None,
                 error_info={
                     "exception_type": "BadRequestError",
                     "message": ANY_STRING,

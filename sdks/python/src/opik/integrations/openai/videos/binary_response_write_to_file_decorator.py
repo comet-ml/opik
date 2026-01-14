@@ -17,7 +17,6 @@ LOGGER = logging.getLogger(__name__)
 
 def create_write_to_file_decorator(
     project_name: Optional[str] = None,
-    provider: Optional[str] = None,
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """
     Create a decorator that tracks write_to_file calls.
@@ -35,7 +34,6 @@ def create_write_to_file_decorator(
                 metadata={"created_from": "openai", "type": "openai_videos"},
                 tags=["openai"],
                 type="general",
-                provider=provider,
                 project_name=project_name,
             ) as span_data:
                 result = func(file)

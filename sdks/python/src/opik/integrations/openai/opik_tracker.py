@@ -159,7 +159,6 @@ def _patch_openai_videos(
     from .videos import (
         VideosCreateTrackDecorator,
         VideosDownloadTrackDecorator,
-        VideosRetrieveTrackDecorator,
     )
 
     provider = (
@@ -168,21 +167,17 @@ def _patch_openai_videos(
         else "openai"
     )
 
-    # Create decorator factories for methods that need special input/output handling
-    create_decorator_factory = VideosCreateTrackDecorator()
-    create_decorator_factory.provider = provider
+    # Create decorator factory for LLM methods (create, remix)
+    create_decorator_factory = VideosCreateTrackDecorator(provider=provider)
 
-    retrieve_decorator_factory = VideosRetrieveTrackDecorator()
-    retrieve_decorator_factory.provider = provider
-
+    # Download decorator patches write_to_file on returned instances
     download_decorator_factory = VideosDownloadTrackDecorator()
-    download_decorator_factory.provider = provider
 
     # Video metadata for simple methods using default @opik.track
     video_metadata = {"created_from": "openai", "type": "openai_videos"}
     video_tags = ["openai"]
 
-    # Patch videos.create - start video generation (returns immediately)
+    # Patch videos.create - start video generation (LLM span)
     if hasattr(openai_client.videos, "create"):
         decorator = create_decorator_factory.track(
             type="llm",
@@ -191,19 +186,20 @@ def _patch_openai_videos(
         )
         openai_client.videos.create = decorator(openai_client.videos.create)
 
-    # Patch videos.create_and_poll - video generation with polling
+    # Patch videos.create_and_poll - video generation with polling (general span)
     # This will create a parent span that contains nested create/poll spans
     if hasattr(openai_client.videos, "create_and_poll"):
-        decorator = create_decorator_factory.track(
-            type="general",
+        decorator = opik.track(
             name="videos.create_and_poll",
+            tags=video_tags,
+            metadata=video_metadata,
             project_name=project_name,
         )
         openai_client.videos.create_and_poll = decorator(
             openai_client.videos.create_and_poll
         )
 
-    # Patch videos.remix - remix existing video (generates new video)
+    # Patch videos.remix - remix existing video (LLM span)
     if hasattr(openai_client.videos, "remix"):
         decorator = create_decorator_factory.track(
             type="llm",
@@ -215,20 +211,22 @@ def _patch_openai_videos(
     # Note: videos.retrieve is intentionally NOT patched to avoid too many spans
     # since it's called frequently during polling operations.
 
-    # Patch videos.poll - poll for video completion
+    # Patch videos.poll - poll for video completion (general span)
     if hasattr(openai_client.videos, "poll"):
-        decorator = retrieve_decorator_factory.track(
-            type="general",
+        decorator = opik.track(
             name="videos.poll",
+            tags=video_tags,
+            metadata=video_metadata,
             project_name=project_name,
         )
         openai_client.videos.poll = decorator(openai_client.videos.poll)
 
-    # Patch videos.delete - delete video
+    # Patch videos.delete - delete video (general span)
     if hasattr(openai_client.videos, "delete"):
-        decorator = retrieve_decorator_factory.track(
-            type="general",
+        decorator = opik.track(
             name="videos.delete",
+            tags=video_tags,
+            metadata=video_metadata,
             project_name=project_name,
         )
         openai_client.videos.delete = decorator(openai_client.videos.delete)
@@ -245,7 +243,7 @@ def _patch_openai_videos(
             openai_client.videos.download_content
         )
 
-    # Patch videos.list - list videos (uses default @opik.track)
+    # Patch videos.list - list videos (general span)
     if hasattr(openai_client.videos, "list"):
         decorator = opik.track(
             name="videos.list",

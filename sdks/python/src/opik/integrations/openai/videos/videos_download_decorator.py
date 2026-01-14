@@ -64,8 +64,6 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
-            model=None,
-            provider=self.provider,
         )
 
         return result
@@ -79,16 +77,13 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.EndSpanParameters:
         # Patch write_to_file on the returned instance
         if output is not None:
-            _track_instance_write_to_file(
-                output, current_span_data.project_name, self.provider
-            )
+            _track_instance_write_to_file(output, current_span_data.project_name)
 
         result = arguments_helpers.EndSpanParameters(
             output={"output": output} if not isinstance(output, dict) else output,
             usage=None,
             metadata={},
             model=None,
-            provider=self.provider,
         )
 
         return result
@@ -107,11 +102,9 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
 def _track_instance_write_to_file(
     instance: HttpxBinaryResponseContent,
     project_name: Optional[str],
-    provider: Optional[str],
 ) -> None:
     """Patch write_to_file on this specific instance to track the download."""
     decorator = binary_response_write_to_file_decorator.create_write_to_file_decorator(
         project_name=project_name,
-        provider=provider,
     )
     instance.write_to_file = decorator(instance.write_to_file)  # type: ignore[method-assign]
