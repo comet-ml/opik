@@ -17,6 +17,7 @@ import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
 from ..utils.candidate_selection import extract_choice_logprob
+from ..utils.toolcalling.tool_factory import resolve_toolcalling_tools
 
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,10 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             if (prompt.model_kwargs or {}).get("n", 1) != 1:
                 # TODO: Support multi-choice tool execution by selecting a single candidate.
                 prompt.model_kwargs["n"] = 1
+            # Normalize MCP tool entries into function-calling tools + callables.
+            tools_for_call, function_map = resolve_toolcalling_tools(
+                prompt.tools, prompt.function_map
+            )
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
             count = 0
@@ -145,7 +150,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 response = self._llm_complete(
                     model=prompt.model,
                     messages=all_messages,
-                    tools=prompt.tools,
+                    tools=tools_for_call,
                     seed=seed,
                     model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
                 )
@@ -160,7 +165,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                         tool_name = tool_call["function"]["name"]
                         arguments = json.loads(tool_call["function"]["arguments"])
 
-                        tool_func = prompt.function_map.get(tool_name)
+                        tool_func = function_map.get(tool_name)
                         try:
                             tool_result = (
                                 tool_func(**arguments)

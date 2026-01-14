@@ -3,6 +3,7 @@ import copy
 import inspect
 import logging
 import time
+import warnings
 from abc import ABC, abstractmethod
 import random
 import importlib.metadata
@@ -113,8 +114,14 @@ class BaseOptimizer(ABC):
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
 
-        # Initialize prompt library with overrides
-        self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
+        # Initialize prompt library with overrides (include MCP defaults)
+        from .utils.toolcalling import prompts as toolcalling_prompts
+
+        prompt_defaults = {
+            **toolcalling_prompts.MCP_PROMPT_DEFAULTS,
+            **self.DEFAULT_PROMPTS,
+        }
+        self._prompts = PromptLibrary(prompt_defaults, prompt_overrides)
 
     @property
     def prompts(self) -> PromptLibrary:
@@ -690,6 +697,21 @@ class BaseOptimizer(ABC):
            **kwargs: Additional arguments for optimization
         """
         pass
+
+    def optimize_mcp(
+        self, *args: Any, **kwargs: Any
+    ) -> optimization_result.OptimizationResult:
+        """Deprecated: use optimize_prompt(..., optimize_tools=True)."""
+        warnings.warn(
+            "optimize_mcp is deprecated. Use optimize_prompt(..., optimize_tools=True) "
+            "with MCP tools defined in ChatPrompt.tools.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise RuntimeError(
+            "optimize_mcp has been removed. Use optimize_prompt(..., optimize_tools=True) "
+            "with MCP tools in ChatPrompt.tools."
+        )
 
     def get_history(self) -> list[OptimizationRound]:
         """

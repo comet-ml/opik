@@ -8,6 +8,7 @@ from opik.opik_context import update_current_trace
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
 from . import _throttle
+from .utils.toolcalling.tool_factory import resolve_toolcalling_tools
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -131,12 +132,16 @@ class OptimizableAgent:
             pass
 
         if allow_tool_use and self.prompt.tools:
+            # Normalize MCP tool entries into function-calling tools + callables.
+            tools_for_call, function_map = resolve_toolcalling_tools(
+                self.prompt.tools, self.prompt.function_map
+            )
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
             count = 0
             while count < 20:
                 count += 1
-                response = self._llm_complete(all_messages, self.prompt.tools, seed)
+                response = self._llm_complete(all_messages, tools_for_call, seed)
                 optimizer_ref = self.optimizer
                 if optimizer_ref is not None and hasattr(
                     optimizer_ref, "_increment_llm_counter"
@@ -149,7 +154,7 @@ class OptimizableAgent:
                         tool_name = tool_call["function"]["name"]
                         arguments = json.loads(tool_call["function"]["arguments"])
 
-                        tool_func = self.prompt.function_map.get(tool_name)
+                        tool_func = function_map.get(tool_name)
                         try:
                             tool_result = (
                                 tool_func(**arguments)
