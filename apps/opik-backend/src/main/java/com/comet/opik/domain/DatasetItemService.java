@@ -2065,16 +2065,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Deletes items from an existing version using filters.
      * This is used for filter-based deletions when createVersion=false.
+     * Empty filter list means "delete all" (no filters = match everything).
      */
     private Mono<Void> deleteItemsFromExistingVersionByFilters(UUID datasetId, UUID versionId,
             List<DatasetItemFilter> filters, String workspaceId) {
 
-        log.info("Deleting items from existing version '{}' for dataset '{}' using filters", versionId, datasetId);
-
-        if (CollectionUtils.isEmpty(filters)) {
-            log.warn("No filters provided for filter-based deletion");
-            return Mono.empty();
-        }
+        log.info("Deleting items from existing version '{}' for dataset '{}' using filters (empty = delete all)",
+                versionId, datasetId);
 
         return Mono.defer(() -> {
             // Get current version to update counts
@@ -2215,6 +2212,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private Mono<Void> proceedWithGroupedDeletion(UUID batchGroupId, Set<UUID> datasetItemIds, UUID datasetId,
             List<DatasetItemFilter> filters, String workspaceId, String userName, boolean createVersion) {
         return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(optionalVersion -> {
                     if (optionalVersion.isPresent()) {
                         // Version exists - this is a subsequent batch of deletions
@@ -2248,6 +2246,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private Mono<DatasetVersion> handleGroupedInsertion(UUID batchGroupId, DatasetItemBatch batch,
             UUID datasetId, String workspaceId, String userName) {
         return Mono.fromCallable(() -> versionService.findByBatchGroupId(batchGroupId, datasetId, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(optionalVersion -> {
                     if (optionalVersion.isPresent()) {
                         // Version exists - append items to it

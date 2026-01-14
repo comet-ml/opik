@@ -2185,12 +2185,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> removeItemsFromVersionByFilters(@NonNull UUID datasetId, @NonNull UUID versionId,
             @NonNull List<DatasetItemFilter> filters, @NonNull String workspaceId) {
 
-        if (CollectionUtils.isEmpty(filters)) {
-            return Mono.just(0L);
-        }
-
-        log.info("Removing items from version '{}' for dataset '{}' using '{}' filters", versionId, datasetId,
-                filters.size());
+        // Empty filter list means "delete all" (no filters = match everything)
+        log.info("Removing items from version '{}' for dataset '{}' using '{}' filters (empty = delete all)",
+                versionId, datasetId, filters != null ? filters.size() : 0);
 
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
@@ -2205,19 +2202,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         }
 
                         // Build the filter query using StringTemplate
-                        Optional<String> filterConditionsOpt = FilterQueryBuilder.toAnalyticsDbFilters(filters,
-                                FilterStrategy.DATASET_ITEM);
+                        // Empty filters means "delete all" - no filter conditions
+                        Optional<String> filterConditionsOpt = CollectionUtils.isEmpty(filters)
+                                ? Optional.empty()
+                                : FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
 
-                        if (filterConditionsOpt.isEmpty()) {
-                            log.warn("No filter conditions generated for version '{}'", versionId);
-                            return Mono.just(0L);
-                        }
-
-                        String filterConditions = filterConditionsOpt.get();
-
-                        // Use StringTemplate to generate query with filter conditions
+                        // Use StringTemplate to generate query with optional filter conditions
                         var template = new ST(DELETE_ITEMS_FROM_VERSION_BY_FILTERS);
-                        template.add("dataset_item_filters", filterConditions);
+                        filterConditionsOpt.ifPresent(filterConditions -> template.add("dataset_item_filters",
+                                filterConditions));
                         String deleteQuery = template.render();
 
                         var statement = connection.createStatement(deleteQuery)
@@ -2225,8 +2218,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .bind("version_id", versionId.toString())
                                 .bind("workspace_id", workspaceId);
 
-                        // Bind filter parameters using FilterQueryBuilder
-                        statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+                        // Bind filter parameters using FilterQueryBuilder (only if filters exist)
+                        if (CollectionUtils.isNotEmpty(filters)) {
+                            statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+                        }
 
                         return Flux.from(statement.execute())
                                 .flatMap(Result::getRowsUpdated)
@@ -2250,18 +2245,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             String workspaceId) {
 
         return asyncTemplate.nonTransaction(connection -> {
-            Optional<String> filterConditionsOpt = FilterQueryBuilder.toAnalyticsDbFilters(filters,
-                    FilterStrategy.DATASET_ITEM);
+            // Empty filters means "count all" - no filter conditions
+            Optional<String> filterConditionsOpt = CollectionUtils.isEmpty(filters)
+                    ? Optional.empty()
+                    : FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
 
-            if (filterConditionsOpt.isEmpty()) {
-                return Mono.just(0L);
-            }
-
-            String filterConditions = filterConditionsOpt.get();
-
-            // Use StringTemplate to generate query with filter conditions
+            // Use StringTemplate to generate query with optional filter conditions
             var template = new ST(COUNT_ITEMS_MATCHING_FILTERS);
-            template.add("dataset_item_filters", filterConditions);
+            filterConditionsOpt.ifPresent(filterConditions -> template.add("dataset_item_filters", filterConditions));
             String countQuery = template.render();
 
             var statement = connection.createStatement(countQuery)
@@ -2269,8 +2260,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .bind("version_id", versionId.toString())
                     .bind("workspace_id", workspaceId);
 
-            // Bind filter parameters
-            statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            // Bind filter parameters (only if filters exist)
+            if (CollectionUtils.isNotEmpty(filters)) {
+                statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))

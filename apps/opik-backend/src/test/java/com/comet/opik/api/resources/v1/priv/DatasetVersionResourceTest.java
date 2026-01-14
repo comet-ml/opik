@@ -3167,5 +3167,61 @@ class DatasetVersionResourceTest {
                     .extracting(item -> item.data().get("input").asText())
                     .containsExactlyInAnyOrder("test2", "test3");
         }
+
+        @Test
+        @DisplayName("Success: Empty filter list (delete all) without batch_group_id mutates latest version")
+        void deleteItems_whenEmptyFilterListWithoutBatchGroupId_thenDeletesAllAndMutatesLatestVersion() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = List.of(
+                    DatasetItem.builder()
+                            .source(DatasetItemSource.MANUAL)
+                            .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test1\""),
+                                    "expected", JsonUtils.getJsonNodeFromString("\"output1\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .source(DatasetItemSource.MANUAL)
+                            .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test2\""),
+                                    "expected", JsonUtils.getJsonNodeFromString("\"output2\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .source(DatasetItemSource.MANUAL)
+                            .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test3\""),
+                                    "expected", JsonUtils.getJsonNodeFromString("\"output3\"")))
+                            .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get the initial version
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
+
+            // When - Delete all items using empty filter list WITHOUT batch_group_id (should mutate in-place)
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of()) // Empty filters = delete all
+                    .batchGroupId(null) // No batch_group_id = mutate in-place
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
+
+            // Then - Verify STILL ONE version (mutated in-place)
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(1);
+
+            // Version should have all items deleted
+            var updatedVersion = versions.content().get(0);
+            assertThat(updatedVersion.id()).isEqualTo(version1.id()); // Same version ID
+            assertThat(updatedVersion.itemsTotal()).isEqualTo(0); // All items deleted
+            assertThat(updatedVersion.itemsDeleted()).isEqualTo(3);
+
+            // Verify no items remain
+            var itemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 20, updatedVersion.versionHash(),
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(itemsPage.content()).isEmpty();
+        }
     }
 }
