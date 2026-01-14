@@ -83,6 +83,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     /**
      * Discovers all unique column names from the dataset items.
+     * Columns are returned in the order provided by the database.
      *
      * @param datasetId The dataset ID
      * @return A Mono containing an ordered set of column names
@@ -92,7 +93,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
         return datasetItemDao.getColumns(datasetId)
                 .map(columnsMap -> {
-                    // Extract column names from the map and maintain order
+                    // Extract column names from the map and maintain database order
                     Set<String> columnNames = new LinkedHashSet<>(columnsMap.keySet());
                     log.debug("Found columns for dataset '{}': '{}'", datasetId, columnNames);
                     return columnNames;
@@ -156,7 +157,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                                 List<Mono<Void>> uploadMonos = new ArrayList<>();
 
                                 // Accumulate rows into buffer
-                                for (String row : rows) {
+                                for (byte[] row : rows) {
                                     appendToBuffer(currentBuffer, row);
 
                                     // If buffer exceeds max part size, upload immediately
@@ -270,11 +271,11 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
     }
 
     /**
-     * Appends data to the buffer.
+     * Appends byte data directly to the buffer.
      */
-    private void appendToBuffer(ByteArrayOutputStream buffer, String data) {
+    private void appendToBuffer(ByteArrayOutputStream buffer, byte[] data) {
         try {
-            buffer.write(data.getBytes(StandardCharsets.UTF_8));
+            buffer.write(data);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to append to buffer", e);
         }
@@ -337,10 +338,11 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
     }
 
     /**
-     * Converts a DatasetItem to a CSV row string.
+     * Converts a DatasetItem to a CSV row as bytes.
+     * Returns raw bytes to avoid unnecessary String allocation and subsequent getBytes() call.
      */
-    private String convertItemToCsvRow(DatasetItem item, List<String> columnList) {
-        byte[] rowBytes = writeCsv(csvPrinter -> {
+    private byte[] convertItemToCsvRow(DatasetItem item, List<String> columnList) {
+        return writeCsv(csvPrinter -> {
             List<String> row = new ArrayList<>(columnList.size());
             Map<String, JsonNode> data = item.data();
 
@@ -357,8 +359,6 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
             csvPrinter.printRecord(row);
         });
-
-        return new String(rowBytes, StandardCharsets.UTF_8);
     }
 
     /**

@@ -177,7 +177,7 @@ class CsvDatasetExportProcessorImplTest {
         verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
 
         String csvContent = new String(dataCaptor.getValue());
-        // Verify headers are present (order from LinkedHashMap)
+        // Verify headers are present (order from database/LinkedHashMap)
         assertThat(csvContent).containsPattern("name.*age.*city");
         // Verify data row with empty city value
         assertThat(csvContent).contains("Alice");
