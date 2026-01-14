@@ -70,6 +70,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         "pattern_extraction_system": meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE,
         "pattern_extraction_user": meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE,
         "synthesis": meta_prompts.SYNTHESIS_PROMPT_TEMPLATE,
+        "tool_description_system": meta_prompts.TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE,
+        "tool_description_user": meta_prompts.TOOL_DESCRIPTION_USER_PROMPT_TEMPLATE,
     }
 
     # --- Constants for Default Configuration ---
@@ -224,6 +226,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
+        optimize_tools: bool | dict[str, bool] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -257,6 +260,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 provided it must be a valid UUIDv7 string.
             max_trials: Maximum total number of prompts to evaluate across all rounds.
                 Optimizer stops when this limit is reached.
+            optimize_tools: If True, optimize descriptions for all tools in the prompt. If a dict,
+                use tool names as keys and booleans as values to select which tools to optimize.
 
         Returns:
             OptimizationResult: Contains the best prompt found, final score, optimization
@@ -304,6 +309,20 @@ class MetaPromptOptimizer(BaseOptimizer):
         else:
             optimizable_prompts = prompt
             is_single_prompt_optimization = False
+
+        tool_names: list[str] | None = None
+        if optimize_tools:
+            if not is_single_prompt_optimization:
+                raise ValueError(
+                    "Tool description optimization only supports single prompts."
+                )
+            from ...utils.toolcalling import toolcalling
+
+            target_prompt = next(iter(optimizable_prompts.values()))
+            target_prompt, tool_names = toolcalling.prepare_tool_optimization(
+                target_prompt, optimize_tools
+            )
+            optimizable_prompts = {target_prompt.name: target_prompt}
 
         # Set project name from parameter
         self.project_name = project_name
@@ -360,6 +379,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "prompts_per_round": self.prompts_per_round,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
+                "optimize_tools": optimize_tools,
+                "tool_names": tool_names,
                 "validation_dataset": getattr(validation_dataset, "name", None)
                 if validation_dataset is not None
                 else None,
@@ -381,6 +402,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 n_samples=n_samples,
                 auto_continue=auto_continue,
                 is_single_prompt_optimization=is_single_prompt_optimization,
+                optimize_tools=optimize_tools,
+                tool_names=tool_names,
             )
             if optimization:
                 self._update_optimization(optimization, status="completed")
@@ -406,6 +429,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_samples: int | None,
         auto_continue: bool,
         is_single_prompt_optimization: bool = False,
+        optimize_tools: bool | dict[str, bool] | None = None,
+        tool_names: list[str] | None = None,
         _tool_panel_style: str = "bright_magenta",
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
@@ -512,8 +537,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 previous_best_score = best_score
 
                 # Check if we should extract patterns from hall of fame
-                if self.hall_of_fame and self.hall_of_fame.should_extract_patterns(
-                    trials_used
+                if (
+                    self.hall_of_fame
+                    and not optimize_tools
+                    and self.hall_of_fame.should_extract_patterns(trials_used)
                 ):
                     logger.info(
                         f"Extracting patterns from hall of fame at trial {trials_used}"
@@ -534,23 +561,39 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 try:
                     if is_single_prompt_optimization:
-                        single_candidates = candidate_ops.generate_candidate_prompts(
-                            optimizer=self,
-                            current_prompt=list(best_prompts.values())[0],
-                            best_score=best_score,
-                            round_num=round_num,
-                            previous_rounds=rounds,
-                            metric=metric,
-                            optimization_id=optimization_id,
-                            project_name=self.project_name,
-                            build_history_context_fn=self._build_history_context,
-                            get_task_context_fn=self._get_task_context,
-                            winning_patterns=(
-                                self.hall_of_fame.get_patterns_for_injection()
-                                if self.hall_of_fame
-                                else None
-                            ),
-                        )
+                        if optimize_tools:
+                            from ...utils.toolcalling import toolcalling
+
+                            single_candidates = toolcalling.generate_tool_description_candidates(
+                                optimizer=self,
+                                current_prompt=list(best_prompts.values())[0],
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=rounds,
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                project_name=self.project_name,
+                                build_history_context_fn=self._build_history_context,
+                                tool_names=tool_names,
+                            )
+                        else:
+                            single_candidates = candidate_ops.generate_candidate_prompts(
+                                optimizer=self,
+                                current_prompt=list(best_prompts.values())[0],
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=rounds,
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                project_name=self.project_name,
+                                build_history_context_fn=self._build_history_context,
+                                get_task_context_fn=self._get_task_context,
+                                winning_patterns=(
+                                    self.hall_of_fame.get_patterns_for_injection()
+                                    if self.hall_of_fame
+                                    else None
+                                ),
+                            )
                         prompt_key = next(iter(best_prompts.keys()))
                         candidate_prompts = [
                             {prompt_key: prompt}
@@ -580,6 +623,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
                     if (
                         is_single_prompt_optimization
+                        and not optimize_tools
                         and self.synthesis_prompts_per_round > 0
                         and round_num >= self.synthesis_start_round
                         and self.synthesis_round_interval > 0
@@ -682,7 +726,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 # Add best candidate to hall of fame if qualified
-                if self.hall_of_fame and best_cand_score_avg > 0 and not is_bundle:
+                if (
+                    self.hall_of_fame
+                    and not optimize_tools
+                    and best_cand_score_avg > 0
+                    and not is_bundle
+                ):
                     from .ops.halloffame_ops import HallOfFameEntry
 
                     entry = HallOfFameEntry(

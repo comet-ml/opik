@@ -253,72 +253,72 @@ def generate_candidate_prompts(
     Returns:
         List of candidate prompts
     """
-    with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round,
-        verbose=optimizer.verbose,
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
-    ) as candidate_generation_report:
-        logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
-        logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
-        logger.debug(f"Current best score: {best_score:.4f}")
+    try:
+        with reporting.display_candidate_generation_report(
+            optimizer.prompts_per_round,
+            verbose=optimizer.verbose,
+            selection_summary=reporting_utils.summarize_selection_policy(
+                current_prompt
+            ),
+        ) as candidate_generation_report:
+            logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
+            logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
+            logger.debug(f"Current best score: {best_score:.4f}")
 
-        # Prepare pattern injection guidance
-        pattern_guidance = ""
-        if winning_patterns and random.random() < optimizer.pattern_injection_rate:
-            pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
-            pattern_guidance += (
-                "The following patterns have been successful in high-scoring prompts:\n"
-            )
-            for i, pattern in enumerate(winning_patterns, 1):
-                pattern_guidance += f"{i}. {pattern}\n"
-            pattern_guidance += (
-                "\nConsider incorporating these patterns where appropriate, "
-            )
-            pattern_guidance += "but adapt them to fit the current prompt's needs."
-            logger.info(f"Injecting {len(winning_patterns)} patterns into generation")
+            # Prepare pattern injection guidance
+            pattern_guidance = ""
+            if winning_patterns and random.random() < optimizer.pattern_injection_rate:
+                pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
+                pattern_guidance += "The following patterns have been successful in high-scoring prompts:\n"
+                for i, pattern in enumerate(winning_patterns, 1):
+                    pattern_guidance += f"{i}. {pattern}\n"
+                pattern_guidance += (
+                    "\nConsider incorporating these patterns where appropriate, "
+                )
+                pattern_guidance += "but adapt them to fit the current prompt's needs."
+                logger.info(
+                    f"Injecting {len(winning_patterns)} patterns into generation"
+                )
 
-        history_context = build_history_context_fn(previous_rounds)
-        task_context_str = ""
-        analysis_instruction = ""
-        metric_focus_instruction = ""
+            history_context = build_history_context_fn(previous_rounds)
+            task_context_str = ""
+            analysis_instruction = ""
+            metric_focus_instruction = ""
 
-        if optimizer.enable_context:
-            task_context_str, _ = get_task_context_fn(metric=metric)
-            analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
-            metric_focus_instruction = (
-                "Focus on improving the score for the evaluation metric."
-            )
-            logger.debug(
-                "Task context and metric-specific instructions enabled for reasoning prompt."
-            )
-        else:
-            analysis_instruction = (
-                "Analyze the history of scores and the current prompt's performance."
-            )
-            metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
-            logger.debug(
-                "Task context and metric-specific instructions disabled for reasoning prompt."
+            if optimizer.enable_context:
+                task_context_str, _ = get_task_context_fn(metric=metric)
+                analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
+                metric_focus_instruction = (
+                    "Focus on improving the score for the evaluation metric."
+                )
+                logger.debug(
+                    "Task context and metric-specific instructions enabled for reasoning prompt."
+                )
+            else:
+                analysis_instruction = "Analyze the history of scores and the current prompt's performance."
+                metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
+                logger.debug(
+                    "Task context and metric-specific instructions disabled for reasoning prompt."
+                )
+
+            # Get templates from optimizer (with potential overrides)
+            candidate_gen_template = optimizer.get_prompt("candidate_generation")
+            reasoning_template = optimizer.get_prompt("reasoning_system")
+
+            user_prompt = meta_prompts.build_candidate_generation_user_prompt(
+                template=candidate_gen_template,
+                current_prompt_messages=str(current_prompt.get_messages()),
+                best_score=best_score,
+                history_context=history_context,
+                task_context_str=task_context_str,
+                analysis_instruction=analysis_instruction,
+                metric_focus_instruction=metric_focus_instruction,
+                prompts_per_round=optimizer.prompts_per_round,
+                pattern_guidance=pattern_guidance,
+                mode="single",
+                agent_blocks=None,
             )
 
-        # Get templates from optimizer (with potential overrides)
-        candidate_gen_template = optimizer.get_prompt("candidate_generation")
-        reasoning_template = optimizer.get_prompt("reasoning_system")
-
-        user_prompt = meta_prompts.build_candidate_generation_user_prompt(
-            template=candidate_gen_template,
-            current_prompt_messages=str(current_prompt.get_messages()),
-            best_score=best_score,
-            history_context=history_context,
-            task_context_str=task_context_str,
-            analysis_instruction=analysis_instruction,
-            metric_focus_instruction=metric_focus_instruction,
-            prompts_per_round=optimizer.prompts_per_round,
-            pattern_guidance=pattern_guidance,
-            mode="single",
-            agent_blocks=None,
-        )
-
-        try:
             # Prepare metadata for optimization algorithm call
             metadata_for_call = _build_metadata_for_call(
                 optimizer=optimizer,
@@ -481,12 +481,10 @@ def generate_candidate_prompts(
 
             return valid_prompts
 
-        except Exception as e:
-            if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
-                raise
-            raise ValueError(
-                f"Unexpected error during candidate prompt generation: {e}"
-            )
+    except Exception as e:
+        if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+            raise
+        raise ValueError(f"Unexpected error during candidate prompt generation: {e}")
 
 
 def generate_agent_bundle_candidates(
