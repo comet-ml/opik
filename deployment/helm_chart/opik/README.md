@@ -93,6 +93,7 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
