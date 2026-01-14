@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import CodeBlockWithHeader from "@/components/shared/CodeBlockWithHeader/CodeBlockWithHeader";
 import CodeSectionTitle from "@/components/shared/CodeSectionTitle/CodeSectionTitle";
+import InstallOpikSection from "@/components/shared/InstallOpikSection/InstallOpikSection";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
@@ -165,10 +166,7 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   },
 ];
 
-import {
-  INSTALL_SDK_SECTION_TITLE,
-  PIP_INSTALL_OPIK_COMMAND,
-} from "@/constants/shared";
+import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 const DEMO_DATASET_NAME = "Opik Demo Questions";
@@ -382,21 +380,7 @@ eval_results = evaluate(
   };
 
   const renderInstallSection = () => (
-    <div>
-      <CodeSectionTitle>{INSTALL_SDK_SECTION_TITLE}</CodeSectionTitle>
-      {isPhonePortrait ? (
-        <CodeBlockWithHeader
-          title="Terminal"
-          copyText={PIP_INSTALL_OPIK_COMMAND}
-        >
-          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
-        </CodeBlockWithHeader>
-      ) : (
-        <div className="min-h-7">
-          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
-        </div>
-      )}
-    </div>
+    <InstallOpikSection title={INSTALL_SDK_SECTION_TITLE} />
   );
 
   const renderExperimentCodeSection = () => (

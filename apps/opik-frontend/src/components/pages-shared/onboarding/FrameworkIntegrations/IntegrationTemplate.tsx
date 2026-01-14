@@ -2,15 +2,13 @@ import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import CodeBlockWithHeader from "@/components/shared/CodeBlockWithHeader/CodeBlockWithHeader";
 import CodeSectionTitle from "@/components/shared/CodeSectionTitle/CodeSectionTitle";
+import InstallOpikSection from "@/components/shared/InstallOpikSection/InstallOpikSection";
 import useAppStore from "@/store/AppStore";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { useIsPhone } from "@/hooks/useIsPhone";
-import {
-  INSTALL_OPIK_SECTION_TITLE,
-  PIP_INSTALL_OPIK_COMMAND,
-} from "@/constants/shared";
+import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 
 type IntegrationTemplateProps = {
   apiKey?: string;
@@ -78,21 +76,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   };
 
   const renderInstallSection = () => (
-    <div>
-      <CodeSectionTitle>{INSTALL_OPIK_SECTION_TITLE}</CodeSectionTitle>
-      {isPhonePortrait ? (
-        <CodeBlockWithHeader
-          title="Terminal"
-          copyText={PIP_INSTALL_OPIK_COMMAND}
-        >
-          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
-        </CodeBlockWithHeader>
-      ) : (
-        <div className="min-h-7">
-          <CodeHighlighter data={PIP_INSTALL_OPIK_COMMAND} />
-        </div>
-      )}
-    </div>
+    <InstallOpikSection title={INSTALL_OPIK_SECTION_TITLE} />
   );
 
   const renderRunCodeSection = () => (
