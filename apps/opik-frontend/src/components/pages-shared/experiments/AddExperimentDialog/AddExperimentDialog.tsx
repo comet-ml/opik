@@ -19,6 +19,12 @@ import { SquareArrowOutUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -471,9 +477,8 @@ eval_results = evaluate(
     </div>
   );
 
-  const renderEvaluatorsSection = () => (
-    <div className="flex flex-col gap-2 md:sticky md:top-0 md:w-[250px] md:shrink-0 md:self-start">
-      <div className="comet-title-s">Select evaluators</div>
+  const renderEvaluatorsContent = () => (
+    <>
       {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
       {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
       <div className="mt-4">
@@ -489,6 +494,33 @@ eval_results = evaluate(
           </a>
         </Button>
       </div>
+    </>
+  );
+
+  const renderEvaluatorsSection = () => (
+    <div className="flex flex-col gap-2 md:sticky md:top-0 md:w-[250px] md:shrink-0 md:self-start">
+      {isPhonePortrait ? (
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="evaluators" className="border-b-0">
+            <AccordionTrigger className="h-auto py-2 hover:no-underline">
+              <span className="comet-title-s">
+                Select evaluators{" "}
+                {models.length > 0 && (
+                  <span className="text-muted-slate">({models.length})</span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-0">
+              {renderEvaluatorsContent()}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      ) : (
+        <>
+          <div className="comet-title-s">Select evaluators</div>
+          {renderEvaluatorsContent()}
+        </>
+      )}
     </div>
   );
 
