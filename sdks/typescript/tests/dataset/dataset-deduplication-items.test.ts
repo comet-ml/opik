@@ -116,6 +116,7 @@ describe("Dataset Deduplication", () => {
     expect(deleteDatasetItemsSpy).toHaveBeenCalledTimes(1);
     expect(deleteDatasetItemsSpy).toHaveBeenCalledWith({
       itemIds: ["item1"],
+      batchGroupId: expect.any(String),
     });
 
     // Update mock to reflect the state after deletion (only item2 remains)
