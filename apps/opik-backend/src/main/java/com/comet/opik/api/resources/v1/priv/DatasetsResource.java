@@ -26,6 +26,7 @@ import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.CsvDatasetExportService;
 import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetCriteria;
 import com.comet.opik.domain.DatasetExpansionService;
@@ -112,6 +113,7 @@ public class DatasetsResource {
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull CsvDatasetExportService csvExportService;
 
     @GET
     @Path("/{id}")
@@ -443,17 +445,21 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+        log.info(
+                "Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batch.batchGroupId(), workspaceId);
 
-        DatasetItemBatch batchWithIds = new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items);
+        DatasetItemBatch batchWithIds = batch.toBuilder()
+                .items(items)
+                .build();
 
         itemService.save(batchWithIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
-        log.info("Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetName(), batch.items().size(), workspaceId);
+        log.info(
+                "Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batch.batchGroupId(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -609,21 +615,25 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}'",
+        log.info(
+                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
-                emptyIfNull(request.filters()).size());
+                emptyIfNull(request.filters()).size(),
+                request.batchGroupId());
 
-        itemService.delete(request.itemIds(), request.datasetId(), request.filters())
+        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), request.batchGroupId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}'",
+        log.info(
+                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
                 workspaceId,
                 emptyIfNull(request.itemIds()).size(),
                 request.datasetId(),
-                emptyIfNull(request.filters()).size());
+                emptyIfNull(request.filters()).size(),
+                request.batchGroupId());
 
         return Response.noContent().build();
     }
