@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
@@ -194,14 +195,7 @@ export const useExperimentsTableConfig = <
     });
 
     // Deduplicate by experiment ID since the same experiment can appear in multiple groups
-    const uniqueRows = new Map<string, T>();
-    selected.forEach((row) => {
-      if (!uniqueRows.has(row.id)) {
-        uniqueRows.set(row.id, row);
-      }
-    });
-
-    return Array.from(uniqueRows.values());
+    return uniqBy(selected, "id");
   }, [rowSelection, experiments]);
 
   const groupFieldNames = useMemo(
