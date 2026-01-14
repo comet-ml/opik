@@ -4,13 +4,13 @@ import useAppStore, { useUserApiKey } from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/components/ui/checkbox";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import CodeBlockWithHeader from "@/components/shared/CodeBlockWithHeader/CodeBlockWithHeader";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
-import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { buildDocsUrl } from "@/lib/utils";
 import { SquareArrowOutUpRight } from "lucide-react";
@@ -175,36 +175,6 @@ type SectionTitleProps = {
 const SectionTitle: React.FC<SectionTitleProps> = ({ children }) => (
   <div className="comet-body-s-accented md:comet-body-s mb-3 overflow-x-auto whitespace-nowrap">
     {children}
-  </div>
-);
-
-type CodeBlockWithHeaderProps = {
-  title: string;
-  children: React.ReactNode;
-  copyText?: string;
-};
-
-const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = ({
-  title,
-  children,
-  copyText,
-}) => (
-  <div className="overflow-hidden rounded-md border border-border bg-primary-foreground">
-    <div className="flex items-center justify-between border-b border-border px-3">
-      <div className="comet-body-xs text-muted-slate">{title}</div>
-      {copyText && (
-        <div className="-mr-2">
-          <CopyButton
-            message="Successfully copied code"
-            text={copyText}
-            tooltipText="Copy code"
-          />
-        </div>
-      )}
-    </div>
-    <div className="[&>div>.absolute]:!hidden [&_.cm-editor]:!bg-primary-foreground [&_.cm-gutters]:!bg-primary-foreground">
-      {children}
-    </div>
   </div>
 );
 
