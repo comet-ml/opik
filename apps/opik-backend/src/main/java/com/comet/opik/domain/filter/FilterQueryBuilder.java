@@ -533,7 +533,9 @@ public class FilterQueryBuilder {
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
                 TraceThreadField.FEEDBACK_SCORES));
 
-        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
+        map.put(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(SpanField.FEEDBACK_SCORES));
 
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
                 ExperimentsComparisonValidKnownField.OUTPUT,
@@ -711,6 +713,11 @@ public class FilterQueryBuilder {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
         }
 
+        if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES));
+        }
+
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
         }
@@ -728,7 +735,8 @@ public class FilterQueryBuilder {
 
     private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
         return filter.operator() == Operator.IS_NOT_EMPTY
-                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY,
+                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
                         .contains(filterStrategy);
     }
 
@@ -748,7 +756,7 @@ public class FilterQueryBuilder {
             return FEEDBACK_SCORE_COUNT_DB;
         }
 
-        if (filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+        if (filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return SPAN_FEEDBACK_SCORE_COUNT_DB;
         }
 

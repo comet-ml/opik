@@ -14,6 +14,10 @@ export enum METRIC_NAME_TYPE {
   THREAD_COUNT = "THREAD_COUNT",
   THREAD_DURATION = "THREAD_DURATION",
   THREAD_FEEDBACK_SCORES = "THREAD_FEEDBACK_SCORES",
+  SPAN_COUNT = "SPAN_COUNT",
+  SPAN_DURATION = "SPAN_DURATION",
+  SPAN_FEEDBACK_SCORES = "SPAN_FEEDBACK_SCORES",
+  SPAN_TOKEN_USAGE = "SPAN_TOKEN_USAGE",
 }
 
 export enum INTERVAL_TYPE {
@@ -30,6 +34,7 @@ type UseProjectMetricsParams = {
   intervalEnd: string | undefined;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
+  spanFilters?: Filter[];
 };
 
 interface ProjectMetricsResponse {
@@ -46,6 +51,7 @@ const getProjectMetric = async (
     intervalEnd,
     traceFilters,
     threadFilters,
+    spanFilters,
   }: UseProjectMetricsParams,
 ) => {
   const { data } = await api.post<ProjectMetricsResponse>(
@@ -61,6 +67,7 @@ const getProjectMetric = async (
       thread_filters: threadFilters
         ? processFiltersArray(threadFilters)
         : undefined,
+      span_filters: spanFilters ? processFiltersArray(spanFilters) : undefined,
     },
     {
       signal,

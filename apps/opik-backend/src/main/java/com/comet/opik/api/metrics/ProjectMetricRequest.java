@@ -1,6 +1,7 @@
 package com.comet.opik.api.metrics;
 
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -22,6 +23,7 @@ public record ProjectMetricRequest(
         @NonNull TimeInterval interval,
         @NonNull Instant intervalStart,
         Instant intervalEnd,
+        List<SpanFilter> spanFilters,
         List<TraceFilter> traceFilters,
         List<TraceThreadFilter> threadFilters,
         @JsonIgnore UUID uuidFromTime,

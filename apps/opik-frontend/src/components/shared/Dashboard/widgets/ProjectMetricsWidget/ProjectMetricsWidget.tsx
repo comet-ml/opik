@@ -95,11 +95,14 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const isCostMetric = metricName === METRIC_NAME_TYPE.COST;
   const isDurationMetric =
     metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
-    metricName === METRIC_NAME_TYPE.THREAD_DURATION;
+    metricName === METRIC_NAME_TYPE.THREAD_DURATION ||
+    metricName === METRIC_NAME_TYPE.SPAN_DURATION;
   const isCountMetric =
     metricName === METRIC_NAME_TYPE.TOKEN_USAGE ||
     metricName === METRIC_NAME_TYPE.TRACE_COUNT ||
-    metricName === METRIC_NAME_TYPE.THREAD_COUNT;
+    metricName === METRIC_NAME_TYPE.THREAD_COUNT ||
+    metricName === METRIC_NAME_TYPE.SPAN_COUNT ||
+    metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
 
@@ -107,7 +110,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
     (lineName: string) => {
       if (
         metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
-        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
+        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES &&
+        metricName !== METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES
       )
         return true;
       if (!feedbackScores || feedbackScores.length === 0) return true;
@@ -126,6 +130,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       CHART_TYPE.line;
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
+    const spanFilters = widget.config?.spanFilters as Filter[] | undefined;
 
     if (!projectId) {
       return (
@@ -151,6 +156,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
     const validTraceFilters = traceFilters?.filter(isFilterValid);
     const validThreadFilters = threadFilters?.filter(isFilterValid);
+    const validSpanFilters = spanFilters?.filter(isFilterValid);
 
     const intervalType = interval as INTERVAL_TYPE;
     const description = interval
@@ -175,6 +181,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
+          spanFilters={validSpanFilters}
           filterLineCallback={filterLineCallback}
           renderValue={
             isCostMetric

@@ -12,6 +12,7 @@ export const ProjectMetricsWidgetSchema = z.object({
   projectId: z.string().optional(),
   traceFilters: FiltersArraySchema.optional(),
   threadFilters: FiltersArraySchema.optional(),
+  spanFilters: FiltersArraySchema.optional(),
   feedbackScores: z.array(z.string()).optional(),
   overrideDefaults: z.boolean().optional(),
 });

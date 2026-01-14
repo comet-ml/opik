@@ -13,6 +13,8 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
@@ -2506,5 +2508,862 @@ class ProjectMetricsResourceTest {
                                 .value("")
                                 .build(),
                         Arrays.asList(1, 2, 3)));
+    }
+
+    static Stream<Arguments> spanHappyPathWithFilterArguments() {
+        return Stream.of(Arguments.of(
+                (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                        .field(SpanField.ID)
+                        .operator(EQUAL)
+                        .value(span.id().toString())
+                        .build(),
+                Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.NAME)
+                                .operator(EQUAL)
+                                .value(span.name())
+                                .build(),
+                        Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.NAME)
+                                .operator(NOT_EQUAL)
+                                .value(span.name())
+                                .build(),
+                        Arrays.asList(1, 3, 4)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.START_TIME)
+                                .operator(EQUAL)
+                                .value(span.startTime().toString())
+                                .build(),
+                        Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.END_TIME)
+                                .operator(EQUAL)
+                                .value(span.endTime().toString())
+                                .build(),
+                        Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.INPUT)
+                                .operator(EQUAL)
+                                .value(span.input().toString())
+                                .build(),
+                        Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.OUTPUT)
+                                .operator(EQUAL)
+                                .value(span.output().toString())
+                                .build(),
+                        Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.FEEDBACK_SCORES)
+                                .operator(EQUAL)
+                                .key("score1")
+                                .value("1.0")
+                                .build(),
+                        Arrays.asList(0, 5, 5)),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.FEEDBACK_SCORES)
+                                .operator(IS_EMPTY)
+                                .key("score2")
+                                .value("")
+                                .build(),
+                        Arrays.asList(1, 3, 4)));
+    }
+
+    @Nested
+    @DisplayName("Span count")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanCountTest {
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // create spans in several buckets
+            var expected = List.of(3, 2, 1);
+            createSpansForCount(projectName, subtract(marker, TIME_BUCKET_3, interval), expected.getFirst());
+            createSpansForCount(projectName, subtract(marker, TIME_BUCKET_1, interval), expected.get(1));
+            createSpansForCount(projectName, marker, expected.getLast());
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of("spans"), Integer.class,
+                    Map.of("spans", expected.getFirst()),
+                    Map.of("spans", expected.get(1)),
+                    Map.of("spans", expected.getLast()));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // create spans in several buckets
+            var expected = List.of(3, 2, 1);
+            var spans = createSpansForCount(projectName, subtract(marker, TIME_BUCKET_3, interval),
+                    expected.getFirst());
+            // allow one empty hour
+            createSpansForCount(projectName, subtract(marker, TIME_BUCKET_1, interval), expected.get(1));
+            createSpansForCount(projectName, marker, expected.getLast());
+
+            // create feedback scores for the first bucket spans
+            List<FeedbackScoreBatchItem> scores = List
+                    .of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                            factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .id(spans.getFirst().id())
+                                    .name("score2")
+                                    .value(BigDecimal.ONE)
+                                    .projectName(projectName)
+                                    .build());
+
+            spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var expectedValues = Arrays.asList(1, 2, 3, 2, 1, null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .spanFilters(List.of(getFilter.apply(spans.getFirst())))
+                    .build(), marker, List.of("spans"), Integer.class,
+                    singletonMap("spans", expectedValues.get(expectedIndexes.get(0))),
+                    singletonMap("spans", expectedValues.get(expectedIndexes.get(1))),
+                    singletonMap("spans", expectedValues.get(expectedIndexes.get(2))));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Map<String, Integer> emptySpans = new HashMap<>() {
+                {
+                    put("spans", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of("spans"), Integer.class, emptySpans, emptySpans, emptySpans);
+        }
+
+        private List<Span> createSpansForCount(String projectName, Instant marker, int count) {
+            List<Span> spans = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+            return spans;
+        }
+    }
+
+    @Nested
+    @DisplayName("Span duration")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanDurationTest {
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            List<BigDecimal> durationsMinus3 = createSpansWithDuration(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval));
+            List<BigDecimal> durationsMinus1 = createSpansWithDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            List<BigDecimal> durationsCurrent = createSpansWithDuration(projectName, marker);
+
+            var durationMinus3 = Map.of(
+                    "duration.p50", durationsMinus3.get(0),
+                    "duration.p90", durationsMinus3.get(1),
+                    "duration.p99", durationsMinus3.getLast());
+            var durationMinus1 = Map.of(
+                    "duration.p50", durationsMinus1.get(0),
+                    "duration.p90", durationsMinus1.get(1),
+                    "duration.p99", durationsMinus1.getLast());
+            var durationCurrent = Map.of(
+                    "duration.p50", durationsCurrent.get(0),
+                    "duration.p90", durationsCurrent.get(1),
+                    "duration.p99", durationsCurrent.getLast());
+
+            getMetricsAndAssert(
+                    projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.SPAN_DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    marker,
+                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    BigDecimal.class,
+                    durationMinus3,
+                    durationMinus1,
+                    durationCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var startTime = subtract(marker, TIME_BUCKET_3, interval).plusMillis(RANDOM.nextInt(50));
+            var endTime = subtract(marker, TIME_BUCKET_3, interval).plus(4, ChronoUnit.HOURS);
+
+            List<Span> spans = createSpansWithDurationInternal(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 5, startTime, endTime);
+
+            List<BigDecimal> durationsMinus1 = createSpansWithDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            List<BigDecimal> durationsCurrent = createSpansWithDuration(projectName, marker);
+
+            // create feedback scores for the first span
+            List<FeedbackScoreBatchItem> scores = List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score2")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build());
+
+            spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            List<BigDecimal> durationsFirstSpan = calculateQuantiles(List.of(spans.getFirst()));
+            List<BigDecimal> durationsOtherSpans = calculateQuantiles(spans.subList(1, spans.size()));
+            List<BigDecimal> durationsAllSpans = calculateQuantiles(spans);
+
+            var durationFirstSpan = Map.of(
+                    "duration.p50", durationsFirstSpan.get(0),
+                    "duration.p90", durationsFirstSpan.get(1),
+                    "duration.p99", durationsFirstSpan.getLast());
+            var durationOtherSpans = Map.of(
+                    "duration.p50", durationsOtherSpans.get(0),
+                    "duration.p90", durationsOtherSpans.get(1),
+                    "duration.p99", durationsOtherSpans.getLast());
+            var durationAllSpans = Map.of(
+                    "duration.p50", durationsAllSpans.get(0),
+                    "duration.p90", durationsAllSpans.get(1),
+                    "duration.p99", durationsAllSpans.getLast());
+            var durationMinus1 = Map.of(
+                    "duration.p50", durationsMinus1.get(0),
+                    "duration.p90", durationsMinus1.get(1),
+                    "duration.p99", durationsMinus1.getLast());
+            var durationCurrent = Map.of(
+                    "duration.p50", durationsCurrent.get(0),
+                    "duration.p90", durationsCurrent.get(1),
+                    "duration.p99", durationsCurrent.getLast());
+
+            var expectedValues = Arrays.asList(
+                    durationFirstSpan, // 0: first span only
+                    durationOtherSpans, // 1: other spans (not first)
+                    durationAllSpans, // 2: all spans in TIME_BUCKET_3
+                    durationMinus1, // 3: TIME_BUCKET_1
+                    durationCurrent, // 4: marker
+                    null); // 5: empty/no match
+
+            getMetricsAndAssert(
+                    projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.SPAN_DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .spanFilters(List.of(getFilter.apply(spans.getFirst())))
+                            .build(),
+                    marker,
+                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put("duration.p50", null);
+                    put("duration.p90", null);
+                    put("duration.p99", null);
+                }
+            };
+
+            getMetricsAndAssert(
+                    projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.SPAN_DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    marker,
+                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    BigDecimal.class,
+                    empty,
+                    empty,
+                    empty);
+        }
+
+        private List<BigDecimal> createSpansWithDuration(String projectName, Instant marker) {
+            List<Span> spans = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plusMillis(RANDOM.nextInt(50, 100));
+                        Instant spanEndTime = marker.plusMillis(RANDOM.nextInt(100, 1000));
+
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .endTime(spanEndTime)
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+            return StatsUtils.calculateQuantiles(
+                    spans.stream()
+                            .filter(span -> span.endTime() != null)
+                            .map(span -> span.startTime().until(span.endTime(), ChronoUnit.MICROS))
+                            .map(duration -> duration / 1_000.0)
+                            .toList(),
+                    List.of(0.50, 0.90, 0.99));
+        }
+
+        private List<Span> createSpansWithDurationInternal(String projectName, Instant marker, int count,
+                Instant startTime, Instant endTime) {
+            List<Span> spans = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = startTime != null
+                                ? startTime
+                                : marker.plusMillis(RANDOM.nextInt(50, 100));
+                        Instant spanEndTime = endTime != null ? endTime : marker.plusMillis(RANDOM.nextInt(100, 1000));
+
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .endTime(spanEndTime)
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return spans;
+        }
+
+        private List<BigDecimal> calculateQuantiles(List<Span> spans) {
+            return StatsUtils.calculateQuantiles(
+                    spans.stream()
+                            .filter(entity -> entity.endTime() != null)
+                            .map(entity -> entity.startTime().until(entity.endTime(), ChronoUnit.MICROS))
+                            .map(duration -> duration / 1_000.0)
+                            .toList(),
+                    List.of(0.50, 0.90, 0.99));
+        }
+    }
+
+    @Nested
+    @DisplayName("Span token usage")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanTokenUsageTest {
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var usageMinus3 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var usageMinus1 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var usage = createSpansWithTokenUsage(projectName, marker, names);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, names, Long.class, usageMinus3, usageMinus1, usage);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var spans = createSpansWithTokenUsageInternal(projectName, subtract(marker, TIME_BUCKET_3, interval), 5,
+                    names);
+            var usageMinus1 = createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var usage = createSpansWithTokenUsage(projectName, marker, names);
+
+            // create feedback scores for the first span
+            List<FeedbackScoreBatchItem> scores = List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score2")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build());
+
+            spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var usageTotalMinus3 = aggregateTokenUsage(spans, names);
+            var usageFirstSpan = aggregateTokenUsage(List.of(spans.getFirst()), names);
+            var usageOtherSpans = aggregateTokenUsage(spans.subList(1, spans.size()), names);
+
+            var expectedValues = Arrays.asList(
+                    usageFirstSpan, // 0: first span only
+                    usageOtherSpans, // 1: other spans (not first)
+                    usageTotalMinus3, // 2: all spans in TIME_BUCKET_3
+                    usageMinus1, // 3: TIME_BUCKET_1
+                    usage, // 4: marker
+                    null); // 5: empty/no match
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .spanFilters(List.of(getFilter.apply(spans.getFirst())))
+                    .build(), marker, names, Long.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        @ParameterizedTest
+        @EmptySource
+        @NullSource
+        void emptyUsage(List<String> names) {
+            TimeInterval interval = TimeInterval.HOURLY;
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            createSpansWithTokenUsage(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            createSpansWithTokenUsage(projectName, marker, names);
+
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        private Map<String, Long> createSpansWithTokenUsage(String projectName, Instant marker,
+                List<String> usageNames) {
+            List<Span> spans = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .usage(usageNames == null
+                                        ? null
+                                        : usageNames.stream().collect(
+                                                Collectors.toMap(name -> name, n -> Math.abs(RANDOM.nextInt()))))
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+            return spans.stream().map(Span::usage)
+                    .filter(Objects::nonNull)
+                    .flatMap(i -> i.entrySet().stream())
+                    .collect(Collectors.groupingBy(Map.Entry::getKey))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> entry.getValue().stream()
+                                    .filter(usage -> usage.getKey().equals(entry.getKey()))
+                                    .mapToLong(Map.Entry::getValue).sum()));
+        }
+
+        private List<Span> createSpansWithTokenUsageInternal(String projectName, Instant marker, int count,
+                List<String> usageNames) {
+            List<Span> spans = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .usage(usageNames == null
+                                        ? null
+                                        : usageNames.stream()
+                                                .collect(Collectors.toMap(
+                                                        name -> name,
+                                                        name -> RANDOM.nextInt(10, 100))))
+                                .startTime(spanStartTime)
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return spans;
+        }
+
+        private Map<String, Long> aggregateTokenUsage(List<Span> spans, List<String> usageNames) {
+            return spans.stream().map(Span::usage)
+                    .filter(Objects::nonNull)
+                    .flatMap(i -> i.entrySet().stream())
+                    .collect(Collectors.groupingBy(Map.Entry::getKey))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> entry.getValue().stream()
+                                    .filter(usage -> usage.getKey().equals(entry.getKey()))
+                                    .mapToLong(Map.Entry::getValue).sum()));
+        }
+
+        private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
+            Map<String, Long> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(""), Long.class, empty, empty, empty);
+        }
+    }
+
+    @Nested
+    @DisplayName("Span feedback scores")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanFeedbackScoresTest {
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var scoresMinus3 = createSpanFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var scoresMinus1 = createSpanFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var scores = createSpanFeedbackScores(projectName, marker, names);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, names, BigDecimal.class, scoresMinus3, scoresMinus1, scores);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            // setup
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var scoresForFilterSpan = createSpanFeedbackScoresInternalWithSpans(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), names, 1);
+            // Offset by 1 second to avoid overlapping start times with scoresForFilterSpan
+            var scoresMinus3 = createSpanFeedbackScoresInternalWithSpans(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval).plusSeconds(1), names, 5);
+
+            var scoresMinus1 = createSpanFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var scores = createSpanFeedbackScores(projectName, marker, names);
+
+            // Add score1 and score2 for FEEDBACK_SCORES filter tests
+            List<FeedbackScoreBatchItem> additionalScores = List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(scoresForFilterSpan.getLeft().getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(scoresForFilterSpan.getLeft().getFirst().id())
+                            .name("score2")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build());
+
+            spanResourceClient.feedbackScores(additionalScores, API_KEY, WORKSPACE_NAME);
+
+            // Calculate aggregations - scoresForFilter includes the additional score1/score2
+            var allScoresForFilterSpan = Stream.concat(scoresForFilterSpan.getRight().stream(),
+                    additionalScores.stream()).toList();
+            var scoresForFilter = aggregateSpanFeedbackScores(allScoresForFilterSpan);
+            var scoresOnlyMinus3 = aggregateSpanFeedbackScores(scoresMinus3.getRight());
+            var allScoresFilterMinus3 = aggregateSpanFeedbackScores(
+                    Stream.concat(allScoresForFilterSpan.stream(), scoresMinus3.getRight().stream()).toList());
+
+            boolean allEmpty = expectedIndexes.stream().allMatch(i -> i == 5);
+
+            var filter = getFilter.apply(scoresForFilterSpan.getLeft().getFirst());
+            // Extended names list for when filter matches filter span (includes score1, score2)
+            List<String> extendedNames = Stream.concat(names.stream(), Stream.of("score1", "score2")).toList();
+
+            // Determine which score names to expect based on filter result
+            // Index 0 = filter span (has score1/score2), Index 1 = other spans (no score1/score2)
+            List<String> expectedNames;
+            if (allEmpty) {
+                expectedNames = List.of("");
+            } else if (expectedIndexes.get(0) == 0) {
+                // Filter matches filter span which has additional scores
+                expectedNames = extendedNames;
+            } else if (expectedIndexes.get(0) == 1) {
+                // Filter matches only other spans (not filter span) - e.g., IS_EMPTY score2
+                expectedNames = names;
+            } else {
+                // Filter matches all spans - allScoresFilterMinus3 includes additional scores
+                expectedNames = extendedNames;
+            }
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .spanFilters(List.of(filter))
+                    .build(), marker, expectedNames, BigDecimal.class,
+                    expectedIndexes.get(0) == 0
+                            ? scoresForFilter
+                            : expectedIndexes.get(0) == 1 ? scoresOnlyMinus3 : allScoresFilterMinus3,
+                    expectedIndexes.get(1) == 3 ? scoresMinus1 : new HashMap<>() {
+                        {
+                            put("", null);
+                        }
+                    },
+                    expectedIndexes.get(2) == 4 ? scores : new HashMap<>() {
+                        {
+                            put("", null);
+                        }
+                    });
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
+        }
+
+        private Map<String, BigDecimal> createSpanFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames) {
+            return aggregateSpanFeedbackScores(createSpanFeedbackScoresInternal(projectName, marker, scoreNames, 5));
+        }
+
+        private List<FeedbackScoreBatchItem> createSpanFeedbackScoresInternal(
+                String projectName, Instant marker, List<String> scoreNames, int spansCount) {
+            List<Span> spans = IntStream.range(0, spansCount)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+            // create feedback scores for all spans
+            List<FeedbackScoreBatchItem> allScores = spans.stream()
+                    .flatMap(span -> scoreNames.stream()
+                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .name(name)
+                                    .projectName(projectName)
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+
+            spanResourceClient.feedbackScores(allScores, API_KEY, WORKSPACE_NAME);
+
+            return allScores;
+        }
+
+        private Pair<List<Span>, List<FeedbackScoreBatchItem>> createSpanFeedbackScoresInternalWithSpans(
+                String projectName, Instant marker, List<String> scoreNames, int spansCount) {
+            List<Span> spans = IntStream.range(0, spansCount)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .id(idGenerator.generateId(spanStartTime))
+                                .build();
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+            // create feedback scores for all spans
+            List<FeedbackScoreBatchItem> allScores = spans.stream()
+                    .flatMap(span -> scoreNames.stream()
+                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .name(name)
+                                    .projectName(projectName)
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+
+            spanResourceClient.feedbackScores(allScores, API_KEY, WORKSPACE_NAME);
+
+            return Pair.of(spans, allScores);
+        }
+
+        private Map<String, BigDecimal> aggregateSpanFeedbackScores(List<FeedbackScoreBatchItem> scores) {
+            return scores.stream()
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
+                                    .toList())));
+        }
     }
 }

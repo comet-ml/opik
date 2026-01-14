@@ -53,12 +53,18 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
 
   const filters = (controllerField.value as Filter[]) || [];
   const isThreadMetric = filterType === "thread";
+  const isSpanMetric = filterType === "span";
 
   const filterColumns = useMemo(() => {
     if (filterType === "thread") return THREAD_FILTER_COLUMNS;
     if (filterType === "span") return SPAN_FILTER_COLUMNS;
     return TRACE_FILTER_COLUMNS;
   }, [filterType]);
+
+  // Determine the data type for API calls based on filter type
+  const dataType = isSpanMetric
+    ? TRACE_DATA_TYPE.spans
+    : TRACE_DATA_TYPE.traces;
 
   const filtersConfig = useMemo(
     () => ({
@@ -73,7 +79,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: dataType,
             placeholder: "key",
             excludeRoot: true,
           },
@@ -88,7 +94,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: dataType,
             placeholder: "key",
             excludeRoot: false,
           },
@@ -111,7 +117,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             },
           keyComponentProps: {
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: dataType,
             placeholder: "Select score",
           },
         },
@@ -130,7 +136,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           : {}),
       },
     }),
-    [projectId, isThreadMetric],
+    [projectId, isThreadMetric, dataType],
   );
 
   useEffect(() => {
