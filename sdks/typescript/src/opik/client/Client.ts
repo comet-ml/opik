@@ -844,10 +844,10 @@ export class OpikClient {
 
       // Step 3: Validate template structure
       const templateStructure = versionData.templateStructure;
-      if (templateStructure && templateStructure !== PromptTemplateStructure.Chat) {
+      if (!templateStructure || templateStructure !== PromptTemplateStructure.Chat) {
         throw new PromptTemplateStructureMismatch(
           options.name,
-          templateStructure,
+          templateStructure ?? "undefined",
           PromptTemplateStructure.Chat
         );
       }

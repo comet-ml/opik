@@ -160,7 +160,7 @@ describe("ChatPrompt", () => {
       ]);
     });
 
-    it("should replace unsupported modalities with placeholders", () => {
+    it("should replace unsupported modalities with placeholders and collapse to string", () => {
       const messages: ChatMessage[] = [
         {
           role: "user",
@@ -190,12 +190,123 @@ describe("ChatPrompt", () => {
       expect(formatted).toEqual([
         {
           role: "user",
-          content: [
-            { type: "text", text: "Analyze this image" },
-            { type: "text", text: "<<<image>>><<</image>>>" },
-          ],
+          content: "Analyze this image\n\n<<<image>>><<</image>>>",
         },
       ]);
+      expect(typeof formatted[0].content).toBe("string");
+      expect(formatted[0].content).toContain("Analyze this image");
+      expect(formatted[0].content).toContain("<<<image>>>");
+      expect(formatted[0].content).toContain("<<</image>>>");
+    });
+
+    it("should preserve order when replacing unsupported modalities with placeholders and collapse to string", () => {
+      const messages: ChatMessage[] = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "First text" },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://example.com/photo.jpg",
+              },
+            },
+            { type: "text", text: "Second text" },
+          ],
+        },
+      ];
+
+      const data: ChatPromptData = {
+        promptId: "prompt-123",
+        versionId: "version-456",
+        name: "test-prompt",
+        messages,
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({}, { vision: false });
+
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: "First text\n\n<<<image>>><<</image>>>\n\nSecond text",
+        },
+      ]);
+      expect(typeof formatted[0].content).toBe("string");
+      expect(formatted[0].content).toContain("First text");
+      expect(formatted[0].content).toContain("<<<image>>>");
+      expect(formatted[0].content).toContain("Second text");
+      // Verify order: First text should come before placeholder, placeholder before Second text
+      const content = formatted[0].content as string;
+      const firstTextIndex = content.indexOf("First text");
+      const placeholderIndex = content.indexOf("<<<image>>>");
+      const secondTextIndex = content.indexOf("Second text");
+      expect(firstTextIndex).toBeLessThan(placeholderIndex);
+      expect(placeholderIndex).toBeLessThan(secondTextIndex);
+    });
+
+    it("should collapse to string when multimodal content has unsupported image", () => {
+      const messages: ChatMessage[] = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Analyze this content" },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://example.com/photo.jpg",
+              },
+            },
+            {
+              type: "video_url",
+              video_url: {
+                url: "https://example.com/video.mp4",
+                mime_type: "video/mp4",
+              },
+            },
+          ],
+        },
+      ];
+
+      const data: ChatPromptData = {
+        promptId: "prompt-123",
+        versionId: "version-456",
+        name: "test-prompt",
+        messages,
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      // Image not supported, video supported
+      const formatted = chatPrompt.format({}, { vision: false, video: true });
+
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: expect.any(String),
+        },
+      ]);
+      expect(typeof formatted[0].content).toBe("string");
+      const content = formatted[0].content as string;
+      
+      // Text should be preserved
+      expect(content).toContain("Analyze this content");
+      
+      // Image placeholder should be present
+      expect(content).toContain("<<<image>>>");
+      expect(content).toContain("<<</image>>>");
+      
+      // Video should be converted to string representation (since flattening occurred)
+      expect(content).toContain("video_url");
+      expect(content).toContain("https://example.com/video.mp4");
+      
+      // Verify order: text comes first, then image placeholder, then video
+      const textIndex = content.indexOf("Analyze this content");
+      const imagePlaceholderIndex = content.indexOf("<<<image>>>");
+      const videoIndex = content.indexOf("video_url");
+      expect(textIndex).toBeLessThan(imagePlaceholderIndex);
+      expect(imagePlaceholderIndex).toBeLessThan(videoIndex);
     });
 
     it("should handle video content", () => {

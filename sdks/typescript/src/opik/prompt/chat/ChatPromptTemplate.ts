@@ -95,7 +95,7 @@ export class ChatPromptTemplate {
     modalities: SupportedModalities,
   ): ContentPart[] | string {
     const renderedParts: ContentPart[] = [];
-    const textParts: string[] = [];
+    let shouldFlatten = false;
 
     for (const part of parts) {
       if (!part || typeof part !== "object") {
@@ -121,8 +121,12 @@ export class ChatPromptTemplate {
 
         case "image_url": {
           if (modalities.vision === false) {
-            // Modality not supported - add placeholder
-            textParts.push("<<<image>>><<</image>>>");
+            // Modality not supported - add placeholder at this position
+            shouldFlatten = true;
+            renderedParts.push({
+              type: "text",
+              text: "<<<image>>><<</image>>>",
+            });
           } else {
             const imagePart = part as ImageUrlContentPart;
             const imageUrl = imagePart.image_url?.url || "";
@@ -149,8 +153,12 @@ export class ChatPromptTemplate {
 
         case "video_url": {
           if (modalities.video === false) {
-            // Modality not supported - add placeholder
-            textParts.push("<<<video>>><<</video>>>");
+            // Modality not supported - add placeholder at this position
+            shouldFlatten = true;
+            renderedParts.push({
+              type: "text",
+              text: "<<<video>>><<</video>>>",
+            });
           } else {
             const videoPart = part as VideoUrlContentPart;
             const videoUrl = videoPart.video_url?.url || "";
@@ -191,19 +199,30 @@ export class ChatPromptTemplate {
       }
     }
 
-    // If we have text placeholders and no structured content, collapse to string
-    if (textParts.length > 0 && renderedParts.length === 0) {
-      return textParts.join("\n");
+    // If any unsupported modality was encountered, flatten all parts to a string
+    if (shouldFlatten) {
+      const segments: string[] = [];
+      for (const part of renderedParts) {
+        if (part.type === "text") {
+          const text = (part as TextContentPart).text;
+          if (text) {
+            segments.push(text);
+          }
+        } else {
+          // For non-text parts that are still in the array (shouldn't happen when flattening,
+          // but handle gracefully), convert to string representation
+          segments.push(JSON.stringify(part));
+        }
+      }
+      return segments.join("\n\n");
     }
 
-    // If we have text placeholders mixed with structured content, add them as text parts
-    if (textParts.length > 0) {
-      for (const text of textParts) {
-        renderedParts.push({
-          type: "text",
-          text,
-        });
-      }
+    // If renderedParts contains exactly one text part, collapse to string
+    if (
+      renderedParts.length === 1 &&
+      renderedParts[0].type === "text"
+    ) {
+      return (renderedParts[0] as TextContentPart).text;
     }
 
     return renderedParts;

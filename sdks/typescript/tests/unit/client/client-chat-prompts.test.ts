@@ -255,6 +255,29 @@ describe("OpikClient - Chat Prompts", () => {
       ).rejects.toThrow(PromptTemplateStructureMismatch);
     });
 
+    it("should throw PromptTemplateStructureMismatch if templateStructure is undefined", async () => {
+      vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
+        content: [
+          {
+            name: "test-prompt",
+          } as OpikApi.PromptPublic,
+        ],
+      } as OpikApi.PromptPagePublic);
+
+      vi.spyOn(client.api.prompts, "retrievePromptVersion").mockResolvedValue({
+        id: "version-123",
+        promptId: "prompt-456",
+        template: "Hello {{name}}",
+        commit: "abc123",
+        type: "mustache",
+        templateStructure: undefined,
+      } as OpikApi.PromptVersionDetail);
+
+      await expect(
+        client.getChatPrompt({ name: "test-prompt" })
+      ).rejects.toThrow(PromptTemplateStructureMismatch);
+    });
+
     it("should retrieve specific version by commit", async () => {
       const messages: ChatMessage[] = [
         { role: "user", content: "Hello" },
