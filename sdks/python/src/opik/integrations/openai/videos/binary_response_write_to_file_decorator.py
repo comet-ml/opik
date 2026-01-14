@@ -88,4 +88,3 @@ def _attach_video_file(file_path: str, span_data: span.SpanData) -> None:
             "Failed to attach video to span: %s",
             str(e),
         )
-
