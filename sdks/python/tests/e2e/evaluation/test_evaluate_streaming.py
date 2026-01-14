@@ -3,7 +3,8 @@ from typing import Dict, Any, List
 from unittest import mock
 
 import opik
-from opik.api_objects import rest_stream_parser, constants
+from opik.api_objects import rest_stream_parser
+from opik.evaluation.engine import engine
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
@@ -77,7 +78,7 @@ def test_streaming_starts_evaluation_before_complete_download(
             events.append("task")
         return simple_task(item)
 
-    # Patch both read_and_parse_stream to track yields and DATASET_STREAM_BATCH_SIZE
+    # Patch both read_and_parse_stream to track yields and EVALUATION_STREAM_DATASET_BATCH_SIZE
     # to ensure we stream in multiple batches
     with (
         mock.patch.object(
@@ -85,7 +86,7 @@ def test_streaming_starts_evaluation_before_complete_download(
             "read_and_parse_stream",
             side_effect=tracked_read_and_parse_stream,
         ),
-        mock.patch.object(constants, "DATASET_STREAM_BATCH_SIZE", TEST_BATCH_SIZE),
+        mock.patch.object(engine, "EVALUATION_STREAM_DATASET_BATCH_SIZE", TEST_BATCH_SIZE),
     ):
         # Run evaluation with streaming
         evaluation_result = opik.evaluate(
