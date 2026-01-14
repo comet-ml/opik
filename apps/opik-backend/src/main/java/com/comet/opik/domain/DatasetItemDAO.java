@@ -30,6 +30,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1725,10 +1726,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(result -> result.map((row, rowMetadata) -> {
                         @SuppressWarnings("unchecked")
                         Map<String, List<String>> columns = (Map<String, List<String>>) row.get("columns", Map.class);
-                        return columns != null ? columns : new HashMap<String, List<String>>();
+                        // Use LinkedHashMap to preserve insertion order
+                        return columns != null
+                                ? new LinkedHashMap<>(columns)
+                                : new LinkedHashMap<String, List<String>>();
                     }));
 
-            return resultFlux.defaultIfEmpty(new HashMap<String, List<String>>()).next();
+            return resultFlux.defaultIfEmpty(new LinkedHashMap<String, List<String>>()).next();
         })
                 .doFinally(signalType -> endSegment(segment));
     }

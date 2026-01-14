@@ -9,7 +9,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -74,14 +73,14 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 .flatMap(result -> {
                     log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
                             message.jobId(), result.filePath(), result.expiresAt());
-                    return jobService.updateJobToCompleted(message.jobId(), result.filePath(), result.downloadUrl(),
+                    return jobService.updateJobToCompleted(message.jobId(), result.filePath(),
                             result.expiresAt());
                 })
                 .then()
                 .onErrorResume(throwable -> {
                     log.error("Failed to process dataset export job: jobId='{}'", message.jobId(), throwable);
-                    String errorMessage = truncateErrorMessage(
-                            StringUtils.defaultIfBlank(throwable.getMessage(), throwable.toString()), 255);
+                    // Use a user-friendly message - technical details are logged above
+                    String errorMessage = "Failed to export dataset. Please try again later.";
                     return jobService.updateJobToFailed(message.jobId(), errorMessage)
                             .then(Mono.error(throwable)); // Re-throw to prevent ACK
                 })
@@ -96,22 +95,5 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
             return true;
         }
         return false;
-    }
-
-    /**
-     * Truncates error message to specified maximum length, appending "..." if truncated.
-     *
-     * @param message    the error message to truncate
-     * @param maxLength  the maximum length allowed
-     * @return truncated message or null if input is null
-     */
-    private String truncateErrorMessage(String message, int maxLength) {
-        if (message == null) {
-            return null;
-        }
-        if (message.length() <= maxLength) {
-            return message;
-        }
-        return message.substring(0, maxLength - 3) + "...";
     }
 }

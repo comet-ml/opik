@@ -212,7 +212,7 @@ class DatasetExportCleanupJobIntegrationTest {
         int deletedCount = Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
             return transactionTemplate.inTransaction(handle -> {
                 var dao = handle.attach(DatasetExportJobDAO.class);
-                return dao.deleteExpiredJobs("regular-user", Set.of(expiredJobId));
+                return dao.deleteJobsByIds("regular-user", Set.of(expiredJobId));
             });
         }))
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, "regular-user"))
@@ -254,7 +254,6 @@ class DatasetExportCleanupJobIntegrationTest {
                 .datasetId(datasetId)
                 .status(status)
                 .filePath(filePath)
-                .downloadUrl(null)
                 .errorMessage(null)
                 .createdAt(now)
                 .lastUpdatedAt(now)
@@ -284,7 +283,6 @@ class DatasetExportCleanupJobIntegrationTest {
                 .datasetId(datasetId)
                 .status(DatasetExportStatus.FAILED)
                 .filePath(filePath)
-                .downloadUrl(null)
                 .errorMessage(errorMessage)
                 .createdAt(now)
                 .lastUpdatedAt(now)

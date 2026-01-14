@@ -49,6 +49,7 @@ interface MetricContainerChartProps {
   chartId: string;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
+  spanFilters?: Filter[];
   filterLineCallback?: (lineName: string) => boolean;
   chartOnly?: boolean;
 }
@@ -85,6 +86,7 @@ const MetricContainerChart = ({
   chartType = CHART_TYPE.line,
   traceFilters,
   threadFilters,
+  spanFilters,
   filterLineCallback,
   chartOnly = false,
 }: MetricContainerChartProps) => {
@@ -97,6 +99,7 @@ const MetricContainerChart = ({
       intervalEnd,
       traceFilters,
       threadFilters,
+      spanFilters,
     },
     {
       enabled: !!projectId,

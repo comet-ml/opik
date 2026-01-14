@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000045_optimize_dataset_export_jobs_indexes
+--changeset thiagohora:000046_optimize_dataset_export_jobs_indexes
 --comment: Optimize indexes for dataset export job cleanup queries
 
 -- Drop old expires_at index (will be replaced with composite index)
@@ -18,4 +18,3 @@ ON dataset_export_jobs(status, viewed_at);
 --rollback DROP INDEX idx_status_viewed_at ON dataset_export_jobs;
 --rollback DROP INDEX idx_status_expires_at ON dataset_export_jobs;
 --rollback CREATE INDEX idx_expires_at ON dataset_export_jobs(expires_at);
-

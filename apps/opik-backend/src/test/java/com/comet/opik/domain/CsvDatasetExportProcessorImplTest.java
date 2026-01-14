@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -10,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -42,16 +42,12 @@ class CsvDatasetExportProcessorImplTest {
     @Mock
     private FileService fileService;
 
-    @Mock
-    private PreSignerService preSignerService;
-
     private DatasetExportConfig exportConfig;
 
     private CsvDatasetExportProcessorImpl processor;
 
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final String WORKSPACE_ID = "test-workspace";
-    private static final String TEST_PRESIGNED_URL = "https://s3.amazonaws.com/bucket/path?signature=test";
 
     @BeforeEach
     void setUp() {
@@ -66,17 +62,13 @@ class CsvDatasetExportProcessorImplTest {
         lenient().when(fileService.uploadPart(any(), any(), anyInt(), any())).thenReturn("test-etag");
         lenient().when(fileService.completeMultipartUpload(any(), any(), any())).thenReturn(null);
 
-        // Mock presigned URL generation (both overloads)
-        lenient().when(preSignerService.presignDownloadUrl(any())).thenReturn(TEST_PRESIGNED_URL);
-        lenient().when(preSignerService.presignDownloadUrl(any(), any())).thenReturn(TEST_PRESIGNED_URL);
-
-        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, preSignerService, exportConfig);
+        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, exportConfig);
     }
 
     @Test
     void generateAndUploadCsv_shouldGenerateCsvAndUpload_whenItemsExist() {
         // Given
-        Map<String, List<String>> columns = new HashMap<>();
+        Map<String, List<String>> columns = new LinkedHashMap<>();
         columns.put("name", List.of("String"));
         columns.put("age", List.of("Int"));
 
@@ -101,7 +93,6 @@ class CsvDatasetExportProcessorImplTest {
                     assertThat(exportResult.filePath())
                             .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
                     assertThat(exportResult.filePath()).endsWith(".csv");
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                     assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
                 .verifyComplete();
@@ -114,9 +105,6 @@ class CsvDatasetExportProcessorImplTest {
 
         // Verify multipart upload was completed
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
-
-        // Verify presigned URL was generated with custom TTL
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -137,7 +125,6 @@ class CsvDatasetExportProcessorImplTest {
                     assertThat(exportResult.filePath())
                             .startsWith("exports/" + WORKSPACE_ID + "/datasets/" + DATASET_ID);
                     assertThat(exportResult.filePath()).endsWith(".csv");
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                     assertThat(exportResult.expiresAt()).isAfter(Instant.now());
                 })
                 .verifyComplete();
@@ -145,7 +132,6 @@ class CsvDatasetExportProcessorImplTest {
         // Verify abortMultipartUpload and upload were called for empty dataset
         verify(fileService).abortMultipartUpload(any(), eq("test-upload-id"));
         verify(fileService).upload(any(), any(), eq("text/csv"));
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -173,14 +159,12 @@ class CsvDatasetExportProcessorImplTest {
         StepVerifier.create(result)
                 .assertNext(exportResult -> {
                     assertThat(exportResult.filePath()).isNotEmpty();
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                 })
                 .verifyComplete();
 
         // Verify multipart upload was called
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -208,14 +192,12 @@ class CsvDatasetExportProcessorImplTest {
         StepVerifier.create(result)
                 .assertNext(exportResult -> {
                     assertThat(exportResult.filePath()).isNotEmpty();
-                    assertThat(exportResult.downloadUrl()).isEqualTo(TEST_PRESIGNED_URL);
                 })
                 .verifyComplete();
 
         // Verify multipart upload was called
         verify(fileService).createMultipartUpload(any(), eq("text/csv"));
         verify(fileService).completeMultipartUpload(any(), eq("test-upload-id"), any());
-        verify(preSignerService).presignDownloadUrl(any(), any());
     }
 
     @Test
@@ -232,6 +214,50 @@ class CsvDatasetExportProcessorImplTest {
                 .expectErrorMatches(throwable -> throwable instanceof RuntimeException &&
                         throwable.getMessage().equals("DB error"))
                 .verify();
+    }
+
+    @Test
+    void generateAndUploadCsv_shouldPreserveColumnInsertionOrder_whenUsingLinkedHashMap() {
+        // Given - Use LinkedHashMap to preserve insertion order (as DAO now does)
+        Map<String, List<String>> columns = new LinkedHashMap<>();
+        columns.put("zebra", List.of("String"));
+        columns.put("apple", List.of("String"));
+        columns.put("mango", List.of("String"));
+        columns.put("banana", List.of("String"));
+
+        List<DatasetItem> items = new ArrayList<>();
+        items.add(createItem(UUID.randomUUID(), Map.of(
+                "zebra", JsonUtils.valueToTree("z-value"),
+                "apple", JsonUtils.valueToTree("a-value"),
+                "mango", JsonUtils.valueToTree("m-value"),
+                "banana", JsonUtils.valueToTree("b-value"))));
+
+        when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
+        when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
+
+        // When
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+
+        // Then
+        StepVerifier.create(result)
+                .assertNext(exportResult -> {
+                    assertThat(exportResult.filePath()).isNotEmpty();
+                })
+                .verifyComplete();
+
+        // Verify CSV content preserves insertion order from LinkedHashMap
+        ArgumentCaptor<byte[]> dataCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(fileService).uploadPart(any(), eq("test-upload-id"), anyInt(), dataCaptor.capture());
+
+        String csvContent = new String(dataCaptor.getValue());
+        String[] lines = csvContent.split("\n");
+
+        // First line should be header with columns in insertion order
+        assertThat(lines[0].trim()).isEqualTo("zebra,apple,mango,banana");
+
+        // Second line should have values in the same order as headers
+        assertThat(lines[1].trim()).isEqualTo("z-value,a-value,m-value,b-value");
     }
 
     private DatasetItem createItem(UUID id, Map<String, JsonNode> data) {

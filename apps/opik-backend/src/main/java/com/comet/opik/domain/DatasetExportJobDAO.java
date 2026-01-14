@@ -29,7 +29,6 @@ public interface DatasetExportJobDAO {
                 dataset_id,
                 status,
                 file_path,
-                download_url,
                 error_message,
                 created_at,
                 last_updated_at,
@@ -42,7 +41,6 @@ public interface DatasetExportJobDAO {
                 :job.datasetId,
                 :job.status,
                 :job.filePath,
-                :job.downloadUrl,
                 :job.errorMessage,
                 :job.createdAt,
                 :job.lastUpdatedAt,
@@ -54,15 +52,15 @@ public interface DatasetExportJobDAO {
     void save(@BindMethods("job") DatasetExportJob job, @Bind("workspaceId") String workspaceId);
 
     /**
-     * Updates a dataset export job status (e.g., to PROCESSING).
+     * Marks a PENDING dataset export job as PROCESSING.
      * Sets status and last_updated_by.
      * Only allows transition from PENDING to PROCESSING.
      *
      * @param workspaceId The workspace ID for security
      * @param id The job ID to update
-     * @param status The new status (e.g., PROCESSING)
+     * @param status The new status (should be PROCESSING)
      * @param lastUpdatedBy The user who updated the job
-     * @return The number of rows updated (0 if job not found or doesn't belong to workspace or invalid state transition)
+     * @return The number of rows updated (0 if job not found or doesn't belong to workspace or not in PENDING state)
      */
     @SqlUpdate("""
             UPDATE dataset_export_jobs
@@ -72,21 +70,20 @@ public interface DatasetExportJobDAO {
                 AND workspace_id = :workspaceId
                 AND status = 'PENDING'
             """)
-    int updateStatus(@Bind("workspaceId") String workspaceId,
+    int markPendingJobAsProcessing(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetExportStatus status,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     /**
      * Updates a dataset export job when it completes successfully.
-     * Sets status, file_path, download_url, expires_at, last_updated_by, and clears error_message and viewed_at.
+     * Sets status, file_path, expires_at, last_updated_by, and clears error_message and viewed_at.
      * Only allows transition from PROCESSING to COMPLETED.
      *
      * @param workspaceId The workspace ID for security
      * @param id The job ID to update
      * @param status The new status (typically COMPLETED)
      * @param filePath The path to the exported file
-     * @param downloadUrl The presigned URL for downloading the file
      * @param expiresAt The expiration timestamp
      * @param lastUpdatedBy The user who updated the job
      * @return The number of rows updated (0 if job not found or doesn't belong to workspace or invalid state transition)
@@ -95,7 +92,6 @@ public interface DatasetExportJobDAO {
             UPDATE dataset_export_jobs
             SET status = :status,
                 file_path = :filePath,
-                download_url = :downloadUrl,
                 expires_at = :expiresAt,
                 last_updated_by = :lastUpdatedBy,
                 error_message = NULL,
@@ -108,14 +104,13 @@ public interface DatasetExportJobDAO {
             @Bind("id") UUID id,
             @Bind("status") DatasetExportStatus status,
             @Bind("filePath") String filePath,
-            @Bind("downloadUrl") String downloadUrl,
             @Bind("expiresAt") java.time.Instant expiresAt,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     /**
      * Updates a dataset export job when it fails.
      * Sets status, error_message, last_updated_by.
-     * Does NOT clear file_path or download_url - files must be cleaned up by cleanup job.
+     * Does NOT clear file_path - files must be cleaned up by cleanup job.
      * Allows transition from PENDING or PROCESSING to FAILED.
      *
      * @param workspaceId The workspace ID for security
@@ -147,7 +142,6 @@ public interface DatasetExportJobDAO {
                 NULL AS dataset_name,
                 status,
                 file_path,
-                download_url,
                 error_message,
                 created_at,
                 last_updated_at,
@@ -168,7 +162,6 @@ public interface DatasetExportJobDAO {
                 NULL AS dataset_name,
                 status,
                 file_path,
-                download_url,
                 error_message,
                 created_at,
                 last_updated_at,
@@ -235,7 +228,6 @@ public interface DatasetExportJobDAO {
                 NULL AS dataset_name,
                 status,
                 file_path,
-                download_url,
                 error_message,
                 created_at,
                 last_updated_at,
@@ -273,7 +265,6 @@ public interface DatasetExportJobDAO {
                 NULL AS dataset_name,
                 status,
                 file_path,
-                download_url,
                 error_message,
                 created_at,
                 last_updated_at,
@@ -293,6 +284,7 @@ public interface DatasetExportJobDAO {
 
     /**
      * Deletes export jobs by their IDs across all workspaces.
+     * Used by cleanup job to delete both expired completed jobs and viewed failed jobs.
      *
      * <p><strong>Security Warning:</strong> This operation affects ALL workspaces without filtering.
      * It should ONLY be called by system-level cleanup jobs. The userName parameter MUST be
@@ -306,7 +298,7 @@ public interface DatasetExportJobDAO {
             DELETE FROM dataset_export_jobs
             WHERE id IN (<ids>)
             AND :userName = '""" + RequestContext.SYSTEM_USER + "'")
-    int deleteExpiredJobs(@Bind("userName") String userName, @BindList("ids") Set<UUID> ids);
+    int deleteJobsByIds(@Bind("userName") String userName, @BindList("ids") Set<UUID> ids);
 
     @SqlUpdate("""
             UPDATE dataset_export_jobs

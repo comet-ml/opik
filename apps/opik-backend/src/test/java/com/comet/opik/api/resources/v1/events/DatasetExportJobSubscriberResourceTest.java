@@ -451,7 +451,7 @@ class DatasetExportJobSubscriberResourceTest {
             datasetItems.add(item);
         }
 
-        datasetResourceClient.createDatasetItems(new DatasetItemBatch(dataset.name(), null, datasetItems),
+        datasetResourceClient.createDatasetItems(new DatasetItemBatch(dataset.name(), null, datasetItems, null),
                 WORKSPACE_NAME,
                 API_KEY);
 

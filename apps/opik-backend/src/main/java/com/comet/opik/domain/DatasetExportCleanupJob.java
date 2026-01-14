@@ -85,15 +85,22 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
             log.info("Dataset export cleanup completed successfully");
 
+        } catch (IllegalStateException exception) {
+            // Lock acquisition/state errors - expected failure mode
+            log.warn("Dataset export cleanup failed due to lock/state issue", exception);
         } catch (RuntimeException exception) {
             // Check if the cause is an InterruptedException and restore interrupt status
-            if (exception.getCause() instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-                log.warn("Dataset export cleanup was interrupted", exception);
-            } else {
-                // Log unexpected runtime errors
-                log.error("Failed to cleanup expired dataset export jobs", exception);
+            Throwable cause = exception.getCause();
+            while (cause != null) {
+                if (cause instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Dataset export cleanup was interrupted", exception);
+                    return; // Exit early on interrupt
+                }
+                cause = cause.getCause();
             }
+            // Log unexpected runtime errors
+            log.error("Failed to cleanup expired dataset export jobs", exception);
         }
     }
 

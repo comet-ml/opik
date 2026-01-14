@@ -347,6 +347,7 @@ class RawDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -361,6 +362,9 @@ class RawDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -378,6 +382,7 @@ class RawDatasetsClient:
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -721,6 +726,7 @@ class RawDatasetsClient:
         item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -741,6 +747,9 @@ class RawDatasetsClient:
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
             Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -757,6 +766,7 @@ class RawDatasetsClient:
                 "filters": convert_and_respect_annotation_metadata(
                     object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2024,6 +2034,7 @@ class AsyncRawDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2038,6 +2049,9 @@ class AsyncRawDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2055,6 +2069,7 @@ class AsyncRawDatasetsClient:
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2400,6 +2415,7 @@ class AsyncRawDatasetsClient:
         item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2420,6 +2436,9 @@ class AsyncRawDatasetsClient:
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
             Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2436,6 +2455,7 @@ class AsyncRawDatasetsClient:
                 "filters": convert_and_respect_annotation_metadata(
                     object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
