@@ -137,42 +137,44 @@ public interface DatasetExportJobDAO {
 
     @SqlQuery("""
             SELECT
-                id,
-                dataset_id,
-                NULL AS dataset_name,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                viewed_at,
-                created_by,
-                last_updated_by
-            FROM dataset_export_jobs
-            WHERE id = :id
-            AND workspace_id = :workspaceId
+                j.id,
+                j.dataset_id,
+                d.name AS dataset_name,
+                j.status,
+                j.file_path,
+                j.error_message,
+                j.created_at,
+                j.last_updated_at,
+                j.expires_at,
+                j.viewed_at,
+                j.created_by,
+                j.last_updated_by
+            FROM dataset_export_jobs j
+            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            WHERE j.id = :id
+            AND j.workspace_id = :workspaceId
             """)
     Optional<DatasetExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
 
     @SqlQuery("""
             SELECT
-                id,
-                dataset_id,
-                NULL AS dataset_name,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                viewed_at,
-                created_by,
-                last_updated_by
-            FROM dataset_export_jobs
-            WHERE workspace_id = :workspaceId
-                AND dataset_id = :datasetId
-                AND status IN (<statuses>)
+                j.id,
+                j.dataset_id,
+                d.name AS dataset_name,
+                j.status,
+                j.file_path,
+                j.error_message,
+                j.created_at,
+                j.last_updated_at,
+                j.expires_at,
+                j.viewed_at,
+                j.created_by,
+                j.last_updated_by
+            FROM dataset_export_jobs j
+            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            WHERE j.workspace_id = :workspaceId
+                AND j.dataset_id = :datasetId
+                AND j.status IN (<statuses>)
             """)
     List<DatasetExportJob> findInProgressByDataset(
             @Bind("workspaceId") String workspaceId,

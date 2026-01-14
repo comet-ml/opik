@@ -43,6 +43,7 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.utils.FileNameUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -79,6 +80,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.media.multipart.ContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
 
@@ -911,14 +913,17 @@ public class DatasetsResource {
                 .block();
 
         // Generate filename from dataset name or fallback to job ID
-        String filename = job != null && job.datasetName() != null
-                ? job.datasetName() + ".csv"
-                : "dataset-export-" + jobId + ".csv";
+        String filename = FileNameUtils.buildDatasetExportFilename(job.datasetName(), jobId);
 
         log.info("Completed download for export job '{}' on workspaceId '{}'", jobId, workspaceId);
 
+        // Use Jersey's ContentDisposition to safely build the header (handles encoding)
+        ContentDisposition contentDisposition = ContentDisposition.type("attachment")
+                .fileName(filename)
+                .build();
+
         return Response.ok(inputStream)
-                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Disposition", contentDisposition.toString())
                 .header("Content-Type", "text/csv")
                 .build();
     }

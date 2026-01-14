@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -102,7 +103,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
             return jobService.findInProgressJobs(datasetId)
                     .flatMap(existingJobs -> {
                         if (!existingJobs.isEmpty()) {
-                            DatasetExportJob existingJob = existingJobs.get(0);
+                            DatasetExportJob existingJob = existingJobs.getFirst();
                             log.info("Found existing in-progress export job: '{}'", existingJob.id());
                             return Mono.just(existingJob);
                         }
@@ -119,7 +120,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                 .flatMap(existingJobs -> {
                     // Double-check after acquiring lock
                     if (!existingJobs.isEmpty()) {
-                        DatasetExportJob existingJob = existingJobs.get(0);
+                        DatasetExportJob existingJob = existingJobs.getFirst();
                         log.info("Found existing in-progress export job after lock: '{}'", existingJob.id());
                         return Mono.just(existingJob);
                     }
@@ -183,7 +184,9 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
 
                     if (job.status() != DatasetExportStatus.COMPLETED) {
                         return Mono
-                                .error(new NotFoundException("Export file not found for job: '%s'".formatted(jobId)));
+                                .error(new BadRequestException(
+                                        "Export job '%s' is not ready for download (status: %s)"
+                                                .formatted(jobId, job.status())));
                     }
 
                     log.info("Downloading export file for job: '{}', filePath: '{}'", jobId, job.filePath());
