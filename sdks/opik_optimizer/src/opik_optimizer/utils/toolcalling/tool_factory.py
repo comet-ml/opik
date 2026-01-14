@@ -1,9 +1,23 @@
 """Factory helpers to resolve MCP tool entries into function-calling tools.
 
-The factory normalizes user-supplied ``tools`` entries that include an ``mcp``
-block into standard function-calling tools, and returns callables for the
-tool loop. MCP tool metadata remains attached to the tool entry so optimizers
-can filter or mutate MCP tools separately from standard function tools.
+OpenAI-style tools:
+    {
+      "type": "mcp",
+      "server_label": "context7",
+      "server_url": "https://mcp.context7.com/mcp",
+      "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+      "allowed_tools": ["resolve-library-id", "get-library-docs"]
+    }
+
+Cursor-style configs can be converted with ``cursor_mcp_config_to_tools``:
+    {
+      "mcpServers": {
+        "context7": {
+          "command": "npx",
+          "args": ["-y", "@upstash/context7-mcp", "--api-key", "YOUR_API_KEY"]
+        }
+      }
+    }
 """
 
 from __future__ import annotations
@@ -11,6 +25,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable, Mapping
@@ -21,11 +36,13 @@ from .mcp import (
     ToolCallingManifest,
     ToolSignature,
     call_tool_from_manifest,
+    list_tools_from_manifest,
     load_tool_signature_from_manifest,
     response_to_text,
 )
 
 logger = logging.getLogger(__name__)
+_REQUIRE_APPROVAL_WARNED = False
 
 
 @dataclass(frozen=True)
@@ -69,33 +86,34 @@ class ToolCallingFactory:
         )
 
     def resolve_tool_entry(self, entry: Mapping[str, Any]) -> ToolCallingResolvedTool:
-        """Resolve a single tool entry into a function tool plus callable."""
+        """Resolve a single legacy MCP tool entry into a function tool plus callable."""
         mcp_block = entry.get("mcp")
         if not isinstance(mcp_block, Mapping):
-            raise ValueError("MCP tool entry missing 'mcp' block")
+            raise ValueError("Legacy MCP tool entry missing 'mcp' block")
 
         server = mcp_block.get("server")
         tool_block = mcp_block.get("tool")
         if not isinstance(server, Mapping):
-            raise ValueError("MCP tool entry missing 'mcp.server'")
+            raise ValueError("Legacy MCP tool entry missing 'mcp.server'")
         if not isinstance(tool_block, Mapping):
-            raise ValueError("MCP tool entry missing 'mcp.tool'")
+            raise ValueError("Legacy MCP tool entry missing 'mcp.tool'")
 
         tool_name = tool_block.get("name")
         if not tool_name:
-            raise ValueError("MCP tool entry missing 'mcp.tool.name'")
+            raise ValueError("Legacy MCP tool entry missing 'mcp.tool.name'")
 
         function_name = mcp_block.get("name")
         if not function_name:
-            raise ValueError("MCP tool entry missing 'mcp.name'")
+            raise ValueError("Legacy MCP tool entry missing 'mcp.name'")
         signature = self._get_signature(server, tool_name, mcp_block.get("signature"))
 
+        parameters = _strip_schema_field(signature.parameters)
         function_entry: dict[str, Any] = {
             "type": "function",
             "function": {
                 "name": function_name,
                 "description": signature.description,
-                "parameters": signature.parameters,
+                "parameters": parameters,
             },
             "mcp": copy.deepcopy(dict(mcp_block)),
         }
@@ -112,6 +130,7 @@ class ToolCallingFactory:
         self, server: Mapping[str, Any], tool_name: str
     ) -> Callable[..., str]:
         """Build a callable that executes the MCP tool and returns text output."""
+
         def _callable(**arguments: Any) -> str:
             response = self._call_tool(server, tool_name, arguments)
             return response_to_text(response)
@@ -184,7 +203,55 @@ def resolve_toolcalling_tools(
     factory = factory or ToolCallingFactory()
 
     for tool in tools:
-        if not isinstance(tool, dict) or "mcp" not in tool:
+        if not isinstance(tool, dict):
+            resolved_tools.append(copy.deepcopy(tool))
+            continue
+
+        if tool.get("type") == "mcp":
+            normalized = _normalize_openai_mcp_tool(tool)
+            server = normalized["server"]
+            server_label = normalized["server_label"]
+            allowed_tools = normalized["allowed_tools"]
+            require_approval = normalized["require_approval"]
+
+            if allowed_tools is None:
+                allowed_tools = _list_tool_names(server)
+            if not allowed_tools:
+                raise ValueError(
+                    f"MCP server '{server_label}' did not return any tools."
+                )
+
+            existing_names = _collect_function_names(resolved_tools, resolved_map)
+            for tool_name in allowed_tools:
+                signature = factory._get_signature(server, tool_name, None)
+                function_name = _resolve_function_name(
+                    tool_name, server_label, existing_names
+                )
+                existing_names.add(function_name)
+                parameters = _strip_schema_field(signature.parameters)
+                function_entry = {
+                    "type": "function",
+                    "function": {
+                        "name": function_name,
+                        "description": signature.description,
+                        "parameters": parameters,
+                    },
+                    "mcp": {
+                        "server_label": server_label,
+                        "server": copy.deepcopy(server),
+                        "tool": {"name": tool_name},
+                        "name": function_name,
+                        "allowed_tools": allowed_tools,
+                        "require_approval": require_approval,
+                    },
+                }
+                resolved_tools.append(function_entry)
+                resolved_map.setdefault(
+                    function_name, factory._build_callable(server, tool_name)
+                )
+            continue
+
+        if "mcp" not in tool:
             resolved_tools.append(copy.deepcopy(tool))
             continue
 
@@ -210,6 +277,195 @@ def resolve_toolcalling_tools(
         resolved_map.setdefault(resolved.function_name, resolved.callable)
 
     return resolved_tools, resolved_map
+
+
+def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Convert Cursor-style MCP config into OpenAI-style MCP tool entries.
+
+    Cursor style (local):
+        {
+          "mcpServers": {
+            "context7": {
+              "command": "npx",
+              "args": ["-y", "@upstash/context7-mcp", "--api-key", "YOUR_API_KEY"],
+              "env": {"API_KEY": "${env:API_KEY}"}
+            }
+          }
+        }
+
+    Cursor style (remote):
+        {
+          "mcpServers": {
+            "context7": {
+              "url": "https://mcp.context7.com/mcp",
+              "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"}
+            }
+          }
+        }
+
+    OpenAI-style output:
+        {
+          "tools": [
+            {
+              "type": "mcp",
+              "server_label": "context7",
+              "server_url": "https://mcp.context7.com/mcp",
+              "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"}
+            }
+          ]
+        }
+    """
+    servers = config.get("mcpServers")
+    if not isinstance(servers, Mapping):
+        raise ValueError("Cursor MCP config must include 'mcpServers'.")
+
+    tools: list[dict[str, Any]] = []
+    for server_label, server in servers.items():
+        if not isinstance(server, Mapping):
+            raise ValueError(f"MCP server '{server_label}' must be a mapping.")
+        entry: dict[str, Any] = {"type": "mcp", "server_label": server_label}
+        if "url" in server:
+            entry["server_url"] = server.get("url")
+            if "headers" in server:
+                entry["headers"] = server.get("headers")
+            if "auth" in server:
+                entry["auth"] = server.get("auth")
+        else:
+            entry["command"] = server.get("command")
+            entry["args"] = server.get("args", [])
+            entry["env"] = server.get("env", {})
+        tools.append(entry)
+
+    return tools
+
+
+def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:
+    if entry.get("type") != "mcp":
+        raise ValueError("MCP tool entry must have type='mcp'.")
+
+    server_label = entry.get("server_label")
+    if not server_label and entry.get("name"):
+        server_label = entry.get("name")
+        warnings.warn(
+            "MCP tool entry used 'name' instead of 'server_label'; converting.",
+            UserWarning,
+            stacklevel=2,
+        )
+    if not server_label:
+        raise ValueError("MCP tool entry missing 'server_label'.")
+
+    server_url = entry.get("server_url") or entry.get("url")
+    if entry.get("url") and not entry.get("server_url"):
+        warnings.warn(
+            "MCP tool entry used 'url' instead of 'server_url'; converting.",
+            UserWarning,
+            stacklevel=2,
+        )
+    command = entry.get("command")
+    if server_url and command:
+        raise ValueError("MCP tool entry cannot include both server_url and command.")
+    if not server_url and not command:
+        raise ValueError("MCP tool entry must include either server_url or command.")
+
+    require_approval = entry.get("require_approval")
+    if require_approval is not None:
+        _warn_require_approval()
+
+    if server_url:
+        server = {
+            "type": "remote",
+            "url": server_url,
+            "headers": entry.get("headers", {}),
+            "auth": entry.get("auth"),
+        }
+    else:
+        server = {
+            "type": "stdio",
+            "command": command,
+            "args": entry.get("args", []),
+            "env": entry.get("env", {}),
+        }
+
+    allowed_tools = entry.get("allowed_tools")
+    if allowed_tools is not None and not isinstance(allowed_tools, list):
+        raise ValueError("allowed_tools must be a list of tool names.")
+
+    return {
+        "server_label": server_label,
+        "server": server,
+        "allowed_tools": allowed_tools,
+        "require_approval": require_approval,
+    }
+
+
+def _warn_require_approval() -> None:
+    global _REQUIRE_APPROVAL_WARNED
+    if _REQUIRE_APPROVAL_WARNED:
+        return
+    warnings.warn(
+        "require_approval is ignored by the optimizer toolcalling runtime.",
+        UserWarning,
+        stacklevel=2,
+    )
+    _REQUIRE_APPROVAL_WARNED = True
+
+
+def _collect_function_names(
+    tools: list[dict[str, Any]], function_map: dict[str, Callable]
+) -> set[str]:
+    names = set(function_map.keys())
+    for tool in tools:
+        if tool.get("type") == "function":
+            function_block = tool.get("function", {})
+            name = function_block.get("name")
+            if name:
+                names.add(name)
+    return names
+
+
+def _resolve_function_name(
+    tool_name: str, server_label: str, existing_names: set[str]
+) -> str:
+    if tool_name not in existing_names:
+        return tool_name
+
+    candidate = f"{server_label}.{tool_name}"
+    suffix = 2
+    while candidate in existing_names:
+        candidate = f"{server_label}.{tool_name}.{suffix}"
+        suffix += 1
+
+    logger.warning(
+        "Tool name collision for %s; using %s instead.", tool_name, candidate
+    )
+    return candidate
+
+
+def _list_tool_names(server: Mapping[str, Any]) -> list[str]:
+    server_type = server.get("type")
+    if server_type == "stdio":
+        manifest = ToolCallingManifest.from_dict(server)
+        tools = list_tools_from_manifest(manifest)
+    elif server_type == "remote":
+        url = server.get("url")
+        if not url:
+            raise ValueError("Remote MCP server missing 'url'.")
+        tools = list_tools_from_remote(url, server.get("headers") or {})
+    else:
+        raise ValueError("MCP server type must be 'stdio' or 'remote'")
+
+    names: list[str] = []
+    for tool in tools:
+        name = getattr(tool, "name", None)
+        if name:
+            names.append(name)
+    return names
+
+
+def _strip_schema_field(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    cleaned = dict(parameters) if parameters else {}
+    cleaned.pop("$schema", None)
+    return cleaned
 
 
 def _load_remote_tool_signature(

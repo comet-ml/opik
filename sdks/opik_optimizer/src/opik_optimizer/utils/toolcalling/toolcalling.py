@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from typing import Any
 from collections.abc import Callable
 
@@ -22,6 +23,33 @@ from ...algorithms.meta_prompt_optimizer.ops import (
 from .tool_factory import ToolCallingFactory
 
 logger = logging.getLogger(__name__)
+
+
+def validate_optimization_flags(
+    *,
+    optimize_prompt: bool,
+    optimize_tools: bool | dict[str, bool] | None,
+    supports_tool_optimization: bool,
+    warn_unsupported: bool = False,
+) -> bool | dict[str, bool] | None:
+    """Validate optimization flags and normalize tool optimization options."""
+    if not optimize_prompt and not optimize_tools:
+        raise ValueError("optimize_prompt and optimize_tools are both disabled.")
+
+    if optimize_tools and not supports_tool_optimization:
+        if not optimize_prompt:
+            raise ValueError(
+                "Tool-only optimization is not supported by this optimizer."
+            )
+        if warn_unsupported:
+            warnings.warn(
+                "optimize_tools is not supported by this optimizer; ignoring tool optimization.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return None
+
+    return optimize_tools
 
 
 class ToolDescriptionCandidate(BaseModel):
@@ -80,7 +108,9 @@ def prepare_tool_optimization(
             )
     elif optimize_tools is True:
         tool_names = [
-            segment.segment_id.replace(prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1)
+            segment.segment_id.replace(
+                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
+            )
             for segment in tool_segments
         ]
     return resolved_prompt, tool_names
@@ -117,7 +147,9 @@ def generate_tool_description_candidates(
         tool_blocks_str = _build_tool_blocks(tool_segments)
 
         tool_description_user_template = optimizer.get_prompt("tool_description_user")
-        tool_description_system_template = optimizer.get_prompt("tool_description_system")
+        tool_description_system_template = optimizer.get_prompt(
+            "tool_description_system"
+        )
         user_prompt = meta_prompts.build_tool_description_user_prompt(
             tool_blocks=tool_blocks_str,
             best_score=best_score,

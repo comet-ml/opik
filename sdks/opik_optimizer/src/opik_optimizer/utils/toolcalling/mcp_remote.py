@@ -43,6 +43,7 @@ def _run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
 
 def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
     """List tools from a remote MCP server over StreamableHTTP."""
+
     async def _inner() -> Any:
         ClientSession, streamablehttp_client = _load_remote_sdk()
         async with streamablehttp_client(url, headers=dict(headers)) as (
@@ -76,6 +77,7 @@ def call_tool_from_remote(
     arguments: dict[str, Any],
 ) -> Any:
     """Invoke a tool on a remote MCP server over StreamableHTTP."""
+
     async def _inner() -> Any:
         ClientSession, streamablehttp_client = _load_remote_sdk()
         async with streamablehttp_client(url, headers=dict(headers)) as (
