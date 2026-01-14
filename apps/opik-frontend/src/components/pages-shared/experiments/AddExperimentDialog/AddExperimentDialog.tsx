@@ -395,10 +395,7 @@ eval_results = evaluate(
       <CodeSectionTitle>3. Create an Experiment</CodeSectionTitle>
       {isPhonePortrait ? (
         <CodeBlockWithHeader title="Python" copyText={codeWithConfigToCopy}>
-          <CodeHighlighter
-            data={codeWithConfig}
-            copyData={codeWithConfigToCopy}
-          />
+          <CodeHighlighter data={codeWithConfig} />
         </CodeBlockWithHeader>
       ) : (
         <CodeHighlighter
