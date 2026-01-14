@@ -6,6 +6,7 @@ import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,7 +60,7 @@ class CsvDatasetExportServiceImplTest {
     private static final String USER_NAME = "test-user";
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final UUID JOB_ID = UUID.randomUUID();
-    private static final io.dropwizard.util.Duration DEFAULT_TTL = io.dropwizard.util.Duration.hours(24);
+    private static final Duration DEFAULT_TTL = Duration.hours(24);
 
     @BeforeEach
     void setUp() {
