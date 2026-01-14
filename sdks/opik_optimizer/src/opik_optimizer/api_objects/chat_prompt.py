@@ -189,7 +189,16 @@ class ChatPrompt:
             raise ValueError("`tools` must be a list")
         else:
             for tool in tools:
-                types.Tool.model_validate(tool)
+                if isinstance(tool, dict) and "mcp" in tool:
+                    _validate_mcp_tool(tool)
+                    if "function" in tool:
+                        types.FunctionTool.model_validate(tool["function"])
+                        if "type" in tool and tool["type"] != "function":
+                            raise ValueError(
+                                "MCP tool type must be 'function' when provided"
+                            )
+                else:
+                    types.Tool.model_validate(tool)
 
     @staticmethod
     def _update_string_content(content: str, label: str, value: str) -> str:
@@ -366,3 +375,26 @@ class ChatPrompt:
             user=obj.get("user", None),
             messages=obj.get("messages", None),
         )
+
+
+def _validate_mcp_tool(tool: dict[str, Any]) -> None:
+    mcp_block = tool.get("mcp")
+    if not isinstance(mcp_block, dict):
+        raise ValueError("MCP tool must include an 'mcp' object")
+
+    server = mcp_block.get("server")
+    tool_block = mcp_block.get("tool")
+    if not isinstance(server, dict):
+        raise ValueError("MCP tool must include 'mcp.server' config")
+    if not mcp_block.get("name"):
+        raise ValueError("MCP tool must include 'mcp.name'")
+    if not isinstance(tool_block, dict) or not tool_block.get("name"):
+        raise ValueError("MCP tool must include 'mcp.tool.name'")
+
+    server_type = server.get("type")
+    if server_type not in {"stdio", "remote"}:
+        raise ValueError("MCP server type must be 'stdio' or 'remote'")
+    if server_type == "stdio" and not server.get("command"):
+        raise ValueError("MCP stdio server must include 'command'")
+    if server_type == "remote" and not server.get("url"):
+        raise ValueError("MCP remote server must include 'url'")
