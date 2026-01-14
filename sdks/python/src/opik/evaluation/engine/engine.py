@@ -26,7 +26,8 @@ LOGGER = logging.getLogger(__name__)
 
 EVALUATION_TASK_NAME = "evaluation_task"
 
-STREAM_DATASET_BATCH_SIZE = 200 # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
+STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
+
 
 def _calculate_total_items(
     dataset: dataset.Dataset,
