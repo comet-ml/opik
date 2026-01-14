@@ -481,20 +481,23 @@ eval_results = evaluate(
     <>
       {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
       {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
-      <div className="mt-4">
-        <Button variant="secondary" asChild>
-          <a
-            href={buildDocsUrl("/evaluation/metrics/custom_metric")}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center"
-          >
-            Learn about custom metrics
-            <SquareArrowOutUpRight className="ml-1 size-4" />
-          </a>
-        </Button>
-      </div>
     </>
+  );
+
+  const renderCustomMetricsLink = () => (
+    <div className="mt-4">
+      <Button variant="secondary" asChild>
+        <a
+          href={buildDocsUrl("/evaluation/metrics/custom_metric")}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center"
+        >
+          Learn about custom metrics
+          <SquareArrowOutUpRight className="ml-1 size-4" />
+        </a>
+      </Button>
+    </div>
   );
 
   const renderEvaluatorsSection = () => (
@@ -524,6 +527,7 @@ eval_results = evaluate(
             )}
           </div>
           {renderEvaluatorsContent()}
+          {renderCustomMetricsLink()}
         </>
       )}
     </div>

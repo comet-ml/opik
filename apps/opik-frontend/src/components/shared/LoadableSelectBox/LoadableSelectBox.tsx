@@ -39,7 +39,6 @@ interface BaseLoadableSelectBoxProps {
   align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
-  /** Whether to auto-focus the search input when the popover opens. Defaults to true. */
   autoFocus?: boolean;
 }
 
