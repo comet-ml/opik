@@ -121,7 +121,8 @@ public class ExperimentsResource {
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("sorting") String sorting,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIdsQueryParam) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
@@ -141,6 +142,11 @@ public class ExperimentsResource {
                 .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
                 .orElse(null);
 
+        var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
+                .filter(param -> !param.isBlank())
+                .map(ParamsValidator::getIds)
+                .orElse(null);
+
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
@@ -151,6 +157,7 @@ public class ExperimentsResource {
                 .optimizationId(optimizationId)
                 .types(types)
                 .filters(experimentFilters)
+                .experimentIds(experimentIds)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
