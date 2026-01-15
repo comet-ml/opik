@@ -27,7 +27,6 @@ import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
-import useTracesOrSpansMetadataPaths from "@/hooks/useTracesOrSpansMetadataPaths";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
@@ -53,6 +52,7 @@ import {
   isColumnSortable,
   mapColumnDataFields,
 } from "@/lib/table";
+import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
@@ -528,17 +528,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
-  const { metadataPaths } = useTracesOrSpansMetadataPaths(
-    {
-      projectId,
-      type: type as TRACE_DATA_TYPE,
-      filters, // Pass filters to narrow metadata columns to filtered data
-    },
-    {
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
-
   const noData = !search && filters.length === 0;
   const noDataText = noData
     ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
@@ -548,6 +537,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     () => data?.content ?? [],
     [data?.content],
   );
+
+  // Extract metadata paths directly from loaded traces/spans data
+  const metadataPaths = useMemo(() => {
+    const allPaths = rows.reduce<string[]>((acc, row) => {
+      if (row.metadata && (isObject(row.metadata) || isArray(row.metadata))) {
+        return acc.concat(getJSONPaths(row.metadata, "metadata", []));
+      }
+      return acc;
+    }, []);
+    return uniq(allPaths).sort();
+  }, [rows]);
 
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
