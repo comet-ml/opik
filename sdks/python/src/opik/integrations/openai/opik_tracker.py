@@ -12,6 +12,13 @@ import opik.semantic_version as semantic_version
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
 
+def _get_provider(openai_client: OpenAIClient) -> str:
+    """Get the provider name from the OpenAI client's base URL."""
+    if openai_client.base_url.host != "api.openai.com":
+        return openai_client.base_url.host
+    return "openai"
+
+
 def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
@@ -64,8 +71,7 @@ def _patch_openai_chat_completions(
     chat_completions_decorator_factory = (
         openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
     )
-    if openai_client.base_url.host != "api.openai.com":
-        chat_completions_decorator_factory.provider = openai_client.base_url.host
+    chat_completions_decorator_factory.provider = _get_provider(openai_client)
 
     completions_create_decorator = chat_completions_decorator_factory.track(
         type="llm",
@@ -126,8 +132,7 @@ def _patch_openai_responses(
     responses_decorator_factory = (
         openai_responses_decorator.OpenaiResponsesTrackDecorator()
     )
-    if openai_client.base_url.host != "api.openai.com":
-        responses_decorator_factory.provider = openai_client.base_url.host
+    responses_decorator_factory.provider = _get_provider(openai_client)
 
     if hasattr(openai_client.responses, "create"):
         responses_create_decorator = responses_decorator_factory.track(
@@ -161,23 +166,13 @@ def _patch_openai_videos(
         VideosDownloadTrackDecorator,
     )
 
-    provider = (
-        openai_client.base_url.host
-        if openai_client.base_url.host != "api.openai.com"
-        else "openai"
-    )
-
-    # Create decorator factory for LLM methods (create, remix)
+    provider = _get_provider(openai_client)
     create_decorator_factory = VideosCreateTrackDecorator(provider=provider)
-
-    # Download decorator patches write_to_file on returned instances
     download_decorator_factory = VideosDownloadTrackDecorator()
 
-    # Video metadata for simple methods using default @opik.track
     video_metadata = {"created_from": "openai", "type": "openai_videos"}
     video_tags = ["openai"]
 
-    # Patch videos.create - start video generation (LLM span)
     if hasattr(openai_client.videos, "create"):
         decorator = create_decorator_factory.track(
             type="llm",
@@ -186,8 +181,6 @@ def _patch_openai_videos(
         )
         openai_client.videos.create = decorator(openai_client.videos.create)
 
-    # Patch videos.create_and_poll - video generation with polling (general span)
-    # This will create a parent span that contains nested create/poll spans
     if hasattr(openai_client.videos, "create_and_poll"):
         decorator = opik.track(
             name="videos.create_and_poll",
@@ -199,7 +192,6 @@ def _patch_openai_videos(
             openai_client.videos.create_and_poll
         )
 
-    # Patch videos.remix - remix existing video (LLM span)
     if hasattr(openai_client.videos, "remix"):
         decorator = create_decorator_factory.track(
             type="llm",
@@ -211,7 +203,6 @@ def _patch_openai_videos(
     # Note: videos.retrieve is intentionally NOT patched to avoid too many spans
     # since it's called frequently during polling operations.
 
-    # Patch videos.poll - poll for video completion (general span)
     if hasattr(openai_client.videos, "poll"):
         decorator = opik.track(
             name="videos.poll",
@@ -221,7 +212,6 @@ def _patch_openai_videos(
         )
         openai_client.videos.poll = decorator(openai_client.videos.poll)
 
-    # Patch videos.delete - delete video (general span)
     if hasattr(openai_client.videos, "delete"):
         decorator = opik.track(
             name="videos.delete",
@@ -243,7 +233,6 @@ def _patch_openai_videos(
             openai_client.videos.download_content
         )
 
-    # Patch videos.list - list videos (general span)
     if hasattr(openai_client.videos, "list"):
         decorator = opik.track(
             name="videos.list",
