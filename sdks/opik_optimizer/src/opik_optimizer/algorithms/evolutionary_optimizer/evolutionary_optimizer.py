@@ -734,7 +734,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 )
 
                 # -------- update best-prompt bookkeeping -------------------------
-                previous_best_primary_score_for_gen = best_primary_score_overall
                 if hof:
                     if self.enable_moo:
                         current_best_ind = max(
