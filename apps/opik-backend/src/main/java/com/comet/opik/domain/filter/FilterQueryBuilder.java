@@ -346,6 +346,7 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
                     .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
                     .put(ExperimentField.TAGS, TAGS_DB)
+                    .put(ExperimentField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
     private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
