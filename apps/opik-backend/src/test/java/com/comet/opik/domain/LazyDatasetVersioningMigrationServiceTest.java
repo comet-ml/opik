@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import jakarta.inject.Provider;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,12 +53,12 @@ class LazyDatasetVersioningMigrationServiceTest {
 
     @BeforeEach
     void setUp() {
+        Provider<RequestContext> requestContextProvider = () -> requestContext;
         migrationService = new DatasetVersioningMigrationService(
                 lockService,
-                datasetVersionDAO,
                 datasetItemVersionDAO,
                 jdbi,
-                requestContext);
+                requestContextProvider);
     }
 
     @Test

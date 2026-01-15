@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.lock.LockService.Lock;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -22,10 +23,9 @@ import java.util.UUID;
 public class DatasetVersioningMigrationService {
 
     private final @NonNull LockService lockService;
-    private final @NonNull DatasetVersionDAO datasetVersionDAO;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
     private final @NonNull org.jdbi.v3.core.Jdbi jdbi;
-    private final @NonNull RequestContext requestContext;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     private static final Lock MIGRATION_LOCK = new Lock("dataset_versioning_migration");
     private static final UUID UUID_MIN = UUID.fromString("00000000-0000-0000-0000-000000000000");
