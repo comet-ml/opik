@@ -44,25 +44,23 @@ def fake_file_upload_preprocessor():
 
 
 @pytest.fixture
-def patch_streamer():
+def patch_streamer(
+    fake_file_upload_preprocessor: file_upload_preprocessor.FileUploadPreprocessor,
+):
     streamer = None
     try:
         # Create upload manager first
-        fake_upload_manager = noop_file_upload_manager.FileUploadManagerEmulator()
-        upload_preprocessor = file_upload_preprocessor.FileUploadPreprocessor(
-            fake_upload_manager
-        )
         # Pass upload manager to emulator so it can access attachments
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor(
-                file_upload_manager=fake_upload_manager
+                file_upload_manager=fake_file_upload_preprocessor.file_upload_manager
             )
         )
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=True,
-            upload_preprocessor=upload_preprocessor,
+            upload_preprocessor=fake_file_upload_preprocessor,
             max_queue_size=None,
             use_attachment_extraction=False,
         )
