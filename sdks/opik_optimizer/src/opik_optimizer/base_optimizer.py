@@ -430,6 +430,8 @@ class BaseOptimizer(ABC):
             )
             n_samples = None
 
+        project_name = resolve_project_name(project_name)
+
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
         self._attach_agent_owner(agent)
