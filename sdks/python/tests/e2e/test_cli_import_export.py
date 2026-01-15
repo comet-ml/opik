@@ -1136,6 +1136,27 @@ class TestCLIImportExport:
             f"got {imported_span_data.usage.get('total_tokens')}"
         )
 
+        # Check non-standard token fields are preserved
+        # The backend stores these with 'original_usage.' prefix for provider-specific token details
+        assert (
+            imported_span_data.usage.get(
+                "original_usage.completion_tokens_details.reasoning_tokens"
+            )
+            == llm_usage["completion_tokens_details"]["reasoning_tokens"]
+        ), (
+            f"reasoning_tokens mismatch: expected {llm_usage['completion_tokens_details']['reasoning_tokens']}, "
+            f"got {imported_span_data.usage.get('original_usage.completion_tokens_details.reasoning_tokens')}"
+        )
+        assert (
+            imported_span_data.usage.get(
+                "original_usage.prompt_tokens_details.cached_tokens"
+            )
+            == llm_usage["prompt_tokens_details"]["cached_tokens"]
+        ), (
+            f"cached_tokens mismatch: expected {llm_usage['prompt_tokens_details']['cached_tokens']}, "
+            f"got {imported_span_data.usage.get('original_usage.prompt_tokens_details.cached_tokens')}"
+        )
+
         # Verify cost is calculated (should be non-None if backend supports cost calculation for this model)
         # Note: Cost calculation depends on backend having pricing info for the model
         if original_cost is not None:
