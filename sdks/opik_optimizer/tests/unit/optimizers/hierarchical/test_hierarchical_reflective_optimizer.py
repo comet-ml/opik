@@ -254,3 +254,67 @@ class TestHierarchicalReflectiveOptimizerEarlyStop:
         assert result.details["stop_reason"] == "baseline_score_met_threshold"
         assert result.details["perfect_score"] == 0.95
         assert result.initial_score == result.score
+
+
+class TestHierarchicalReflectiveOptimizerCounters:
+    def test_respects_max_trials_and_records_history(
+        self,
+        mock_optimization_context,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mock_optimization_context()
+        dataset = _make_dataset()
+        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0)
+        prompt = ChatPrompt(system="Test", user="{question}")
+
+        monkeypatch.setattr(
+            optimizer,
+            "evaluate_prompt",
+            lambda **kwargs: _mock_experiment_result(0.1)
+            if kwargs.get("return_evaluation_result")
+            else 0.1,
+        )
+
+        analysis = HierarchicalRootCauseAnalysis(
+            total_test_cases=1,
+            num_batches=1,
+            unified_failure_modes=[
+                FailureMode(
+                    name="Failure",
+                    description="desc",
+                    root_cause="cause",
+                )
+            ],
+            synthesis_notes="Test",
+        )
+        monkeypatch.setattr(
+            optimizer,
+            "_hierarchical_root_cause_analysis",
+            lambda evaluation_result: analysis,
+        )
+
+        improvement_calls: list[int] = []
+
+        def fake_generate_and_evaluate_improvement(**kwargs):
+            improvement_calls.append(kwargs.get("attempt", 0))
+            prompts_arg = kwargs.get("best_prompts", {})
+            improved = {name: p.copy() for name, p in prompts_arg.items()}
+            return improved, 0.2, _mock_experiment_result(0.2)
+
+        monkeypatch.setattr(
+            optimizer,
+            "_generate_and_evaluate_improvement",
+            fake_generate_and_evaluate_improvement,
+        )
+
+        result = optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+        )
+
+        assert len(improvement_calls) == 1
+        assert result.details["trials_completed"] == 1
+        assert len(result.history) == 1
+        assert result.history[0]["trials_completed"] == 1
