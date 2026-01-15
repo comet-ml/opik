@@ -54,6 +54,7 @@ public class DatasetExportConfig implements StreamConfiguration {
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS)
+    @MaxDuration(value = 7, unit = TimeUnit.DAYS)
     private Duration defaultTtl = Duration.hours(24);
 
     /**
@@ -80,6 +81,24 @@ public class DatasetExportConfig implements StreamConfiguration {
      */
     @JsonProperty
     @Min(100) @Max(10000) private int itemBatchSize = 100;
+
+    /**
+     * Timeout for cleanup job execution (how long the cleanup can run).
+     * Default: 5 minutes
+     */
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+    private Duration cleanupTimeout = Duration.minutes(5);
+
+    /**
+     * How long to wait for acquiring the distributed lock for cleanup.
+     * Default: 1 second
+     */
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
+    private Duration cleanupLockWaitTime = Duration.seconds(1);
 
     // lazy codec creation to ensure it picks up the configured JsonUtils mapper
     @Override

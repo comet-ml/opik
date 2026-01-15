@@ -24,6 +24,8 @@ public interface PreSignerService {
 
     String presignDownloadUrl(String key);
 
+    String presignDownloadUrl(String key, Duration expiresIn);
+
     long getPresignedUrlExpirationSeconds();
 }
 
@@ -68,6 +70,13 @@ class PreSignerServiceImpl implements PreSignerService {
 
     @Override
     public String presignDownloadUrl(String key) {
+        return presignDownloadUrl(key, Duration.ofSeconds(s3Config.getPreSignUrlTimeoutSec()));
+    }
+
+    @Override
+    public String presignDownloadUrl(@NonNull String key, @NonNull Duration expiresIn) {
+        log.debug("Generating presigned download URL for key: '{}', expires in: {}", key, expiresIn);
+
         // Create a request to get an object
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(s3Config.getS3BucketName())
@@ -76,11 +85,13 @@ class PreSignerServiceImpl implements PreSignerService {
 
         // Generate the pre-signed URL
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofSeconds(s3Config.getPreSignUrlTimeoutSec()))
+                .signatureDuration(expiresIn)
                 .getObjectRequest(getObjectRequest)
                 .build();
 
-        return preSigner.presignGetObject(presignRequest).url().toString();
+        String url = preSigner.presignGetObject(presignRequest).url().toString();
+        log.debug("Generated presigned download URL for key: '{}'", key);
+        return url;
     }
 
     @Override
