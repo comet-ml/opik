@@ -24,10 +24,31 @@ jobs:
 
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VERSION: ${{inputs.version}}
     steps:
 
+        - name: Install Helm
+          # azure/setup-helm v4.3.1 pinned to commit SHA 1a275c3b69536ee54be43f2070a358922e12c8d4
+          # Source: https://github.com/Azure/setup-helm/releases/tag/v4.3.1
+          uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+          with:
+            version: v3.19.4
+
+        - name: Validate version input
+          shell: bash
+          run: |
+            set -e
+            # Validate version input to prevent command injection
+            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
+              echo "ERROR: Invalid version format: $VERSION"
+              echo "Expected SemVer format (e.g., v1.2.3, 1.2.3-alpha, 1.2.3+build)"
+              exit 1
+            fi
+            echo "Version validated: $VERSION"
+
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v4
           with:
             ref: ${{inputs.version}}
             fetch-tags: true
@@ -35,16 +56,11 @@ jobs:
             fetch-depth: 0
 
         - name: Checkout GH Pages branch
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v4
           with:
             path: 'dest'
             ref: 'gh-pages'
             fetch-depth: 0
-
-        - name: Install Helm
-          uses: azure/setup-helm@v4.2.0
-          with:
-            version: v3.13.0
 
         - name: Run lint on Helm chart
           shell: bash
@@ -53,7 +69,6 @@ jobs:
             set -e
             cd deployment/helm_chart/opik
             helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
-            helm repo add bitnami https://charts.bitnami.com/bitnami
             helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
             helm dependency build
             helm lint --values values.yaml .
@@ -63,26 +78,77 @@ jobs:
           shell: bash
           working-directory: src
           run: |
+            set -e
             cd deployment/helm_chart
-            helm package --version ${{inputs.version}} --app-version ${{inputs.version}} opik/ -u -d ../../../dest
+            helm package --version "$VERSION" --app-version "$VERSION" opik/ -u -d ../../../dest
             cd -
             echo "Copy updated README"
             cp deployment/helm_chart/opik/README.md ../dest/.
 
-        - name: Push New Files
+        - name: Restore file timestamps from git history
           shell: bash
           working-directory: dest
           run: |
-              helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/
-              git config user.name "Helm Updater"
-              git config user.email "actions@users.noreply.github.com"
-              git add $(git ls-files -o --exclude-standard)
-              git add index.yaml README.md
-              git commit -m "Release Opik helm chart ${{inputs.version}}"
-              git push   
+            set -e
+            # Set file modification times based on git commit history
+            # This is important because helm repo index uses file mtime to set the 'created' field
+            
+            # 1. Set timestamp for the newly packaged chart from source repo tag
+            NEW_CHART_FILE="opik-${VERSION}.tgz"
+            if [ -f "$NEW_CHART_FILE" ]; then
+              NEW_CHART_TIME=$(cd ../src && git log -1 --format="%cI" "$VERSION" || true)
+              if [ -n "$NEW_CHART_TIME" ]; then
+                touch -d "$NEW_CHART_TIME" "$NEW_CHART_FILE"
+                echo "Set $NEW_CHART_FILE mtime to $NEW_CHART_TIME (from source tag)"
+              fi
+            fi
+            
+            # 2. Restore timestamps for existing files from gh-pages git history
+            echo "Restoring file timestamps from git history..."
+            git ls-files -z | while read -d $'\0' file; do
+              if [ -f "$file" ]; then
+                TIME=$(git log -1 --format="%cI" -- "$file")
+                if [ -n "$TIME" ]; then
+                  touch -d "$TIME" "$file"
+                  echo "Set $file mtime to $TIME"
+                fi
+              fi
+            done
+            echo "File timestamps restored."
+
+        - name: Push New Files
+          shell: bash
+          working-directory: dest
+          env:
+            INDEX_FILE: index.yaml
+          run: |
+            set -e
+            # Run helm repo index which will overwrite created timestamps
+            helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/ --merge "${INDEX_FILE}"
+            
+            # Fix timestamps again - helm repo index overwrites them based on file mtime
+            echo "=== Fixing timestamps based on file modification times ==="
+            CHARTS=$(yq eval '.entries[] | .[] | .urls[0]' "${INDEX_FILE}")
+            
+            for CHART_URL in $CHARTS; do
+                FILENAME=$(basename "$CHART_URL")
+                
+                if [ -f "$FILENAME" ]; then
+                    MTIME=$(date -u -r "$FILENAME" +"%Y-%m-%dT%H:%M:%SZ")
+                    echo "Setting $FILENAME timestamp to $MTIME"
+                    yq eval "(.entries[][] | select(.urls[0] == \"$CHART_URL\") | .created) = \"$MTIME\"" -i --indent 2 "${INDEX_FILE}"
+                fi
+            done
+            
+            git config user.name "Helm Updater"
+            git config user.email "actions@users.noreply.github.com"
+            git ls-files -o --exclude-standard -z | xargs -0 -r git add
+            git add "${INDEX_FILE}" README.md
+            git commit -m "Release Opik helm chart $VERSION"
+            git push   
 
         - name: Summary
           run: |
-            echo "Helm chart is published, version is : ${{inputs.version}}" >> $GITHUB_STEP_SUMMARY
+            echo "Helm chart is published, version is : $VERSION" >> $GITHUB_STEP_SUMMARY
 
 
