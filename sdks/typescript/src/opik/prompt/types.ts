@@ -110,6 +110,7 @@ export interface ImageUrlContentPart extends ContentPart {
   image_url: {
     url: string;
     detail?: string;
+    [key: string]: unknown;
   };
 }
 
@@ -124,6 +125,7 @@ export interface VideoUrlContentPart extends ContentPart {
     duration?: number;
     format?: string;
     detail?: string;
+    [key: string]: unknown;
   };
 }
 
