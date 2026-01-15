@@ -11,6 +11,7 @@ import com.comet.opik.api.ExperimentGroupWithTime;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.grouping.GroupBy;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
@@ -24,13 +25,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 
 public class ExperimentResponseBuilder {
 
-    public static final String DELETED_DATASET = "__DELETED";
+    private static final String DELETED_ENTITY = "__DELETED";
+
+    private static boolean isValidUUID(String value) {
+        if (value == null || value.trim().isEmpty() || value.contains("\u0000")) {
+            return false;
+        }
+        try {
+            UUID.fromString(value.trim());
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 
     public ExperimentGroupResponse buildGroupResponse(List<ExperimentGroupItem> groupItems,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
@@ -125,17 +140,26 @@ public class ExperimentResponseBuilder {
     private String resolveLabel(String groupingValue, GroupBy group,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder) {
         return switch (group.field()) {
-            case DATASET_ID -> {
-                Map<UUID, Dataset> datasetMap = enrichInfoHolder.datasetMap();
-                if (datasetMap == null) {
-                    yield DELETED_DATASET;
-                }
-                yield Optional.ofNullable(datasetMap.get(UUID.fromString(groupingValue)))
-                        .map(Dataset::name)
-                        .orElse(DELETED_DATASET);
-            }
+            case DATASET_ID -> resolveEntityName(
+                    groupingValue,
+                    enrichInfoHolder.datasetMap(),
+                    Dataset::name);
+            case PROJECT_ID -> resolveEntityName(
+                    groupingValue,
+                    enrichInfoHolder.projectMap(),
+                    Project::name);
             default -> groupingValue;
         };
+    }
+
+    private <T> String resolveEntityName(String groupingValue, Map<UUID, T> entityMap,
+            Function<T, String> nameExtractor) {
+        if (entityMap == null || !isValidUUID(groupingValue)) {
+            return DELETED_ENTITY;
+        }
+        return Optional.ofNullable(entityMap.get(UUID.fromString(groupingValue.trim())))
+                .map(nameExtractor)
+                .orElse(DELETED_ENTITY);
     }
 
     public GroupContentWithAggregations calculateRecursiveAggregations(@NonNull GroupContentWithAggregations content) {
@@ -325,19 +349,11 @@ public class ExperimentResponseBuilder {
 
     private ExperimentGroupResponse.GroupContent buildGroupNode(String groupingValue,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder, GroupBy group) {
-        return switch (group.field()) {
-            case DATASET_ID ->
-                ExperimentGroupResponse.GroupContent.builder()
-                        .label(Optional.ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
-                                .map(Dataset::name)
-                                .orElse(DELETED_DATASET))
-                        .groups(new HashMap<>())
-                        .build();
-
-            default -> ExperimentGroupResponse.GroupContent.builder()
-                    .groups(new HashMap<>())
-                    .build();
-        };
+        String label = resolveLabel(groupingValue, group, enrichInfoHolder);
+        return ExperimentGroupResponse.GroupContent.builder()
+                .label(label.equals(groupingValue) ? null : label)
+                .groups(new HashMap<>())
+                .build();
     }
 
     private List<ExperimentGroupResponse.GroupDetail> buildSortedGroups(List<ExperimentGroupItem> groupItems,
@@ -350,13 +366,7 @@ public class ExperimentResponseBuilder {
             for (int i = 0; i < item.groupValues().size(); i++) {
                 String groupingValue = item.groupValues().get(i);
                 if (groupingValue != null) {
-                    String label = switch (groups.get(i).field()) {
-                        case DATASET_ID ->
-                            Optional.ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
-                                    .map(Dataset::name)
-                                    .orElse(DELETED_DATASET);
-                        default -> groupingValue;
-                    };
+                    String label = resolveLabel(groupingValue, groups.get(i), enrichInfoHolder);
                     groupsWithTime.get(i).add(
                             new ExperimentGroupWithTime(
                                     label,

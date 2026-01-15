@@ -16,6 +16,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -57,6 +58,7 @@ import static com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED;
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @Singleton
@@ -68,6 +70,7 @@ public class ExperimentService {
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService datasetVersionService;
+    private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
@@ -170,6 +173,10 @@ public class ExperimentService {
 
     private Map<UUID, Dataset> getDatasetMap(List<Dataset> datasets) {
         return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
+    }
+
+    private Map<UUID, Project> getProjectMap(List<Project> projects) {
+        return projects.stream().collect(Collectors.toMap(Project::id, Function.identity()));
     }
 
     private Map<UUID, DatasetVersion> getDatasetVersionMap(List<DatasetVersion> versions) {
@@ -292,25 +299,46 @@ public class ExperimentService {
 
     private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<List<String>> allGroupValues,
             List<GroupBy> groups, String workspaceId) {
-        int nestingIdx = groups.stream().filter(g -> DATASET_ID.equals(g.field()))
+        Set<UUID> datasetIds = extractUuidsFromGroupValues(allGroupValues, groups, DATASET_ID);
+        Set<UUID> projectIds = extractUuidsFromGroupValues(allGroupValues, groups, PROJECT_ID);
+
+        Mono<Map<UUID, Dataset>> datasetsMono = Mono
+                .fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(this::getDatasetMap);
+
+        Mono<Map<UUID, Project>> projectsMono = Mono
+                .fromCallable(() -> projectService.findByIds(workspaceId, projectIds))
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(this::getProjectMap);
+
+        return Mono.zip(datasetsMono, projectsMono)
+                .map(tuple -> ExperimentGroupEnrichInfoHolder.builder()
+                        .datasetMap(tuple.getT1())
+                        .projectMap(tuple.getT2())
+                        .build());
+    }
+
+    private Set<UUID> extractUuidsFromGroupValues(List<List<String>> allGroupValues, List<GroupBy> groups,
+            String fieldName) {
+        int nestingIdx = groups.stream()
+                .filter(g -> fieldName.equals(g.field()))
                 .findFirst()
                 .map(groups::indexOf)
                 .orElse(-1);
 
-        Set<UUID> datasetIds = nestingIdx == -1
-                ? Set.of()
-                : allGroupValues.stream()
-                        .map(groupValues -> groupValues.get(nestingIdx))
-                        .filter(Objects::nonNull)
-                        .map(UUID::fromString)
-                        .collect(Collectors.toSet());
+        if (nestingIdx == -1) {
+            return Set.of();
+        }
 
-        return Mono.fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(this::getDatasetMap)
-                .map(datasetMap -> ExperimentGroupEnrichInfoHolder.builder()
-                        .datasetMap(datasetMap)
-                        .build());
+        return allGroupValues.stream()
+                .map(groupValues -> groupValues.get(nestingIdx))
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .filter(s -> !s.contains("\u0000")) // Filter out strings with null bytes
+                .map(UUID::fromString)
+                .collect(Collectors.toSet());
     }
 
     @WithSpan
