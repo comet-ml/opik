@@ -299,34 +299,8 @@ public class ExperimentService {
 
     private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<List<String>> allGroupValues,
             List<GroupBy> groups, String workspaceId) {
-        int datasetNestingIdx = groups.stream().filter(g -> DATASET_ID.equals(g.field()))
-                .findFirst()
-                .map(groups::indexOf)
-                .orElse(-1);
-
-        Set<UUID> datasetIds = datasetNestingIdx == -1
-                ? Set.of()
-                : allGroupValues.stream()
-                        .map(groupValues -> groupValues.get(datasetNestingIdx))
-                        .filter(Objects::nonNull)
-                        .map(UUID::fromString)
-                        .collect(Collectors.toSet());
-
-        int projectNestingIdx = groups.stream().filter(g -> PROJECT_ID.equals(g.field()))
-                .findFirst()
-                .map(groups::indexOf)
-                .orElse(-1);
-
-        Set<UUID> projectIds = projectNestingIdx == -1
-                ? Set.of()
-                : allGroupValues.stream()
-                        .map(groupValues -> groupValues.get(projectNestingIdx))
-                        .filter(Objects::nonNull)
-                        .map(String::trim)
-                        .filter(StringUtils::isNotBlank)
-                        .filter(s -> !s.contains("\u0000")) // Filter out strings with null bytes
-                        .map(UUID::fromString)
-                        .collect(Collectors.toSet());
+        Set<UUID> datasetIds = extractUuidsFromGroupValues(allGroupValues, groups, DATASET_ID);
+        Set<UUID> projectIds = extractUuidsFromGroupValues(allGroupValues, groups, PROJECT_ID);
 
         Mono<Map<UUID, Dataset>> datasetsMono = Mono
                 .fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
@@ -343,6 +317,28 @@ public class ExperimentService {
                         .datasetMap(tuple.getT1())
                         .projectMap(tuple.getT2())
                         .build());
+    }
+
+    private Set<UUID> extractUuidsFromGroupValues(List<List<String>> allGroupValues, List<GroupBy> groups,
+            String fieldName) {
+        int nestingIdx = groups.stream()
+                .filter(g -> fieldName.equals(g.field()))
+                .findFirst()
+                .map(groups::indexOf)
+                .orElse(-1);
+
+        if (nestingIdx == -1) {
+            return Set.of();
+        }
+
+        return allGroupValues.stream()
+                .map(groupValues -> groupValues.get(nestingIdx))
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .filter(s -> !s.contains("\u0000")) // Filter out strings with null bytes
+                .map(UUID::fromString)
+                .collect(Collectors.toSet());
     }
 
     @WithSpan
