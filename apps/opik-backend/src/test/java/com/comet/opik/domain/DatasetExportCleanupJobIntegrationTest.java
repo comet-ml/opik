@@ -83,7 +83,7 @@ class DatasetExportCleanupJobIntegrationTest {
 
         String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
         MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
-        
+
         APP = newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
