@@ -12,7 +12,7 @@
 - `apps/opik-backend`: Dropwizard services; migrations in `data-migrations`; see `apps/opik-backend/.cursor/rules/architecture.mdc`.
 - `apps/opik-frontend`: Vite + React UI; modules under `src/features`; align with `apps/opik-frontend/.cursor/rules/frontend_rules.mdc`.
 - SDKs (`sdks/python`, `sdks/typescript`, `sdks/opik_optimizer`): language-specific code with co-located `tests/` and rules in `sdks/*/.cursor/rules/`.
-- `tests_end_to_end`: Pytest suites (`tests/`) and Playwright flows (`tests_end_to_end_ts/`); fixtures in `installer_utils/`, `page_objects/`.
+- `tests_end_to_end`: Playwright E2E TypeScript tests (`typescript-tests/`); helper service (`test-helper-service/`); installer utilities (`installer_utils/`).
 - `scripts/` and `opik.sh`: Orchestrate local stacks, builds, linting.
 
 ## Build, Test, and Development Commands
