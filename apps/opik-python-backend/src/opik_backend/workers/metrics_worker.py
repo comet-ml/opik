@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 # Failure TTL: how long failed jobs are kept in Redis (default: 1 day = 86400 seconds)
 # Configurable via RQ_WORKER_TTL_FAILURE environment variable
 DEFAULT_FAILURE_TTL = 86400
-RQ_FAILURE_TTL = int(os.getenv("RQ_WORKER_TTL_FAILURE", DEFAULT_FAILURE_TTL))
+try:
+    RQ_FAILURE_TTL = int(os.getenv("RQ_WORKER_TTL_FAILURE", DEFAULT_FAILURE_TTL))
+except ValueError:
+    logger.warning(f"Invalid RQ_WORKER_TTL_FAILURE, using default {DEFAULT_FAILURE_TTL}")
+    RQ_FAILURE_TTL = DEFAULT_FAILURE_TTL
 
 meter = get_meter(__name__)
 
@@ -77,17 +81,17 @@ class MetricsWorker(Worker):
         self._failure_ttl = RQ_FAILURE_TTL
         logger.info(f"MetricsWorker initialized with failure_ttl={self._failure_ttl}s")
 
-    def handle_job_failure(self, job: Job, queue: Queue, started_job_registry=None, exc_string: str = ''):
+    def handle_job_failure(self, job: Job, exc_info):
         """Handle job failure with custom failure TTL.
         
         Override the default failure_ttl (1 year) with a configurable value.
+        Signature matches RQ 2.x: handle_job_failure(job, exc_info)
         """
-        # Set the failure_ttl on the job before the parent handles it
         if job.failure_ttl is None:
             job.failure_ttl = self._failure_ttl
             logger.debug(f"Set failure_ttl={self._failure_ttl}s for job {job.id}")
         
-        return super().handle_job_failure(job, queue, started_job_registry, exc_string)
+        return super().handle_job_failure(job, exc_info)
 
     def execute_job(self, job: Job, queue: Queue) -> bool:
         """Execute a job and return success status."""

@@ -13,11 +13,13 @@ from .exceptions import InvalidOptimizerError
 logger = logging.getLogger(__name__)
 
 # Default max_tokens for optimizer LLM calls to prevent truncation of structured outputs.
-# The optimizer generates JSON responses that can be large (improved prompts, analysis, etc.)
-# Without this, responses may be truncated mid-JSON causing parsing failures.
 # Configurable via OPTSTUDIO_LLM_MAX_TOKENS environment variable.
 DEFAULT_MAX_TOKENS = 8192
-LLM_MAX_TOKENS = int(os.getenv("OPTSTUDIO_LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
+try:
+    LLM_MAX_TOKENS = int(os.getenv("OPTSTUDIO_LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
+except ValueError:
+    logger.warning(f"Invalid OPTSTUDIO_LLM_MAX_TOKENS, using default {DEFAULT_MAX_TOKENS}")
+    LLM_MAX_TOKENS = DEFAULT_MAX_TOKENS
 
 
 class OptimizerFactory:
@@ -66,6 +68,7 @@ class OptimizerFactory:
         
         # Ensure model_params has a reasonable max_tokens to prevent truncation
         # of structured outputs (JSON responses for improved prompts, analysis, etc.)
+        model_params = model_params or {}
         if "max_tokens" not in model_params:
             model_params = {**model_params, "max_tokens": LLM_MAX_TOKENS}
         
