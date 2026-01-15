@@ -248,6 +248,40 @@ class TestEvolutionaryOptimizerEarlyStop:
         assert evaluation_count[0] > 1  # At least baseline + some evaluations
 
 
+def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EvolutionaryOptimizer should evaluate against the validation dataset when supplied."""
+    dataset_train = _make_dataset()
+    dataset_val = _make_dataset()
+    dataset_val.name = "validation-ds"
+
+    optimizer = EvolutionaryOptimizer(
+        model="gpt-4o",
+        skip_perfect_score=False,
+        population_size=2,
+        num_generations=1,
+    )
+
+    calls: list[Any] = []
+
+    def mock_evaluate_prompt(**kwargs):
+        calls.append(kwargs.get("dataset"))
+        return 0.5
+
+    monkeypatch.setattr(optimizer, "evaluate_prompt", mock_evaluate_prompt)
+
+    prompt = ChatPrompt(system="test", user="{question}")
+    optimizer.optimize_prompt(
+        prompt=prompt,
+        dataset=dataset_train,
+        validation_dataset=dataset_val,
+        metric=_metric,
+        max_trials=3,
+    )
+
+    assert calls, "evaluate_prompt should be invoked"
+    assert all(call is dataset_val for call in calls)
+
+
 class TestEvolutionaryOptimizerAgentUsage:
     """Test that self.agent is properly set and used during evaluation."""
 
