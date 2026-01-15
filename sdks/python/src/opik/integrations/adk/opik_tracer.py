@@ -136,7 +136,6 @@ class OpikTracer:
     ) -> None:
         try:
             output = self._last_model_output
-            # Debug logging for callback invocation
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
             if current_span is not None:
@@ -229,63 +228,43 @@ class OpikTracer:
                 return
 
             # Track time-to-first-token: detect first token arrival
+            # We check for first token on EVERY callback (including partial chunks)
+            # to catch the first moment content appears
             if current_span.id in self._ttft_tracking:
                 request_start_time, first_token_time = self._ttft_tracking[
                     current_span.id
                 ]
                 if first_token_time is None:
                     # Check if this response contains actual content (first token)
+                    # Content can be text or function calls (tool calls)
+                    has_content = False
                     try:
-                        output_dict = adk_helpers.convert_adk_base_model_to_dict(
-                            llm_response
-                        )
-                        # Check if there's any text content in the response
-                        has_content = False
-                        if isinstance(output_dict, dict):
-                            # Check various possible content locations
-                            if "content" in output_dict:
-                                content = output_dict["content"]
-                                if isinstance(content, list) and len(content) > 0:
-                                    for part in content:
-                                        if isinstance(part, dict) and part.get("text"):
-                                            has_content = True
-                                            break
-                                elif isinstance(content, str) and content.strip():
+                        # Check the LlmResponse object directly for content structure
+                        if (
+                            llm_response.content is not None
+                            and llm_response.content.parts
+                        ):
+                            for part in llm_response.content.parts:
+                                # Check for text content
+                                if part.text is not None and len(part.text.strip()) > 0:
                                     has_content = True
-                            # Also check for candidates structure (Gemini format)
-                            if not has_content and "candidates" in output_dict:
-                                candidates = output_dict["candidates"]
-                                if isinstance(candidates, list) and len(candidates) > 0:
-                                    candidate = candidates[0]
-                                    if (
-                                        isinstance(candidate, dict)
-                                        and "content" in candidate
-                                    ):
-                                        content = candidate["content"]
-                                        if (
-                                            isinstance(content, dict)
-                                            and "parts" in content
-                                        ):
-                                            parts = content["parts"]
-                                            if isinstance(parts, list):
-                                                for part in parts:
-                                                    if isinstance(
-                                                        part, dict
-                                                    ) and part.get("text"):
-                                                        has_content = True
-                                                        break
-
-                        if has_content:
-                            # First token detected
-                            first_token_time = time.time()
-                            self._ttft_tracking[current_span.id] = (
-                                request_start_time,
-                                first_token_time,
-                            )
+                                    break
+                                # Check for function call content (tool calls)
+                                if part.function_call is not None:
+                                    has_content = True
+                                    break
                     except Exception as e:
                         LOGGER.debug(
-                            f"Error detecting first token for TTFT calculation: {e}",
+                            f"Error checking LlmResponse.content.parts for TTFT: {e}",
                             exc_info=True,
+                        )
+
+                    if has_content:
+                        # First token detected - record the time
+                        first_token_time = time.time()
+                        self._ttft_tracking[current_span.id] = (
+                            request_start_time,
+                            first_token_time,
                         )
 
             # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
@@ -321,7 +300,7 @@ class OpikTracer:
                 current_span.metadata = {}
             current_span.metadata.update(metadata_update)
             current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
-                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION
+                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
             )
 
             current_span.update(
