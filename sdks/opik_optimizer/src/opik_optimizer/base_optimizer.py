@@ -117,6 +117,7 @@ class AlgorithmResult:
 
     best_prompts: "dict[str, chat_prompt.ChatPrompt]"
     best_score: float
+    # TODO(opik_optimizer/#history-schema): replace loose dicts with structured entries.
     history: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -357,6 +358,7 @@ class BaseOptimizer(ABC):
         """
         try:
             opik_optimization = self.opik_client.create_optimization(
+                # TODO(opik_optimizer/#dataset-splits): support dict of datasets (train/val/test) once API allows.
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata=self._build_optimization_metadata(),
