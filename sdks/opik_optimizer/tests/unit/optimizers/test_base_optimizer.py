@@ -727,6 +727,64 @@ def test_evaluate_coerces_infinite_scores(
     assert optimizer._context.trials_completed == 1
 
 
+def test_coerce_score_rejects_nan() -> None:
+    """NaN scores should raise a ValueError."""
+    with pytest.raises(ValueError, match="Score cannot be NaN"):
+        BaseOptimizer._coerce_score(float("nan"))
+
+
+def test_coerce_score_rejects_non_numeric() -> None:
+    """Non-numeric scores should raise a TypeError."""
+    with pytest.raises(TypeError, match="Score must be convertible to float"):
+        BaseOptimizer._coerce_score(object())
+
+
+def test_on_evaluation_handles_non_finite_scores(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    """_on_evaluation should not crash when scores are non-finite."""
+    optimizer = ConcreteOptimizer(model="gpt-4", verbose=1)
+    dataset = MagicMock()
+    metric = MagicMock()
+    agent = MagicMock()
+
+    context = OptimizationContext(
+        prompts={"main": simple_chat_prompt},
+        initial_prompts={"main": simple_chat_prompt},
+        is_single_prompt_optimization=True,
+        dataset=dataset,
+        evaluation_dataset=dataset,
+        validation_dataset=None,
+        metric=metric,
+        agent=agent,
+        optimization=None,
+        optimization_id=None,
+        experiment_config=None,
+        n_samples=None,
+        max_trials=5,
+        project_name="Test",
+        baseline_score=None,
+    )
+    context.current_best_score = float("inf")
+    context.trials_completed = 1
+    optimizer._context = context
+
+    captured: dict[str, Any] = {}
+
+    def fake_display_evaluation_progress(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "opik_optimizer.reporting_utils.display_evaluation_progress",
+        fake_display_evaluation_progress,
+    )
+
+    optimizer._on_evaluation(context, {"main": simple_chat_prompt}, float("inf"))
+
+    assert captured["style"] == "yellow"
+    assert captured["score_text"] == "non-finite score"
+
+
 class TestDeepMergeDicts:
     """Tests for _deep_merge_dicts static method."""
 
