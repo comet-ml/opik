@@ -1039,7 +1039,8 @@ class TestSelectEvaluationDataset:
 
         assert result is validation_ds
 
-    def test_returns_validation_when_warn_unsupported_set(self, optimizer) -> None:
+    def test_returns_training_when_warn_unsupported_set(self, optimizer) -> None:
+        """When warn_unsupported=True, validation_dataset is ignored and training is returned."""
         from opik import Dataset
 
         training_ds = MagicMock(spec=Dataset)
@@ -1051,7 +1052,9 @@ class TestSelectEvaluationDataset:
             training_ds, validation_ds, warn_unsupported=True
         )
 
-        assert result is validation_ds
+        # When warn_unsupported=True, the warning says validation is ignored,
+        # so training dataset should be returned
+        assert result is training_ds
 
 
 class TestSetupOptimization:
