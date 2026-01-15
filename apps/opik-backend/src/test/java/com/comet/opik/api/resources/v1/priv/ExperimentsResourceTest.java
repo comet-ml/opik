@@ -1498,6 +1498,130 @@ class ExperimentsResourceTest {
         }
 
         @Test
+        @DisplayName("when filtering by experiment_scores, then return only experiments with matching scores")
+        void findByExperimentScoresFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create experiments with experiment_scores
+            var scoreName = "exp_score_" + UUID.randomUUID().toString().substring(0, 8);
+            var experimentScores = List.of(
+                    new BigDecimal("0.85"),
+                    new BigDecimal("0.60"),
+                    new BigDecimal("0.35"));
+
+            var experiments = new ArrayList<Experiment>();
+
+            for (int i = 0; i < experimentScores.size(); i++) {
+                var experimentScore = ExperimentScore.builder()
+                        .name(scoreName)
+                        .value(experimentScores.get(i))
+                        .build();
+
+                var experiment = generateExperiment().toBuilder()
+                        .experimentScores(List.of(experimentScore))
+                        .build();
+
+                experiments.add(experiment);
+                createAndAssert(experiment, apiKey, workspaceName);
+            }
+
+            // Test different filter operators
+            var filterTestCases = List.of(
+                    new FilterTestCase(Operator.GREATER_THAN, "0.75", experiments.get(0).id(), 1),
+                    new FilterTestCase(Operator.EQUAL, "0.60", experiments.get(1).id(), 1),
+                    new FilterTestCase(Operator.LESS_THAN, "0.40", experiments.get(2).id(), 1),
+                    new FilterTestCase(Operator.GREATER_THAN_EQUAL, "0.60", null, 2),
+                    new FilterTestCase(Operator.LESS_THAN_EQUAL, "0.60", null, 2));
+
+            for (var testCase : filterTestCases) {
+                var filters = List.of(ExperimentFilter.builder()
+                        .field(ExperimentField.EXPERIMENT_SCORES)
+                        .operator(testCase.operator)
+                        .key(scoreName)
+                        .value(testCase.filterValue)
+                        .build());
+
+                try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                        null, null, filters)) {
+
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                    assertThat(actualPage.total()).isEqualTo(testCase.expectedCount);
+                    assertThat(actualPage.content()).hasSize(testCase.expectedCount);
+
+                    if (testCase.expectedExperimentId != null) {
+                        assertThat(actualPage.content().getFirst().id()).isEqualTo(testCase.expectedExperimentId);
+                    }
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("experimentScoresEmptyOperators")
+        @DisplayName("when filtering by experiment_scores with IS_EMPTY/IS_NOT_EMPTY, then return correct experiments")
+        void findByExperimentScoresEmptyFilter(Operator operator, boolean expectExperimentWithScores) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create experiment with experiment_scores
+            var scoreName = "empty_exp_score_" + UUID.randomUUID().toString().substring(0, 8);
+            var experimentScoreWithScore = ExperimentScore.builder()
+                    .name(scoreName)
+                    .value(new BigDecimal("0.95"))
+                    .build();
+
+            var experimentWithScores = generateExperiment().toBuilder()
+                    .experimentScores(List.of(experimentScoreWithScore))
+                    .build();
+
+            createAndAssert(experimentWithScores, apiKey, workspaceName);
+
+            // Create experiment without experiment_scores
+            var experimentWithoutScores = generateExperiment().toBuilder()
+                    .experimentScores(null)
+                    .build();
+
+            createAndAssert(experimentWithoutScores, apiKey, workspaceName);
+
+            // Filter by experiment_scores with IS_EMPTY or IS_NOT_EMPTY
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.EXPERIMENT_SCORES)
+                    .operator(operator)
+                    .key(scoreName)
+                    .value("")
+                    .build());
+
+            try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                    null, null, filters)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                assertThat(actualPage.total()).isEqualTo(1);
+                assertThat(actualPage.content()).hasSize(1);
+
+                var expectedExperimentId = expectExperimentWithScores
+                        ? experimentWithScores.id()
+                        : experimentWithoutScores.id();
+                assertThat(actualPage.content().getFirst().id()).isEqualTo(expectedExperimentId);
+            }
+        }
+
+        private Stream<Arguments> experimentScoresEmptyOperators() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_NOT_EMPTY, true),
+                    Arguments.of(Operator.IS_EMPTY, false));
+        }
+
+        @Test
         void findAll() {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();

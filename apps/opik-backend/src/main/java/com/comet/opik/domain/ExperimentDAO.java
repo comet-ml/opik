@@ -331,7 +331,7 @@ class ExperimentDAO {
                 SELECT
                     e.id AS experiment_id,
                     JSON_VALUE(score, '$.name') AS name,
-                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                    CAST(JSON_VALUE(score, '$.value') AS Decimal(18, 9)) AS value
                 FROM experiments_final AS e
                 ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
                 WHERE length(e.experiment_scores) > 2
@@ -574,7 +574,7 @@ class ExperimentDAO {
                 SELECT
                     e.id AS experiment_id,
                     JSON_VALUE(score, '$.name') AS name,
-                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                    CAST(JSON_VALUE(score, '$.value') AS Decimal(18, 9)) AS value
                 FROM experiments_initial AS e
                 ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
                 WHERE length(e.experiment_scores) > 2
