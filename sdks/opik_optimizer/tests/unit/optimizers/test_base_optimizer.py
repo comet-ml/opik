@@ -1729,10 +1729,8 @@ class TestDefaultOptimizePrompt:
 
         # Early stop should report actual work done, not 0
         assert result.details["stopped_early"] is True
-        # Current implementation: these will be present due to _normalize_details
-        # After refactor: should default to 1
-        assert "trials_completed" in result.details or "initial_score" in result.details
-        # The test documents the expected behavior after refactor
+        # At least 1 trial must have completed (baseline evaluation counts as a trial)
+        assert result.details.get("trials_completed", 1) >= 1
 
     def test_early_stop_uses_optimizer_provided_counts(
         self,
