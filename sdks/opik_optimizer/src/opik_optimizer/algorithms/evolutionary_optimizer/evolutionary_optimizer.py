@@ -105,7 +105,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
         """Return optimizer-specific configuration for display."""
         return {
-            "optimizer": f"{'DEAP MOO' if self.enable_moo else 'DEAP SO'} Evolutionary Optimization",
+            "optimizer": f"Evolutionary Optimization ({'DEAP MOO' if self.enable_moo else 'DEAP SO'})",
             "population_size": self.population_size,
             "generations": self.num_generations,
             "mutation_rate": self.mutation_rate,
@@ -795,6 +795,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
                     self._add_to_history(gen_round_data)
             finally:
+                if context.finish_reason == "max_trials":
+                    reporting.display_message(
+                        f"Stopped early: max_trials reached after round {self._current_round + 1}",
+                        verbose=self.verbose,
+                    )
                 self._clear_reporter()
 
         # finish_reason is handled by _finalize_finish_reason override

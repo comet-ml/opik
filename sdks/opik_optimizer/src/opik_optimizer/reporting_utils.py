@@ -421,7 +421,14 @@ def _display_chat_prompt_messages_and_tools(
         tool_summary_lines = ["Tools:"]
         for tool in chat_p.tools:
             tool_summary_lines.append(_format_tool_summary(tool))
-        items.append(Text("\n".join(tool_summary_lines), style="dim cyan"))
+        items.append(
+            Panel(
+                Text("\n".join(tool_summary_lines), style="dim cyan"),
+                border_style="dim",
+                width=PANEL_WIDTH,
+                padding=(1, 2),
+            )
+        )
 
     return items
 
