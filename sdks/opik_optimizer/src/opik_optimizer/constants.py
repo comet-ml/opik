@@ -6,6 +6,10 @@ import re
 from typing import Optional
 
 DEFAULT_PROJECT_NAME = "Optimization"
+DEFAULT_EVAL_THREADS = 12
+MIN_EVAL_THREADS = 1
+MAX_EVAL_THREADS = 64
+
 
 def resolve_project_name(project_name: str | None = None) -> str:
     """
@@ -25,3 +29,20 @@ def resolve_project_name(project_name: str | None = None) -> str:
     sanitized = re.sub(r"[^\w\s\-\.\+]", "", candidate).strip()
     return sanitized or DEFAULT_PROJECT_NAME
 
+
+def normalize_eval_threads(n_threads: Optional[int]) -> int:
+    """
+    Clamp and sanitize thread counts for evaluator calls.
+
+    Ensures a positive integer within configured bounds and uses defaults
+    when values are missing or invalid.
+    """
+    candidate = n_threads if n_threads is not None else DEFAULT_EVAL_THREADS
+    try:
+        normalized = int(candidate)
+    except (TypeError, ValueError):
+        normalized = DEFAULT_EVAL_THREADS
+
+    normalized = max(MIN_EVAL_THREADS, normalized)
+    normalized = min(MAX_EVAL_THREADS, normalized)
+    return normalized

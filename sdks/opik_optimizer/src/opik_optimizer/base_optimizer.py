@@ -5,6 +5,7 @@ import logging
 import time
 from abc import ABC
 import random
+import math
 import importlib.metadata
 from dataclasses import dataclass, field
 
@@ -22,6 +23,7 @@ from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from .constants import (
     resolve_project_name,
+    normalize_eval_threads,
 )
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
@@ -189,6 +191,7 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = resolve_project_name()
+        self.n_threads: int = normalize_eval_threads(None)  # Safe default thread count
 
         # Optimization progress tracking
         # These are updated by the base class and can be read by get_metadata
@@ -564,7 +567,7 @@ class BaseOptimizer(ABC):
             agent=context.agent,
             experiment_config=experiment_config,
             n_samples=context.n_samples,
-            n_threads=getattr(self, "n_threads", None),
+            n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
             verbose=0,
         )
 
@@ -1692,6 +1695,7 @@ class BaseOptimizer(ABC):
         return_evaluation_result: bool = False,
     ) -> float | EvaluationResult:
         random.seed(seed)
+        n_threads = normalize_eval_threads(n_threads)
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
@@ -1800,10 +1804,6 @@ class BaseOptimizer(ABC):
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             n_samples = min(n_samples, len(all_ids))
             dataset_item_ids = random.sample(all_ids, n_samples)
-
-        # Ensure num_threads has a default value if None
-        if n_threads is None:
-            n_threads = 12
 
         result = task_evaluator.evaluate(
             dataset=dataset,

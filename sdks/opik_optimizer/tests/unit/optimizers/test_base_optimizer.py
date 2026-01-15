@@ -14,15 +14,18 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
+from decimal import Decimal
 from typing import Any, TYPE_CHECKING, cast
 from unittest.mock import MagicMock
+
+import pytest
 
 from opik_optimizer.base_optimizer import (
     BaseOptimizer,
     OptimizationRound,
     OptimizationContext,
 )
+from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
 
 if TYPE_CHECKING:
@@ -36,6 +39,12 @@ if TYPE_CHECKING:
 class ConcreteOptimizer(BaseOptimizer):
     """Concrete implementation for testing the abstract BaseOptimizer."""
 
+    n_threads: int = 12
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.n_threads = 12
+
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
@@ -45,7 +54,7 @@ class ConcreteOptimizer(BaseOptimizer):
         experiment_config: dict[str, Any] | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        project_name: str = "Optimization",
+        project_name: str | None = None,
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
@@ -607,6 +616,115 @@ def test_evaluate_forwards_configured_n_threads(
 
     assert score == 0.5
     assert captured_call["n_threads"] == optimizer.n_threads
+
+
+def test_normalize_n_threads_clamps_bounds(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    """Thread counts are clamped to safe bounds before evaluator calls."""
+    optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
+    dataset = MagicMock()
+    metric = MagicMock(__name__="metric")
+    agent = MagicMock()
+
+    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
+
+    captured: list[int] = []
+
+    def fake_evaluate(
+        dataset,
+        evaluated_task,
+        metric,
+        num_threads,
+        optimization_id=None,
+        dataset_item_ids=None,
+        project_name=None,
+        n_samples=None,
+        experiment_config=None,
+        verbose=1,
+        return_evaluation_result=False,
+    ):
+        captured.append(num_threads)
+        return 1.0
+
+    monkeypatch.setattr(
+        "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
+    )
+
+    # Below minimum should clamp to MIN_EVAL_THREADS
+    optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        n_threads=0,
+        verbose=0,
+    )
+
+    # Above maximum should clamp to MAX_EVAL_THREADS
+    optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        n_threads=10_000,
+        verbose=0,
+    )
+
+    assert captured[0] == MIN_EVAL_THREADS
+    assert captured[1] == MAX_EVAL_THREADS
+
+
+def test_evaluate_coerces_infinite_scores(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    """Metrics returning non-builtin numerics (e.g., Decimal('Infinity')) are coerced safely."""
+    optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
+    dataset = MagicMock()
+    metric = MagicMock()
+    agent = MagicMock()
+
+    optimizer._context = OptimizationContext(
+        prompts={"main": simple_chat_prompt},
+        initial_prompts={"main": simple_chat_prompt},
+        is_single_prompt_optimization=True,
+        dataset=dataset,
+        evaluation_dataset=dataset,
+        validation_dataset=None,
+        metric=metric,
+        agent=agent,
+        optimization=None,
+        optimization_id=None,
+        experiment_config=None,
+        n_samples=None,
+        max_trials=3,
+        project_name="Test",
+        baseline_score=None,
+        current_best_score=float("inf"),
+    )
+
+    def fake_evaluate_prompt(
+        self,
+        *,
+        prompt,
+        dataset,
+        metric,
+        agent,
+        experiment_config,
+        n_samples,
+        n_threads,
+        verbose,
+        **kwargs,
+    ):
+        return Decimal("Infinity")
+
+    monkeypatch.setattr(ConcreteOptimizer, "evaluate_prompt", fake_evaluate_prompt)
+
+    score = optimizer.evaluate({"main": simple_chat_prompt})
+
+    assert score == float("inf")
+    assert optimizer._context.current_best_score == float("inf")
+    assert optimizer._context.trials_completed == 1
 
 
 class TestDeepMergeDicts:
