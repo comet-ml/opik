@@ -713,7 +713,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     self._best_primary_score_history = best_primary_score_history
 
                     if should_restart:
-                        evo_reporter.restart_population(self.DEFAULT_RESTART_GENERATIONS)
+                        evo_reporter.restart_population(
+                            self.DEFAULT_RESTART_GENERATIONS
+                        )
                         deap_population = population_ops.restart_population(
                             optimizer=self,
                             hof=hof,
