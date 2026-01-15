@@ -161,14 +161,11 @@ def _patch_openai_videos(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
 ) -> None:
-    from .videos import (
-        VideosCreateTrackDecorator,
-        VideosDownloadTrackDecorator,
-    )
+    from . import videos
 
     provider = _get_provider(openai_client)
-    create_decorator_factory = VideosCreateTrackDecorator(provider=provider)
-    download_decorator_factory = VideosDownloadTrackDecorator()
+    create_decorator_factory = videos.VideosCreateTrackDecorator(provider=provider)
+    download_decorator_factory = videos.VideosDownloadTrackDecorator()
 
     video_metadata = {"created_from": "openai", "type": "openai_videos"}
     video_tags = ["openai"]
