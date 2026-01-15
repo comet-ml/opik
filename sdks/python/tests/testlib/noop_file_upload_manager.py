@@ -40,6 +40,7 @@ class FileUploadManagerEmulator(base_upload_manager.BaseFileUploadManager):
         )
 
     def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
+        self.uploads = []
         return True
 
     def all_done(self) -> bool:

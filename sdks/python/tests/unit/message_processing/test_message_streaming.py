@@ -11,7 +11,7 @@ NOT_USED = sentinel.NOT_USED
 
 
 @pytest.fixture
-def batched_streamer_and_mock_message_processor(noop_file_upload_preprocessor):
+def batched_streamer_and_mock_message_processor(fake_file_upload_preprocessor):
     tested = None
     try:
         mock_message_processor = mock.Mock()
@@ -20,7 +20,7 @@ def batched_streamer_and_mock_message_processor(noop_file_upload_preprocessor):
             n_consumers=1,
             use_batching=True,
             use_attachment_extraction=False,
-            upload_preprocessor=noop_file_upload_preprocessor,
+            upload_preprocessor=fake_file_upload_preprocessor,
             max_queue_size=None,
         )
 
@@ -55,7 +55,7 @@ def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
     ],
 )
 def test_streamer__batching_disabled__messages_that_support_batching_are_processed_independently(
-    objects, noop_file_upload_preprocessor
+    objects, fake_file_upload_preprocessor
 ):
     mock_message_processor = mock.Mock()
     tested = None
@@ -65,7 +65,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             n_consumers=1,
             use_batching=False,
             use_attachment_extraction=False,
-            upload_preprocessor=noop_file_upload_preprocessor,
+            upload_preprocessor=fake_file_upload_preprocessor,
             max_queue_size=None,
         )
 

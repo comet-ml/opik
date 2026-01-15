@@ -38,9 +38,9 @@ def shutdown_cached_client_after_test():
 
 
 @pytest.fixture
-def noop_file_upload_preprocessor():
-    fake_upload_manager = noop_file_upload_manager.FileUploadManagerEmulator()
-    yield file_upload_preprocessor.FileUploadPreprocessor(fake_upload_manager)
+def fake_file_upload_preprocessor():
+    upload_manager_emulator = noop_file_upload_manager.FileUploadManagerEmulator()
+    yield file_upload_preprocessor.FileUploadPreprocessor(upload_manager_emulator)
 
 
 @pytest.fixture
