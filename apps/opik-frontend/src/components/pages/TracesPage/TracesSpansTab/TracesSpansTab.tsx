@@ -15,7 +15,9 @@ import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
+import isArray from "lodash/isArray";
 import get from "lodash/get";
+import uniq from "lodash/uniq";
 import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
@@ -25,6 +27,7 @@ import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
+import useTracesOrSpansMetadataPaths from "@/hooks/useTracesOrSpansMetadataPaths";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
@@ -170,16 +173,6 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Metadata",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata,
-    cell: CodeCell as never,
   },
   {
     id: "tags",
@@ -535,6 +528,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const { metadataPaths } = useTracesOrSpansMetadataPaths(
+    {
+      projectId,
+      type: type as TRACE_DATA_TYPE,
+      filters, // Pass filters to narrow metadata columns to filtered data
+    },
+    {
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
   const noData = !search && filters.length === 0;
   const noDataText = noData
     ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
@@ -575,6 +579,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     defaultValue: [],
   });
 
+  const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
+    string[]
+  >("traces-metadata-columns-order", {
+    defaultValue: [],
+  });
+  const [metadataMainColumnOrder, setMetadataMainColumnOrder] =
+    useLocalStorageState<string[]>("traces-metadata-main-column-order", {
+      defaultValue: [COLUMN_METADATA_ID],
+    });
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
@@ -602,10 +616,75 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       }));
   }, [spanFeedbackScoresData?.scores, type]);
 
+  const dynamicMetadataColumns = useMemo(() => {
+    const paths = metadataPaths ?? [];
+
+    // Filter out paths that contain array indices (e.g., "metadata.some_list[0].field")
+    // and extract base array paths (e.g., "metadata.some_list")
+    const filteredPaths = paths.filter((path) => {
+      // Filter out paths that start with underscore (internal/private fields)
+      const fieldName = path.startsWith("metadata.")
+        ? path.substring("metadata.".length)
+        : path;
+      if (fieldName.startsWith("_")) {
+        return false;
+      }
+
+      // Filter out paths that contain array indices
+      // e.g., exclude "metadata.some_list[0].field" but keep "metadata.some_list"
+      if (path.includes("[")) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // Extract base array paths from paths that were filtered out
+    // e.g., from "metadata.some_list[0].field" extract "metadata.some_list"
+    const arrayBasePaths = new Set<string>();
+    paths.forEach((path) => {
+      if (path.includes("[")) {
+        // Extract the base path before the first "["
+        const basePath = path.substring(0, path.indexOf("["));
+        const fieldName = basePath.startsWith("metadata.")
+          ? basePath.substring("metadata.".length)
+          : basePath;
+        // Only include if it doesn't start with underscore
+        if (!fieldName.startsWith("_")) {
+          arrayBasePaths.add(basePath);
+        }
+      }
+    });
+
+    // Combine filtered paths and array base paths, then deduplicate
+    const allPaths = uniq([
+      ...filteredPaths,
+      ...Array.from(arrayBasePaths),
+    ]).sort();
+
+    return allPaths.map<DynamicColumn>((path) => {
+      // Use "." prefix to indicate it's a path
+      // e.g., "metadata.time_to_first_token" -> ".time_to_first_token"
+      // Indentation is handled by SortableMenuItem component (adds pl-4 padding)
+      const label = path.startsWith("metadata.")
+        ? `.${path.substring("metadata.".length)}`
+        : `.${path}`;
+
+      return {
+        id: path, // e.g., "metadata.time_to_first_token" or "metadata.some_list"
+        label: label, // e.g., ".time_to_first_token" or ".some_list"
+        columnType: COLUMN_TYPE.string, // Default to string, could auto-detect
+      };
+    });
+  }, [metadataPaths]);
+
+  // Only include feedback scores in dynamic columns cache (auto-selects new ones)
+  // Metadata columns are NOT auto-selected - users must manually choose them
   const dynamicColumnsIds = useMemo(
     () => [
       ...dynamicScoresColumns.map((c) => c.id),
       ...dynamicSpanScoresColumns.map((c) => c.id),
+      // Note: metadata columns are NOT included here - they won't be auto-selected
     ],
     [dynamicScoresColumns, dynamicSpanScoresColumns],
   );
@@ -671,6 +750,61 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
     return feedbackScoresColumns;
   }, [dynamicScoresColumns, dynamicSpanScoresColumns, type]);
+
+  // Metadata main column (single "Metadata" column)
+  const metadataMainColumnData = useMemo(() => {
+    return [
+      {
+        id: COLUMN_METADATA_ID,
+        label: "Metadata",
+        type: COLUMN_TYPE.dictionary,
+        accessorFn: (row) =>
+          isObject(row.metadata)
+            ? JSON.stringify(row.metadata, null, 2)
+            : row.metadata,
+        cell: CodeCell as never,
+      },
+    ] as ColumnData<BaseTraceData>[];
+  }, []);
+
+  const metadataColumnsData = useMemo(() => {
+    // Add individual metadata field columns (without main "Metadata" column)
+    const fieldColumns = dynamicMetadataColumns.map(({ label, id }) => {
+      // Change label from ".ITEM" to "Metadata.ITEM"
+      const columnLabel = label.startsWith(".")
+        ? `Metadata${label}`
+        : `Metadata.${label}`;
+
+      return {
+        id,
+        label: columnLabel,
+        type: COLUMN_TYPE.string,
+        sortable: false, // Disable sorting for metadata columns - backend may not fully support it yet
+        accessorFn: (row) => {
+        // Use lodash/get to extract nested value
+        // This will return undefined if the path doesn't exist (e.g.,
+        // LLM span doesn't have metadata.tool_name)
+        const value = get(row, id);
+
+        // Handle missing values - show "-" if field doesn't exist
+        // This happens when viewing spans of different types
+        if (value === undefined || value === null) {
+          return "-";
+        }
+
+        // Format arrays and objects as JSON
+        if (isArray(value) || isObject(value)) {
+          return JSON.stringify(value, null, 2);
+        }
+
+        return String(value);
+      },
+      cell: CodeCell as never,
+      };
+    }) as ColumnData<BaseTraceData>[];
+
+    return fieldColumns;
+  }, [dynamicMetadataColumns, sortableBy]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -806,6 +940,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
+      // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
   }, [type, handleThreadIdClick, isGuardrailsEnabled]);
 
@@ -918,6 +1053,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sortableColumns: sortableBy,
         },
       ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        metadataMainColumnData,
+        {
+          columnsOrder: metadataMainColumnOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        metadataColumnsData,
+        {
+          columnsOrder: metadataColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
     ];
   }, [
     handleRowClick,
@@ -927,6 +1078,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
+    metadataMainColumnData,
+    metadataMainColumnOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -976,7 +1131,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const columnSections = useMemo(() => {
-    return [
+    const sections = [
       {
         title: "Feedback scores",
         columns: scoresColumnsData,
@@ -984,7 +1139,37 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         onOrderChange: setScoresColumnsOrder,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
+    // Add Metadata section (single column, no title) between Feedback scores and Metadata items
+    sections.push({
+      title: "", // Empty title to hide section label
+      columns: metadataMainColumnData,
+      order: metadataMainColumnOrder,
+      onOrderChange: setMetadataMainColumnOrder,
+    });
+
+    // Add Metadata items section if there are metadata columns
+    if (metadataColumnsData.length > 0) {
+      sections.push({
+        title: "Metadata items",
+        columns: metadataColumnsData,
+        order: metadataColumnsOrder,
+        onOrderChange: setMetadataColumnsOrder,
+      });
+    }
+
+    return sections;
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    metadataMainColumnData,
+    metadataMainColumnOrder,
+    setMetadataMainColumnOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
+    setMetadataColumnsOrder,
+  ]);
 
   if (isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending) {
     return <Loader />;
@@ -1064,6 +1249,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            excludeFromSelectAll={
+              metadataColumnsData.length > 0
+                ? metadataColumnsData.map((col) => col.id)
+                : []
+            }
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>

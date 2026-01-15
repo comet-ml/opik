@@ -30,6 +30,9 @@ const SortableMenuItem: React.FunctionComponent<SortableMenuItemProps> = ({
     transition,
   };
 
+  // Check if this is an indented metadata path (starts with "." but not "All")
+  const isIndented = label.trim().startsWith(".") && id !== "metadata";
+
   return (
     <DropdownMenuCustomCheckboxItem
       ref={setNodeRef}
@@ -37,6 +40,7 @@ const SortableMenuItem: React.FunctionComponent<SortableMenuItemProps> = ({
       {...attributes}
       className={cn("group", {
         "z-10": id === active?.id,
+        "metadata-indented": isIndented, // Add class for indented metadata items
       })}
       checked={checked}
       onCheckedChange={() => onCheckboxChange(id)}

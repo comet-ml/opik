@@ -795,3 +795,12 @@ div.cm-theme div.cm-search.cm-panel {
 .react-grid-item:hover > .react-resizable-handle::after {
   border-color: hsl(var(--muted-slate)) !important;
 }
+
+// Indent metadata path entries in column selector
+.metadata-indented {
+  padding-left: 3rem !important; // Indent the entire item
+
+  > span.absolute {
+    left: 1rem !important; // Move checkbox to the right (from left-2 which is 0.5rem to 1rem)
+  }
+}
