@@ -517,6 +517,7 @@ class BaseOptimizer(ABC):
                     is_single_prompt_optimization=context.is_single_prompt_optimization,
                 ),
             )
+            baseline_score = self._coerce_score(baseline_score)
             baseline_reporter.set_score(baseline_score)
 
         return baseline_score
@@ -564,6 +565,7 @@ class BaseOptimizer(ABC):
             n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
             verbose=0,
         )
+        score = self._coerce_score(score)
 
         # Increment trial counter
         context.trials_completed += 1
@@ -667,6 +669,8 @@ class BaseOptimizer(ABC):
         state = self.get_progress_state()
         display_info = self.get_evaluation_display_info()
         best_score = state.get("best_score") or 0.0
+        score_is_finite = math.isfinite(score)
+        best_is_finite = math.isfinite(best_score) if best_score is not None else True
 
         # Build progress prefix based on optimizer state
         prefix_parts = []
@@ -684,7 +688,10 @@ class BaseOptimizer(ABC):
         )
 
         # Display score with comparison to best
-        if best_score == 0 and score > 0:
+        if not score_is_finite or not best_is_finite:
+            style = "yellow"
+            score_text = f"{score}" if score_is_finite else "non-finite score"
+        elif best_score == 0 and score > 0:
             style = "green"
             score_text = f"{score:.4f}"
         elif best_score == 0 and score == 0:
@@ -1625,6 +1632,26 @@ class BaseOptimizer(ABC):
                 time.sleep(5)
         if count == 3:
             logger.warning("Unable to update optimization status; continuing...")
+
+    @staticmethod
+    def _coerce_score(raw_score: Any) -> float:
+        """
+        Normalize scores returned by metrics into builtin floats.
+
+        Avoids comparison issues when metrics return Decimals, numpy scalars,
+        or other numeric types (including inf).
+        """
+        try:
+            score = float(raw_score)
+        except (TypeError, ValueError):
+            raise TypeError(
+                f"Score must be convertible to float, got {type(raw_score).__name__}"
+            )
+
+        if math.isnan(score):
+            raise ValueError("Score cannot be NaN.")
+
+        return score
 
     def _finalize_optimization(
         self,
