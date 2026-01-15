@@ -60,7 +60,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       return;
     }
 
-    client = new Opik({apiUrl: "http://localhost:5173/api/"});
+    client = new Opik();
   });
 
   afterAll(async () => {
