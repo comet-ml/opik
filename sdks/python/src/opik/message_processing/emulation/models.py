@@ -31,6 +31,25 @@ class FeedbackScoreModel:
 
 
 @dataclasses.dataclass
+class AttachmentModel:
+    """
+    Represents a model for an attachment associated with a span or trace.
+
+    This class stores metadata about files or data attached to spans or traces,
+    including the file path, name, and content type.
+
+    Attributes:
+        file_path: Path to the attached file.
+        file_name: Name of the attached file.
+        content_type: MIME type of the attached file.
+    """
+
+    file_path: str
+    file_name: str
+    content_type: Optional[str] = None
+
+
+@dataclasses.dataclass
 class SpanModel:
     """
     Represents a span model used to describe specific points in a process, their metadata,
@@ -86,6 +105,7 @@ class SpanModel:
     error_info: Optional[ErrorInfoDict] = None
     total_cost: Optional[float] = None
     last_updated_at: Optional[datetime.datetime] = None
+    attachments: Optional[List[AttachmentModel]] = None
 
 
 @dataclasses.dataclass
@@ -160,3 +180,4 @@ class TraceModel:
     error_info: Optional[ErrorInfoDict] = None
     thread_id: Optional[str] = None
     last_updated_at: Optional[datetime.datetime] = None
+    attachments: Optional[List[AttachmentModel]] = None

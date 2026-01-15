@@ -1,6 +1,7 @@
 from typing import Optional, TypeVar
 
 import openai
+import opik
 
 from . import (
     chat_completion_chunks_aggregator,
@@ -9,6 +10,13 @@ from . import (
 import opik.semantic_version as semantic_version
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
+
+
+def _get_provider(openai_client: OpenAIClient) -> str:
+    """Get the provider name from the OpenAI client's base URL."""
+    if openai_client.base_url.host != "api.openai.com":
+        return openai_client.base_url.host
+    return "openai"
 
 
 def track_openai(
@@ -27,6 +35,9 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
+      `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
+      and `write_to_file()` on downloaded content
 
     Can be used within other Opik-tracked functions.
 
@@ -47,6 +58,9 @@ def track_openai(
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
 
+    if hasattr(openai_client, "videos"):
+        _patch_openai_videos(openai_client, project_name)
+
     return openai_client
 
 
@@ -57,8 +71,7 @@ def _patch_openai_chat_completions(
     chat_completions_decorator_factory = (
         openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
     )
-    if openai_client.base_url.host != "api.openai.com":
-        chat_completions_decorator_factory.provider = openai_client.base_url.host
+    chat_completions_decorator_factory.provider = _get_provider(openai_client)
 
     completions_create_decorator = chat_completions_decorator_factory.track(
         type="llm",
@@ -119,8 +132,7 @@ def _patch_openai_responses(
     responses_decorator_factory = (
         openai_responses_decorator.OpenaiResponsesTrackDecorator()
     )
-    if openai_client.base_url.host != "api.openai.com":
-        responses_decorator_factory.provider = openai_client.base_url.host
+    responses_decorator_factory.provider = _get_provider(openai_client)
 
     if hasattr(openai_client.responses, "create"):
         responses_create_decorator = responses_decorator_factory.track(
@@ -143,3 +155,86 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_videos(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    from . import videos
+
+    provider = _get_provider(openai_client)
+    create_decorator_factory = videos.VideosCreateTrackDecorator(provider=provider)
+    download_decorator_factory = videos.VideosDownloadTrackDecorator()
+
+    video_metadata = {"created_from": "openai", "type": "openai_videos"}
+    video_tags = ["openai"]
+
+    if hasattr(openai_client.videos, "create"):
+        decorator = create_decorator_factory.track(
+            type="llm",
+            name="videos.create",
+            project_name=project_name,
+        )
+        openai_client.videos.create = decorator(openai_client.videos.create)
+
+    if hasattr(openai_client.videos, "create_and_poll"):
+        decorator = opik.track(
+            name="videos.create_and_poll",
+            tags=video_tags,
+            metadata=video_metadata,
+            project_name=project_name,
+        )
+        openai_client.videos.create_and_poll = decorator(
+            openai_client.videos.create_and_poll
+        )
+
+    if hasattr(openai_client.videos, "remix"):
+        decorator = create_decorator_factory.track(
+            type="llm",
+            name="videos.remix",
+            project_name=project_name,
+        )
+        openai_client.videos.remix = decorator(openai_client.videos.remix)
+
+    # Note: videos.retrieve is intentionally NOT patched to avoid too many spans
+    # since it's called frequently during polling operations.
+
+    if hasattr(openai_client.videos, "poll"):
+        decorator = opik.track(
+            name="videos.poll",
+            tags=video_tags,
+            metadata=video_metadata,
+            project_name=project_name,
+        )
+        openai_client.videos.poll = decorator(openai_client.videos.poll)
+
+    if hasattr(openai_client.videos, "delete"):
+        decorator = opik.track(
+            name="videos.delete",
+            tags=video_tags,
+            metadata=video_metadata,
+            project_name=project_name,
+        )
+        openai_client.videos.delete = decorator(openai_client.videos.delete)
+
+    # Patch download_content - also patches write_to_file on returned instances
+    # download_content returns a lazy response object, write_to_file does the actual download
+    if hasattr(openai_client.videos, "download_content"):
+        decorator = download_decorator_factory.track(
+            type="general",
+            name="videos.download_content",
+            project_name=project_name,
+        )
+        openai_client.videos.download_content = decorator(
+            openai_client.videos.download_content
+        )
+
+    if hasattr(openai_client.videos, "list"):
+        decorator = opik.track(
+            name="videos.list",
+            tags=video_tags,
+            metadata=video_metadata,
+            project_name=project_name,
+        )
+        openai_client.videos.list = decorator(openai_client.videos.list)

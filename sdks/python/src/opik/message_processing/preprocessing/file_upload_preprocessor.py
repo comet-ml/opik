@@ -19,7 +19,7 @@ class FileUploadPreprocessor(preprocessor.MessagePreprocessor):
     def __init__(
         self, file_upload_manager: base_upload_manager.BaseFileUploadManager
     ) -> None:
-        self._file_upload_manager = file_upload_manager
+        self.file_upload_manager = file_upload_manager
 
     def preprocess(
         self, message: Optional[messages.BaseMessage]
@@ -29,10 +29,10 @@ class FileUploadPreprocessor(preprocessor.MessagePreprocessor):
             return None
 
         if base_upload_manager.message_supports_upload(message):
-            self._file_upload_manager.upload(message)
+            self.file_upload_manager.upload(message)
             return None
 
         return message
 
     def flush(self, timeout: Optional[float], sleep_time: int) -> bool:
-        return self._file_upload_manager.flush(timeout=timeout, sleep_time=sleep_time)
+        return self.file_upload_manager.flush(timeout=timeout, sleep_time=sleep_time)

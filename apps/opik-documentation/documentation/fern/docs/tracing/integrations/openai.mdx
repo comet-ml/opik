@@ -210,6 +210,63 @@ _ = wrapped_client.responses.create(
 
 More information on logging chat conversations can be found in the [Log conversations](/tracing/log_chat_conversations) section.
 
+## Video Generation (Sora)
+
+The `track_openai` wrapper also supports OpenAI's video generation API (Sora). When you generate videos, Opik automatically tracks the video creation process and logs the generated video as an attachment when you download it via the client API.
+
+```python
+import os
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+os.environ["OPIK_PROJECT_NAME"] = "openai-video-demo"
+
+client = OpenAI()
+tracked_client = track_openai(client)
+
+
+@track
+def generate_video(prompt: str) -> dict:
+    """Generate a video using OpenAI's Sora model."""
+    # Create video and wait for completion
+    video = tracked_client.videos.create_and_poll(
+        model="sora-2",
+        prompt=prompt,
+    )
+
+    result = {"id": video.id, "status": video.status}
+
+    # Download the video if generation succeeded
+    # If OpenAI moderation rejected your request - you'll see it in the create_and_poll span output
+    if video.status == "completed":
+        content = tracked_client.videos.download_content(video_id=video.id)
+        content.write_to_file("output_video.mp4")
+        result["output_path"] = "output_video.mp4"
+
+    return result
+
+
+# Generate a video
+generate_video("A golden retriever playing in the snow")
+```
+
+The trace will show the full video generation workflow including the video creation, polling, download, and the generated video as an attachment:
+
+<Frame>
+  <img src="/img/tracing/openai_video_integration.png" />
+</Frame>
+
+<Tip>
+  The `videos.retrieve` method is intentionally not tracked because the `poll` method makes many retrieve calls internally, which would create excessive noise in your traces. If you need to track retrieve calls (e.g. if you don't use `poll` and check the progress manually), you can decorate the method yourself:
+
+  ```python
+  tracked_client.videos.retrieve = opik.track(name="videos.retrieve")(
+      tracked_client.videos.retrieve
+  )
+  ```
+</Tip>
+
 ## Supported OpenAI methods
 
 The `track_openai` wrapper supports the following OpenAI methods:
@@ -218,5 +275,11 @@ The `track_openai` wrapper supports the following OpenAI methods:
 - `openai_client.beta.chat.completions.parse()`
 - `openai_client.beta.chat.completions.stream()`
 - `openai_client.responses.create()`
+- `openai_client.videos.create()`
+- `openai_client.videos.create_and_poll()`
+- `openai_client.videos.poll()`
+- `openai_client.videos.download_content()`
+- `openai_client.videos.list()`
+- `openai_client.videos.delete()`
 
 If you would like to track another OpenAI method, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).

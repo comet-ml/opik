@@ -1,9 +1,12 @@
 import datetime
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, TYPE_CHECKING
 
 from opik.message_processing.emulation import emulator_message_processor
 from opik.types import ErrorInfoDict, SpanType
 from . import models
+
+if TYPE_CHECKING:
+    from . import noop_file_upload_manager
 
 
 class BackendEmulatorMessageProcessor(
@@ -12,10 +15,21 @@ class BackendEmulatorMessageProcessor(
     """
     This class serves as a replacement for the real backend. It collects all logged messages
     to be used in tests.
+
+    Optionally accepts a file_upload_manager to access attachment data that was
+    intercepted by the FileUploadPreprocessor before reaching the message processor.
     """
 
-    def __init__(self, active: bool = True, merge_duplicates: bool = True) -> None:
+    def __init__(
+        self,
+        active: bool = True,
+        merge_duplicates: bool = True,
+        file_upload_manager: Optional[
+            "noop_file_upload_manager.FileUploadManagerEmulator"
+        ] = None,
+    ) -> None:
         super().__init__(active=active, merge_duplicates=merge_duplicates)
+        self._file_upload_manager = file_upload_manager
 
     def create_trace_model(
         self,
@@ -118,3 +132,60 @@ class BackendEmulatorMessageProcessor(
             category_name=category_name,
             reason=reason,
         )
+
+    @property
+    def trace_trees(self) -> List[models.TraceModel]:
+        """
+        Override to add attachments from the file upload manager.
+
+        Attachments are intercepted by FileUploadPreprocessor before reaching
+        the message processor, so we need to get them from the upload manager.
+        """
+        # Get base trace trees from parent
+        traces = super().trace_trees
+
+        # If we have a file upload manager, add attachments to spans and traces
+        if self._file_upload_manager is not None:
+            self._add_attachments_to_traces(traces)
+
+        return traces
+
+    def _add_attachments_to_traces(self, traces: List[models.TraceModel]) -> None:
+        """Add attachments from file upload manager to traces and their spans."""
+        for trace in traces:
+            # Add trace-level attachments
+            trace_attachments = self._file_upload_manager.attachments_by_trace.get(
+                trace.id, []
+            )
+            if trace_attachments:
+                trace.attachments = [
+                    models.AttachmentModel(
+                        file_path=att.file_path,
+                        file_name=att.file_name,
+                        content_type=att.mime_type or "",
+                    )
+                    for att in trace_attachments
+                ]
+
+            # Add span-level attachments recursively
+            self._add_attachments_to_spans(trace.spans)
+
+    def _add_attachments_to_spans(self, spans: List[models.SpanModel]) -> None:
+        """Recursively add attachments to spans."""
+        for span in spans:
+            span_attachments = self._file_upload_manager.attachments_by_span.get(
+                span.id, []
+            )
+            if span_attachments:
+                span.attachments = [
+                    models.AttachmentModel(
+                        file_path=att.file_path,
+                        file_name=att.file_name,
+                        content_type=att.mime_type or "",
+                    )
+                    for att in span_attachments
+                ]
+
+            # Recurse into nested spans
+            if span.spans:
+                self._add_attachments_to_spans(span.spans)
