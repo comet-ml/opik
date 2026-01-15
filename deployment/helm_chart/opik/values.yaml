@@ -418,6 +418,7 @@ redis:
     size: 8Gi
 
 altinity-clickhouse-operator:
+  enabled: true
   metrics:
     enabled: false
   serviceMonitor:
