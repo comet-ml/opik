@@ -552,6 +552,315 @@ Please enjoy your extended stay.`;
       expect(diff).toContain("amazing");
       expect(diff).toContain("extended");
     });
+
+    it("should compare multimodal content with text, images, and show diff markers", () => {
+      const messages1 = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Describe the image in detail." },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://picsum.photos/id/237/200/300",
+                detail: "high",
+                width: 800,
+              },
+            },
+          ],
+        },
+      ];
+
+      const messages2 = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Please describe the image in detail, including colors.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://picsum.photos/id/237/200/500",
+                detail: "low",
+                height: 600,
+              },
+              my_metadata: "my_metadata",
+            },
+          ],
+        },
+      ];
+
+      const version1 = new PromptVersion({
+        versionId: "version-1",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages1),
+        commit: "abc123",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const version2 = new PromptVersion({
+        versionId: "version-2",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages2),
+        commit: "def456",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff = version1.compareTo(version2);
+
+      // Verify structure
+      expect(diff).toContain("Message 1 [user]:");
+      expect(diff).toContain("Type: text");
+      expect(diff).toContain("Type: image_url");
+
+      // Verify diff markers (- from version2, + from version1)
+      expect(diff).toContain("+     Describe the image in detail.");
+      expect(diff).toContain(
+        "-     Please describe the image in detail, including colors."
+      );
+      expect(diff).toContain("+     URL: https://picsum.photos/id/237/200/300");
+      expect(diff).toContain("-     URL: https://picsum.photos/id/237/200/500");
+
+      // Verify property changes
+      expect(diff).toContain("+     detail: high");
+      expect(diff).toContain("-     detail: low");
+      expect(diff).toContain("+     width: 800");
+      expect(diff).toContain("-     height: 600");
+      expect(diff).toContain("-     my_metadata: my_metadata");
+    });
+
+    it("should handle video content and additional properties", () => {
+      const messages1 = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: "https://example.com/video1.mp4",
+                mime_type: "video/mp4",
+                duration: 120,
+                format: "h264",
+                custom_prop: "custom1",
+              },
+              timestamp: "2024-01-01",
+            },
+          ],
+        },
+      ];
+
+      const messages2 = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: "https://example.com/video2.mp4",
+                mime_type: "video/webm",
+                duration: 180,
+                bitrate: 5000,
+                custom_prop: "custom2",
+              },
+              timestamp: "2024-01-02",
+            },
+          ],
+        },
+      ];
+
+      const version1 = new PromptVersion({
+        versionId: "version-1",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages1),
+        commit: "abc123",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const version2 = new PromptVersion({
+        versionId: "version-2",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages2),
+        commit: "def456",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff = version1.compareTo(version2);
+
+      // Verify structure
+      expect(diff).toContain("Message 1 [user]:");
+      expect(diff).toContain("Type: video_url");
+
+      // Verify URL changes
+      expect(diff).toContain("+     URL: https://example.com/video1.mp4");
+      expect(diff).toContain("-     URL: https://example.com/video2.mp4");
+
+      // Verify property changes with diff markers
+      expect(diff).toContain("+     mime_type: video/mp4");
+      expect(diff).toContain("-     mime_type: video/webm");
+      expect(diff).toContain("+     duration: 120");
+      expect(diff).toContain("-     duration: 180");
+      expect(diff).toContain("+     format: h264");
+      expect(diff).toContain("-     bitrate: 5000");
+      expect(diff).toContain("+     custom_prop: custom1");
+      expect(diff).toContain("-     custom_prop: custom2");
+      expect(diff).toContain("+     timestamp: 2024-01-01");
+      expect(diff).toContain("-     timestamp: 2024-01-02");
+    });
+
+    it("should handle mixed content types including unrecognized types", () => {
+      const messages1 = [
+        { role: "system", content: "You are helpful" },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Compare these",
+              language: "en",
+            },
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/img1.jpg" },
+            },
+            {
+              type: "audio",
+              audio_data: "base64data",
+            },
+          ],
+        },
+      ];
+
+      const messages2 = [
+        { role: "system", content: "You are friendly" },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Compare those",
+              language: "fr",
+            },
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/img2.jpg" },
+            },
+            {
+              type: "audio",
+              audio_data: "different_base64data",
+            },
+          ],
+        },
+      ];
+
+      const version1 = new PromptVersion({
+        versionId: "version-1",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages1),
+        commit: "abc123de",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const version2 = new PromptVersion({
+        versionId: "version-2",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages2),
+        commit: "def456gh",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff = version1.compareTo(version2);
+
+      // Verify commit hashes in headers
+      expect(diff).toContain("abc123de");
+      expect(diff).toContain("def456gh");
+
+      // Verify multiple messages structure
+      expect(diff).toContain("Message 1 [system]");
+      expect(diff).toContain("Message 2 [user]");
+
+      // Verify system message diff
+      expect(diff).toContain("+   You are helpful");
+      expect(diff).toContain("-   You are friendly");
+
+      // Verify text content diff with diff markers
+      expect(diff).toContain("+     Compare these");
+      expect(diff).toContain("-     Compare those");
+      expect(diff).toContain("+     language: en");
+      expect(diff).toContain("-     language: fr");
+
+      // Verify image URL changes with diff markers
+      expect(diff).toContain("Type: image_url");
+      expect(diff).toContain("+     URL: https://example.com/img1.jpg");
+      expect(diff).toContain("-     URL: https://example.com/img2.jpg");
+
+      // Verify unrecognized type handling
+      expect(diff).toContain("Type: audio");
+      expect(diff).toContain("[Difference found in unrecognized content type]");
+      expect(diff).not.toContain("base64data");
+    });
+
+    it("should handle edge cases (empty messages, no commits, identical prompts)", () => {
+      // Test with empty vs non-empty
+      const emptyVersion = new PromptVersion({
+        versionId: "version-1",
+        name: "test-prompt",
+        prompt: JSON.stringify([]),
+        commit: "unknown",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const nonEmptyVersion = new PromptVersion({
+        versionId: "version-2",
+        name: "test-prompt",
+        prompt: JSON.stringify([{ role: "user", content: "Hello" }]),
+        commit: "unknown",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff1 = emptyVersion.compareTo(nonEmptyVersion);
+      // Verify structure and added content with diff marker
+      expect(diff1).toContain("Message 1 [user]");
+      expect(diff1).toContain("-   Hello");
+      expect(diff1).toContain("unknown");
+
+      // Test identical prompts
+      const messages = [{ role: "system", content: "You are helpful" }];
+
+      const identicalVersion1 = new PromptVersion({
+        versionId: "version-1",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages),
+        commit: "abc123",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const identicalVersion2 = new PromptVersion({
+        versionId: "version-2",
+        name: "test-prompt",
+        prompt: JSON.stringify(messages),
+        commit: "def456",
+        promptId: "prompt-123",
+        type: PromptType.MUSTACHE,
+      });
+
+      const diff2 = identicalVersion1.compareTo(identicalVersion2);
+      expect(diff2).toBeDefined();
+      expect(diff2).toContain("abc123");
+      expect(diff2).toContain("def456");
+      // For identical content, there should be no diff markers, just context
+      expect(diff2).toContain("You are helpful");
+    });
   });
 
   describe("fromApiResponse", () => {

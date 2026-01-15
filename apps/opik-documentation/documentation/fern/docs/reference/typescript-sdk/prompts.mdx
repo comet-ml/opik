@@ -11,7 +11,12 @@ The Opik TypeScript SDK provides comprehensive prompt management functionality f
 
 ## Introduction
 
-A prompt in Opik is a versioned template with variables that can be formatted at runtime. Each prompt:
+Opik supports two types of prompts:
+
+- **Text Prompts**: Simple string templates for single-turn interactions
+- **Chat Prompts**: Structured message-based templates for conversational AI with support for multimodal content (text, images, videos)
+
+Each prompt:
 
 - Has a unique name and auto-generated versions
 - Supports Mustache or Jinja2 template syntax
@@ -21,9 +26,11 @@ A prompt in Opik is a versioned template with variables that can be formatted at
 
 ## Getting Started
 
+This section covers text prompts. For chat prompts with structured messages, see the [Chat Prompts](#chat-prompts) section.
+
 ### Creating Your First Prompt
 
-Create a prompt with the `createPrompt` method:
+Create a text prompt with the `createPrompt` method:
 
 ```typescript
 import { Opik, PromptType } from "opik";
@@ -193,16 +200,17 @@ Search and filter prompts using [Opik Query Language (OQL)](/docs/opik/reference
 
 **Supported Fields:**
 
-| Field             | Type     | Description                   | Example                                 |
-| ----------------- | -------- | ----------------------------- | --------------------------------------- |
-| `id`              | String   | Unique prompt identifier      | `id = "prompt-123"`                     |
-| `name`            | String   | Prompt name                   | `name contains "greeting"`              |
-| `description`     | String   | Prompt description            | `description contains "template"`       |
-| `tags`            | List     | Prompt tags                   | `tags contains "production"`            |
-| `created_by`      | String   | Creator email/identifier      | `created_by = "user@example.com"`       |
-| `created_at`      | DateTime | Creation timestamp            | `created_at > "2024-01-01"`             |
-| `last_updated_by` | String   | Last updater email/identifier | `last_updated_by = "admin@example.com"` |
-| `last_updated_at` | DateTime | Last update timestamp         | `last_updated_at > "2024-01-01"`        |
+| Field                | Type     | Description                   | Example                                 |
+| -------------------- | -------- | ----------------------------- | --------------------------------------- |
+| `id`                 | String   | Unique prompt identifier      | `id = "prompt-123"`                     |
+| `name`               | String   | Prompt name                   | `name contains "greeting"`              |
+| `description`        | String   | Prompt description            | `description contains "template"`       |
+| `tags`               | List     | Prompt tags                   | `tags contains "production"`            |
+| `template_structure` | String   | Prompt type (text or chat)    | `template_structure = "chat"`           |
+| `created_by`         | String   | Creator email/identifier      | `created_by = "user@example.com"`       |
+| `created_at`         | DateTime | Creation timestamp            | `created_at > "2024-01-01"`             |
+| `last_updated_by`    | String   | Last updater email/identifier | `last_updated_by = "admin@example.com"` |
+| `last_updated_at`    | DateTime | Last update timestamp         | `last_updated_at > "2024-01-01"`        |
 
 **Search Examples:**
 
@@ -221,7 +229,16 @@ const prodPrompts = await client.searchPrompts('tags contains "production"');
 
 // Search by creator
 const myPrompts = await client.searchPrompts(
-  'created_by = "alice@company.com"'
+  'created_by = "alice@company.com"',
+);
+
+// Filter by prompt type
+const chatPrompts = await client.searchPrompts('template_structure = "chat"');
+const textPrompts = await client.searchPrompts('template_structure = "text"');
+
+// Combine filters
+const prodChatPrompts = await client.searchPrompts(
+  'template_structure = "chat" AND tags contains "production"',
 );
 ```
 
@@ -421,6 +438,453 @@ const prompt = await client.createPrompt({
 const prodPrompts = await client.searchPrompts('tags contains "production"');
 ```
 
+## Chat Prompts
+
+Chat prompts are structured message-based templates designed for conversational AI applications. They support multiple message roles (system, user, assistant) and multimodal content including text, images, and videos.
+
+### Key Features
+
+- **Structured Messages**: Organize prompts as a list of messages with roles (system, user, assistant)
+- **Multimodal Support**: Include images, videos, and text in the same prompt
+- **Variable Substitution**: Use Mustache (`{{variable}}`) or Jinja2 syntax
+- **Version Control**: Automatic versioning when messages change
+- **Template Validation**: Optional validation of template placeholders
+
+### Creating Chat Prompts
+
+Create chat prompts using the `createChatPrompt` method:
+
+```typescript
+import { Opik, PromptType } from "opik";
+
+const client = new Opik();
+
+// Define chat messages with variables
+const messages = [
+  {
+    role: "system",
+    content: "You are a helpful assistant specializing in {{domain}}.",
+  },
+  {
+    role: "user",
+    content: "Explain {{topic}} in simple terms.",
+  },
+];
+
+// Create a chat prompt
+const chatPrompt = await client.createChatPrompt({
+  name: "educational-assistant",
+  messages: messages,
+  type: PromptType.MUSTACHE,
+  metadata: { category: "education" },
+  tags: ["education", "assistant"],
+});
+
+console.log(`Created chat prompt with commit: ${chatPrompt.commit}`);
+```
+
+### Formatting Chat Prompts
+
+Format chat prompts with variables to get ready-to-use message arrays:
+
+```typescript
+const chatPrompt = await client.getChatPrompt({
+  name: "educational-assistant",
+});
+
+if (chatPrompt) {
+  // Format the messages with variables
+  const formattedMessages = chatPrompt.format({
+    domain: "physics",
+    topic: "quantum entanglement",
+  });
+
+  console.log(formattedMessages);
+  // Output:
+  // [
+  //   { role: "system", content: "You are a helpful assistant specializing in physics." },
+  //   { role: "user", content: "Explain quantum entanglement in simple terms." }
+  // ]
+}
+```
+
+### Multi-Turn Conversations
+
+Create templates for multi-turn conversations:
+
+```typescript
+const messages = [
+  {
+    role: "system",
+    content: "You are a customer support agent for {{company}}.",
+  },
+  {
+    role: "user",
+    content: "I have an issue with {{product}}.",
+  },
+  {
+    role: "assistant",
+    content: "I'd be happy to help with your {{product}}. Can you describe the issue?",
+  },
+  {
+    role: "user",
+    content: "{{issue_description}}",
+  },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "customer-support-flow",
+  messages: messages,
+});
+
+// Format with specific values
+const formatted = chatPrompt.format({
+  company: "Acme Corp",
+  product: "Widget Pro",
+  issue_description: "It won't turn on",
+});
+```
+
+### Multimodal Chat Prompts
+
+Chat prompts support multimodal content for vision-enabled models:
+
+#### Image Analysis
+
+```typescript
+// Chat prompt with image content
+const messages = [
+  {
+    role: "system",
+    content: "You analyze images and provide detailed descriptions.",
+  },
+  {
+    role: "user",
+    content: [
+      { type: "text", text: "What's in this image of {{subject}}?" },
+      {
+        type: "image_url",
+        image_url: {
+          url: "{{image_url}}",
+          detail: "high",
+        },
+      },
+    ],
+  },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "image-analyzer",
+  messages: messages,
+});
+
+// Format with variables
+const formatted = chatPrompt.format(
+  {
+    subject: "a sunset",
+    image_url: "https://example.com/sunset.jpg",
+  },
+  { vision: true }, // Supported modalities
+);
+```
+
+#### Video Analysis
+
+```typescript
+// Chat prompt with video content
+const messages = [
+  {
+    role: "system",
+    content: "You analyze videos and provide insights.",
+  },
+  {
+    role: "user",
+    content: [
+      { type: "text", text: "Analyze this video: {{description}}" },
+      {
+        type: "video_url",
+        video_url: {
+          url: "{{video_url}}",
+          mime_type: "video/mp4",
+        },
+      },
+    ],
+  },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "video-analyzer",
+  messages: messages,
+});
+
+// Format with variables
+const formatted = chatPrompt.format(
+  {
+    description: "traffic analysis",
+    video_url: "https://example.com/traffic.mp4",
+  },
+  { vision: true, video: true },
+);
+```
+
+#### Mixed Content
+
+```typescript
+// Chat prompt with multiple images and text
+const messages = [
+  {
+    role: "user",
+    content: [
+      { type: "text", text: "Compare these two images:" },
+      {
+        type: "image_url",
+        image_url: { url: "{{image1_url}}" },
+      },
+      { type: "text", text: "and" },
+      {
+        type: "image_url",
+        image_url: { url: "{{image2_url}}" },
+      },
+      { type: "text", text: "What are the main differences?" },
+    ],
+  },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "image-comparison",
+  messages: messages,
+});
+
+const formatted = chatPrompt.format(
+  {
+    image1_url: "https://example.com/before.jpg",
+    image2_url: "https://example.com/after.jpg",
+  },
+  { vision: true },
+);
+```
+
+<Note>
+  When formatting multimodal prompts, you can specify `supportedModalities` to
+  control how content is rendered:
+
+- If a modality is supported (e.g., `{ vision: true }`), the structured content is preserved
+- If a modality is not supported, it's replaced with text placeholders (e.g., `<<<image>>><<</image>>>`)
+
+This allows you to use the same prompt template with different models that may or may not support certain modalities.
+
+</Note>
+
+### Retrieving Chat Prompts
+
+Get chat prompts by name or specific version:
+
+```typescript
+// Get latest version
+const chatPrompt = await client.getChatPrompt({
+  name: "educational-assistant",
+});
+
+if (chatPrompt) {
+  console.log(`Messages: ${JSON.stringify(chatPrompt.messages)}`);
+  console.log(`Commit: ${chatPrompt.commit}`);
+}
+
+// Get specific version
+const oldVersion = await client.getChatPrompt({
+  name: "educational-assistant",
+  commit: "abc123de",
+});
+```
+
+### Searching Chat Prompts
+
+Search for chat prompts specifically using the `template_structure` filter:
+
+```typescript
+// Search for only chat prompts
+const chatPrompts = await client.searchPrompts(
+  'template_structure = "chat" AND name contains "assistant"',
+);
+
+for (const prompt of chatPrompts) {
+  console.log(`Chat prompt: ${prompt.name}`);
+}
+
+// Search for text prompts only
+const textPrompts = await client.searchPrompts('template_structure = "text"');
+```
+
+Without the `template_structure` filter, `searchPrompts` returns both text and chat prompts.
+
+### Template Types for Chat Prompts
+
+Chat prompts support two template types:
+
+#### Mustache (Default)
+
+```typescript
+import { PromptType } from "opik";
+
+const messages = [
+  {
+    role: "user",
+    content: "Hello {{name}}, you live in {{city}}.",
+  },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "mustache-example",
+  messages: messages,
+  type: PromptType.MUSTACHE, // Default
+});
+
+const formatted = chatPrompt.format({
+  name: "Alice",
+  city: "Paris",
+});
+// Result: [{ role: "user", content: "Hello Alice, you live in Paris." }]
+```
+
+#### Jinja2
+
+```typescript
+import { PromptType } from "opik";
+
+const messages = [
+  {
+    role: "user",
+    content: `
+      {% if is_premium %}
+      Hello {{ name }}, welcome to our premium service!
+      {% else %}
+      Hello {{ name }}, welcome!
+      {% endif %}
+    `,
+  },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "jinja-example",
+  messages: messages,
+  type: PromptType.JINJA2,
+});
+
+// With premium user
+const formatted1 = chatPrompt.format({
+  name: "Alice",
+  is_premium: true,
+});
+// Result includes: "Hello Alice, welcome to our premium service!"
+
+// With regular user
+const formatted2 = chatPrompt.format({
+  name: "Bob",
+  is_premium: false,
+});
+// Result includes: "Hello Bob, welcome!"
+```
+
+<Note>
+  Jinja2 templates support advanced features like conditionals, loops, and
+  filters, making them more powerful for complex prompt logic. However, Mustache
+  templates are simpler and more portable.
+</Note>
+
+### Chat Prompt Versioning
+
+Chat prompts are automatically versioned when the messages change:
+
+```typescript
+// Create initial version
+const messagesV1 = [
+  { role: "system", content: "You are helpful." },
+  { role: "user", content: "Hi!" },
+];
+
+const chatPrompt = await client.createChatPrompt({
+  name: "greeting-prompt",
+  messages: messagesV1,
+});
+
+console.log(`Version 1 commit: ${chatPrompt.commit}`);
+
+// Update with new messages - creates new version
+const messagesV2 = [
+  { role: "system", content: "You are a helpful assistant." },
+  { role: "user", content: "Hello {{name}}!" },
+];
+
+const chatPromptV2 = await client.createChatPrompt({
+  name: "greeting-prompt",
+  messages: messagesV2,
+  changeDescription: "Added personalization with name variable",
+});
+
+console.log(`Version 2 commit: ${chatPromptV2.commit}`);
+
+// Get version history
+const versions = await chatPrompt.getVersions();
+console.log(`Total versions: ${versions.length}`);
+```
+
+### Version Management for Chat Prompts
+
+Chat prompts support the same version management features as text prompts:
+
+```typescript
+const chatPrompt = await client.getChatPrompt({
+  name: "greeting-prompt",
+});
+
+// Get all versions
+const versions = await chatPrompt.getVersions();
+
+// Get specific version
+const oldVersion = await chatPrompt.getVersion("abc123de");
+
+// Compare versions
+if (versions.length >= 2) {
+  const current = versions[0];
+  const previous = versions[1];
+  const diff = current.compareTo(previous);
+  console.log(diff);
+}
+
+// Restore previous version
+const targetVersion = versions.find((v) => v.commit === "abc123de");
+if (targetVersion) {
+  const restoredPrompt = await chatPrompt.useVersion(targetVersion);
+  console.log(`Restored to commit: ${restoredPrompt.commit}`);
+}
+```
+
+### Updating Chat Prompt Properties
+
+Update chat prompt metadata without creating new versions:
+
+```typescript
+const chatPrompt = await client.getChatPrompt({
+  name: "greeting-prompt",
+});
+
+// Update name, description, or tags
+await chatPrompt.updateProperties({
+  name: "welcome-prompt",
+  description: "Updated greeting template",
+  tags: ["welcome", "production", "v2"],
+});
+
+console.log(`Updated prompt name: ${chatPrompt.name}`);
+```
+
+<Note>
+  Updating properties (`name`, `description`, `tags`) does **not** create a new
+  version. Only changes to the **messages**, **metadata**, or **type** trigger
+  version creation.
+</Note>
+
+
 ## API Reference
 
 ### OpikClient Methods
@@ -479,6 +943,50 @@ Deletes multiple prompts and all their versions.
 - `ids: string[]` - Array of prompt IDs to delete
 
 **Returns:** `Promise<void>`
+
+#### `createChatPrompt(options)`
+
+Creates a new chat prompt or returns existing version if content unchanged.
+
+**Arguments:**
+
+- `options.name: string` - Chat prompt name (required)
+- `options.messages: ChatMessage[]` - Array of chat messages with roles and content (required)
+- `options.type?: PromptType` - Template engine (default: `MUSTACHE`)
+- `options.promptId?: string` - Optional prompt ID
+- `options.description?: string` - Optional description
+- `options.metadata?: JsonNode` - Optional metadata
+- `options.changeDescription?: string` - Version change description
+- `options.tags?: string[]` - Optional tags
+
+**Returns:** `Promise<ChatPrompt>` - Created or existing chat prompt
+
+**ChatMessage Format:**
+
+```typescript
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string | ContentPart[];
+}
+
+interface ContentPart {
+  type: "text" | "image_url" | "video_url";
+  text?: string; // For text type
+  image_url?: { url: string; detail?: string }; // For image_url type
+  video_url?: { url: string; mime_type?: string }; // For video_url type
+}
+```
+
+#### `getChatPrompt(options)`
+
+Retrieves a chat prompt by name and optional version.
+
+**Arguments:**
+
+- `options.name: string` - Chat prompt name (required)
+- `options.commit?: string` - Optional commit hash for specific version
+
+**Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance or null if not found
 
 ### Prompt Class
 
@@ -599,3 +1107,96 @@ Compares this version's template with another version.
 - `changeDescription?: string` - Version change description
 - `createdAt?: Date` - Creation timestamp
 - `createdBy?: string` - Creator identifier
+
+### ChatPrompt Class
+
+The `ChatPrompt` class extends `BasePrompt` and provides chat-specific functionality for managing structured message-based prompts.
+
+#### Methods
+
+##### `format(variables, supportedModalities?)`
+
+Formats the chat prompt messages with provided variables.
+
+**Arguments:**
+
+- `variables: Record<string, unknown>` - Variables to substitute in message content
+- `supportedModalities?: SupportedModalities` - Optional modality support configuration
+
+**SupportedModalities Format:**
+
+```typescript
+interface SupportedModalities {
+  vision?: boolean; // Support for image content (default: true)
+  video?: boolean; // Support for video content (default: true)
+}
+```
+
+**Returns:** `ChatMessage[]` - Array of formatted chat messages
+
+**Throws:** `PromptValidationError` if required variables missing (Mustache only)
+
+**Example:**
+
+```typescript
+const formatted = chatPrompt.format(
+  { name: "Alice", topic: "AI" },
+  { vision: true, video: false },
+);
+```
+
+##### `getVersions()`
+
+Retrieves all version history for this chat prompt.
+
+**Returns:** `Promise<PromptVersion[]>` - Array of all versions (newest first)
+
+##### `getVersion(commit)`
+
+Gets a specific version as a ChatPrompt instance.
+
+**Arguments:**
+
+- `commit: string` - Commit hash (8-char or full)
+
+**Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance or null if not found
+
+##### `useVersion(version)`
+
+Restores a specific version by creating a new version with old content.
+
+**Arguments:**
+
+- `version: PromptVersion` - Version object to restore
+
+**Returns:** `Promise<ChatPrompt>` - New chat prompt instance with restored content
+
+##### `updateProperties(updates)`
+
+Updates chat prompt properties without creating new version.
+
+**Arguments:**
+
+- `updates.name?: string` - New prompt name
+- `updates.description?: string` - New description
+- `updates.tags?: string[]` - New tags array
+
+**Returns:** `Promise<this>` - This chat prompt instance (for chaining)
+
+##### `delete()`
+
+Deletes this chat prompt and all its versions.
+
+**Returns:** `Promise<void>`
+
+#### Properties
+
+- `id: string` - Unique chat prompt identifier
+- `name: string` - Chat prompt name
+- `messages: ChatMessage[]` - Array of chat messages with roles and content
+- `commit?: string` - Current version commit hash
+- `type: PromptType` - Template engine type
+- `description?: string` - Chat prompt description
+- `tags?: readonly string[]` - Chat prompt tags
+- `metadata?: JsonNode` - Chat prompt metadata
+- `changeDescription?: string` - Latest version change description
