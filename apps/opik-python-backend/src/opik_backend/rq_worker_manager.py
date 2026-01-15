@@ -111,8 +111,11 @@ class RqWorkerManager:
         """Clean up stale worker registrations from this process on startup.
 
         When containers restart without graceful shutdown, old worker registrations
-        remain in Redis. This method only cleans up workers that belong to our
+        remain in Redis. This method cleans up workers that belong to our
         hostname AND our PID - avoiding interference with other processes.
+
+        In Docker/containerized environments, PIDs are often reused (e.g., PID 9),
+        so we must clean up any workers with our prefix before starting new ones.
         """
         try:
             redis_client = redis_utils.get_redis_client()
@@ -132,7 +135,15 @@ class RqWorkerManager:
                 )
                 for worker in our_workers:
                     try:
-                        worker.register_death()
+                        # Remove from workers set first
+                        redis_client.srem("rq:workers", f"rq:worker:{worker.name}")
+                        # Delete the worker hash
+                        redis_client.delete(f"rq:worker:{worker.name}")
+                        # Try register_death for any additional cleanup
+                        try:
+                            worker.register_death()
+                        except Exception:
+                            pass  # May fail if already cleaned up
                         logger.info(f"Cleaned up stale worker: {worker.name}")
                     except Exception as e:
                         logger.warning(f"Failed to clean up worker {worker.name}: {e}")

@@ -1,6 +1,7 @@
 """Optimizer factory for Optimization Studio."""
 
 import logging
+import os
 from typing import Dict, Type, Any
 
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
@@ -10,6 +11,13 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_re
 from .exceptions import InvalidOptimizerError
 
 logger = logging.getLogger(__name__)
+
+# Default max_tokens for optimizer LLM calls to prevent truncation of structured outputs.
+# The optimizer generates JSON responses that can be large (improved prompts, analysis, etc.)
+# Without this, responses may be truncated mid-JSON causing parsing failures.
+# Configurable via OPTSTUDIO_LLM_MAX_TOKENS environment variable.
+DEFAULT_MAX_TOKENS = 8192
+LLM_MAX_TOKENS = int(os.getenv("OPTSTUDIO_LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
 
 
 class OptimizerFactory:
@@ -55,6 +63,11 @@ class OptimizerFactory:
                 optimizer_type,
                 f"Available optimizers: {available}"
             )
+        
+        # Ensure model_params has a reasonable max_tokens to prevent truncation
+        # of structured outputs (JSON responses for improved prompts, analysis, etc.)
+        if "max_tokens" not in model_params:
+            model_params = {**model_params, "max_tokens": LLM_MAX_TOKENS}
         
         logger.info(f"Initializing {optimizer_type} optimizer with params: {optimizer_params}")
         
