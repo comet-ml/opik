@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
@@ -41,7 +42,7 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { DELETED_DATASET_LABEL, GROUPING_KEY } from "@/constants/groups";
 import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
@@ -113,6 +114,34 @@ export const useExperimentsTableConfig = <
     setSelectedColumns,
   });
 
+  /**
+   * Generates a unique row ID for an experiment.
+   * When grouping is active, the same experiment can appear in multiple groups
+   * (e.g., when grouping by tags, an experiment with multiple tags appears once per tag).
+   * This method creates unique IDs by combining the experiment ID with grouping field values.
+   *
+   * @param row - The experiment row
+   * @returns A unique row ID (either simple "experimentId" or compound "experimentId|field:value")
+   */
+  const getExperimentRowId = useMemo(() => {
+    return (row: T) => {
+      // Find all grouping fields in the row
+      const groupingFields = Object.keys(row).filter((key) =>
+        key.startsWith(GROUPING_KEY),
+      );
+
+      if (groupingFields.length > 0) {
+        // Create a unique ID by combining the experiment ID with all grouping field values
+        const groupParts = groupingFields
+          .map((field) => `${field}:${row[field as keyof T]}`)
+          .join("|");
+        return `${row.id}|${groupParts}`;
+      }
+
+      return row.id;
+    };
+  }, []);
+
   const { checkboxClickHandler } = useMemo(() => {
     return {
       checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
@@ -173,9 +202,28 @@ export const useExperimentsTableConfig = <
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
-    return experiments.filter(
-      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
-    );
+    const selected = experiments.filter((row) => {
+      if (checkIsGroupRowType(row.id)) {
+        return false;
+      }
+
+      // Check if this experiment is selected using either simple or compound ID
+      // When grouping is active, the rowSelection keys are compound IDs like "experimentId|grouping_field:value"
+      // We need to check both the simple ID and all possible compound IDs
+      if (rowSelection[row.id]) {
+        return true;
+      }
+
+      // Check if any compound ID containing this experiment ID is selected
+      return Object.keys(rowSelection).some((selectionKey) => {
+        return (
+          selectionKey.startsWith(`${row.id}|`) && rowSelection[selectionKey]
+        );
+      });
+    });
+
+    // Deduplicate by experiment ID since the same experiment can appear in multiple groups
+    return uniqBy(selected, "id");
   }, [rowSelection, experiments]);
 
   const groupFieldNames = useMemo(
@@ -354,6 +402,9 @@ export const useExperimentsTableConfig = <
     scoresColumnsData,
     checkboxClickHandler,
     groupFieldNames,
+
+    // Utility methods
+    getExperimentRowId,
 
     // Configs
     sortConfig,
