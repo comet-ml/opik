@@ -379,4 +379,70 @@ public interface DatasetVersionDAO {
             @Bind("items_deleted") int itemsDeleted,
             @Bind("workspace_id") String workspaceId,
             @Bind("last_updated_by") String lastUpdatedBy);
+
+    @SqlUpdate("""
+            INSERT INTO dataset_versions (
+                id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
+                change_description, metadata, created_by, last_updated_by, workspace_id,
+                created_at, last_updated_at
+            )
+            SELECT
+                :version_id,
+                :dataset_id,
+                'v1',
+                0,
+                0,
+                0,
+                0,
+                'Initial version',
+                NULL,
+                d.created_by,
+                d.last_updated_by,
+                d.workspace_id,
+                d.created_at,
+                d.last_updated_at
+            FROM datasets d
+            WHERE d.id = :dataset_id
+              AND d.workspace_id = :workspace_id
+              AND NOT EXISTS (
+                  SELECT 1 FROM dataset_versions
+                  WHERE dataset_id = :dataset_id
+              )
+            """)
+    int ensureVersion1Exists(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_id") UUID versionId,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("""
+            UPDATE dataset_versions
+            SET items_total = :items_total,
+                last_updated_at = NOW()
+            WHERE id = :version_id
+            """)
+    void updateItemsTotal(@Bind("version_id") UUID versionId,
+            @Bind("items_total") long itemsTotal);
+
+    @SqlUpdate("""
+            INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id, created_at, last_updated_at)
+            SELECT
+                :dataset_id,
+                'latest',
+                :version_id,
+                d.created_by,
+                d.last_updated_by,
+                d.workspace_id,
+                d.created_at,
+                d.last_updated_at
+            FROM datasets d
+            WHERE d.id = :dataset_id
+              AND d.workspace_id = :workspace_id
+              AND NOT EXISTS (
+                  SELECT 1 FROM dataset_version_tags
+                  WHERE dataset_id = :dataset_id
+                    AND tag = 'latest'
+              )
+            """)
+    int ensureLatestTagExists(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_id") UUID versionId,
+            @Bind("workspace_id") String workspaceId);
 }

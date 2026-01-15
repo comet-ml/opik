@@ -507,6 +507,18 @@ traceThreadConfig:
   # Default: 4s
   # Description: The time to wait for the close trace threads job to finish before releasing the lock
   closeTraceThreadJobLockTime: 3s
+
+# Dataset Versioning Migration configuration
+datasetVersioningMigration:
+  # Default: false for testing
+  # Description: Whether to run the dataset versioning migration on startup
+  enabled: false
+  # Default: 100
+  # Description: Number of datasets to process in each batch
+  batchSize: 100
+  # Default: 3600 (1 hour)
+  # Description: Lock timeout in seconds for the migration process
+  lockTimeoutSeconds: 3600
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms
