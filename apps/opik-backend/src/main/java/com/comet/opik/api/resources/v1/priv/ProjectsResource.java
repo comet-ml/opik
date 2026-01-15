@@ -236,6 +236,7 @@ public class ProjectsResource {
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
         request = request.toBuilder()
+                .spanFilters(filtersFactory.validateFilter(request.spanFilters()))
                 .traceFilters(filtersFactory.validateFilter(request.traceFilters()))
                 .threadFilters(filtersFactory.validateFilter(request.threadFilters()))
                 .build();

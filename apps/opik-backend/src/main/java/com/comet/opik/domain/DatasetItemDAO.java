@@ -12,7 +12,6 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -31,6 +30,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,7 +39,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -72,7 +72,13 @@ public interface DatasetItemDAO {
     Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
 
-    Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
+    /**
+     * Retrieves the column definitions (column names and their types) for the dataset items' data field.
+     *
+     * @param datasetId The ID of the dataset
+     * @return A Mono containing a map of column names to their types
+     */
+    Mono<Map<String, List<String>>> getColumns(UUID datasetId);
 }
 
 @Singleton
@@ -106,7 +112,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 created_by,
                 last_updated_by
             )
-            VALUES
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values
                 <items:{item |
                     (
                          :id<item.index>,
@@ -137,6 +144,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             AND workspace_id = :workspace_id
             ORDER BY last_updated_at DESC
             LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -151,6 +159,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -160,6 +169,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(ids)> AND id IN :ids <endif>
             <if(dataset_id)> AND dataset_id = :dataset_id <endif>
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -184,6 +194,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit OFFSET :offset
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -215,6 +226,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS lastRows
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -244,6 +256,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -262,6 +275,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                      LIMIT 1 BY id
                      ) AS lastRows
             GROUP BY dataset_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -403,6 +417,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             AND <search_filter>
             <endif>
             <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -411,6 +426,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 DISTINCT id, workspace_id
             FROM dataset_items
             WHERE id IN :datasetItemIds
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -766,6 +782,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ORDER BY id DESC, last_updated_at DESC
             <endif>
             LIMIT :limit OFFSET :offset
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -823,6 +840,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT trace_id FROM experiment_items_final)
             ) as t ON t.id = ei.trace_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -866,18 +884,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
-            LIMIT 1 BY s.id;
-            """;
-
-    private static final String SELECT_DRAFT_ITEM_IDS_AND_HASHES = """
-            SELECT
-                id,
-                data_hash
-            FROM dataset_items
-            WHERE dataset_id = :datasetId
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            LIMIT 1 BY s.id
+            SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
@@ -1092,6 +1100,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM experiment_items_filtered ei
             LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
             LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1116,17 +1125,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Mono<Long> mapAndInsert(
             UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
 
-        List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
-
-        var template = TemplateUtils.newST(sqlTemplate)
-                .add("items", queryItems);
-
-        String sql = template.render();
-
-        var statement = connection.createStatement(sql);
-
         return makeMonoContextAware((userName, workspaceId) -> {
+            List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
+            var template = getSTWithLogComment(sqlTemplate, "save_dataset_items", workspaceId, items.size())
+                    .add("items", queryItems);
+
+            String sql = template.render();
+
+            var statement = connection.createStatement(sql);
             statement.bind("workspace_id", workspaceId);
 
             int i = 0;
@@ -1177,17 +1184,18 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
                 datasetId, limit, lastRetrievedId);
 
-        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_STREAM);
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
+                    datasetId.toString());
 
-        if (lastRetrievedId != null) {
-            template.add("lastRetrievedId", lastRetrievedId);
-        }
-
-        return asyncTemplate.stream(connection -> {
+            if (lastRetrievedId != null) {
+                template.add("lastRetrievedId", lastRetrievedId);
+            }
 
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", datasetId)
-                    .bind("limit", limit);
+                    .bind("limit", limit)
+                    .bind("workspace_id", workspaceId);
 
             if (lastRetrievedId != null) {
                 statement.bind("lastRetrievedId", lastRetrievedId);
@@ -1195,10 +1203,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_stream");
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(DatasetItemResultMapper::mapItem);
-        });
+        }));
     }
 
     @Override
@@ -1248,25 +1256,27 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     public Mono<List<Column>> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var template = TemplateUtils.newST(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID);
+            var template = getSTWithLogComment(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID,
+                    "get_output_columns", workspaceId, datasetId.toString());
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", experimentIds);
             }
 
             var statement = connection.createStatement(template.render())
-                    .bind("dataset_id", datasetId);
+                    .bind("dataset_id", datasetId)
+                    .bind("workspace_id", workspaceId);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
             }
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            return Mono.from(statement.execute())
                     .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "output"))
                     .map(List::copyOf);
-        });
+        }));
     }
 
     @Override
@@ -1284,30 +1294,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             log.info("Deleting dataset items from dataset '{}' with filters", datasetId);
         }
 
-        var template = TemplateUtils.newST(DELETE_DATASET_ITEM);
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(DELETE_DATASET_ITEM, "delete_dataset_items", workspaceId,
+                    hasIds ? ids.size() : 0);
 
-        // Add ids or filters to template
-        // Delete by specific IDs (mutually exclusive with dataset_id + filters)
-        if (hasIds) {
-            template.add("ids", true);
-        } else {
-            // Delete by dataset_id with optional filters (mutually exclusive with ids)
-            template.add("dataset_id", true);
+            // Add ids or filters to template
+            // Delete by specific IDs (mutually exclusive with dataset_id + filters)
+            if (hasIds) {
+                template.add("ids", true);
+            } else {
+                // Delete by dataset_id with optional filters (mutually exclusive with ids)
+                template.add("dataset_id", true);
 
-            // Add additional filters if provided
-            if (CollectionUtils.isNotEmpty(filters)) {
-                Optional<String> datasetItemFiltersOpt = filterQueryBuilder.toAnalyticsDbFilters(filters,
-                        FilterStrategy.DATASET_ITEM);
+                // Add additional filters if provided
+                if (CollectionUtils.isNotEmpty(filters)) {
+                    Optional<String> datasetItemFiltersOpt = filterQueryBuilder.toAnalyticsDbFilters(filters,
+                            FilterStrategy.DATASET_ITEM);
 
-                datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                        datasetItemFilters));
+                    datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                            datasetItemFilters));
+                }
             }
-        }
 
-        var query = template.render();
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(query);
+            var query = template.render();
+            var statement = connection.createStatement(query)
+                    .bind("workspace_id", workspaceId);
 
             // Bind ids if provided
             if (hasIds) {
@@ -1328,16 +1339,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     ? "Completed delete for '%s' dataset items".formatted(ids.size())
                     : "Completed delete for dataset items matching filters";
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum)
                     .doFinally(signalType -> endSegment(segment))
                     .doOnSuccess(__ -> log.info(successMessage));
-        });
+        }));
     }
 
-    private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        var template = TemplateUtils.newST(query);
+    private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria, String queryName,
+            String workspaceId) {
+        var template = getSTWithLogComment(query, queryName, workspaceId, "");
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1401,64 +1413,70 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return Mono.zip(countMono, columnsMono)
                 .doFinally(signalType -> endSegment(segment))
-                .flatMap(results -> asyncTemplate.nonTransaction(connection -> {
+                .flatMap(results -> asyncTemplate
+                        .nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-                    Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE, contentSegmentName);
+                            Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE, contentSegmentName);
 
-                    var selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
-                    selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
-                            datasetItemSearchCriteria.truncate());
-                    selectTemplate = selectTemplate.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize());
+                            var selectTemplate = newFindTemplate(query, datasetItemSearchCriteria, contentSegmentName,
+                                    workspaceId);
+                            selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
+                                    datasetItemSearchCriteria.truncate());
+                            selectTemplate = selectTemplate.add("truncationSize",
+                                    configuration.getResponseFormatting().getTruncationSize());
 
-                    // Add sorting if present
-                    var finalTemplate = selectTemplate;
-                    if (datasetItemSearchCriteria.sortingFields() != null) {
-                        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields(),
-                                filterQueryBuilder
-                                        .buildDatasetItemFieldMapping(datasetItemSearchCriteria.sortingFields())))
-                                .ifPresent(sortFields -> {
-                                    // feedback_scores is now exposed at outer query level via argMax(tfs.feedback_scores, ei.created_at)
-                                    // so we don't need to map it to tfs.feedback_scores anymore
-                                    finalTemplate.add("sort_fields", sortFields);
-                                });
-                    }
+                            // Add sorting if present
+                            var finalTemplate = selectTemplate;
+                            if (datasetItemSearchCriteria.sortingFields() != null) {
+                                Optional.ofNullable(
+                                        sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields(),
+                                                filterQueryBuilder
+                                                        .buildDatasetItemFieldMapping(
+                                                                datasetItemSearchCriteria.sortingFields())))
+                                        .ifPresent(sortFields -> {
+                                            // feedback_scores is now exposed at outer query level via argMax(tfs.feedback_scores, ei.created_at)
+                                            // so we don't need to map it to tfs.feedback_scores anymore
+                                            finalTemplate.add("sort_fields", sortFields);
+                                        });
+                            }
 
-                    var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
-                            && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
+                            var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
+                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
 
-                    var selectStatement = connection.createStatement(finalTemplate.render())
-                            .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                            .bind("limit", size)
-                            .bind("offset", (page - 1) * size);
+                            var selectStatement = connection.createStatement(finalTemplate.render())
+                                    .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                                    .bind("limit", size)
+                                    .bind("offset", (page - 1) * size)
+                                    .bind("workspace_id", workspaceId);
 
-                    // Only bind experimentIds and entityType if we have experiment IDs
-                    if (hasExperimentIds) {
-                        selectStatement = selectStatement.bind("experimentIds",
-                                datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
-                                .bind("entityType", datasetItemSearchCriteria.entityType().getType());
-                    }
+                            // Only bind experimentIds and entityType if we have experiment IDs
+                            if (hasExperimentIds) {
+                                selectStatement = selectStatement.bind("experimentIds",
+                                        datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
+                                        .bind("entityType", datasetItemSearchCriteria.entityType().getType());
+                            }
 
-                    // Bind dynamic sorting keys if present
-                    if (hasDynamicKeys) {
-                        selectStatement = sortingQueryBuilder.bindDynamicKeys(selectStatement,
-                                datasetItemSearchCriteria.sortingFields());
-                    }
+                            // Bind dynamic sorting keys if present
+                            if (hasDynamicKeys) {
+                                selectStatement = sortingQueryBuilder.bindDynamicKeys(selectStatement,
+                                        datasetItemSearchCriteria.sortingFields());
+                            }
 
-                    bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
+                            bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
 
-                    Long total = results.getT1();
-                    Set<Column> columns = results.getT2();
+                            Long total = results.getT1();
+                            Set<Column> columns = results.getT2();
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
-                            .doFinally(signalType -> endSegment(segmentContent))
-                            .flatMap(DatasetItemResultMapper::mapItem)
-                            .collectList()
-                            .onErrorResume(e -> handleSqlError(e, List.of()))
-                            .flatMap(
-                                    items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
-                                            sortingFactory.getSortableFields())));
-                }));
+                            return Flux.from(selectStatement.execute())
+                                    .doFinally(signalType -> endSegment(segmentContent))
+                                    .flatMap(DatasetItemResultMapper::mapItem)
+                                    .collectList()
+                                    .onErrorResume(e -> handleSqlError(e, List.of()))
+                                    .flatMap(
+                                            items -> Mono
+                                                    .just(new DatasetItemPage(items, page, items.size(), total, columns,
+                                                            sortingFactory.getSortableFields())));
+                        })));
     }
 
     private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
@@ -1470,12 +1488,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
+            var countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria, "get_count", workspaceId);
 
             var statement = connection.createStatement(countTemplate.render())
-                    .bind("datasetId", datasetItemSearchCriteria.datasetId());
+                    .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                    .bind("workspace_id", workspaceId);
 
             // Only bind experimentIds if we have them
             if (hasExperimentIds) {
@@ -1485,22 +1504,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .flatMap(DatasetItemResultMapper::mapCount)
                     .reduce(0L, Long::sum)
                     .onErrorResume(e -> handleSqlError(e, 0L))
                     .doFinally(signalType -> endSegment(segment));
-        });
+        }));
     }
 
     private Mono<Set<Column>> mapColumnsField(DatasetItemSearchCriteria datasetItemSearchCriteria) {
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware(
-                bindWorkspaceIdToMono(
-                        connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
-                                .bind("datasetId", datasetItemSearchCriteria.datasetId())))
-                .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data")))
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID, "map_columns_field",
+                    workspaceId, "");
+            return Mono.from(connection.createStatement(template.render())
+                    .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                    .bind("workspace_id", workspaceId)
+                    .execute())
+                    .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data"));
+        }))
                 .doFinally(signalType -> endSegment(segment));
     }
 
@@ -1519,26 +1542,29 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
                 experimentIds, filters);
 
-        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS);
-        template.add("dataset_id", datasetId);
-        if (!experimentIds.isEmpty()) {
-            template.add("experiment_ids", true);
-        }
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS,
+                    "get_experiment_items_stats", workspaceId, experimentIds.size());
+            template.add("dataset_id", datasetId);
+            if (!experimentIds.isEmpty()) {
+                template.add("experiment_ids", true);
+            }
 
-        applyFiltersToTemplate(template, filters);
+            applyFiltersToTemplate(template, filters);
 
-        String sql = template.render();
-        log.debug("Experiment items stats query: '{}'", sql);
+            String sql = template.render();
+            log.debug("Experiment items stats query: '{}'", sql);
 
-        return asyncTemplate.nonTransaction(connection -> {
-            Statement statement = connection.createStatement(sql);
+            Statement statement = connection.createStatement(sql)
+                    .bind("workspace_id", workspaceId);
             bindStatementParameters(statement, datasetId, experimentIds, filters);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map(
-                            (row, rowMetadata) -> com.comet.opik.domain.stats.StatsMapper.mapExperimentItemsStats(row)))
+            return Flux.from(statement.execute())
+                    .flatMap(result -> Flux.from(result.map(
+                            (row, rowMetadata) -> com.comet.opik.domain.stats.StatsMapper
+                                    .mapExperimentItemsStats(row))))
                     .singleOrEmpty();
-        })
+        }))
                 .doOnError(error -> log.error("Failed to get experiment items stats", error));
     }
 
@@ -1604,22 +1630,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             log.info("Bulk updating dataset items by filters for dataset '{}'", datasetId);
         }
 
-        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, "bulk_update", workspaceId);
 
-        // Add ids or filters to template
-        if (hasIds) {
-            template.add("ids", true);
-        } else {
-            // When using filters, dataset_id is required
-            template.add("dataset_id", true);
-            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-        }
+            // Add ids or filters to template
+            if (hasIds) {
+                template.add("ids", true);
+            } else {
+                // When using filters, dataset_id is required
+                template.add("dataset_id", true);
+                filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            }
 
-        var query = template.render();
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(query);
+            var query = template.render();
+            var statement = connection.createStatement(query)
+                    .bind("user_name", userName)
+                    .bind("workspace_id", workspaceId);
 
             // Bind ids if provided
             if (hasIds) {
@@ -1643,15 +1670,16 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     ? "Completed bulk update for '%s' dataset items".formatted(ids.size())
                     : "Completed bulk update for dataset items matching filters in dataset '%s'".formatted(datasetId);
 
-            return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
+            return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
                     .then()
                     .doOnSuccess(__ -> log.info(successMessage));
-        });
+        }));
     }
 
-    private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags) {
-        var template = TemplateUtils.newST(sql);
+    private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags,
+            String queryName, String workspaceId) {
+        var template = getSTWithLogComment(sql, queryName, workspaceId, "");
 
         Optional.ofNullable(update.input())
                 .ifPresent(input -> template.add("input", input));
@@ -1685,21 +1713,27 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(@NonNull UUID datasetId) {
+    public Mono<Map<String, List<String>>> getColumns(@NonNull UUID datasetId) {
+        log.debug("Getting columns for dataset '{}'", datasetId);
 
-        log.info("Fetching draft item IDs and hashes for dataset='{}'", datasetId);
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_columns");
 
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_item_ids_and_hashes");
+        return asyncTemplate.nonTransaction(connection -> {
+            Statement statement = connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
+                    .bind("datasetId", datasetId);
 
-        return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(SELECT_DRAFT_ITEM_IDS_AND_HASHES)
-                    .bind("datasetId", datasetId.toString());
+            Flux<Map<String, List<String>>> resultFlux = makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, List<String>> columns = (Map<String, List<String>>) row.get("columns", Map.class);
+                        // Use LinkedHashMap to preserve insertion order
+                        return columns != null
+                                ? new LinkedHashMap<>(columns)
+                                : new LinkedHashMap<String, List<String>>();
+                    }));
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map((row, metadata) -> DatasetItemIdAndHash.builder()
-                            .itemId(UUID.fromString(row.get("id", String.class)))
-                            .dataHash(row.get("data_hash", Long.class))
-                            .build()));
-        }).doFinally(signalType -> endSegment(segment));
+            return resultFlux.defaultIfEmpty(new LinkedHashMap<String, List<String>>()).next();
+        })
+                .doFinally(signalType -> endSegment(segment));
     }
 }

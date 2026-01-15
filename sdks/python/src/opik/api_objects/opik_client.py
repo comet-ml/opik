@@ -821,6 +821,7 @@ class Opik:
             name=name,
             description=dataset_fern.description,
             rest_client=self._rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
         )
 
         dataset_.__internal_api__sync_hashes__()
@@ -906,6 +907,7 @@ class Opik:
             name=name,
             description=description,
             rest_client=self._rest_client,
+            dataset_items_count=0,
         )
 
         self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)

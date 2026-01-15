@@ -9,7 +9,7 @@ export interface ProviderApiKeyPublic {
     provider: OpikApi.ProviderApiKeyPublicProvider;
     apiKey?: string;
     name?: string;
-    /** Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically. */
+    /** Provider name - required for custom LLM and Bedrock providers to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1'). Must not be blank for custom and Bedrock providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically. */
     providerName?: string;
     headers?: Record<string, string>;
     configuration?: Record<string, string>;

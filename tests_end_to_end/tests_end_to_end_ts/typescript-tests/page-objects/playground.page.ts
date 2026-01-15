@@ -32,7 +32,6 @@ export class PlaygroundPage extends BasePage {
 
   async goto(): Promise<void> {
     await super.goto();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async selectModel(providerName: string, modelName: string): Promise<void> {
@@ -163,7 +162,6 @@ export class PlaygroundPage extends BasePage {
     }
 
     console.log('Waiting for response...');
-    await this.page.waitForLoadState('networkidle');
     await this.page.waitForTimeout(2000);
   }
 

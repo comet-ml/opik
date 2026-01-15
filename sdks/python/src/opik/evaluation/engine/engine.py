@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Iterator
 
 import opik.logging_messages as logging_messages
 import opik.opik_context as opik_context
@@ -25,6 +25,30 @@ from ...message_processing.emulation import models
 LOGGER = logging.getLogger(__name__)
 
 EVALUATION_TASK_NAME = "evaluation_task"
+
+EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
+
+
+def _calculate_total_items(
+    dataset: dataset.Dataset,
+    nb_samples: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+) -> Optional[int]:
+    """
+    Calculate the total number of items that will be evaluated.
+
+    Returns None if the total cannot be determined (e.g., when using a sampler).
+    """
+    if dataset_item_ids is not None:
+        return len(dataset_item_ids)
+
+    # If nb_samples is specified and smaller than dataset size, use it
+    if nb_samples is not None:
+        if dataset.dataset_items_count is not None:
+            return min(nb_samples, dataset.dataset_items_count)
+        return nb_samples
+
+    return dataset.dataset_items_count
 
 
 class EvaluationEngine:
@@ -157,34 +181,57 @@ class EvaluationEngine:
 
     def _compute_test_results_for_llm_task(
         self,
-        dataset_items: List[dataset_item.DatasetItem],
+        dataset_items: Iterator[dataset_item.DatasetItem],
         task: LLMTask,
         experiment_: Optional[experiment.Experiment],
         trial_count: int,
         description: str,
+        total_items: Optional[int] = None,
     ) -> List[test_result.TestResult]:
         test_results: List[test_result.TestResult] = []
 
-        for trial_id in range(trial_count):
-            evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
-                functools.partial(
-                    self._compute_test_result_for_llm_task,
-                    item=item,
-                    task=task,
-                    trial_id=trial_id,
-                    experiment_=experiment_,
-                )
-                for item in dataset_items
-            ]
+        # Cache dataset items for multiple trials
+        dataset_items_cache: List[dataset_item.DatasetItem] = []
 
-            test_results += evaluation_tasks_executor.execute(
-                evaluation_tasks=evaluation_tasks,
+        for trial_id in range(trial_count):
+            desc = f"{description} trial {trial_id}" if trial_count > 1 else description
+
+            # Use streaming executor to submit tasks as items arrive
+            executor: evaluation_tasks_executor.StreamingExecutor[
+                test_result.TestResult
+            ] = evaluation_tasks_executor.StreamingExecutor(
                 workers=self._workers,
                 verbose=self._verbose,
-                desc=f"{description} trial {trial_id}"
-                if trial_count > 1
-                else description,
+                desc=desc,
+                total=total_items,
             )
+            with executor:
+                # For first trial, consume from iterator and cache items
+                if trial_id == 0:
+                    for item in dataset_items:
+                        dataset_items_cache.append(item)
+                        evaluation_task = functools.partial(
+                            self._compute_test_result_for_llm_task,
+                            item=item,
+                            task=task,
+                            trial_id=trial_id,
+                            experiment_=experiment_,
+                        )
+                        executor.submit(evaluation_task)
+                else:
+                    # For subsequent trials, use cached items
+                    for item in dataset_items_cache:
+                        evaluation_task = functools.partial(
+                            self._compute_test_result_for_llm_task,
+                            item=item,
+                            task=task,
+                            trial_id=trial_id,
+                            experiment_=experiment_,
+                        )
+                        executor.submit(evaluation_task)
+
+                # Collect results from executor
+                test_results += executor.get_results()
 
         return test_results
 
@@ -282,21 +329,54 @@ class EvaluationEngine:
         trial_count: int,
         experiment_: Optional[experiment.Experiment],
     ) -> List[test_result.TestResult]:
-        dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
+        # Can't use streaming with these parameters yet, so fallback to non-streaming
+        use_streaming = (
+            dataset_sampler is None
+            and not self._metrics_evaluator.has_task_span_metrics
         )
 
-        if dataset_sampler is not None:
-            dataset_items = dataset_sampler.sample(dataset_items)
+        # Get dataset items using streaming or non-streaming approach
+        if use_streaming:
+            dataset_items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
+                nb_samples=nb_samples,
+                dataset_item_ids=dataset_item_ids,
+                batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            )
+        else:
+            LOGGER.info("Dataset streaming disabled due to evaluation parameters")
+            dataset_items_list = list(
+                dataset_.__internal_api__stream_items_as_dataclasses__(
+                    nb_samples=nb_samples,
+                    dataset_item_ids=dataset_item_ids,
+                    batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+                )
+            )
+
+            if dataset_sampler is not None:
+                dataset_items_list = dataset_sampler.sample(dataset_items_list)
+
+            # Convert list to iterator
+            dataset_items_iter = iter(dataset_items_list)
+
+        # Calculate total items for progress bar
+        if use_streaming:
+            total_items = _calculate_total_items(
+                dataset=dataset_,
+                nb_samples=nb_samples,
+                dataset_item_ids=dataset_item_ids,
+            )
+        else:
+            # After sampling, the actual count is the length of the list
+            total_items = len(dataset_items_list)
 
         if not self._metrics_evaluator.has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
-                dataset_items=dataset_items,
+                dataset_items=dataset_items_iter,
                 task=task,
                 experiment_=experiment_,
                 trial_count=trial_count,
                 description="Evaluation",
+                total_items=total_items,
             )
 
         LOGGER.debug(
@@ -306,11 +386,12 @@ class EvaluationEngine:
 
         with local_recording.record_traces_locally(client=self._client) as recording:
             test_results = self._compute_test_results_for_llm_task(
-                dataset_items=dataset_items,
+                dataset_items=dataset_items_iter,
                 task=task,
                 experiment_=experiment_,
                 trial_count=trial_count,
                 description="Evaluation",
+                total_items=total_items,
             )
             self._update_test_results_with_task_span_metrics(
                 test_results=test_results,
@@ -339,7 +420,7 @@ class EvaluationEngine:
             List of TestResult objects containing scores for each item.
         """
         # Convert raw items to DatasetItem objects for compatibility
-        dataset_items = [
+        dataset_items_list = [
             dataset_item.DatasetItem(
                 id=f"temp_item_{idx}",
                 **item,
@@ -349,11 +430,12 @@ class EvaluationEngine:
 
         if not self._metrics_evaluator.has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
-                dataset_items=dataset_items,
+                dataset_items=iter(dataset_items_list),
                 task=task,
                 experiment_=None,
                 trial_count=1,
                 description="Items evaluation",
+                total_items=len(items),
             )
 
         LOGGER.debug(
@@ -363,11 +445,12 @@ class EvaluationEngine:
 
         with local_recording.record_traces_locally(client=self._client) as recording:
             test_results = self._compute_test_results_for_llm_task(
-                dataset_items=dataset_items,
+                dataset_items=iter(dataset_items_list),
                 task=task,
                 experiment_=None,
                 trial_count=1,
                 description="Items evaluation",
+                total_items=len(items),
             )
             self._update_test_results_with_task_span_metrics(
                 test_results=test_results,
@@ -388,7 +471,7 @@ class EvaluationEngine:
             for test_case_ in test_cases
         ]
 
-        test_results = evaluation_tasks_executor.execute(
+        test_results: List[test_result.TestResult] = evaluation_tasks_executor.execute(
             evaluation_tasks=evaluation_tasks,
             workers=self._workers,
             verbose=self._verbose,
