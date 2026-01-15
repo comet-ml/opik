@@ -41,6 +41,9 @@ pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
     reason="Test only applies to ADK versions >= 1.3.0",
 )
 
+# Maximum reasonable time-to-first-token in seconds for test assertions
+MAX_REASONABLE_TTFT_SECONDS = 60
+
 
 def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
     session_service = adk_sessions.InMemorySessionService()
@@ -1991,8 +1994,8 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
         ), f"time_to_first_token should be a number, got {type(ttft)}"
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
         assert (
-            ttft < 60
-        ), f"time_to_first_token should be reasonable (< 60s), got {ttft}"
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
 
 @pytest_skip_for_adk_older_than_1_3_0
@@ -2057,8 +2060,8 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
         ), f"time_to_first_token should be a number, got {type(ttft)}"
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
         assert (
-            ttft < 60
-        ), f"time_to_first_token should be reasonable (< 60s), got {ttft}"
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
 
 @pytest_skip_for_adk_older_than_1_3_0
@@ -2124,8 +2127,8 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
         ), f"time_to_first_token should be a number, got {type(ttft)}"
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
         assert (
-            ttft < 60
-        ), f"time_to_first_token should be reasonable (< 60s), got {ttft}"
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
     # Verify that different LLM calls have different (or same) TTFT values
     # They might be similar but should be tracked independently
@@ -2196,6 +2199,14 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
                 assert (
                     ttft >= 0
                 ), f"time_to_first_token should be non-negative, got {ttft}"
+        else:
+            # When span has no output or no usage, TTFT should not be present
+            assert not (
+                llm_span.metadata and "time_to_first_token" in llm_span.metadata
+            ), (
+                f"LLM span without content should not have 'time_to_first_token' in metadata. "
+                f"Span output: {llm_span.output}, usage: {llm_span.usage}, metadata: {llm_span.metadata}"
+            )
 
 
 @pytest_skip_for_adk_older_than_1_3_0
@@ -2281,5 +2292,5 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
         ), f"time_to_first_token should be a number, got {type(ttft)}"
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
         assert (
-            ttft < 60
-        ), f"time_to_first_token should be reasonable (< 60s), got {ttft}"
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
