@@ -398,6 +398,7 @@ class BaseOptimizer(ABC):
                     f"{self.__class__.__name__} currently does not support validation dataset. "
                     f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
                 )
+                return dataset
             return validation_dataset
         return dataset
 

@@ -750,11 +750,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             current_best_ind
                         )
                         self._generations_without_overall_improvement = 0
-                    elif (
-                        updated_best_primary_score
-                        == previous_best_primary_score_for_gen
-                    ):
-                        self._generations_without_overall_improvement += 1
                     else:
                         self._generations_without_overall_improvement += 1
                 else:
