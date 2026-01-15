@@ -3,7 +3,6 @@
 import os
 import re
 
-from typing import Optional
 
 DEFAULT_PROJECT_NAME = "Optimization"
 DEFAULT_EVAL_THREADS = 12
@@ -30,7 +29,7 @@ def resolve_project_name(project_name: str | None = None) -> str:
     return sanitized or DEFAULT_PROJECT_NAME
 
 
-def normalize_eval_threads(n_threads: Optional[int]) -> int:
+def normalize_eval_threads(n_threads: int | None) -> int:
     """
     Clamp and sanitize thread counts for evaluator calls.
 
