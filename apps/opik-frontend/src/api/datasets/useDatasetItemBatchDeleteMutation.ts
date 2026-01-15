@@ -15,6 +15,7 @@ type UseDatasetItemBatchDeleteMutationParams = {
   isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
+  batchGroupId?: string;
 };
 
 const useDatasetItemBatchDeleteMutation = () => {
@@ -28,6 +29,7 @@ const useDatasetItemBatchDeleteMutation = () => {
       isAllItemsSelected,
       filters = [],
       search,
+      batchGroupId,
     }: UseDatasetItemBatchDeleteMutationParams) => {
       let payload;
 
@@ -40,6 +42,7 @@ const useDatasetItemBatchDeleteMutation = () => {
         payload = {
           dataset_id: datasetId,
           filters: processFiltersArray(combinedFilters),
+          ...(batchGroupId && { batch_group_id: batchGroupId }),
         };
       } else {
         payload = { item_ids: ids };
@@ -73,9 +76,12 @@ const useDatasetItemBatchDeleteMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: () => {
-      return queryClient.invalidateQueries({
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({
         queryKey: ["dataset-items"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
       });
     },
   });
