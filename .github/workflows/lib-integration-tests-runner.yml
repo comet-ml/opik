@@ -33,12 +33,15 @@ on:
           - litellm
           - harbor
       run_expensive_tests:
-        description: "Run expensive tests (e.g., video generation). Enabled by default on scheduled runs."
+        description: "Run expensive tests (e.g., video generation). Enabled by default on weekly scheduled runs."
         required: false
         type: boolean
         default: false
   schedule:
-    - cron: "0 0 */1 * *"
+    # Daily run at midnight UTC (without expensive tests)
+    - cron: "0 0 * * *"
+    # Weekly run on Sunday at midnight UTC (with expensive tests)
+    - cron: "0 0 * * 0"
   pull_request:
     paths:
     - 'sdks/python/**'
@@ -95,7 +98,8 @@ jobs:
     if: contains(fromJSON('["openai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-openai-tests.yml
     with:
-      run_expensive_tests: ${{ github.event_name == 'schedule' || github.event.inputs.run_expensive_tests == 'true' }}
+      # Run expensive tests on weekly schedule (Sunday) or when manually requested
+      run_expensive_tests: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0') || github.event.inputs.run_expensive_tests == 'true' }}
     secrets: inherit
   
   langchain_tests:
