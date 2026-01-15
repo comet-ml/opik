@@ -186,6 +186,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         def _local_evaluation() -> EvaluationBatch[dict[str, Any], dict[str, Any]]:
             """Fallback to direct evaluation without task_evaluator."""
+            # TODO(opik_optimizer/#gepa-adapter): Remove this local scoring path once GEPA provides a native Opik adapter.
             outputs: list[dict[str, Any]] = []
             scores: list[float] = []
             trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
@@ -226,7 +227,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 outputs.append({"output": raw_output})
                 scores.append(score)
                 try:
-                    self._optimizer._gepa_live_metric_calls += 1
+                    self._optimizer._adapter_metric_calls += 1
                     self._context.trials_completed += 1
                 except Exception:
                     pass
@@ -337,7 +338,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             outputs.append({"output": output_text})
             scores.append(score_value)
             try:
-                self._optimizer._gepa_live_metric_calls += 1
+                self._optimizer._adapter_metric_calls += 1
                 self._context.trials_completed += 1
             except Exception:
                 pass

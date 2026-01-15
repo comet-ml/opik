@@ -84,7 +84,7 @@ class GepaOptimizer(BaseOptimizer):
             prompt_overrides=None,
         )
         self.n_threads = n_threads
-        self._gepa_live_metric_calls = 0
+        self._adapter_metric_calls = 0
         self._adapter = None  # Will be set during optimization
 
         # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
@@ -266,6 +266,7 @@ class GepaOptimizer(BaseOptimizer):
             max_metric_calls // effective_n_samples if effective_n_samples else 0
         )
         if reflection_minibatch_size > max_trials:
+            # TODO(opik_optimizer/#gepa-batching): Centralize reflection minibatch clamping when we consolidate trial budgeting.
             logger.warning(
                 "reflection_minibatch_size (%s) exceeds max_trials (%s); GEPA reflection will not run. "
                 "Increase max_trials or lower the minibatch.",
@@ -285,7 +286,7 @@ class GepaOptimizer(BaseOptimizer):
         train_insts = self._build_data_insts(train_items, input_key, output_key)
         val_insts = self._build_data_insts(val_items, input_key, output_key)
 
-        self._gepa_live_metric_calls = 0
+        self._adapter_metric_calls = 0
 
         adapter = OpikGEPAAdapter(
             base_prompts=optimizable_prompts,
@@ -303,7 +304,7 @@ class GepaOptimizer(BaseOptimizer):
         except Exception as exc:  # pragma: no cover
             raise ImportError("gepa package is required for GepaOptimizer") from exc
 
-        use_gepa_progress_bar = display_progress_bar if self.verbose == 0 else False
+        use_adapter_progress_bar = display_progress_bar if self.verbose == 0 else False
 
         with gepa_reporting.start_gepa_optimization(
             verbose=self.verbose, max_trials=max_trials
@@ -332,7 +333,7 @@ class GepaOptimizer(BaseOptimizer):
                 "max_metric_calls": max_metric_calls,
                 "run_dir": run_dir,
                 "track_best_outputs": track_best_outputs,
-                "display_progress_bar": use_gepa_progress_bar,
+                "display_progress_bar": use_adapter_progress_bar,
                 "seed": seed,
                 "raise_on_exception": raise_on_exception,
                 "logger": logger_instance,
@@ -510,8 +511,8 @@ class GepaOptimizer(BaseOptimizer):
                 else None
             ),
             "selected_candidate_opik_score": best_score,
-            "gepa_live_metric_used": True,
-            "gepa_live_metric_call_count": self._gepa_live_metric_calls,
+            "adapter_metric_used": True,
+            "adapter_metric_call_count": self._adapter_metric_calls,
             "dataset_item_ids": [item.get("id") for item in train_items],
         }
         if best_matches_seed:
