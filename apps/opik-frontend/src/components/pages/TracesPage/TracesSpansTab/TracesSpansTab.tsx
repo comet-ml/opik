@@ -781,30 +781,30 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: COLUMN_TYPE.string,
         sortable: false, // Disable sorting for metadata columns - backend may not fully support it yet
         accessorFn: (row) => {
-        // Use lodash/get to extract nested value
-        // This will return undefined if the path doesn't exist (e.g.,
-        // LLM span doesn't have metadata.tool_name)
-        const value = get(row, id);
+          // Use lodash/get to extract nested value
+          // This will return undefined if the path doesn't exist (e.g.,
+          // LLM span doesn't have metadata.tool_name)
+          const value = get(row, id);
 
-        // Handle missing values - show "-" if field doesn't exist
-        // This happens when viewing spans of different types
-        if (value === undefined || value === null) {
-          return "-";
-        }
+          // Handle missing values - show "-" if field doesn't exist
+          // This happens when viewing spans of different types
+          if (value === undefined || value === null) {
+            return "-";
+          }
 
-        // Format arrays and objects as JSON
-        if (isArray(value) || isObject(value)) {
-          return JSON.stringify(value, null, 2);
-        }
+          // Format arrays and objects as JSON
+          if (isArray(value) || isObject(value)) {
+            return JSON.stringify(value, null, 2);
+          }
 
-        return String(value);
-      },
-      cell: CodeCell as never,
+          return String(value);
+        },
+        cell: CodeCell as never,
       };
     }) as ColumnData<BaseTraceData>[];
 
     return fieldColumns;
-  }, [dynamicMetadataColumns, sortableBy]);
+  }, [dynamicMetadataColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
