@@ -93,7 +93,7 @@ class ParameterOptimizer(BaseOptimizer):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        project_name: str = "Optimization",
+        project_name: str | None = None,
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,

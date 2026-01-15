@@ -20,6 +20,9 @@ from . import optimization_result, reporting_utils, task_evaluator, helpers
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
+from .constants import (
+    resolve_project_name,
+)
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 
@@ -185,7 +188,7 @@ class BaseOptimizer(ABC):
         }
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
-        self.project_name: str = "Optimization"  # Default project name
+        self.project_name: str = resolve_project_name()
 
         # Optimization progress tracking
         # These are updated by the base class and can be read by get_metadata
@@ -411,7 +414,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         experiment_config: dict[str, Any] | None = None,
         validation_dataset: "Dataset | None" = None,
-        project_name: str = "Optimization",
+        project_name: str | None = None,
         optimization_id: str | None = None,
         max_trials: int = 10,
         reuse_existing_optimization: bool = False,
@@ -1408,7 +1411,7 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        project_name: str = "Optimization",
+        project_name: str | None = None,
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
@@ -1437,7 +1440,7 @@ class BaseOptimizer(ABC):
            experiment_config: Optional configuration for the experiment
            n_samples: Number of samples to use for evaluation
            auto_continue: Whether to continue optimization automatically
-           project_name: Opik project name for logging traces (default: "Optimization")
+           project_name: Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")
            optimization_id: Optional ID to use when creating the Opik optimization run
            validation_dataset: Optional validation dataset for ranking candidates
            max_trials: Maximum number of optimization trials

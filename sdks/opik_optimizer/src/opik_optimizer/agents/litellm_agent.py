@@ -16,6 +16,7 @@ from opik import opik_context
 import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
+from ..constants import resolve_project_name
 from ..utils.candidate_selection import extract_choice_logprob
 
 
@@ -30,10 +31,10 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def __init__(
         self,
-        project_name: str,
+        project_name: str | None = None,
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
-        self.project_name = project_name
+        self.project_name = resolve_project_name(project_name)
         self.init_llm()
 
     def init_llm(self) -> None:
