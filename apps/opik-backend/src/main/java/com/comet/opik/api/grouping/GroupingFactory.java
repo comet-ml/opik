@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.filter.FieldType.DICTIONARY;
+import static com.comet.opik.api.filter.FieldType.LIST;
 import static com.comet.opik.api.filter.FieldType.STRING;
 
 @Slf4j
@@ -84,6 +85,11 @@ public abstract class GroupingFactory {
         if (DATASET_ID.equals(field) || PROJECT_ID.equals(field)) {
             return STRING;
         }
+        // tags is LIST
+        if (TAGS.equals(field)) {
+            return LIST;
+        }
+
         // Default to STRING for unknown fields
         return STRING;
     }
