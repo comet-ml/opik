@@ -137,46 +137,79 @@ public interface DatasetExportJobDAO {
 
     @SqlQuery("""
             SELECT
-                id,
-                dataset_id,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                viewed_at,
-                created_by,
-                last_updated_by
-            FROM dataset_export_jobs
-            WHERE id = :id
-            AND workspace_id = :workspaceId
+                j.id,
+                j.dataset_id,
+                d.name AS dataset_name,
+                j.status,
+                j.file_path,
+                j.error_message,
+                j.created_at,
+                j.last_updated_at,
+                j.expires_at,
+                j.viewed_at,
+                j.created_by,
+                j.last_updated_by
+            FROM dataset_export_jobs j
+            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            WHERE j.id = :id
+            AND j.workspace_id = :workspaceId
             """)
     Optional<DatasetExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
 
     @SqlQuery("""
             SELECT
-                id,
-                dataset_id,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                viewed_at,
-                created_by,
-                last_updated_by
-            FROM dataset_export_jobs
-            WHERE workspace_id = :workspaceId
-                AND dataset_id = :datasetId
-                AND status IN (<statuses>)
-            ORDER BY created_at DESC
+                j.id,
+                j.dataset_id,
+                d.name AS dataset_name,
+                j.status,
+                j.file_path,
+                j.error_message,
+                j.created_at,
+                j.last_updated_at,
+                j.expires_at,
+                j.viewed_at,
+                j.created_by,
+                j.last_updated_by
+            FROM dataset_export_jobs j
+            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            WHERE j.workspace_id = :workspaceId
+                AND j.dataset_id = :datasetId
+                AND j.status IN (<statuses>)
             """)
     List<DatasetExportJob> findInProgressByDataset(
             @Bind("workspaceId") String workspaceId,
             @Bind("datasetId") UUID datasetId,
             @BindList("statuses") Set<DatasetExportStatus> statuses);
+
+    /**
+     * Finds all export jobs for a workspace with dataset names.
+     * Returns all jobs regardless of status - the cleanup job handles removing old jobs.
+     * The frontend checks viewed_at to decide whether to show error toasts for failed jobs.
+     *
+     * @param workspaceId The workspace ID
+     * @return List of all export jobs for the workspace with dataset names
+     */
+    @SqlQuery("""
+            SELECT
+                j.id,
+                j.dataset_id,
+                d.name AS dataset_name,
+                j.status,
+                j.file_path,
+                j.download_url,
+                j.error_message,
+                j.created_at,
+                j.last_updated_at,
+                j.expires_at,
+                j.viewed_at,
+                j.created_by,
+                j.last_updated_by
+            FROM dataset_export_jobs j
+            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            WHERE j.workspace_id = :workspaceId
+            ORDER BY j.id DESC
+            """)
+    List<DatasetExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId);
 
     /**
      * Finds expired completed export jobs across all workspaces for cleanup.
@@ -193,8 +226,8 @@ public interface DatasetExportJobDAO {
     @SqlQuery("""
             SELECT
                 id,
-                workspace_id,
                 dataset_id,
+                NULL AS dataset_name,
                 status,
                 file_path,
                 error_message,
@@ -230,8 +263,8 @@ public interface DatasetExportJobDAO {
     @SqlQuery("""
             SELECT
                 id,
-                workspace_id,
                 dataset_id,
+                NULL AS dataset_name,
                 status,
                 file_path,
                 error_message,
@@ -271,14 +304,16 @@ public interface DatasetExportJobDAO {
 
     @SqlUpdate("""
             UPDATE dataset_export_jobs
-            SET viewed_at = :viewedAt
+            SET viewed_at = :viewedAt,
+                last_updated_by = :lastUpdatedBy
             WHERE id = :id
                 AND workspace_id = :workspaceId
                 AND viewed_at IS NULL
             """)
     int updateViewedAt(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
-            @Bind("viewedAt") Instant viewedAt);
+            @Bind("viewedAt") Instant viewedAt,
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("DELETE FROM dataset_export_jobs WHERE workspace_id = :workspaceId AND id IN (<ids>)")
     int deleteByIds(@Bind("workspaceId") String workspaceId, @BindList("ids") Set<UUID> ids);

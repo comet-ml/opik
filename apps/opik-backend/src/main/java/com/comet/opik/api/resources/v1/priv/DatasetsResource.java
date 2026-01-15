@@ -7,6 +7,8 @@ import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
+import com.comet.opik.api.DatasetExportJob;
+import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -41,6 +43,7 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.utils.FileNameUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -77,6 +80,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.media.multipart.ContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
 
@@ -785,5 +789,142 @@ public class DatasetsResource {
     @Path("/{id}/versions")
     public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
         return new DatasetVersionsResource(datasetId, versionService, requestContext, featureFlags);
+    }
+
+    // Dataset Export Resources
+
+    @POST
+    @Path("/{id}/export")
+    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.", responses = {
+            @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
+            @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
+    })
+    @JsonView(DatasetExportJob.View.Public.class)
+    @RateLimited
+    public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Starting CSV export for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+
+        // Verify dataset exists
+        service.findById(datasetId);
+
+        DatasetExportJob job = csvExportService.startExport(datasetId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Export job '{}' created/found for dataset '{}' on workspaceId '{}'", job.id(), datasetId,
+                workspaceId);
+
+        // Return 202 if new job was created (PENDING status), 200 if existing job found
+        var status = job.status() == DatasetExportStatus.PENDING
+                ? Response.Status.ACCEPTED
+                : Response.Status.OK;
+
+        return Response.status(status).entity(job).build();
+    }
+
+    @GET
+    @Path("/export-jobs/{jobId}")
+    @Operation(operationId = "getDatasetExportJob", summary = "Get dataset export job status", description = "Retrieves the current status of a dataset export job", responses = {
+            @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    @JsonView(DatasetExportJob.View.Public.class)
+    public Response getDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        DatasetExportJob job = csvExportService.getJob(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found export job '{}' with status '{}' on workspaceId '{}'", jobId, job.status(), workspaceId);
+
+        return Response.ok(job).build();
+    }
+
+    @PUT
+    @Path("/export-jobs/{jobId}/mark-viewed")
+    @Operation(operationId = "markDatasetExportJobViewed", summary = "Mark dataset export job as viewed", description = "Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.", responses = {
+            @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Marking export job '{}' as viewed on workspaceId '{}'", jobId, workspaceId);
+
+        csvExportService.markJobAsViewed(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Marked export job '{}' as viewed on workspaceId '{}'", jobId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/export-jobs")
+    @Operation(operationId = "getDatasetExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
+            @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetExportJob.class))))
+    })
+    @JsonView(DatasetExportJob.View.Public.class)
+    public Response getDatasetExportJobs() {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting export jobs for workspaceId '{}'", workspaceId);
+
+        var jobs = csvExportService.findAllJobs()
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found '{}' export job(s) for workspaceId '{}'", jobs.size(), workspaceId);
+
+        return Response.ok(jobs).build();
+    }
+
+    @GET
+    @Path("/export-jobs/{jobId}/download")
+    @Produces("text/csv")
+    @Operation(operationId = "downloadDatasetExport", summary = "Download dataset export file", description = "Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.", responses = {
+            @ApiResponse(responseCode = "200", description = "CSV file content", content = @Content(schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "400", description = "Export job is not ready for download"),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    public Response downloadDatasetExport(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Downloading export file for job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        // Get job to extract dataset name for filename
+        DatasetExportJob job = csvExportService.getJob(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        var inputStream = csvExportService.downloadExport(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        // Generate filename from dataset name or fallback to job ID
+        String filename = FileNameUtils.buildDatasetExportFilename(job.datasetName(), jobId);
+
+        log.info("Completed download for export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        // Use Jersey's ContentDisposition to safely build the header (handles encoding)
+        ContentDisposition contentDisposition = ContentDisposition.type("attachment")
+                .fileName(filename)
+                .build();
+
+        return Response.ok(inputStream)
+                .header("Content-Disposition", contentDisposition.toString())
+                .header("Content-Type", "text/csv")
+                .build();
     }
 }
