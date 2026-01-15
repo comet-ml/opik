@@ -114,6 +114,14 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             ]
         return [str(c).strip() for c in candidates if c is not None and str(c).strip()]
 
+    def _record_adapter_metric_call(self) -> None:
+        """Increment adapter metric counters while tolerating missing attributes."""
+        try:
+            self._optimizer._adapter_metric_calls += 1
+            self._context.trials_completed += 1
+        except Exception:
+            pass
+
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
     ) -> dict[str, chat_prompt.ChatPrompt]:
@@ -226,11 +234,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
                 outputs.append({"output": raw_output})
                 scores.append(score)
-                try:
-                    self._optimizer._adapter_metric_calls += 1
-                    self._context.trials_completed += 1
-                except Exception:
-                    pass
+                if self._should_stop():
+                    break
+                self._record_adapter_metric_call()
 
                 if trajectories is not None:
                     trajectories.append(
@@ -337,11 +343,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             outputs.append({"output": output_text})
             scores.append(score_value)
-            try:
-                self._optimizer._adapter_metric_calls += 1
-                self._context.trials_completed += 1
-            except Exception:
-                pass
+            if self._should_stop():
+                break
+            self._record_adapter_metric_call()
 
             if trajectories is not None:
                 trajectories.append(

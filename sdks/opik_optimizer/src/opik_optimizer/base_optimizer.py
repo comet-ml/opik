@@ -240,6 +240,31 @@ class BaseOptimizer(ABC):
         threshold = self.perfect_score if perfect_score is None else perfect_score
         return baseline_score >= threshold
 
+    def _should_stop_context(self, context: "OptimizationContext") -> bool:
+        """
+        Return True when the optimization should stop based on context flags/budget.
+
+        Order of precedence:
+        1) Explicit should_stop flag (set elsewhere, e.g., optimizer logic)
+        2) Perfect score (only when skip_perfect_score is True)
+        3) Max trials reached
+        """
+        if context.should_stop:
+            return True
+
+        if self.skip_perfect_score and context.current_best_score is not None:
+            if context.current_best_score >= self.perfect_score:
+                context.finish_reason = context.finish_reason or "perfect_score"
+                context.should_stop = True
+                return True
+
+        if context.trials_completed >= context.max_trials:
+            context.finish_reason = context.finish_reason or "max_trials"
+            context.should_stop = True
+            return True
+
+        return False
+
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
         self.llm_call_counter = 0
@@ -582,12 +607,7 @@ class BaseOptimizer(ABC):
         self._on_evaluation(context, prompts, score)
 
         # Check early stop conditions - SET FLAG, don't raise
-        if self.skip_perfect_score and score >= self.perfect_score:
-            context.should_stop = True
-            context.finish_reason = "perfect_score"
-        elif context.trials_completed >= context.max_trials:
-            context.should_stop = True
-            context.finish_reason = "max_trials"
+        self._should_stop_context(context)
 
         return score
 

@@ -426,7 +426,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         while context.trials_completed < max_trials:
             # Check should_stop flag at start of each iteration
-            if context.should_stop:
+            if self._should_stop_context(context):
                 break
 
             iteration += 1
@@ -495,7 +495,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
                     for attempt in range(1, max_attempts + 1):
                         # Check if we've reached the trial limit before starting a new trial
-                        if context.trials_completed >= max_trials:
+                        if self._should_stop_context(context):
                             logger.info(
                                 f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
                                 f"Stopping optimization."

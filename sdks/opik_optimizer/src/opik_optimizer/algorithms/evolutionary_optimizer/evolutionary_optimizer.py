@@ -502,7 +502,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 individual: Any,
             ) -> tuple[float, ...]:
                 # Check if we should skip (max_trials or early stop already triggered)
-                if context.should_stop or context.trials_completed >= max_trials:
+                if self._should_stop_context(context):
                     return (-float("inf"), float("inf"))
 
                 # Convert individual to ChatPrompt dict and use centralized evaluate()
@@ -523,7 +523,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 individual: Any,
             ) -> tuple[float, ...]:
                 # Check if we should skip (max_trials or early stop already triggered)
-                if context.should_stop or context.trials_completed >= max_trials:
+                if self._should_stop_context(context):
                     return (-float("inf"),)
 
                 # Convert individual to ChatPrompt dict and use centralized evaluate()
@@ -680,17 +680,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 for generation_idx in range(1, self.num_generations + 1):
                     # Update progress tracking for display
                     self._current_round = generation_idx - 1  # 0-based internally
-                    # Check should_stop flag at start of each generation
-                    if context.should_stop:
-                        break
-
-                    # Check if we've exhausted our evaluation budget
-                    if context.trials_completed >= max_trials:
-                        logger.info(
-                            f"Stopping optimization: max_trials ({max_trials}) reached after {generation_idx - 1} generations"
-                        )
-                        context.should_stop = True
-                        context.finish_reason = "max_trials"
+                    # Check should_stop flag at start of each generation (includes max_trials/perfect_score)
+                    if self._should_stop_context(context):
+                        if context.finish_reason == "max_trials":
+                            logger.info(
+                                f"Stopping optimization: max_trials ({max_trials}) reached after {generation_idx - 1} generations"
+                            )
                         break
 
                     evo_reporter.start_gen(generation_idx, self.num_generations)

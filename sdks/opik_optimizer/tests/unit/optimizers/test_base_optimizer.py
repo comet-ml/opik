@@ -794,6 +794,79 @@ def test_on_evaluation_handles_non_finite_scores(
     assert captured["score_text"] == "non-finite score"
 
 
+def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:
+    optimizer = ConcreteOptimizer(
+        model="gpt-4", perfect_score=0.8, skip_perfect_score=True
+    )
+    dataset = MagicMock()
+    metric = MagicMock()
+    agent = MagicMock()
+    context = OptimizationContext(
+        prompts={"main": simple_chat_prompt},
+        initial_prompts={"main": simple_chat_prompt},
+        is_single_prompt_optimization=True,
+        dataset=dataset,
+        evaluation_dataset=dataset,
+        validation_dataset=None,
+        metric=metric,
+        agent=agent,
+        optimization=None,
+        optimization_id=None,
+        experiment_config=None,
+        n_samples=None,
+        max_trials=5,
+        project_name="Test",
+        baseline_score=None,
+    )
+    optimizer._context = context
+
+    def fake_eval(*args, **kwargs):
+        return 0.9
+
+    optimizer.evaluate_prompt = fake_eval  # type: ignore[assignment]
+
+    optimizer.evaluate({"main": simple_chat_prompt})
+    assert context.should_stop is True
+    assert context.finish_reason == "perfect_score"
+
+
+def test_evaluate_sets_finish_reason_on_max_trials(simple_chat_prompt) -> None:
+    optimizer = ConcreteOptimizer(
+        model="gpt-4", perfect_score=1.5, skip_perfect_score=True
+    )
+    dataset = MagicMock()
+    metric = MagicMock()
+    agent = MagicMock()
+    context = OptimizationContext(
+        prompts={"main": simple_chat_prompt},
+        initial_prompts={"main": simple_chat_prompt},
+        is_single_prompt_optimization=True,
+        dataset=dataset,
+        evaluation_dataset=dataset,
+        validation_dataset=None,
+        metric=metric,
+        agent=agent,
+        optimization=None,
+        optimization_id=None,
+        experiment_config=None,
+        n_samples=None,
+        max_trials=1,
+        project_name="Test",
+        baseline_score=None,
+    )
+    optimizer._context = context
+
+    def fake_eval(*args, **kwargs):
+        return 0.1
+
+    optimizer.evaluate_prompt = fake_eval  # type: ignore[assignment]
+
+    optimizer.evaluate({"main": simple_chat_prompt})
+    assert context.should_stop is True
+    assert context.finish_reason == "max_trials"
+    assert context.trials_completed == 1
+
+
 class TestDeepMergeDicts:
     """Tests for _deep_merge_dicts static method."""
 

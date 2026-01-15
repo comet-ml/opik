@@ -301,7 +301,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         while context.trials_completed < max_trials:
             # Check should_stop flag at start of each round
-            if context.should_stop:
+            if self._should_stop_context(context):
                 break
 
             self._current_round = round_num
@@ -426,7 +426,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             for candidate_count, candidate in enumerate(candidate_prompts):
                 # Check should_stop before each evaluation
-                if context.should_stop:
+                if self._should_stop_context(context):
                     break
 
                 # Update progress tracking for display
