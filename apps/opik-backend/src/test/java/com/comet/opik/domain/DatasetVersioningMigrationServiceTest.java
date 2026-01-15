@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Provider;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +13,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -37,7 +37,7 @@ class DatasetVersioningMigrationServiceTest {
     private DatasetItemVersionDAO datasetItemVersionDAO;
 
     @Mock
-    private Jdbi jdbi;
+    private TransactionTemplate template;
 
     @Mock
     private RequestContext requestContext;
@@ -54,7 +54,7 @@ class DatasetVersioningMigrationServiceTest {
         migrationService = new DatasetVersioningMigrationService(
                 lockService,
                 datasetItemVersionDAO,
-                jdbi,
+                template,
                 requestContextProvider);
     }
 
