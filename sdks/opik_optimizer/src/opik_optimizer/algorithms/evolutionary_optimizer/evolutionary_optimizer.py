@@ -233,7 +233,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._generations_without_overall_improvement = 0
         self._best_primary_score_history: list[float] = []
         self._gens_since_pop_improvement: int = 0
-        self._evo_reporter: Any = None
+        self._reporter: Any = None
 
         if self.seed is not None:
             random.seed(self.seed)
@@ -387,8 +387,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
             offspring = elites + rest
 
         # --- crossover -------------------------------------------------
-        if self._evo_reporter:
-            self._evo_reporter.performing_crossover()
+        if self._reporter:
+            self._reporter.performing_crossover()
         offspring = [copy.deepcopy(ind) for ind in offspring]
         for i in range(0, len(offspring), 2):
             if i + 1 < len(offspring):
@@ -414,8 +414,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     del offspring[i].fitness.values, offspring[i + 1].fitness.values
 
         # --- mutation --------------------------------------------------
-        if self._evo_reporter:
-            self._evo_reporter.performing_mutation()
+        if self._reporter:
+            self._reporter.performing_mutation()
         mut_rate = self._get_adaptive_mutation_rate()
         n_mutations = 0
         for i, ind in enumerate(offspring):
@@ -438,8 +438,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # --- evaluation ------------------------------------------------
         invalid = [ind for ind in offspring if not ind.fitness.valid]
-        if self._evo_reporter:
-            self._evo_reporter.performing_evaluation(len(invalid))
+        if self._reporter:
+            self._reporter.performing_evaluation(len(invalid))
         for ind in invalid:
             fit = self._deap_evaluate_individual_fitness(ind)
             if self.enable_moo:
@@ -678,7 +678,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         generation_idx = 0
         with reporting.start_evolutionary_algo(verbose=self.verbose) as evo_reporter:
-            self._evo_reporter = evo_reporter
+            self._reporter = evo_reporter
             for generation_idx in range(1, self.num_generations + 1):
                 # Update progress tracking for display
                 self._current_round = generation_idx - 1  # 0-based internally
@@ -797,7 +797,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 self._add_to_history(gen_round_data)
 
             # Reset reporter after loop
-            self._evo_reporter = None
+            self._reporter = None
 
         # finish_reason is handled by _finalize_finish_reason override
 
