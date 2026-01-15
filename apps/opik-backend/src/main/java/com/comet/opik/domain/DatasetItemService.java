@@ -1370,9 +1370,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             // The baseVersion is the version ID directly (not a hash or tag)
             UUID baseVersionId = changes.baseVersion();
 
-            // Verify the base version exists and get its item count
+            // Verify the base version exists
             DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
-            int baseVersionItemCount = baseVersion.itemsTotal();
 
             // Check if baseVersion is the latest (unless override is set)
             if (!override && !versionService.isLatestVersion(workspaceId, datasetId, baseVersionId)) {
@@ -1399,50 +1398,53 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     baseVersionId);
             Mono<Set<UUID>> deletedItemIdsMono = mapRowIdsToDatasetItemIds(deletedRowIds);
 
-            return Mono.zip(editedItemsMono, deletedItemIdsMono)
-                    .flatMap(tuple -> {
-                        List<DatasetItem> editedItems = tuple.getT1();
-                        Set<UUID> deletedIds = tuple.getT2();
+            // Get the actual item count for the base version (handles migrated versions)
+            return getActualItemCount(baseVersion, datasetId, workspaceId)
+                    .flatMap(baseVersionItemCount -> Mono.zip(editedItemsMono, deletedItemIdsMono)
+                            .flatMap(tuple -> {
+                                List<DatasetItem> editedItems = tuple.getT1();
+                                Set<UUID> deletedIds = tuple.getT2();
 
-                        // Generate UUIDs for all items in the correct order for ClickHouse's ORDER BY id DESC
-                        // Since UUIDv7 is time-ordered (later = larger) and we sort DESC (largest first),
-                        // we need to generate UUIDs in reverse order of desired appearance:
-                        // 1. Unchanged items first (smallest UUIDs) - will appear LAST
-                        // 2. Edited items second (middle UUIDs) - will appear in MIDDLE
-                        // 3. Added items last (largest UUIDs) - will appear FIRST
+                                // Generate UUIDs for all items in the correct order for ClickHouse's ORDER BY id DESC
+                                // Since UUIDv7 is time-ordered (later = larger) and we sort DESC (largest first),
+                                // we need to generate UUIDs in reverse order of desired appearance:
+                                // 1. Unchanged items first (smallest UUIDs) - will appear LAST
+                                // 2. Edited items second (middle UUIDs) - will appear in MIDDLE
+                                // 3. Added items last (largest UUIDs) - will appear FIRST
 
-                        // However, we reverse the unchanged UUID pool to maintain original order
-                        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
+                                // However, we reverse the unchanged UUID pool to maintain original order
+                                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
 
-                        List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
-                        List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
+                                List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
+                                List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
-                        // Assign row IDs to edited and added items
-                        List<DatasetItem> editedItemsWithIds = withAssignedRowIds(editedItems, editedUuids);
-                        List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
+                                // Assign row IDs to edited and added items
+                                List<DatasetItem> editedItemsWithIds = withAssignedRowIds(editedItems, editedUuids);
+                                List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
-                        // Apply delta changes via DAO
-                        return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                                addedItemsWithIds, editedItemsWithIds, deletedIds, unchangedUuids)
-                                .map(itemsTotal -> {
-                                    log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
+                                // Apply delta changes via DAO
+                                return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                                        addedItemsWithIds, editedItemsWithIds, deletedIds, unchangedUuids)
+                                        .map(itemsTotal -> {
+                                            log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId,
+                                                    itemsTotal);
 
-                                    // Create version metadata
-                                    DatasetVersion version = versionService.createVersionFromDelta(
-                                            datasetId,
-                                            newVersionId,
-                                            itemsTotal.intValue(),
-                                            baseVersionId,
-                                            changes.tags(),
-                                            changes.changeDescription(),
-                                            workspaceId,
-                                            userName);
+                                            // Create version metadata
+                                            DatasetVersion version = versionService.createVersionFromDelta(
+                                                    datasetId,
+                                                    newVersionId,
+                                                    itemsTotal.intValue(),
+                                                    baseVersionId,
+                                                    changes.tags(),
+                                                    changes.changeDescription(),
+                                                    workspaceId,
+                                                    userName);
 
-                                    log.info("Created version '{}' for dataset '{}' with hash '{}'",
-                                            version.id(), datasetId, version.versionHash());
-                                    return version;
-                                });
-                    });
+                                            log.info("Created version '{}' for dataset '{}' with hash '{}'",
+                                                    version.id(), datasetId, version.versionHash());
+                                            return version;
+                                        });
+                            }));
         });
     }
 
