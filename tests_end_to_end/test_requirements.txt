@@ -1,5 +1,0 @@
-pytest
-playwright==1.49.0
-pytest-playwright
-pytest-rerunfailures
-allure-pytest>=2.13.0

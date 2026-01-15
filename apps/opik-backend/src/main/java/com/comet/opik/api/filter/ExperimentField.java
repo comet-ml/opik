@@ -9,6 +9,7 @@ public enum ExperimentField implements Field {
     METADATA(METADATA_QUERY_PARAM, FieldType.DICTIONARY),
     DATASET_ID(DATASET_ID_QUERY_PARAM, FieldType.STRING),
     PROMPT_IDS(PROMPT_IDS_QUERY_PARAM, FieldType.LIST),
+    TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     ;
 
     private final String queryParamField;
