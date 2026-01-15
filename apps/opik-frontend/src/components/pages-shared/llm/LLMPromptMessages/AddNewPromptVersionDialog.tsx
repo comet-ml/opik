@@ -140,12 +140,15 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
     if (isEdit) {
       if (selectedPrompt) {
+        const promptType = selectedPrompt?.latest_version?.type;
+
         newVersionMutate({
           name: selectedPrompt?.name,
           template,
           changeDescription,
           ...(finalMetadata && { metadata: finalMetadata }),
           ...(templateStructure && { templateStructure }),
+          ...(promptType && { type: promptType }),
           onSuccess: (data) =>
             onSave(data, selectedPrompt?.name, selectedPrompt?.id),
         });
