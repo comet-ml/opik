@@ -7,16 +7,19 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
 public class AnthropicClientGenerator implements LlmProviderClientGenerator<AnthropicClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final ChatModelListener chatModelListener;
 
     private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder();
@@ -66,6 +69,11 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
 
         return builder.build();
     }

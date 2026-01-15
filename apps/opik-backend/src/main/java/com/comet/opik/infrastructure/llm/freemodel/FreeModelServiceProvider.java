@@ -10,11 +10,13 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -27,15 +29,18 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
     private final OpenAIClientGenerator clientGenerator;
     private final FreeModelConfig freeModelConfig;
     private final LlmProviderClientConfig llmProviderClientConfig;
+    private final ChatModelListener chatModelListener;
 
     public FreeModelServiceProvider(
             @NonNull OpenAIClientGenerator clientGenerator,
             @NonNull LlmProviderFactory factory,
             @NonNull FreeModelConfig freeModelConfig,
-            @NonNull LlmProviderClientConfig llmProviderClientConfig) {
+            @NonNull LlmProviderClientConfig llmProviderClientConfig,
+            @NonNull ChatModelListener chatModelListener) {
         this.clientGenerator = clientGenerator;
         this.freeModelConfig = freeModelConfig;
         this.llmProviderClientConfig = llmProviderClientConfig;
+        this.chatModelListener = chatModelListener;
 
         if (freeModelConfig.isEnabled()) {
             factory.register(LlmProvider.OPIK_FREE, this);
@@ -84,6 +89,11 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
 
         Optional.ofNullable(transformedParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(transformedParameters.seed()).ifPresent(builder::seed);
+
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
 
         return builder.build();
     }

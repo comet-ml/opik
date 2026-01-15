@@ -106,4 +106,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private LlmInstrumentationConfig llmInstrumentation = new LlmInstrumentationConfig();
 }

@@ -103,6 +103,33 @@
             <artifactId>opentelemetry-r2dbc-1.0</artifactId>
             <version>${opentelmetry.version}-alpha</version>
         </dependency>
+        <!-- OpenInference instrumentation for LangChain4J -->
+        <dependency>
+            <groupId>com.arize</groupId>
+            <artifactId>openinference-instrumentation-langchain4j</artifactId>
+            <version>0.1.3</version>
+        </dependency>
+        <!-- OpenTelemetry SDK for LLM instrumentation -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+            <version>1.45.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <version>1.45.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-logging</artifactId>
+            <version>1.45.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry.semconv</groupId>
+            <artifactId>opentelemetry-semconv</artifactId>
+            <version>1.28.0-alpha</version>
+        </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>rds</artifactId>

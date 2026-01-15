@@ -8,6 +8,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -19,11 +20,12 @@ public class OpenRouterModule extends AbstractModule {
     @Singleton
     @Named("openrouterGenerator")
     public OpenAIClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) throws IOException {
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull ChatModelListener chatModelListener) throws IOException {
         LlmProviderClientConfig customConfig = JsonUtils.readValue(
                 JsonUtils.writeValueAsBytes(config), LlmProviderClientConfig.class);
         customConfig.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig(config.getOpenRouterUrl()));
-        return new OpenAIClientGenerator(customConfig);
+        return new OpenAIClientGenerator(customConfig, chatModelListener);
     }
 
     @Provides

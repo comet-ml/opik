@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.http.client.jdk.JdkHttpClient;
 import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.http.HttpClient;
+import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
@@ -23,6 +25,7 @@ import java.util.Optional;
 public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull ChatModelListener chatModelListener;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
@@ -99,6 +102,11 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
+
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
 
         // Pass custom parameters directly to constructor since builder inheritance
         // doesn't allow us to chain our custom methods cleanly

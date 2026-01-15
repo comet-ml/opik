@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.instrumentation.LlmInstrumentationService;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
@@ -15,8 +16,9 @@ public class CustomLlmModule extends AbstractModule {
     @Singleton
     @Named("customLlmGenerator")
     public CustomLlmClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new CustomLlmClientGenerator(config);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull LlmInstrumentationService llmInstrumentationService) {
+        return new CustomLlmClientGenerator(config, llmInstrumentationService.createChatModelListener());
     }
 
     @Provides

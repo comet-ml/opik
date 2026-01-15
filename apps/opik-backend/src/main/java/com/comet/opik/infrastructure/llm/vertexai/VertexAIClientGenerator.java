@@ -4,118 +4,108 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.cloud.vertexai.Transport;
-import com.google.cloud.vertexai.VertexAI;
-import com.google.cloud.vertexai.api.GenerationConfig;
-import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.common.base.Preconditions;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel;
 import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiStreamingChatModel;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-@RequiredArgsConstructor
 @Slf4j
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     private final @NonNull LlmProviderClientConfig clientConfig;
+    private final @NonNull ChatModelListener chatModelListener;
 
-    private ChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-
-        VertexAI vertexAI = getVertexAI(apiKey);
-
-        GenerationConfig generationConfig = getGenerationConfig(request);
-
-        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-
-        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
+    public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig,
+            @NonNull ChatModelListener chatModelListener) {
+        this.clientConfig = clientConfig;
+        this.chatModelListener = chatModelListener;
     }
 
-    private GenerativeModel getGenerativeModel(ChatCompletionRequest request, VertexAI vertexAI,
-            GenerationConfig generationConfig) {
+    private ChatModel newVertexAIClient(LlmProviderClientApiConfig config, ChatCompletionRequest request) {
+        var credentials = getCredentials(config);
         var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
 
-        return new GenerativeModel(vertexAIModelName.toString(), vertexAI)
-                .withGenerationConfig(generationConfig);
-    }
+        var builder = VertexAiGeminiChatModel.builder()
+                .project(credentials.getProjectId())
+                .location(config.configuration().get("location"))
+                .modelName(vertexAIModelName.toString())
+                .credentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                .logRequests(clientConfig.getLogRequests())
+                .logResponses(clientConfig.getLogResponses());
 
-    public StreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
-            @NonNull ChatCompletionRequest request) {
-
-        VertexAI vertexAI = getVertexAI(apiKey);
-
-        GenerationConfig generationConfig = getGenerationConfig(request);
-
-        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-
-        return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
-    }
-
-    private InternalServerErrorException failWithError(Exception e) {
-        return new InternalServerErrorException("Failed to create GoogleCredentials", e);
-    }
-
-    private GenerationConfig getGenerationConfig(ChatCompletionRequest request) {
-        var generationConfig = GenerationConfig.newBuilder();
-
+        // Add optional parameters from request
         Optional.ofNullable(request.temperature())
                 .map(Double::floatValue)
-                .ifPresent(generationConfig::setTemperature);
-
+                .ifPresent(builder::temperature);
         Optional.ofNullable(request.topP())
                 .map(Double::floatValue)
-                .ifPresent(generationConfig::setTopP);
-
-        Optional.ofNullable(request.stop())
-                .ifPresent(values -> values.forEach(generationConfig::addStopSequences));
-
-        Optional.ofNullable(request.presencePenalty())
-                .map(Double::floatValue)
-                .ifPresent(generationConfig::setPresencePenalty);
-
-        Optional.ofNullable(request.frequencyPenalty())
-                .map(Double::floatValue)
-                .ifPresent(generationConfig::setFrequencyPenalty);
-
+                .ifPresent(builder::topP);
         Optional.ofNullable(request.maxTokens())
-                .ifPresent(generationConfig::setMaxOutputTokens);
-
+                .ifPresent(builder::maxOutputTokens);
         Optional.ofNullable(request.seed())
-                .ifPresent(generationConfig::setSeed);
+                .ifPresent(builder::seed);
 
-        return generationConfig.build();
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
+
+        return builder.build();
     }
 
-    private VertexAI getVertexAI(LlmProviderClientApiConfig config) {
+    public StreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig config,
+            @NonNull ChatCompletionRequest request) {
+        var credentials = getCredentials(config);
+        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
+
+        var builder = VertexAiGeminiStreamingChatModel.builder()
+                .project(credentials.getProjectId())
+                .location(config.configuration().get("location"))
+                .modelName(vertexAIModelName.toString())
+                .credentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                .logRequests(clientConfig.getLogRequests())
+                .logResponses(clientConfig.getLogResponses());
+
+        // Add optional parameters from request
+        Optional.ofNullable(request.temperature())
+                .map(Double::floatValue)
+                .ifPresent(builder::temperature);
+        Optional.ofNullable(request.topP())
+                .map(Double::floatValue)
+                .ifPresent(builder::topP);
+        Optional.ofNullable(request.maxTokens())
+                .ifPresent(builder::maxOutputTokens);
+
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
+
+        return builder.build();
+    }
+
+    private ServiceAccountCredentials getCredentials(LlmProviderClientApiConfig config) {
         try {
-            var credentials = ServiceAccountCredentials.fromStream(
+            return ServiceAccountCredentials.fromStream(
                     new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
-
-            VertexAI.Builder builder = new VertexAI.Builder();
-
-            Optional.ofNullable(config.configuration().get("location"))
-                    .ifPresent(builder::setLocation);
-
-            return builder
-                    .setProjectId(credentials.getProjectId())
-                    .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                    .setTransport(Transport.GRPC)
-                    .build();
-
         } catch (Exception e) {
-            throw failWithError(e);
+            throw new InternalServerErrorException("Failed to create GoogleCredentials", e);
         }
     }
 
@@ -129,14 +119,33 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     @Override
-    public ChatModel generateChat(@NonNull LlmProviderClientApiConfig apiKey,
+    public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        var requestBuilder = ChatCompletionRequest.builder()
-                .model(modelParameters.name())
-                .temperature(modelParameters.temperature());
+        var credentials = getCredentials(config);
+        var vertexAIModelName = VertexAIModelName.byQualifiedName(modelParameters.name())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + modelParameters.name()));
 
-        Optional.ofNullable(modelParameters.seed()).ifPresent(requestBuilder::seed);
+        var builder = VertexAiGeminiChatModel.builder()
+                .project(credentials.getProjectId())
+                .location(config.configuration().get("location"))
+                .modelName(vertexAIModelName.toString())
+                .credentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                .logRequests(clientConfig.getLogRequests())
+                .logResponses(clientConfig.getLogResponses());
 
-        return newVertexAIClient(apiKey, requestBuilder.build());
+        // Add optional parameters
+        Optional.ofNullable(modelParameters.temperature())
+                .map(Double::floatValue)
+                .ifPresent(builder::temperature);
+        Optional.ofNullable(modelParameters.seed())
+                .ifPresent(builder::seed);
+
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
+
+        return builder.build();
     }
 }
+

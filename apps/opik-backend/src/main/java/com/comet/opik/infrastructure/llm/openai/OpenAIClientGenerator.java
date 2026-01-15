@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
@@ -20,6 +22,7 @@ import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_U
 public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final ChatModelListener chatModelListener;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
@@ -76,6 +79,11 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
+
+        // Add OpenTelemetry instrumentation listener
+        if (chatModelListener != null) {
+            builder.listeners(List.of(chatModelListener));
+        }
 
         return builder.build();
     }

@@ -4,6 +4,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.instrumentation.LlmInstrumentationService;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -21,11 +22,13 @@ public class FreeModelModule extends AbstractModule {
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull @Named("openaiGenerator") OpenAIClientGenerator clientGenerator,
             @NonNull @Config OpikConfiguration configuration,
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig llmProviderClientConfig) {
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig llmProviderClientConfig,
+            @NonNull LlmInstrumentationService llmInstrumentationService) {
         return new FreeModelServiceProvider(
                 clientGenerator,
                 llmProviderFactory,
                 configuration.getFreeModel(),
-                llmProviderClientConfig);
+                llmProviderClientConfig,
+                llmInstrumentationService.createChatModelListener());
     }
 }

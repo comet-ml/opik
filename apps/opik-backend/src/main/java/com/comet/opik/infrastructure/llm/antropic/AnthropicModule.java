@@ -15,8 +15,9 @@ public class AnthropicModule extends AbstractModule {
     @Provides
     @Singleton
     public AnthropicClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new AnthropicClientGenerator(config);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull dev.langchain4j.model.chat.listener.ChatModelListener chatModelListener) {
+        return new AnthropicClientGenerator(config, chatModelListener);
     }
 
     @Provides
