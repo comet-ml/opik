@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 /**
  * Tests for ColumnsButton excludeFromSelectAll logic
- * 
+ *
  * These tests verify the core logic for excluding metadata items from "Select all"
  * functionality. The tests focus on the computed values rather than UI interactions
  * since Radix UI dropdown menus require special handling in test environments.
@@ -96,7 +96,6 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
     it("should return true even when excluded columns are not selected", () => {
       const selectedColumns = ["name", "duration", "input"];
       const selectAllColumnsIds = ["name", "duration", "input"];
-      const excludeFromSelectAll = ["metadata.time_to_first_token"];
 
       // Metadata items are not in selectedColumns, but that's OK
       const allColumnsSelected =
@@ -150,12 +149,6 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
     });
 
     it("should deselect all columns including excluded ones", () => {
-      const selectedColumns = [
-        "name",
-        "duration",
-        "metadata.time_to_first_token",
-      ];
-
       // Simulating toggleColumns(false) logic
       const newSelection: string[] = [];
 

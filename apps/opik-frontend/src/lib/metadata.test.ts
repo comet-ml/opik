@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { getJSONPaths } from "./utils";
-import isObject from "lodash/isObject";
-import isArray from "lodash/isArray";
 import uniq from "lodash/uniq";
 
 /**
@@ -133,11 +131,7 @@ describe("normalizeMetadataPaths", () => {
   });
 
   it("should sort paths alphabetically", () => {
-    const paths = [
-      "metadata.zebra",
-      "metadata.alpha",
-      "metadata.beta",
-    ];
+    const paths = ["metadata.zebra", "metadata.alpha", "metadata.beta"];
     const result = normalizeMetadataPaths(paths);
     expect(result).toEqual([
       "metadata.alpha",
@@ -182,10 +176,7 @@ describe("normalizeMetadataPaths", () => {
 
 describe("buildDynamicMetadataColumns", () => {
   it("should build columns with dot-prefixed labels", () => {
-    const paths = [
-      "metadata.time_to_first_token",
-      "metadata.model_name",
-    ];
+    const paths = ["metadata.time_to_first_token", "metadata.model_name"];
     const result = buildDynamicMetadataColumns(paths);
     expect(result).toEqual([
       {
