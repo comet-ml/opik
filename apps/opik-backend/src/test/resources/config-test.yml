@@ -519,6 +519,9 @@ datasetVersioningMigration:
   # Default: 3600 (1 hour)
   # Description: Lock timeout in seconds for the migration process
   lockTimeoutSeconds: 3600
+  # Default: false for testing
+  # Description: Whether to enable lazy migration (migrate datasets on first access)
+  lazyEnabled: false
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms

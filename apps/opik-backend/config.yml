@@ -840,3 +840,6 @@ datasetVersioningMigration:
   # Default: 3600 (1 hour)
   # Description: Lock timeout in seconds for the migration process
   lockTimeoutSeconds: ${DATASET_VERSIONING_MIGRATION_LOCK_TIMEOUT:-3600}
+  # Default: false
+  # Description: Whether to enable lazy migration (migrate datasets on first access)
+  lazyEnabled: ${DATASET_VERSIONING_MIGRATION_LAZY_ENABLED:-"false"}
