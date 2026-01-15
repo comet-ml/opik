@@ -153,13 +153,15 @@ def test_distributed_headers__context_cleanup_in_normal_flow(fake_backend):
     """Test that span data is properly cleaned up from context after normal execution."""
     # Create a parent trace to get a valid trace ID
     with opik.start_as_current_trace("parent-trace", flush=True):
-        with opik.start_as_current_span("parent-span", flush=True):
+        with opik.start_as_current_span("parent-span"):
             distributed_headers = opik_context.get_distributed_trace_headers()
 
     # Verify context is clean before
     assert opik.opik_context.get_current_span_data() is None
 
-    with distributed_headers_context_manager.distributed_headers(distributed_headers):
+    with distributed_headers_context_manager.distributed_headers(
+        distributed_headers, flush=True
+    ):
         # Verify the root span is in context during execution
         current_span = opik.opik_context.get_current_span_data()
         assert current_span is not None
