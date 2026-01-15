@@ -305,6 +305,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     /**
+     * Simple count query without filters for getting actual item count in a version.
+     * Used for migrated versions where items_total is 0.
+     */
+    private static final String SELECT_DATASET_ITEM_VERSIONS_SIMPLE_COUNT = """
+            SELECT count(DISTINCT id) as count
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND workspace_id = :workspace_id
+            """;
+
+    /**
      * Counts dataset items with experiment items, applying all filters from search criteria.
      * This ensures pagination totals match the filtered results.
      *
@@ -2408,7 +2420,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      */
     @Override
     public Mono<Integer> getActualItemCount(UUID datasetId, UUID versionId, String workspaceId) {
-        String query = SELECT_DATASET_ITEM_VERSIONS_COUNT;
+        String query = SELECT_DATASET_ITEM_VERSIONS_SIMPLE_COUNT;
 
         return asyncTemplate.nonTransaction(connection -> Mono.from(connection.createStatement(query)
                 .bind("datasetId", datasetId)
