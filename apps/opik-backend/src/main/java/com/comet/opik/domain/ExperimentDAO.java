@@ -522,6 +522,7 @@ class ExperimentDAO {
                     ef.id,
                     ef.dataset_id,
                     ef.metadata,
+                    ef.tags,
                     ef.prompt_ids,
                     ef.created_at,
                     ep.project_id
