@@ -18,6 +18,7 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from . import prompts as hierarchical_prompts
+from . import reporting
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -445,95 +446,115 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 break
 
             # Perform hierarchical root cause analysis
-            logger.debug("Performing hierarchical root cause analysis...")
-            train_dataset_experiment_result = self.evaluate_prompt(
-                prompt=best_prompts,
-                dataset=dataset,
-                metric=metric,
-                agent=agent,
-                n_samples=n_samples,
-                n_threads=self.n_threads,
-                return_evaluation_result=True,
-            )
-            hierarchical_analysis = self._hierarchical_root_cause_analysis(
-                train_dataset_experiment_result
-            )
-            logger.debug(
-                f"Root cause analysis complete: {hierarchical_analysis.total_test_cases} test cases, "
-                f"{hierarchical_analysis.num_batches} batches"
+            with reporting.display_root_cause_analysis(
+                verbose=self.verbose
+            ) as rca_reporter:
+                train_dataset_experiment_result = self.evaluate_prompt(
+                    prompt=best_prompts,
+                    dataset=dataset,
+                    metric=metric,
+                    agent=agent,
+                    n_samples=n_samples,
+                    n_threads=self.n_threads,
+                    return_evaluation_result=True,
+                )
+                hierarchical_analysis = self._hierarchical_root_cause_analysis(
+                    train_dataset_experiment_result
+                )
+                rca_reporter.set_completed(
+                    hierarchical_analysis.total_test_cases,
+                    hierarchical_analysis.num_batches,
+                )
+
+            # Display synthesis results
+            reporting.display_hierarchical_synthesis(
+                total_test_cases=hierarchical_analysis.total_test_cases,
+                num_batches=hierarchical_analysis.num_batches,
+                synthesis_notes=hierarchical_analysis.synthesis_notes or "",
+                verbose=self.verbose,
             )
 
-            logger.debug(
-                f"Identified {len(hierarchical_analysis.unified_failure_modes)} failure modes"
+            # Display identified failure modes
+            reporting.display_failure_modes(
+                hierarchical_analysis.unified_failure_modes, verbose=self.verbose
             )
 
             # Generate improved prompt for each failure mode
             for idx, root_cause in enumerate(
                 hierarchical_analysis.unified_failure_modes, 1
             ):
-                logger.debug(
-                    f"Addressing failure mode {idx}/{len(hierarchical_analysis.unified_failure_modes)}: {root_cause.name}"
-                )
+                with reporting.display_prompt_improvement(
+                    root_cause.name, verbose=self.verbose
+                ):
+                    # Try multiple attempts if needed
+                    max_attempts = max_retries + 1
+                    improved_chat_prompts = None
+                    improved_score = None
 
-                # Try multiple attempts if needed
-                max_attempts = max_retries + 1
-                improved_chat_prompts = None
-                improved_score = None
+                    for attempt in range(1, max_attempts + 1):
+                        # Check if we've reached the trial limit before starting a new trial
+                        if context.trials_completed >= max_trials:
+                            logger.info(
+                                f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
+                                f"Stopping optimization."
+                            )
+                            self._should_stop_optimization = True
+                            break
 
-                for attempt in range(1, max_attempts + 1):
-                    # Check if we've reached the trial limit before starting a new trial
-                    if context.trials_completed >= max_trials:
-                        logger.info(
-                            f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
-                            f"Stopping optimization."
+                        # Generate and evaluate improvement (this is 1 trial)
+                        (
+                            improved_chat_prompts,
+                            improved_score,
+                            improved_experiment_result,
+                        ) = self._generate_and_evaluate_improvement(
+                            root_cause=root_cause,
+                            best_prompts=best_prompts,
+                            best_score=best_score,
+                            original_prompts=optimizable_prompts,
+                            dataset=dataset,
+                            validation_dataset=validation_dataset,
+                            metric=metric,
+                            agent=agent,
+                            optimization_id=optimization.id if optimization else None,
+                            n_samples=n_samples,
+                            attempt=attempt,
+                            max_attempts=max_attempts,
                         )
-                        self._should_stop_optimization = True
-                        break
+                        # Increment context.trials_completed (single source of truth)
+                        context.trials_completed += 1
 
-                    # Generate and evaluate improvement (this is 1 trial)
-                    (
-                        improved_chat_prompts,
-                        improved_score,
-                        improved_experiment_result,
-                    ) = self._generate_and_evaluate_improvement(
-                        root_cause=root_cause,
-                        best_prompts=best_prompts,
-                        best_score=best_score,
-                        original_prompts=optimizable_prompts,
-                        dataset=dataset,
-                        validation_dataset=validation_dataset,
-                        metric=metric,
-                        agent=agent,
-                        optimization_id=optimization.id if optimization else None,
-                        n_samples=n_samples,
-                        attempt=attempt,
-                        max_attempts=max_attempts,
-                    )
-                    # Increment context.trials_completed (single source of truth)
-                    context.trials_completed += 1
+                        # Check for perfect score early stop
+                        if (
+                            self.skip_perfect_score
+                            and improved_score >= self.perfect_score
+                        ):
+                            context.should_stop = True
+                            context.finish_reason = "perfect_score"
+                            break
 
-                    # Check for perfect score early stop
-                    if self.skip_perfect_score and improved_score >= self.perfect_score:
-                        context.should_stop = True
-                        context.finish_reason = "perfect_score"
-                        break
+                        # Check if we got improvement
+                        if improved_score > best_score:
+                            reporting.display_iteration_improvement(
+                                improvement=(improved_score - best_score) / best_score
+                                if best_score > 0
+                                else 0,
+                                current_score=improved_score,
+                                best_score=best_score,
+                                verbose=self.verbose,
+                            )
+                            break
 
-                    # Check if we got improvement
-                    if improved_score > best_score:
-                        logger.info(
-                            f"Improvement found for '{root_cause.name}' on attempt {attempt}"
-                        )
-                        break
-
-                    # No improvement - should we retry?
-                    if attempt < max_attempts and context.trials_completed < max_trials:
-                        logger.debug(
-                            f"Retrying attempt {attempt + 1}/{max_attempts} for '{root_cause.name}'"
-                        )
-                    else:
-                        logger.debug(
-                            f"No improvement after {attempt} attempts for '{root_cause.name}'"
-                        )
+                        # No improvement - should we retry?
+                        if (
+                            attempt < max_attempts
+                            and context.trials_completed < max_trials
+                        ):
+                            reporting.display_retry_attempt(
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                                failure_mode_name=root_cause.name,
+                                verbose=self.verbose,
+                            )
 
                 # Break out of failure mode loop if flag is set
                 if self._should_stop_optimization or context.should_stop:
