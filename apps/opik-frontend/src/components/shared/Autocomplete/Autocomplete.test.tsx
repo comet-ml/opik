@@ -46,7 +46,7 @@ describe("AutoComplete - Clear button functionality", () => {
     );
 
     const clearButton = screen.getByRole("button", { hidden: true });
-    fireEvent.mouseDown(clearButton);
+    fireEvent.click(clearButton);
 
     await waitFor(() => {
       expect(mockOnValueChange).toHaveBeenCalledWith("");

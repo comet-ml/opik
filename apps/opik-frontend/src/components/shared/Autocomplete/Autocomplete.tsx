@@ -125,8 +125,8 @@ const AutoComplete = <T extends string>({
 
   const handleClear = useCallback(
     (e: React.MouseEvent) => {
-      e.preventDefault();
       e.stopPropagation();
+
       const emptyValue = "" as T;
       setLocalValue(emptyValue);
       onValueChange(emptyValue);
@@ -212,7 +212,7 @@ const AutoComplete = <T extends string>({
           variant="ghost"
           size="icon"
           className="absolute right-1 size-6 shrink-0 text-foreground opacity-50 hover:opacity-100"
-          onMouseDown={handleClear}
+          onClick={handleClear}
           tabIndex={-1}
           type="button"
         >
