@@ -1547,7 +1547,13 @@ class TestFinalizeFinishReason:
 
     def test_preserves_early_stop_reasons(self, optimizer, base_context) -> None:
         """Various early stop reasons should be preserved."""
-        for early_reason in ["perfect_score", "no_improvement", "convergence"]:
+        for early_reason in [
+            "perfect_score",
+            "no_improvement",
+            "convergence",
+            "error",
+            "cancelled",
+        ]:
             base_context.trials_completed = 10
             base_context.finish_reason = early_reason
 

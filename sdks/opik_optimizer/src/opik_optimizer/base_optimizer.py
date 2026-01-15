@@ -59,6 +59,8 @@ FinishReason = Literal[
     "perfect_score",  # Target score threshold reached
     "max_trials",  # Maximum number of trials reached
     "no_improvement",  # No improvement for configured number of generations
+    "error",  # Optimization failed
+    "cancelled",  # Optimization cancelled/interrupted
 ]
 
 
