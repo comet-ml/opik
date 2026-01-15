@@ -561,6 +561,7 @@ class BaseOptimizer(ABC):
             agent=context.agent,
             experiment_config=experiment_config,
             n_samples=context.n_samples,
+            n_threads=getattr(self, "n_threads", None),
             verbose=0,
         )
 

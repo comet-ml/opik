@@ -555,6 +555,60 @@ def test_evaluate_prompt_selects_max_logprob_candidate(
     assert score == 1.0
 
 
+def test_evaluate_forwards_configured_n_threads(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    """Candidate evaluations should honor the optimizer's configured n_threads."""
+    optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
+    optimizer.n_threads = 1
+
+    dataset = MagicMock()
+    metric = MagicMock()
+    agent = MagicMock()
+
+    optimizer._context = OptimizationContext(
+        prompts={"main": simple_chat_prompt},
+        initial_prompts={"main": simple_chat_prompt},
+        is_single_prompt_optimization=True,
+        dataset=dataset,
+        evaluation_dataset=dataset,
+        validation_dataset=None,
+        metric=metric,
+        agent=agent,
+        optimization=None,
+        optimization_id=None,
+        experiment_config=None,
+        n_samples=None,
+        max_trials=3,
+        project_name="Test",
+    )
+
+    captured_call: dict[str, Any] = {}
+
+    def fake_evaluate_prompt(
+        self,
+        *,
+        prompt,
+        dataset,
+        metric,
+        agent,
+        experiment_config,
+        n_samples,
+        verbose,
+        n_threads=None,
+        **kwargs,
+    ):
+        captured_call["n_threads"] = n_threads
+        return 0.5
+
+    monkeypatch.setattr(ConcreteOptimizer, "evaluate_prompt", fake_evaluate_prompt)
+
+    score = optimizer.evaluate({"main": simple_chat_prompt})
+
+    assert score == 0.5
+    assert captured_call["n_threads"] == optimizer.n_threads
+
+
 class TestDeepMergeDicts:
     """Tests for _deep_merge_dicts static method."""
 
