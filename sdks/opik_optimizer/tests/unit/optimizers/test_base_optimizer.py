@@ -739,6 +739,15 @@ def test_coerce_score_rejects_non_numeric() -> None:
         BaseOptimizer._coerce_score(object())
 
 
+def test_reporter_helpers_set_and_clear() -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    reporter = object()
+    optimizer._set_reporter(reporter)
+    assert optimizer._reporter is reporter
+    optimizer._clear_reporter()
+    assert optimizer._reporter is None
+
+
 def test_on_evaluation_handles_non_finite_scores(
     monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
 ) -> None:

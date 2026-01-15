@@ -192,6 +192,7 @@ class BaseOptimizer(ABC):
         # These are updated by the base class and can be read by get_metadata
         self._trials_completed: int = 0
         self._rounds_completed: int = 0
+        self._reporter: Any | None = None
 
         # Current optimization context (set during optimize_prompt, used by evaluate())
         self.__context: OptimizationContext | None = None
@@ -884,8 +885,17 @@ class BaseOptimizer(ABC):
         if self._opik_client is not None:
             # Note: Opik client doesn't have explicit cleanup, but we can clear the reference
             self._opik_client = None
+        self._reporter = None
 
         logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
+
+    def _set_reporter(self, reporter: Any | None) -> None:
+        """Set the active reporter for the current optimization scope."""
+        self._reporter = reporter
+
+    def _clear_reporter(self) -> None:
+        """Clear the active reporter."""
+        self._reporter = None
 
     def __del__(self) -> None:
         """Destructor to ensure cleanup is called."""
