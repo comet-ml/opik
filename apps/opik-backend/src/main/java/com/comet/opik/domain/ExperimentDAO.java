@@ -487,6 +487,7 @@ class ExperimentDAO {
                     id,
                     dataset_id,
                     metadata,
+                    tags,
                     arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids,
                     created_at
                 FROM experiments final
@@ -716,6 +717,7 @@ class ExperimentDAO {
                     e.id as id,
                     e.dataset_id AS dataset_id,
                     e.metadata AS metadata,
+                    e.tags AS tags,
                     fs.feedback_scores as feedback_scores,
                     es.experiment_scores as experiment_scores,
                     ed.trace_count as trace_count,

@@ -10,6 +10,7 @@ public enum ExperimentField implements Field {
     DATASET_ID(DATASET_ID_QUERY_PARAM, FieldType.STRING),
     PROJECT_ID(PROJECT_ID_QUERY_PARAM, FieldType.STRING),
     PROMPT_IDS(PROMPT_IDS_QUERY_PARAM, FieldType.LIST),
+    TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     ;
 
     private final String queryParamField;

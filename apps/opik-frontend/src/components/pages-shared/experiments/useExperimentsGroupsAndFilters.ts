@@ -31,6 +31,12 @@ export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
     disposable: true,
   },
   {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+  },
+  {
     id: COLUMN_METADATA_ID,
     label: "Configuration",
     type: COLUMN_TYPE.dictionary,

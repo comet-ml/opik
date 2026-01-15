@@ -1,15 +1,13 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.domain.DatasetExportMessage;
+import com.comet.opik.domain.CsvDatasetExportProcessor;
+import com.comet.opik.domain.DatasetExportJobService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
-import reactor.core.publisher.Mono;
-
-import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -30,13 +28,19 @@ class DatasetExportJobSubscriberTest {
     @Mock
     private RedissonReactiveClient redisClient;
 
+    @Mock
+    private DatasetExportJobService jobService;
+
+    @Mock
+    private CsvDatasetExportProcessor csvProcessor;
+
     private DatasetExportJobSubscriber subscriber;
 
     @Test
     void start_shouldSkipStartup_whenDisabled() {
         // Given
         when(config.isEnabled()).thenReturn(false);
-        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient));
+        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
         subscriber.start();
@@ -49,32 +53,12 @@ class DatasetExportJobSubscriberTest {
     void stop_shouldSkipShutdown_whenDisabled() {
         // Given
         when(config.isEnabled()).thenReturn(false);
-        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient));
+        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
         subscriber.stop();
 
         // Then - verify no shutdown interactions occurred
         verify(redisClient, never()).getStream(any(), any());
-    }
-
-    @Test
-    void processEvent_shouldReturnError_whenCsvExportNotImplemented() {
-        // Given
-        subscriber = new DatasetExportJobSubscriber(config, redisClient);
-
-        DatasetExportMessage message = DatasetExportMessage.builder()
-                .jobId(UUID.randomUUID())
-                .datasetId(UUID.randomUUID())
-                .workspaceId(UUID.randomUUID().toString())
-                .build();
-
-        // When
-        Mono<Void> result = subscriber.processEvent(message);
-
-        // Then - verify it returns error (not empty) to prevent message acknowledgment
-        result.as(reactor.test.StepVerifier::create)
-                .expectError(IllegalStateException.class)
-                .verify();
     }
 }
