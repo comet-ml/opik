@@ -59,9 +59,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     DEFAULT_MAX_ITERATIONS = 5
     DEFAULT_CONVERGENCE_THRESHOLD = 0.01  # Stop if improvement is less than 1%
 
-    # Reuse existing optimization run when optimization_id is provided
-    REUSE_EXISTING_OPTIMIZATION: bool = True
-
     def __init__(
         self,
         model: str = "gpt-4o",

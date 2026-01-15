@@ -123,14 +123,6 @@ class BaseOptimizer(ABC):
     # Subclasses define their prompts here
     DEFAULT_PROMPTS: dict[str, str] = {}
 
-    # Whether to warn when validation_dataset is provided but not supported.
-    # Subclasses that don't support validation should set this to True.
-    WARN_VALIDATION_UNSUPPORTED: bool = False
-
-    # Whether to reuse an existing optimization run when optimization_id is provided.
-    # If True and optimization_id is given, looks up existing run instead of creating new one.
-    REUSE_EXISTING_OPTIMIZATION: bool = False
-
     def __init__(
         self,
         model: str,
@@ -420,8 +412,6 @@ class BaseOptimizer(ABC):
         project_name: str | None = None,
         optimization_id: str | None = None,
         max_trials: int = 10,
-        reuse_existing_optimization: bool = False,
-        warn_validation_unsupported: bool = False,
         **extra_params: Any,
     ) -> "OptimizationContext":
         optimizable_prompts, is_single_prompt_optimization = (
@@ -447,7 +437,7 @@ class BaseOptimizer(ABC):
         self.project_name = project_name
         self._reset_counters()
 
-        if reuse_existing_optimization and optimization_id:
+        if optimization_id:
             opik_optimization = self.opik_client.get_optimization_by_id(optimization_id)
             self.current_optimization_id = opik_optimization.id
             logger.debug(f"Using existing optimization with ID: {opik_optimization.id}")
@@ -457,7 +447,7 @@ class BaseOptimizer(ABC):
             )
 
         evaluation_dataset = self._select_evaluation_dataset(
-            dataset, validation_dataset, warn_unsupported=warn_validation_unsupported
+            dataset, validation_dataset
         )
 
         if validation_dataset is not None:
@@ -1468,9 +1458,6 @@ class BaseOptimizer(ABC):
             project_name=project_name,
             optimization_id=optimization_id,
             max_trials=max_trials,
-            warn_validation_unsupported=self.WARN_VALIDATION_UNSUPPORTED,
-            reuse_existing_optimization=self.REUSE_EXISTING_OPTIMIZATION
-            and bool(optimization_id),
             auto_continue=auto_continue,
             **kwargs,
         )
