@@ -792,6 +792,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(dataset -> Mono.deferContextual(ctx -> {
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    // Ensure dataset is migrated if lazy migration is enabled
+                    return ensureLazyMigration(dataset.id(), workspaceId, userName)
+                            .thenReturn(dataset);
+                }))
                 .flatMapMany(dataset -> {
                     // 3-tier version resolution logic:
                     // 1. If version parameter is specified, use it
@@ -1235,6 +1241,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            // Ensure dataset is migrated if lazy migration is enabled
+            return ensureLazyMigration(datasetItemSearchCriteria.datasetId(), workspaceId, userName)
+                    .then(Mono.defer(() -> getItemsInternal(page, size, datasetItemSearchCriteria)));
+        });
+    }
+
+    private Mono<DatasetItemPage> getItemsInternal(
+            int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
 
         if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
             // Fetch versioned (immutable) items from dataset_item_versions table

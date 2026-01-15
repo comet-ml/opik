@@ -9,13 +9,15 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.util.UUID;
+
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @Slf4j
 @Singleton
@@ -24,7 +26,7 @@ public class DatasetVersioningMigrationService {
 
     private final @NonNull LockService lockService;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
-    private final @NonNull org.jdbi.v3.core.Jdbi jdbi;
+    private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
 
     private static final Lock MIGRATION_LOCK = new Lock("dataset_versioning_migration");
@@ -87,7 +89,7 @@ public class DatasetVersioningMigrationService {
      */
     private Mono<Boolean> hasVersions(UUID datasetId, String workspaceId) {
         return Mono.fromCallable(() -> {
-            long count = jdbi.inTransaction(TransactionIsolationLevel.READ_COMMITTED, handle -> {
+            long count = template.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(DatasetVersionDAO.class);
                 return dao.countByDatasetId(datasetId, workspaceId);
             });
@@ -100,6 +102,7 @@ public class DatasetVersioningMigrationService {
      * <p>
      * This method double-checks if the dataset still needs migration (in case another
      * thread migrated it while waiting for the lock), then performs the migration.
+     * The entire migration runs in a single transaction.
      *
      * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
@@ -107,21 +110,29 @@ public class DatasetVersioningMigrationService {
      * @return a Mono that completes when migration is done
      */
     private Mono<Void> performLazyMigration(UUID datasetId, String workspaceId, String userName) {
-        return hasVersions(datasetId, workspaceId)
-                .flatMap(hasVersions -> {
-                    if (hasVersions) {
-                        // Another thread already migrated this dataset
-                        log.debug("Dataset '{}' was already migrated by another thread", datasetId);
-                        return Mono.empty();
-                    }
+        return Mono.<Void>fromCallable(() -> {
+            // Run the entire migration in a single WRITE transaction
+            return template.inTransaction(WRITE, handle -> {
+                // Double-check if dataset still needs migration
+                var dao = handle.attach(DatasetVersionDAO.class);
+                long count = dao.countByDatasetId(datasetId, workspaceId);
 
-                    log.info("Starting lazy migration for dataset '{}'", datasetId);
-                    return migrateSingleDataset(datasetId, workspaceId, userName)
-                            .doOnSuccess(unused -> log.info("Successfully completed lazy migration for dataset '{}'",
-                                    datasetId))
-                            .doOnError(error -> log.error("Failed to perform lazy migration for dataset '{}'",
-                                    datasetId, error));
-                });
+                if (count > 0) {
+                    // Another thread already migrated this dataset
+                    log.debug("Dataset '{}' was already migrated by another thread", datasetId);
+                    return null;
+                }
+
+                log.info("Starting lazy migration for dataset '{}' in a single transaction", datasetId);
+
+                // Execute the reactive migration chain and block within the transaction
+                // This ensures all operations run in this single transaction
+                migrateSingleDataset(datasetId, workspaceId, userName).block();
+
+                log.info("Successfully completed lazy migration for dataset '{}'", datasetId);
+                return null;
+            });
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(30);
@@ -197,7 +208,7 @@ public class DatasetVersioningMigrationService {
         return Mono.<Void>fromCallable(() -> {
             log.debug("Ensuring version 1 exists for dataset '{}'", datasetId);
 
-            jdbi.useTransaction(TransactionIsolationLevel.READ_COMMITTED, handle -> {
+            template.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(DatasetVersionDAO.class);
                 int rowsInserted = dao.ensureVersion1Exists(datasetId, versionId, workspaceId);
 
@@ -206,6 +217,7 @@ public class DatasetVersioningMigrationService {
                 } else {
                     log.debug("Version 1 already exists for dataset '{}'", datasetId);
                 }
+                return null;
             });
 
             return null;
@@ -248,9 +260,10 @@ public class DatasetVersioningMigrationService {
                     log.debug("Dataset '{}' has '{}' items in version 1", datasetId, count);
 
                     return Mono.<Void>fromCallable(() -> {
-                        jdbi.useTransaction(TransactionIsolationLevel.READ_COMMITTED, handle -> {
+                        template.inTransaction(WRITE, handle -> {
                             handle.attach(DatasetVersionDAO.class)
                                     .updateItemsTotal(versionId, count);
+                            return null;
                         });
                         return null;
                     }).subscribeOn(Schedulers.boundedElastic());
@@ -261,7 +274,7 @@ public class DatasetVersioningMigrationService {
         return Mono.<Void>fromCallable(() -> {
             log.debug("Ensuring 'latest' tag exists for dataset '{}'", datasetId);
 
-            jdbi.useTransaction(TransactionIsolationLevel.READ_COMMITTED, handle -> {
+            template.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(DatasetVersionDAO.class);
                 int rowsInserted = dao.ensureLatestTagExists(datasetId, versionId, workspaceId);
 
@@ -270,6 +283,7 @@ public class DatasetVersioningMigrationService {
                 } else {
                     log.debug("'latest' tag already exists for dataset '{}'", datasetId);
                 }
+                return null;
             });
 
             return null;
