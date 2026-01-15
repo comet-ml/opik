@@ -1,5 +1,6 @@
 package com.comet.opik.api.grouping;
 
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.BadRequestException;
@@ -70,7 +71,7 @@ public abstract class GroupingFactory {
         return group.toBuilder().type(fieldType).build();
     }
 
-    private com.comet.opik.api.filter.FieldType getFieldType(String field) {
+    private FieldType getFieldType(String field) {
         // metadata is always DICTIONARY
         if (METADATA.equals(field)) {
             return DICTIONARY;
