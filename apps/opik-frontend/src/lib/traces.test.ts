@@ -101,6 +101,46 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({ message: "User message", prettified: true });
   });
 
+  it("handles LangGraph input with array content in human message", () => {
+    const message = {
+      messages: [
+        {
+          content: [{ type: "text", text: "[2026-01-12 19:22:36] Hi there" }],
+          additional_kwargs: { timestamp: 1768245756358 },
+          response_metadata: {},
+          type: "human",
+          name: null,
+          id: null,
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "[2026-01-12 19:22:36] Hi there",
+      prettified: true,
+    });
+  });
+
+  it("handles LangGraph input with array content and system message last", () => {
+    const message = {
+      messages: [
+        {
+          content: [{ type: "text", text: "What is the weather?" }],
+          type: "human",
+        },
+        {
+          content: "You are a helpful assistant.",
+          type: "system",
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "What is the weather?",
+      prettified: true,
+    });
+  });
+
   it("handles LangGraph input with multiple human messages and returns the last one", () => {
     const message = {
       messages: [

@@ -216,18 +216,37 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const humanMessages = message.messages.filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+    // Get the last human message, supporting both string and array content formats
+    const humanMessages = [];
+
+    for (const m of message.messages) {
+      if (isObject(m) && "type" in m && m.type === "human" && "content" in m) {
+        // Content can be a string
+        if (isString(m.content) && m.content !== "") {
+          humanMessages.push(m.content);
+        }
+        // Or content can be an array with text content (e.g., LangChain with OpenAI)
+        else if (isArray(m.content)) {
+          const lastTextContent = findLast(
+            m.content,
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text) &&
+              c.text !== "",
+          );
+
+          if (lastTextContent && "text" in lastTextContent) {
+            humanMessages.push(lastTextContent.text);
+          }
+        }
+      }
+    }
 
     if (humanMessages.length > 0) {
-      return last(humanMessages).content;
+      return last(humanMessages);
     }
   } else if (
     config.type === "output" &&
