@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, List, Optional, Union
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import google.adk.agents
 from google.adk.agents import callback_context
@@ -65,6 +66,8 @@ class OpikTracer:
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
         self._opik_client = opik_client.get_client_cached()
+        # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
+        self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
         patchers.patch_adk(self._opik_client)
 
@@ -190,6 +193,10 @@ class OpikTracer:
             )
 
             context_storage.add_span_data(result.span_data)
+
+            # Track request start time for time-to-first-token calculation
+            request_start_time = time.time()
+            self._ttft_tracking[result.span_data.id] = (request_start_time, None)
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
@@ -201,12 +208,10 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # Ignore partial chunks, ADK will call this method with the full response at the end
-            if llm_response.partial is True:
-                return
-
+            is_partial = llm_response.partial is True
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
+            is_partial = False
 
         try:
             model = None
@@ -223,6 +228,70 @@ class OpikTracer:
                 )
                 return
 
+            # Track time-to-first-token: detect first token arrival
+            if current_span.id in self._ttft_tracking:
+                request_start_time, first_token_time = self._ttft_tracking[
+                    current_span.id
+                ]
+                if first_token_time is None:
+                    # Check if this response contains actual content (first token)
+                    try:
+                        output_dict = adk_helpers.convert_adk_base_model_to_dict(
+                            llm_response
+                        )
+                        # Check if there's any text content in the response
+                        has_content = False
+                        if isinstance(output_dict, dict):
+                            # Check various possible content locations
+                            if "content" in output_dict:
+                                content = output_dict["content"]
+                                if isinstance(content, list) and len(content) > 0:
+                                    for part in content:
+                                        if isinstance(part, dict) and part.get("text"):
+                                            has_content = True
+                                            break
+                                elif isinstance(content, str) and content.strip():
+                                    has_content = True
+                            # Also check for candidates structure (Gemini format)
+                            if not has_content and "candidates" in output_dict:
+                                candidates = output_dict["candidates"]
+                                if isinstance(candidates, list) and len(candidates) > 0:
+                                    candidate = candidates[0]
+                                    if (
+                                        isinstance(candidate, dict)
+                                        and "content" in candidate
+                                    ):
+                                        content = candidate["content"]
+                                        if (
+                                            isinstance(content, dict)
+                                            and "parts" in content
+                                        ):
+                                            parts = content["parts"]
+                                            if isinstance(parts, list):
+                                                for part in parts:
+                                                    if isinstance(
+                                                        part, dict
+                                                    ) and part.get("text"):
+                                                        has_content = True
+                                                        break
+
+                        if has_content:
+                            # First token detected
+                            first_token_time = time.time()
+                            self._ttft_tracking[current_span.id] = (
+                                request_start_time,
+                                first_token_time,
+                            )
+                    except Exception as e:
+                        LOGGER.debug(
+                            f"Error detecting first token for TTFT calculation: {e}",
+                            exc_info=True,
+                        )
+
+            # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
+            if is_partial:
+                return
+
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
@@ -237,18 +306,33 @@ class OpikTracer:
                     exc_info=True,
                 )
 
+            # Calculate time-to-first-token and add to metadata
+            metadata_update = {}
+            if current_span.id in self._ttft_tracking:
+                request_start_time, first_token_time = self._ttft_tracking.pop(
+                    current_span.id
+                )
+                if first_token_time is not None:
+                    time_to_first_token = first_token_time - request_start_time
+                    metadata_update["time_to_first_token"] = time_to_first_token
+
+            # Merge with existing metadata
+            if current_span.metadata is None:
+                current_span.metadata = {}
+            current_span.metadata.update(metadata_update)
+            current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
+                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION
+            )
+
             current_span.update(
                 output=output,
                 name=model or current_span.model,
                 type="llm",
                 model=model,
                 usage=usage,
+                metadata=current_span.metadata,
                 project_name=self.project_name,
             )
-            if current_span.metadata is not None:
-                current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
-                    llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION
-                )
 
             context_storage.pop_span_data(ensure_id=current_span.id)
             current_span.init_end_time()
@@ -331,6 +415,8 @@ class OpikTracer:
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("_opik_client", None)
+        # Don't serialize TTFT tracking as it's runtime state
+        state.pop("_ttft_tracking", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
