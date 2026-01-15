@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, List, Optional, Union
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import google.adk.agents
 from google.adk.agents import callback_context
@@ -65,6 +66,8 @@ class OpikTracer:
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
         self._opik_client = opik_client.get_client_cached()
+        # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
+        self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
         patchers.patch_adk(self._opik_client)
 
@@ -133,7 +136,6 @@ class OpikTracer:
     ) -> None:
         try:
             output = self._last_model_output
-            # Debug logging for callback invocation
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
             if current_span is not None:
@@ -190,6 +192,10 @@ class OpikTracer:
             )
 
             context_storage.add_span_data(result.span_data)
+
+            # Track request start time for time-to-first-token calculation
+            request_start_time = time.time()
+            self._ttft_tracking[result.span_data.id] = (request_start_time, None)
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
@@ -201,19 +207,22 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # Ignore partial chunks, ADK will call this method with the full response at the end
-            if llm_response.partial is True:
-                return
-
+            is_partial = llm_response.partial is True
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
+            is_partial = False
 
+        span_id: Optional[str] = None
         try:
             model = None
             usage = None
             output = None
 
             if adk_helpers.has_empty_text_part_content(llm_response):
+                # Clean up TTFT tracking if it exists before early return
+                current_span = context_storage.top_span_data()
+                if current_span is not None and current_span.id is not None:
+                    self._ttft_tracking.pop(current_span.id, None)
                 return
 
             current_span = context_storage.top_span_data()
@@ -221,6 +230,53 @@ class OpikTracer:
                 LOGGER.warning(
                     "No current span found in context for model output update"
                 )
+                return
+
+            # Store span_id early for cleanup on all exit paths
+            span_id = current_span.id
+
+            # Track time-to-first-token: detect first token arrival
+            # We check for first token on EVERY callback (including partial chunks)
+            # to catch the first moment content appears
+            if span_id in self._ttft_tracking:
+                request_start_time, first_token_time = self._ttft_tracking[span_id]
+                if first_token_time is None:
+                    # Check if this response contains actual content (first token)
+                    # Content can be text or function calls (tool calls)
+                    has_content = False
+                    try:
+                        # Check the LlmResponse object directly for content structure
+                        if (
+                            llm_response.content is not None
+                            and llm_response.content.parts
+                        ):
+                            for part in llm_response.content.parts:
+                                # Check for text content
+                                if part.text is not None and len(part.text.strip()) > 0:
+                                    has_content = True
+                                    break
+                                # Check for function call content (tool calls)
+                                if part.function_call is not None:
+                                    has_content = True
+                                    break
+                    except Exception as e:
+                        LOGGER.debug(
+                            f"Error checking LlmResponse.content.parts for TTFT: {e}",
+                            exc_info=True,
+                        )
+
+                    if has_content:
+                        # First token detected - record the time
+                        first_token_time = time.time()
+                        self._ttft_tracking[span_id] = (
+                            request_start_time,
+                            first_token_time,
+                        )
+
+            # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
+            # Note: We intentionally keep the TTFT tracking entry for partial chunks since ADK will call
+            # this method again with the final non-partial response, where we'll properly clean it up
+            if is_partial:
                 return
 
             try:
@@ -237,18 +293,31 @@ class OpikTracer:
                     exc_info=True,
                 )
 
+            # Calculate time-to-first-token and add to metadata
+            metadata_update = {}
+            if span_id in self._ttft_tracking:
+                request_start_time, first_token_time = self._ttft_tracking.pop(span_id)
+                if first_token_time is not None:
+                    time_to_first_token = first_token_time - request_start_time
+                    metadata_update["time_to_first_token"] = time_to_first_token
+
+            # Merge with existing metadata
+            if current_span.metadata is None:
+                current_span.metadata = {}
+            current_span.metadata.update(metadata_update)
+            current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
+                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
+            )
+
             current_span.update(
                 output=output,
                 name=model or current_span.model,
                 type="llm",
                 model=model,
                 usage=usage,
+                metadata=current_span.metadata,
                 project_name=self.project_name,
             )
-            if current_span.metadata is not None:
-                current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
-                    llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION
-                )
 
             context_storage.pop_span_data(ensure_id=current_span.id)
             current_span.init_end_time()
@@ -259,6 +328,9 @@ class OpikTracer:
             self._last_model_output = output
 
         except Exception as e:
+            # Clean up TTFT tracking entry before re-logging error to prevent memory leak
+            if span_id is not None:
+                self._ttft_tracking.pop(span_id, None)
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
     def before_tool_callback(
@@ -331,6 +403,8 @@ class OpikTracer:
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("_opik_client", None)
+        # Don't serialize TTFT tracking as it's runtime state
+        state.pop("_ttft_tracking", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
