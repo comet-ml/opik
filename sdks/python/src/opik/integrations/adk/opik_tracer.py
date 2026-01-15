@@ -212,12 +212,17 @@ class OpikTracer:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
             is_partial = False
 
+        span_id: Optional[str] = None
         try:
             model = None
             usage = None
             output = None
 
             if adk_helpers.has_empty_text_part_content(llm_response):
+                # Clean up TTFT tracking if it exists before early return
+                current_span = context_storage.top_span_data()
+                if current_span is not None and current_span.id is not None:
+                    self._ttft_tracking.pop(current_span.id, None)
                 return
 
             current_span = context_storage.top_span_data()
@@ -227,13 +232,14 @@ class OpikTracer:
                 )
                 return
 
+            # Store span_id early for cleanup on all exit paths
+            span_id = current_span.id
+
             # Track time-to-first-token: detect first token arrival
             # We check for first token on EVERY callback (including partial chunks)
             # to catch the first moment content appears
-            if current_span.id in self._ttft_tracking:
-                request_start_time, first_token_time = self._ttft_tracking[
-                    current_span.id
-                ]
+            if span_id in self._ttft_tracking:
+                request_start_time, first_token_time = self._ttft_tracking[span_id]
                 if first_token_time is None:
                     # Check if this response contains actual content (first token)
                     # Content can be text or function calls (tool calls)
@@ -262,12 +268,14 @@ class OpikTracer:
                     if has_content:
                         # First token detected - record the time
                         first_token_time = time.time()
-                        self._ttft_tracking[current_span.id] = (
+                        self._ttft_tracking[span_id] = (
                             request_start_time,
                             first_token_time,
                         )
 
             # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
+            # Note: We intentionally keep the TTFT tracking entry for partial chunks since ADK will call
+            # this method again with the final non-partial response, where we'll properly clean it up
             if is_partial:
                 return
 
@@ -287,10 +295,8 @@ class OpikTracer:
 
             # Calculate time-to-first-token and add to metadata
             metadata_update = {}
-            if current_span.id in self._ttft_tracking:
-                request_start_time, first_token_time = self._ttft_tracking.pop(
-                    current_span.id
-                )
+            if span_id in self._ttft_tracking:
+                request_start_time, first_token_time = self._ttft_tracking.pop(span_id)
                 if first_token_time is not None:
                     time_to_first_token = first_token_time - request_start_time
                     metadata_update["time_to_first_token"] = time_to_first_token
@@ -322,6 +328,9 @@ class OpikTracer:
             self._last_model_output = output
 
         except Exception as e:
+            # Clean up TTFT tracking entry before re-logging error to prevent memory leak
+            if span_id is not None:
+                self._ttft_tracking.pop(span_id, None)
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
     def before_tool_callback(
