@@ -18,8 +18,8 @@ public class ExperimentGroupingFactory extends GroupingFactory {
     protected void validateFieldType(GroupBy group) {
         String formattedErrorMessage = ERR_INVALID_FIELD_TYPE_TEMPLATE.formatted(group.type(), group.field());
         switch (group.field()) {
-            case DATASET_ID :
-                // dataset_id is a FixedString(36), only STRING type is valid
+            case DATASET_ID, PROJECT_ID :
+                // dataset_id and project_id are FixedString(36), only STRING type is valid
                 if (group.type() != FieldType.STRING) {
                     throw new BadRequestException(formattedErrorMessage);
                 }
