@@ -40,6 +40,92 @@ public class DatasetVersioningMigrationService {
                 lockTimeout);
     }
 
+    /**
+     * Ensures a dataset has been migrated to the versioning system (lazy migration).
+     * <p>
+     * This method checks if the dataset has any versions. If not, it performs a
+     * migration by creating version 1 with all existing items from the legacy
+     * dataset_items table.
+     * <p>
+     * The migration is protected by a distributed lock to prevent concurrent
+     * migrations of the same dataset.
+     *
+     * @param datasetId the dataset ID to ensure is migrated
+     * @param workspaceId the workspace ID
+     * @param userName the user performing the operation
+     * @return a Mono that completes when the dataset is ensured to be migrated
+     */
+    public Mono<Void> ensureDatasetMigrated(@NonNull UUID datasetId, @NonNull String workspaceId,
+            @NonNull String userName) {
+        return Mono.defer(() -> {
+            // First check if dataset has versions (fast check without lock)
+            return hasVersions(datasetId, workspaceId)
+                    .flatMap(hasVersions -> {
+                        if (hasVersions) {
+                            log.debug("Dataset '{}' already has versions, skipping lazy migration", datasetId);
+                            return Mono.empty();
+                        }
+
+                        // Dataset needs migration - acquire lock and migrate
+                        log.info("Dataset '{}' has no versions, performing lazy migration", datasetId);
+                        Lock migrationLock = new Lock("dataset_lazy_migration_" + datasetId);
+
+                        return lockService.executeWithLockCustomExpire(
+                                migrationLock,
+                                Mono.defer(() -> performLazyMigration(datasetId, workspaceId, userName)),
+                                DEFAULT_LOCK_TIMEOUT);
+                    });
+        });
+    }
+
+    /**
+     * Checks if a dataset has any versions.
+     *
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @return a Mono emitting true if the dataset has versions, false otherwise
+     */
+    private Mono<Boolean> hasVersions(UUID datasetId, String workspaceId) {
+        return Mono.fromCallable(() -> {
+            long count = jdbi.inTransaction(TransactionIsolationLevel.READ_COMMITTED, handle -> {
+                var dao = handle.attach(DatasetVersionDAO.class);
+                return dao.countByDatasetId(datasetId, workspaceId);
+            });
+            return count > 0;
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Performs the actual lazy migration of a dataset.
+     * <p>
+     * This method double-checks if the dataset still needs migration (in case another
+     * thread migrated it while waiting for the lock), then performs the migration.
+     *
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @param userName the user performing the migration
+     * @return a Mono that completes when migration is done
+     */
+    private Mono<Void> performLazyMigration(UUID datasetId, String workspaceId, String userName) {
+        return hasVersions(datasetId, workspaceId)
+                .flatMap(hasVersions -> {
+                    if (hasVersions) {
+                        // Another thread already migrated this dataset
+                        log.debug("Dataset '{}' was already migrated by another thread", datasetId);
+                        return Mono.empty();
+                    }
+
+                    log.info("Starting lazy migration for dataset '{}'", datasetId);
+                    return migrateSingleDataset(datasetId, workspaceId, userName)
+                            .doOnSuccess(unused -> log.info("Successfully completed lazy migration for dataset '{}'",
+                                    datasetId))
+                            .doOnError(error -> log.error("Failed to perform lazy migration for dataset '{}'",
+                                    datasetId, error));
+                });
+    }
+
+    private static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(30);
+
     private Mono<Void> migrateAllDatasets(int batchSize, UUID lastSeenDatasetId) {
         return Mono.defer(() -> {
             log.debug("Fetching batch of unmigrated datasets (cursor: '{}')", lastSeenDatasetId);
@@ -66,21 +152,44 @@ public class DatasetVersioningMigrationService {
         });
     }
 
+    /**
+     * Migrates a single dataset to the versioning system.
+     * <p>
+     * This method can be called for both full migration (during startup) and lazy migration
+     * (on-demand when a dataset is accessed). It performs the following steps:
+     * <ol>
+     *   <li>Creates version 1 record if it doesn't exist</li>
+     *   <li>Deletes any existing items from version 1 (cleanup)</li>
+     *   <li>Copies items from legacy dataset_items table</li>
+     *   <li>Updates the items_total count</li>
+     *   <li>Creates the 'latest' tag</li>
+     * </ol>
+     *
+     * @param datasetId the dataset ID to migrate
+     * @param workspaceId the workspace ID
+     * @param userName the user performing the migration
+     * @return a Mono that completes when migration is done
+     */
+    public Mono<Void> migrateSingleDataset(UUID datasetId, String workspaceId, String userName) {
+        UUID versionId = datasetId; // version 1 ID = dataset ID
+
+        log.info("Migrating dataset '{}' in workspace '{}'", datasetId, workspaceId);
+
+        return ensureVersion1Exists(datasetId, versionId, workspaceId, userName)
+                .then(deleteItemsFromVersion1(datasetId, versionId))
+                .then(copyItemsToVersion1(datasetId, versionId))
+                .then(countAndUpdateItemsTotal(datasetId, versionId))
+                .then(ensureLatestTagExists(datasetId, versionId, workspaceId))
+                .doOnSuccess(unused -> log.info("Successfully migrated dataset '{}'", datasetId))
+                .doOnError(error -> log.error("Failed to migrate dataset '{}'", datasetId, error));
+    }
+
     private Mono<Void> migrateDataset(UUID datasetId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
-            UUID versionId = datasetId; // version 1 ID = dataset ID
 
-            log.info("Migrating dataset '{}' in workspace '{}'", datasetId, workspaceId);
-
-            return ensureVersion1Exists(datasetId, versionId, workspaceId, userName)
-                    .then(deleteItemsFromVersion1(datasetId, versionId))
-                    .then(copyItemsToVersion1(datasetId, versionId))
-                    .then(countAndUpdateItemsTotal(datasetId, versionId))
-                    .then(ensureLatestTagExists(datasetId, versionId, workspaceId))
-                    .doOnSuccess(unused -> log.info("Successfully migrated dataset '{}'", datasetId))
-                    .doOnError(error -> log.error("Failed to migrate dataset '{}'", datasetId, error));
+            return migrateSingleDataset(datasetId, workspaceId, userName);
         });
     }
 

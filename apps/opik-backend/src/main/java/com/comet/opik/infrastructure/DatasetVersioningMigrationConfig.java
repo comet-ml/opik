@@ -16,4 +16,7 @@ public class DatasetVersioningMigrationConfig {
 
     @JsonProperty
     @NotNull @Min(1) private int lockTimeoutSeconds;
+
+    @JsonProperty
+    @NotNull private boolean lazyEnabled;
 }
