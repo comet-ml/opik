@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.io.input.BOMInputStream;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -144,8 +145,10 @@ public class CsvDatasetItemProcessor {
      * @throws BadRequestException if CSV headers are invalid
      */
     private void validateCsvHeaders(Path tempFile) {
-        try (InputStreamReader reader = new InputStreamReader(
-                Files.newInputStream(tempFile), StandardCharsets.UTF_8);
+        try (BOMInputStream bomStream = BOMInputStream.builder()
+                .setInputStream(Files.newInputStream(tempFile))
+                .get();
+                InputStreamReader reader = new InputStreamReader(bomStream, StandardCharsets.UTF_8);
                 CSVParser parser = createCsvParser(reader)) {
 
             List<String> headers = parser.getHeaderNames();
@@ -227,8 +230,10 @@ public class CsvDatasetItemProcessor {
     private Mono<Long> processFileFromPath(Path tempFile, UUID datasetId, String workspaceId, String userName,
             Visibility visibility) {
         return Mono.fromCallable(() -> {
-            try (InputStreamReader reader = new InputStreamReader(
-                    Files.newInputStream(tempFile), StandardCharsets.UTF_8);
+            try (BOMInputStream bomStream = BOMInputStream.builder()
+                    .setInputStream(Files.newInputStream(tempFile))
+                    .get();
+                    InputStreamReader reader = new InputStreamReader(bomStream, StandardCharsets.UTF_8);
                     CSVParser parser = createCsvParser(reader)) {
 
                 List<String> headers = parser.getHeaderNames();
