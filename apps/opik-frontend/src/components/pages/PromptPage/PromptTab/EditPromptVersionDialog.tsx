@@ -46,7 +46,7 @@ import {
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLMMessage } from "@/types/llm";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
-import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { PROMPT_TEMPLATE_STRUCTURE, PROMPT_TYPE } from "@/types/prompts";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -61,6 +61,7 @@ type EditPromptVersionDialogProps = {
   metadata?: object;
   promptName: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+  type?: PROMPT_TYPE;
   onSetActiveVersionId: (versionId: string) => void;
 };
 
@@ -71,6 +72,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   metadata: promptMetadata,
   promptName,
   templateStructure,
+  type: promptType,
   onSetActiveVersionId,
 }) => {
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
@@ -147,6 +149,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
       ...(templateStructure && { templateStructure }),
+      ...(promptType && { type: promptType }),
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
       },
