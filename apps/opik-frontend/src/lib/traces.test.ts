@@ -185,6 +185,40 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({ message: "Last user message", prettified: true });
   });
 
+  it("handles LangChain input with array content in human message and system message last", () => {
+    // This is the exact format from the customer's issue - LangChain batched format
+    // with array content in human messages
+    const message = {
+      messages: [
+        [
+          {
+            content: "You are a helpful assistant.",
+            type: "system",
+          },
+          {
+            content: [
+              { type: "text", text: "To start off… what should I call you?" },
+            ],
+            type: "ai",
+          },
+          {
+            content: [{ type: "text", text: "[2026-01-09 19:27:46] Theo" }],
+            type: "human",
+          },
+          {
+            content: "",
+            type: "system",
+          },
+        ],
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "[2026-01-09 19:27:46] Theo",
+      prettified: true,
+    });
+  });
+
   it("handles LangChain output with multiple AI messages and returns the last one", () => {
     const message = {
       generations: [
