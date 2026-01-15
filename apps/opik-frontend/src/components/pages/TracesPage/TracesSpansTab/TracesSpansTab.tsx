@@ -250,7 +250,7 @@ const ROW_HEIGHT_KEY = "traces-row-height";
  */
 function normalizeMetadataPaths(paths: string[]): string[] {
   // Filter out paths that start with underscore or contain array indices
-  const filteredPaths = paths.filter((path) => {
+  const filteredPaths = paths.filter((path: string) => {
     // Filter out paths that start with underscore (internal/private fields)
     const fieldName = path.startsWith("metadata.")
       ? path.substring("metadata.".length)
@@ -271,7 +271,7 @@ function normalizeMetadataPaths(paths: string[]): string[] {
   // Extract base array paths from paths that were filtered out
   // e.g., from "metadata.some_list[0].field" extract "metadata.some_list"
   const arrayBasePaths = new Set<string>();
-  paths.forEach((path) => {
+  paths.forEach((path: string) => {
     if (path.includes("[")) {
       // Extract the base path before the first "["
       const basePath = path.substring(0, path.indexOf("["));
@@ -294,7 +294,7 @@ function normalizeMetadataPaths(paths: string[]): string[] {
  * Formats labels with "." prefix (e.g., "metadata.time_to_first_token" -> ".time_to_first_token")
  */
 function buildDynamicMetadataColumns(paths: string[]): DynamicColumn[] {
-  return paths.map<DynamicColumn>((path) => {
+  return paths.map<DynamicColumn>((path: string) => {
     // Use "." prefix to indicate it's a path
     // e.g., "metadata.time_to_first_token" -> ".time_to_first_token"
     // Indentation is handled by SortableMenuItem component (adds pl-4 padding)
