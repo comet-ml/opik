@@ -60,6 +60,10 @@ When using datasets in the playground, you need to ensure the prompt contains va
 
 Once you are ready to run the experiment, simply select a dataset next to the run button and click on the `Run` button. You will then be able to see the LLM outputs for each sample in the dataset.
 
+### Accessing nested JSON dataset fields
+
+If a dataset column contains JSON-formatted content, you can use dot notation to reference nested values directly when querying or filtering. Dot notation lets you specify the path to a nested field (e.g., `{{input.user.name}}`) to extract only the value you need from within a structured object. This makes it easier to work with deeply nested data without manual flattening or custom parsing.
+
 ## Using images in the playground
 
 The playground supports multimodal prompts with images when using vision-capable models. You can add images in two ways:
