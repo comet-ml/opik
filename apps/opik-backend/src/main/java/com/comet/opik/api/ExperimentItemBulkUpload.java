@@ -34,7 +34,7 @@ public record ExperimentItemBulkUpload(
                 "provided or experiment with that ID doesn't exist, a new experiment will be created with the given " +
                 "experimentName") UUID experimentId,
         @JsonView({
-                View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 250) @Valid List<ExperimentItemBulkRecord> items)
+                View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 1000, message = "Experiment items list size must be between 1 and 1000") @Valid List<ExperimentItemBulkRecord> items)
         implements
             RateEventContainer{
 

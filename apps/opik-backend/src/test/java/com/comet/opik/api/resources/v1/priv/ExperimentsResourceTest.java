@@ -4981,7 +4981,7 @@ class ExperimentsResourceTest {
                                     .datasetName("Test Dataset")
                                     .items(List.of())
                                     .build(),
-                            "items size must be between 1 and 250"));
+                            "items Experiment items list size must be between 1 and 1000"));
         }
 
         @Test
@@ -4990,7 +4990,7 @@ class ExperimentsResourceTest {
             var bulkUpload = ExperimentItemBulkUpload.builder()
                     .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
                     .datasetName("Test Dataset")
-                    .items(IntStream.range(0, 251)
+                    .items(IntStream.range(0, 1001)
                             .mapToObj(i -> ExperimentItemBulkRecord.builder()
                                     .datasetItemId(UUID.randomUUID())
                                     .trace(Trace.builder()
@@ -4998,6 +4998,7 @@ class ExperimentsResourceTest {
                                             .startTime(Instant.now())
                                             .endTime(Instant.now().plusSeconds(1))
                                             .build())
+                                    .spans(List.of())
                                     .build())
                             .toList())
                     .build();
@@ -5010,7 +5011,8 @@ class ExperimentsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
                 var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
 
-                assertThat(errorMessage.errors()).contains("items size must be between 1 and 250");
+                assertThat(errorMessage.errors())
+                        .contains("items Experiment items list size must be between 1 and 1000");
             }
         }
 
