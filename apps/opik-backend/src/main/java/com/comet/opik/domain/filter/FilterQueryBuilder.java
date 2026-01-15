@@ -112,7 +112,7 @@ public class FilterQueryBuilder {
     private static final String CHANGE_DESCRIPTION_DB = "change_description";
 
     /**
-     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, Experiment, etc.).
      * Used to identify feedback score filters that require special handling in query building.
      */
     private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
@@ -120,7 +120,8 @@ public class FilterQueryBuilder {
             TraceField.SPAN_FEEDBACK_SCORES,
             SpanField.FEEDBACK_SCORES,
             TraceThreadField.FEEDBACK_SCORES,
-            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
+            ExperimentField.FEEDBACK_SCORES);
 
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
@@ -536,7 +537,8 @@ public class FilterQueryBuilder {
                 TraceField.FEEDBACK_SCORES,
                 SpanField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
-                TraceThreadField.FEEDBACK_SCORES));
+                TraceThreadField.FEEDBACK_SCORES,
+                ExperimentField.FEEDBACK_SCORES));
 
         map.put(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
 
