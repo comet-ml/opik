@@ -1,4 +1,4 @@
-import { Opik, track } from "opik";
+import { flushAll, track } from "opik";
 
 class TestClass {
   @track({ type: "llm" })
@@ -18,7 +18,6 @@ class TestClass {
   }
 }
 
-const client = new Opik();
 const test = new TestClass();
 await test.execute();
-await client.flush();
+await flushAll();
