@@ -38,8 +38,8 @@ on:
         type: boolean
         default: false
   schedule:
-    # Daily run at midnight UTC (without expensive tests)
-    - cron: "0 0 * * *"
+    # Daily run at midnight UTC Monday-Saturday (without expensive tests)
+    - cron: "0 0 * * 1-6"
     # Weekly run on Sunday at midnight UTC (with expensive tests)
     - cron: "0 0 * * 0"
   pull_request:
