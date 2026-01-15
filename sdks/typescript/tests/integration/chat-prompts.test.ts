@@ -394,4 +394,94 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
 
     expect(formatted[0].content).toBe("Hello Bob, you have 5 messages.");
   });
+
+  it("should compare chat prompt versions with multimodal content including unrecognized properties", async () => {
+    const comparePromptName = `test-compare-multimodal-${Date.now()}`;
+
+    // Create initial version with multimodal content
+    const chatPrompt = await client.createChatPrompt({
+      name: comparePromptName,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Analyze this image carefully.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://example.com/image1.jpg",
+                detail: "high",
+                custom_metadata: "original_image",
+              },
+            },
+          ],
+        },
+      ],
+      type: PromptType.MUSTACHE,
+    });
+
+    createdPromptIds.push(chatPrompt.id);
+
+    // Create a new version with modified content
+    const updatedPrompt = await client.createChatPrompt({
+      name: comparePromptName,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Describe this image in detail.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://example.com/image2.jpg",
+                detail: "low",
+                custom_metadata: "updated_image",
+              },
+            },
+          ],
+        },
+      ],
+      type: PromptType.MUSTACHE,
+    });
+
+    // Get versions for comparison
+    const versions = await updatedPrompt.getVersions();
+    expect(versions.length).toBeGreaterThanOrEqual(2);
+
+    // Compare the two versions
+    const latestVersion = versions[0];
+    const previousVersion = versions[1];
+    const diff = latestVersion.compareTo(previousVersion);
+
+    // Verify diff contains expected structure
+    expect(diff).toContain("Message 1 [user]:");
+    expect(diff).toContain("Type: text");
+    expect(diff).toContain("Type: image_url");
+
+    // Verify text content changes with diff markers (+ for new, - for old)
+    expect(diff).toContain("+     Describe this image in detail.");
+    expect(diff).toContain("-     Analyze this image carefully.");
+
+    // Verify image URL changes with diff markers
+    expect(diff).toContain("+     URL: https://example.com/image2.jpg");
+    expect(diff).toContain("-     URL: https://example.com/image1.jpg");
+
+    // Verify standard property changes with diff markers
+    expect(diff).toContain("+     detail: low");
+    expect(diff).toContain("-     detail: high");
+
+    // Verify unrecognized/custom property changes with diff markers
+    expect(diff).toContain("+     custom_metadata: updated_image");
+    expect(diff).toContain("-     custom_metadata: original_image");
+
+    // Verify commit hashes are present in headers
+    expect(diff).toContain(latestVersion.commit);
+    expect(diff).toContain(previousVersion.commit);
+  });
 });
