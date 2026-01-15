@@ -27,6 +27,7 @@ import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
 import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewedMutation";
 import { DATASET_EXPORT_STATUS } from "@/types/datasets";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { BASE_API_URL, DATASETS_REST_ENDPOINT } from "@/api/api";
 
@@ -161,7 +162,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
             onClick={handleDownload}
             className="size-5"
           >
-            <Download className="size-4 text-primary" />
+            <Download className="size-4 text-foreground-secondary" />
           </Button>
         </TooltipWrapper>
       );
@@ -223,6 +224,7 @@ const DatasetExportPanel: React.FC = () => {
   const removeJob = useRemoveExportJob();
   const hydrateFromApi = useHydrateFromApi();
   const isHydrated = useIsHydrated();
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Fetch all export jobs on mount to restore state after page refresh
   const { data: apiJobs } = useDatasetExportJobs({
@@ -253,6 +255,7 @@ const DatasetExportPanel: React.FC = () => {
   const pendingCount = pendingJobs.length;
   const completedCount = completedJobs.length;
   const hasOnlyCompleted = pendingCount === 0 && completedCount > 0;
+  const hasPendingJobs = pendingCount > 0;
 
   const getStatusText = () => {
     if (pendingCount > 0) {
@@ -265,11 +268,25 @@ const DatasetExportPanel: React.FC = () => {
     return "Preparing download";
   };
 
-  const handleClosePanel = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const closePanel = () => {
     // Remove all jobs when closing panel
     // Use slice() to create a defensive copy to avoid skipping items during iteration
     activeJobs.slice().forEach((jobInfo) => removeJob(jobInfo.job.id));
+  };
+
+  const handleClosePanel = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasPendingJobs) {
+      // Show confirmation dialog if there are pending exports
+      setShowCloseConfirm(true);
+    } else {
+      closePanel();
+    }
+  };
+
+  const handleConfirmClose = () => {
+    setShowCloseConfirm(false);
+    closePanel();
   };
 
   return (
@@ -319,6 +336,16 @@ const DatasetExportPanel: React.FC = () => {
           </div>
         </CardContent>
       )}
+
+      <ConfirmDialog
+        open={showCloseConfirm}
+        setOpen={setShowCloseConfirm}
+        onConfirm={handleConfirmClose}
+        title="Close export panel?"
+        description="You have exports that are still being prepared. Closing this panel will hide the progress and you won't be notified when they complete."
+        confirmText="Close anyway"
+        cancelText="Keep open"
+      />
     </Card>
   );
 };
