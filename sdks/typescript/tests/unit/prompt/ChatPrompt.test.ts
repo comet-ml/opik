@@ -869,4 +869,320 @@ describe("ChatPrompt", () => {
       }).toThrow(/Invalid message content type/);
     });
   });
+
+  describe("unrecognized content types", () => {
+    it("should preserve unrecognized content type with custom fields", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze this content" },
+              {
+                type: "image",
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({});
+
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Analyze this content" },
+            {
+              type: "image",
+              image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("should preserve unrecognized content type with template variables", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Process this {{format}}" },
+              {
+                type: "audio",
+                audio: {
+                  url: "{{audio_url}}",
+                  format: "mp3",
+                },
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({
+        format: "audio file",
+        audio_url: "https://example.com/audio.mp3",
+      });
+
+      // Text part should be formatted, but audio part should be preserved as-is
+      // (template variables in unrecognized types are NOT processed)
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Process this audio file" },
+            {
+              type: "audio",
+              audio: {
+                url: "{{audio_url}}",
+                format: "mp3",
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("should preserve multiple unrecognized content types", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze these files" },
+              {
+                type: "pdf",
+                pdf: {
+                  url: "https://example.com/doc.pdf",
+                  pages: [1, 2, 3],
+                },
+              },
+              {
+                type: "spreadsheet",
+                spreadsheet: {
+                  url: "https://example.com/data.xlsx",
+                  sheet: "Sheet1",
+                },
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({});
+
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Analyze these files" },
+            {
+              type: "pdf",
+              pdf: {
+                url: "https://example.com/doc.pdf",
+                pages: [1, 2, 3],
+              },
+            },
+            {
+              type: "spreadsheet",
+              spreadsheet: {
+                url: "https://example.com/data.xlsx",
+                sheet: "Sheet1",
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("should preserve unrecognized content type mixed with recognized types", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Compare these: {{description}}" },
+              {
+                type: "image_url",
+                image_url: {
+                  url: "{{image_url}}",
+                },
+              },
+              {
+                type: "custom_data",
+                data: {
+                  type: "sensor_reading",
+                  value: 42,
+                  unit: "celsius",
+                },
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({
+        description: "image and data",
+        image_url: "https://example.com/photo.jpg",
+      });
+
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Compare these: image and data" },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://example.com/photo.jpg",
+              },
+            },
+            {
+              type: "custom_data",
+              data: {
+                type: "sensor_reading",
+                value: 42,
+                unit: "celsius",
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("should preserve unrecognized content type when saving and retrieving from API", () => {
+      const messages: ChatMessage[] = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Process this" },
+            {
+              type: "custom_format",
+              custom_format: {
+                data: "base64encodeddata",
+                metadata: { version: "1.0" },
+              },
+            },
+          ],
+        },
+      ];
+
+      const promptData: OpikApi.PromptPublic = {
+        name: "test-prompt",
+        description: "Test with custom content",
+        tags: ["custom"],
+      };
+
+      const apiResponse: OpikApi.PromptVersionDetail = {
+        id: "version-456",
+        promptId: "prompt-123",
+        template: JSON.stringify(messages),
+        commit: "abc123",
+        type: "mustache",
+      };
+
+      const chatPrompt = ChatPrompt.fromApiResponse(
+        promptData,
+        apiResponse,
+        mockClient
+      );
+
+      expect(chatPrompt.messages).toEqual(messages);
+
+      // Verify formatting preserves the custom type
+      const formatted = chatPrompt.format({});
+      expect(formatted).toEqual(messages);
+    });
+
+    it("should collapse to single text when unrecognized type is alone in content", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Only text here" },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({});
+
+      // Should collapse to string when only one text part
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: "Only text here",
+        },
+      ]);
+      expect(typeof formatted[0].content).toBe("string");
+    });
+
+    it("should NOT collapse when unrecognized type is present with text", () => {
+      const data: ChatPromptData = {
+        promptId: "test-id",
+        versionId: "version-id",
+        name: "test-prompt",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Text here" },
+              {
+                type: "unknown",
+                data: "something",
+              },
+            ],
+          },
+        ],
+        type: "mustache",
+      };
+
+      const chatPrompt = new ChatPrompt(data, mockClient);
+      const formatted = chatPrompt.format({});
+
+      // Should NOT collapse to string when multiple parts present
+      expect(formatted).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Text here" },
+            {
+              type: "unknown",
+              data: "something",
+            },
+          ],
+        },
+      ]);
+      expect(Array.isArray(formatted[0].content)).toBe(true);
+    });
+  });
 });
