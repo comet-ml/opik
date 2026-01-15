@@ -605,17 +605,18 @@ class TestReporterLifecycle:
                 return (low + high) / 2
 
         class FakeStudy:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.trials: list[FakeTrial] = []
 
             def optimize(
                 self,
-                objective,
-                n_trials,
-                timeout=None,
-                callbacks=None,
-                show_progress_bar=False,
-            ):
+                objective: "Callable[[FakeTrial], float]",
+                n_trials: int,
+                timeout: float | None = None,
+                callbacks: list | None = None,
+                show_progress_bar: bool = False,
+            ) -> None:
+                _ = show_progress_bar  # keep signature parity, silence linters
                 trial = FakeTrial(0)
                 trial.value = objective(trial)
                 self.trials.append(trial)
