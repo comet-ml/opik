@@ -72,6 +72,12 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     return retVal;
   }, [experiment.id, scoreMap]);
 
+  const baselineScore = useMemo(() => {
+    if (!baselineExperiment) return undefined;
+    const scoreObject = scoreMap[baselineExperiment.id];
+    return scoreObject?.score;
+  }, [baselineExperiment, scoreMap]);
+
   const promptData = useMemo(() => {
     return get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
   }, [experiment]);
@@ -128,6 +134,14 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
             </CardDescription>
           </div>
           <div className="flex flex-row items-baseline gap-2">
+            {!isUndefined(baselineScore) && (
+              <div className="comet-body-s text-muted-slate">
+                {formatNumericData(baselineScore)}
+              </div>
+            )}
+            {!isUndefined(baselineScore) && (
+              <div className="text-muted-slate">→</div>
+            )}
             <div className="comet-title-xl text-4xl leading-none text-foreground-secondary">
               {isUndefined(score) ? "-" : formatNumericData(score)}
             </div>
