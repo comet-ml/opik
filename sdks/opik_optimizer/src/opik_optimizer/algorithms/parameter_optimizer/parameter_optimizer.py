@@ -422,6 +422,7 @@ class ParameterOptimizer(BaseOptimizer):
                     tuned_prompts
                 ),
             ) as trial_reporter:
+                self._set_reporter(trial_reporter)
                 score = self.evaluate_prompt(
                     prompt=tuned_prompts,
                     agent=agent,
@@ -440,6 +441,7 @@ class ParameterOptimizer(BaseOptimizer):
                     best_tuned_prompts = copy.deepcopy(tuned_prompts)
 
                 trial_reporter.set_score(score, is_best=is_best)
+                self._clear_reporter()
 
             # Store per-prompt model_kwargs in trial attrs
             trial.set_user_attr("parameters", sampled_values)

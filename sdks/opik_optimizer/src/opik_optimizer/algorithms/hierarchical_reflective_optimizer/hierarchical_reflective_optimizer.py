@@ -446,22 +446,27 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             with reporting.display_root_cause_analysis(
                 verbose=self.verbose
             ) as rca_reporter:
-                train_dataset_experiment_result = self.evaluate_prompt(
-                    prompt=best_prompts,
-                    dataset=dataset,
-                    metric=metric,
-                    agent=agent,
-                    n_samples=n_samples,
-                    n_threads=self.n_threads,
-                    return_evaluation_result=True,
-                )
-                hierarchical_analysis = self._hierarchical_root_cause_analysis(
-                    train_dataset_experiment_result
-                )
-                rca_reporter.set_completed(
-                    hierarchical_analysis.total_test_cases,
-                    hierarchical_analysis.num_batches,
-                )
+                self._set_reporter(rca_reporter)
+                try:
+                    train_dataset_experiment_result = self.evaluate_prompt(
+                        prompt=best_prompts,
+                        dataset=dataset,
+                        metric=metric,
+                        agent=agent,
+                        n_samples=n_samples,
+                        n_threads=self.n_threads,
+                        return_evaluation_result=True,
+                    )
+                    hierarchical_analysis = self._hierarchical_root_cause_analysis(
+                        train_dataset_experiment_result
+                    )
+                    rca_reporter.set_completed(
+                        hierarchical_analysis.total_test_cases,
+                        hierarchical_analysis.num_batches,
+                    )
+                finally:
+                    self._clear_reporter()
+                self._clear_reporter()
 
             # Display synthesis results
             reporting.display_hierarchical_synthesis(

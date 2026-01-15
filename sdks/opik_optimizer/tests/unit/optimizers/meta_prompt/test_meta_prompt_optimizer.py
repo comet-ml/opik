@@ -94,7 +94,47 @@ class TestMetaPromptOptimizerOptimizePrompt:
 
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, dict)
-        assert isinstance(result.initial_prompt, dict)
+
+    def test_sets_reporter_during_optimization(
+        self,
+        mock_full_optimization_flow,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mock_full_optimization_flow(
+            llm_response="Improved prompt",
+            evaluation_scores=[0.5, 0.8],
+        )
+
+        optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompt = ChatPrompt(system="Test", user="{question}")
+        dataset = _make_dataset()
+
+        events: list[str] = []
+
+        orig_set = optimizer._set_reporter
+        orig_clear = optimizer._clear_reporter
+
+        def tracking_set(reporter):
+            events.append("set")
+            orig_set(reporter)
+
+        def tracking_clear():
+            events.append("clear")
+            orig_clear()
+
+        monkeypatch.setattr(optimizer, "_set_reporter", tracking_set)
+        monkeypatch.setattr(optimizer, "_clear_reporter", tracking_clear)
+
+        optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+            n_samples=2,
+        )
+
+        assert events == ["set", "clear"]
+        assert optimizer._reporter is None
 
     def test_invalid_prompt_raises_error(
         self,

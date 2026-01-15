@@ -297,6 +297,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Calculate the maximum number of rounds
         self._total_rounds = max(1, max_trials // self.prompts_per_round + 1)
         round_num = 0
+        self._set_reporter(object())
 
         while context.trials_completed < max_trials:
             # Check should_stop flag at start of each round
@@ -506,6 +507,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             round_num += 1
 
         # finish_reason, stopped_early, stop_reason are handled by base class
+        self._clear_reporter()
 
         # Build history for result (convert OptimizationRound to dicts)
         history = [
