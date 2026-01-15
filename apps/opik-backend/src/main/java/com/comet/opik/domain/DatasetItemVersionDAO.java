@@ -257,6 +257,44 @@ public interface DatasetItemVersionDAO {
     record DatasetItemIdMapping(UUID rowId, UUID datasetItemId, UUID datasetId) {
     }
 
+    /**
+     * Finds datasets with hash/count mismatches between legacy and versioned tables.
+     * Uses cursor-based pagination with UUIDv7 ordering.
+     *
+     * @param batchSize the number of dataset IDs to return
+     * @param lastSeenDatasetId the cursor for pagination (UUID_MIN for first call)
+     * @return Flux emitting dataset IDs that need migration
+     */
+    Flux<UUID> findDatasetsWithHashMismatch(int batchSize, UUID lastSeenDatasetId);
+
+    /**
+     * Soft deletes all items from a specific dataset version.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID
+     * @return Mono emitting the number of deleted rows
+     */
+    Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId);
+
+    /**
+     * Copies all items from legacy dataset_items table to dataset_item_versions for a specific dataset.
+     * Preserves all original timestamps and user information.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID (should equal datasetId for version 1)
+     * @return Mono emitting the number of copied rows
+     */
+    Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId);
+
+    /**
+     * Counts items in a specific dataset version.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID
+     * @return Mono emitting the count of items
+     */
+    Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId);
+
 }
 
 @Singleton
@@ -2597,6 +2635,131 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FilterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
+    }
+
+    @Override
+    public Flux<UUID> findDatasetsWithHashMismatch(int batchSize, UUID lastSeenDatasetId) {
+        var sql = """
+                WITH legacy AS (
+                    SELECT dataset_id,
+                           groupBitXor(data_hash) as hash,
+                           count(*) as cnt
+                    FROM dataset_items
+                    GROUP BY dataset_id
+                ),
+                versioned AS (
+                    SELECT dataset_id,
+                           groupBitXor(data_hash) as hash,
+                           count(*) as cnt
+                    FROM dataset_item_versions
+                    WHERE dataset_version_id = dataset_id
+                    GROUP BY dataset_id
+                )
+                SELECT COALESCE(l.dataset_id, v.dataset_id) as dataset_id
+                FROM legacy l
+                FULL OUTER JOIN versioned v ON l.dataset_id = v.dataset_id
+                WHERE (COALESCE(l.hash, 0) != COALESCE(v.hash, 0)
+                       OR COALESCE(l.cnt, 0) != COALESCE(v.cnt, 0))
+                  AND COALESCE(l.dataset_id, v.dataset_id) > ?
+                ORDER BY dataset_id ASC
+                LIMIT ?
+                """;
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind(0, lastSeenDatasetId.toString())
+                    .bind(1, batchSize);
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        String datasetIdStr = row.get("dataset_id", String.class);
+                        return UUID.fromString(datasetIdStr);
+                    }))
+                    .collectList();
+        }).flatMapMany(Flux::fromIterable);
+    }
+
+    @Override
+    public Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId) {
+        var sql = """
+                DELETE FROM dataset_item_versions
+                WHERE dataset_id = ?
+                  AND dataset_version_id = ?
+                """;
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind(0, datasetId.toString())
+                    .bind(1, versionId.toString());
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    @Override
+    public Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId) {
+        var sql = """
+                INSERT INTO dataset_item_versions (
+                    id, dataset_item_id, dataset_id, dataset_version_id,
+                    data, metadata, source, trace_id, span_id, tags,
+                    item_created_at, item_last_updated_at,
+                    item_created_by, item_last_updated_by,
+                    created_at, last_updated_at, created_by, last_updated_by,
+                    workspace_id
+                )
+                SELECT
+                    id,
+                    id as dataset_item_id,
+                    dataset_id,
+                    ? as dataset_version_id,
+                    data, metadata, source, trace_id, span_id, tags,
+                    created_at as item_created_at,
+                    last_updated_at as item_last_updated_at,
+                    created_by as item_created_by,
+                    last_updated_by as item_last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    workspace_id
+                FROM dataset_items
+                WHERE dataset_id = ?
+                """;
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind(0, versionId.toString())
+                    .bind(1, datasetId.toString());
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    @Override
+    public Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId) {
+        var sql = """
+                SELECT count(*) as count
+                FROM dataset_item_versions
+                WHERE dataset_id = ?
+                  AND dataset_version_id = ?
+                """;
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind(0, datasetId.toString())
+                    .bind(1, versionId.toString());
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
     }
 
 }
