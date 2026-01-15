@@ -21,14 +21,18 @@ public abstract class GroupingFactory {
     public static final String ERR_EMPTY_GROUPING = "At least one grouping field must be specified";
     public static final String ERR_INVALID_GROUPING_FIELD_TEMPLATE = "Invalid grouping field: %s. Supported fields are: %s";
     public static final String ERR_MISSING_KEY = "Key must be specified for json field '%s'";
+    public static final String ERR_INVALID_FIELD_TYPE_TEMPLATE = "Invalid field type '%s' for field '%s'";
 
     public static final String METADATA = "metadata";
     public static final String DATASET_ID = "dataset_id";
+    public static final String TAGS = "tags";
 
     private static final TypeReference<List<GroupBy>> GROUP_BY_LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     public abstract List<String> getSupportedFields();
+
+    protected abstract void validateFieldType(GroupBy group);
 
     public List<GroupBy> newGrouping(String queryParam) {
         if (StringUtils.isBlank(queryParam)) {
@@ -68,5 +72,8 @@ public abstract class GroupingFactory {
         if (DICTIONARY.equals(group.type()) && StringUtils.isBlank(group.key())) {
             throw new BadRequestException(ERR_MISSING_KEY.formatted(group.field()));
         }
+
+        // Validate field type compatibility
+        validateFieldType(group);
     }
 }

@@ -116,8 +116,9 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
   };
 
   const renderDot: LineDot = (props) => {
+    const { key, ...rest } = props;
+
     if (shouldShowDot(props.index, props.name)) {
-      const { key, ...rest } = props;
       return (
         <Dot
           key={key}
@@ -128,7 +129,9 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
       );
     }
 
-    return <></>;
+    // Return an invisible circle when dot should not be shown
+    // This satisfies the LineDot type requirement for a ReactElement
+    return <circle key={key} r={0} />;
   };
 
   return (

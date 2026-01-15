@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.CommentAssertionUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.ExperimentsTestUtils;
+import com.comet.opik.api.resources.utils.ListComparators;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -149,6 +150,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.ExperimentsTestUtils.getQuantities;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
@@ -1121,6 +1123,61 @@ class ExperimentsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void findByFilterTags(Operator operator, String value) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var name = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .datasetName(datasetName)
+                            .name(name)
+                            .tags(Set.of("tag1", "tag2", "tag3"))
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment().toBuilder().tags(Set.of("other")).build());
+
+            unexpectedExperiments
+                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
+                    .datasetId();
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.TAGS)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+            findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+        }
+
+        private Stream<Arguments> findByFilterTags() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL, "tag1"),
+                    Arguments.of(Operator.NOT_EQUAL, "other"),
+                    Arguments.of(Operator.CONTAINS, "tag"),
+                    Arguments.of(Operator.NOT_CONTAINS, "other"));
+        }
+
+        @ParameterizedTest
         @MethodSource("getValidFilters")
         void findByFiltering(Function<Experiment, ExperimentFilter> getFilter) {
             var workspaceName = UUID.randomUUID().toString();
@@ -1991,7 +2048,19 @@ class ExperimentsResourceTest {
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field("duration.p50").direction(Direction.DESC)
-                                    .build()));
+                                    .build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
+                                    ListComparators.ascending())
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
+                                    ListComparators.descending())
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
@@ -2277,6 +2346,11 @@ class ExperimentsResourceTest {
                     "{\"provider\":\"anthropic\",\"model\":\"claude-3\"}",
                     "{\"provider\":\"openai\",\"model\":\"gpt-3.5\"}");
 
+            List<Set<String>> tagsList = List.of(
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
+
             Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
             List<Trace> tracesAll = new ArrayList<>();
             Map<UUID, List<Span>> traceToSpans = new HashMap<>();
@@ -2297,6 +2371,7 @@ class ExperimentsResourceTest {
                                 .promptVersions(List.of(versionLink))
                                 .metadata(JsonUtils
                                         .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2425,7 +2500,35 @@ class ExperimentsResourceTest {
                                     .value(experiment.promptVersion().promptId().toString())
                                     .build(),
                             (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
-                                    .equals(experiment.promptVersion())));
+                                    .equals(experiment.promptVersion())),
+                    // Test grouping by TAGS without filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            null, null),
+                    // Test grouping by TAGS with DATASET_ID, no filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            null, null),
+                    // Test grouping by TAGS with filter on TAGS using CONTAINS
+                    Arguments.of(true, List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
+                                    && exp.tags().contains(experiment.tags().stream().sorted().findFirst().orElse(""))),
+                    // Test grouping by DATASET_ID and TAGS with filter on TAGS using CONTAINS
+                    Arguments.of(true,
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
+                                    && exp.tags()
+                                            .contains(experiment.tags().stream().sorted().findFirst().orElse(""))));
         }
 
         @ParameterizedTest
@@ -2447,7 +2550,8 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
         }
 
         @Test
@@ -2522,6 +2626,11 @@ class ExperimentsResourceTest {
 
             var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
 
+            List<Set<String>> tagsList = List.of(
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
+
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -2535,6 +2644,7 @@ class ExperimentsResourceTest {
                                                 "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
                                                         .formatted(random.nextBoolean() ? "2024" : "2025") +
                                                         "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2566,6 +2676,11 @@ class ExperimentsResourceTest {
 
             var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
 
+            List<Set<String>> tagsList = List.of(
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
+
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -2585,6 +2700,7 @@ class ExperimentsResourceTest {
                                                 "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
                                                         .formatted(random.nextBoolean() ? "2024" : "2025") +
                                                         "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2692,7 +2808,9 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
         }
 
         private Stream<Arguments> groupExperiments() {
@@ -2706,7 +2824,12 @@ class ExperimentsResourceTest {
                             .of(GroupBy.builder().field(METADATA).key("invalid key").type(FieldType.DICTIONARY)
                                     .build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
-                            GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
+                            GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())),
+                    // Test grouping by TAGS
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build())),
+                    // Test grouping by TAGS with DATASET_ID
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build())));
         }
 
         private Stream<Arguments> groupExperimentsWithFilter() {
@@ -2747,7 +2870,36 @@ class ExperimentsResourceTest {
                                     .value(experiment.promptVersion().promptId().toString())
                                     .build(),
                             (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
-                                    .equals(experiment.promptVersion())));
+                                    .equals(experiment.promptVersion())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags()
+                                    .contains(experiment.tags().iterator().next())),
+                    Arguments.of(
+                            List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build(),
+                                    GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(
+                            List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build(),
+                                    GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY)
+                                            .build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags()
+                                    .contains(experiment.tags().iterator().next())));
         }
     }
 

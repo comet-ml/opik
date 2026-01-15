@@ -121,6 +121,7 @@ export interface Experiment {
   status: string;
   metadata?: object;
   name: string;
+  tags?: string[];
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];
   duration?: AggregatedDuration;

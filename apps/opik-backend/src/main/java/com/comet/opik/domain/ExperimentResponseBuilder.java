@@ -18,6 +18,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -368,8 +369,10 @@ public class ExperimentResponseBuilder {
                 .map(groupList -> ExperimentGroupResponse.GroupDetail.builder()
                         .groupSorting(
                                 groupList.stream()
-                                        .sorted((a, b) -> b.lastCreatedExperimentAt()
-                                                .compareTo(a.lastCreatedExperimentAt()))
+                                        .sorted(
+                                                Comparator.comparing(
+                                                        ExperimentGroupWithTime::lastCreatedExperimentAt).reversed()
+                                                        .thenComparing(ExperimentGroupWithTime::name))
                                         .map(ExperimentGroupWithTime::name)
                                         .distinct()
                                         .toList())
