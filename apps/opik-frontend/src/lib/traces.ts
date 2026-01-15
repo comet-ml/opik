@@ -61,7 +61,11 @@ const prettifyOpenAIMessageLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const lastMessage = last(message.messages);
+    // Filter for user messages only, then get the last one
+    const userMessages = message.messages.filter(
+      (m) => isObject(m) && "role" in m && m.role === "user" && "content" in m,
+    );
+    const lastMessage = last(userMessages);
     if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
       if (isString(lastMessage.content) && lastMessage.content.length > 0) {
         return lastMessage.content;

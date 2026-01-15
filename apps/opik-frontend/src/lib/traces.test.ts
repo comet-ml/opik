@@ -7,7 +7,7 @@ import { prettifyMessage } from "./traces";
  */
 describe("prettifyMessage", () => {
   it("returns the content of the last message if config type is 'input'", () => {
-    const message = { messages: [{ content: "Hello" }] };
+    const message = { messages: [{ role: "user", content: "Hello" }] };
     const result = prettifyMessage(message, { type: "input" });
     expect(result).toEqual({ message: "Hello", prettified: true });
   });
@@ -16,6 +16,7 @@ describe("prettifyMessage", () => {
     const message = {
       messages: [
         {
+          role: "user",
           content: [
             { type: "image", url: "image.png" },
             { type: "text", text: "Hello there" },
@@ -324,6 +325,53 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({
       message:
         "Opik's morning routine before diving into LLM evaluations involves logging, viewing, and evaluating LLM traces using the Opik platform and LLM as a Judge evaluators. This allows for the identification and fixing of issues in the LLM application.",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenAI input with system message last by filtering to user messages", () => {
+    const message = {
+      messages: [
+        { role: "user", content: "User message 1" },
+        { role: "assistant", content: "Assistant response" },
+        { role: "user", content: "User message 2" },
+        { role: "system", content: "System instruction" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "User message 2",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenAI input with only system messages by falling back to generic logic", () => {
+    const message = {
+      messages: [
+        { role: "system", content: "System instruction 1" },
+        { role: "system", content: "System instruction 2" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    // Since there are no user messages, prettifyOpenAIMessageLogic returns undefined
+    // and the generic logic will handle it (extracting the "messages" key)
+    expect(result.message).toBeDefined();
+  });
+
+  it("handles OpenAI input with mixed roles and returns last user message", () => {
+    const message = {
+      messages: [
+        { role: "system", content: "System message" },
+        { role: "user", content: "First user message" },
+        { role: "assistant", content: "Assistant response" },
+        { role: "system", content: "Another system message" },
+        { role: "user", content: "Last user message" },
+        { role: "system", content: "Final system message" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Last user message",
       prettified: true,
     });
   });
