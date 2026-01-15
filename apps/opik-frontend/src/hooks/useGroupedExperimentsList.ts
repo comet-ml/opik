@@ -52,7 +52,6 @@ const DATASETS_SORTING: Sorting = [
     desc: true,
   },
 ];
-const MAX_AMOUNT_OF_DATASET_FOR_SORTING = 1000;
 
 const PROJECTS_SORTING: Sorting = [
   {
@@ -60,7 +59,19 @@ const PROJECTS_SORTING: Sorting = [
     desc: true,
   },
 ];
-const MAX_AMOUNT_OF_PROJECTS_FOR_SORTING = 1000;
+
+const MAX_ENTITIES_FOR_SORTING = 1000;
+
+const buildOrderMap = <T extends { id: string }>(
+  data: T[] | undefined,
+): Record<string, number> | undefined => {
+  if (!data) return undefined;
+  const orderMap: Record<string, number> = {};
+  data.forEach((item, index) => {
+    orderMap[item.id] = index;
+  });
+  return orderMap;
+};
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
@@ -130,17 +141,15 @@ const buildGroupPath = (
     if (!isEmptyOrDeletedA && isEmptyOrDeletedB) return -1; // B goes to the end
     if (isEmptyOrDeletedA && isEmptyOrDeletedB) return 0;
 
-    // If grouping by dataset and we have dataset order map, use it
-    if (isDatasetGroup && datasetOrderMap) {
-      const orderA = datasetOrderMap[a] ?? Number.MAX_SAFE_INTEGER;
-      const orderB = datasetOrderMap[b] ?? Number.MAX_SAFE_INTEGER;
-      return orderA - orderB;
-    }
-
-    // If grouping by project and we have project order map, use it
-    if (isProjectGroup && projectOrderMap) {
-      const orderA = projectOrderMap[a] ?? Number.MAX_SAFE_INTEGER;
-      const orderB = projectOrderMap[b] ?? Number.MAX_SAFE_INTEGER;
+    // If grouping by dataset or project and we have the corresponding order map, use it
+    const orderMap = isDatasetGroup
+      ? datasetOrderMap
+      : isProjectGroup
+        ? projectOrderMap
+        : undefined;
+    if (orderMap) {
+      const orderA = orderMap[a] ?? Number.MAX_SAFE_INTEGER;
+      const orderB = orderMap[b] ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     }
 
@@ -388,7 +397,7 @@ export default function useGroupedExperimentsList(
     {
       workspaceName: params.workspaceName,
       page: 1,
-      size: MAX_AMOUNT_OF_DATASET_FOR_SORTING,
+      size: MAX_ENTITIES_FOR_SORTING,
       withExperimentsOnly: true,
       sorting: DATASETS_SORTING,
     },
@@ -407,7 +416,7 @@ export default function useGroupedExperimentsList(
     {
       workspaceName: params.workspaceName,
       page: 1,
-      size: MAX_AMOUNT_OF_PROJECTS_FOR_SORTING,
+      size: MAX_ENTITIES_FOR_SORTING,
       sorting: PROJECTS_SORTING,
     },
     {
@@ -437,27 +446,15 @@ export default function useGroupedExperimentsList(
 
   const groupsMap = useMemo(() => groupsData?.content ?? {}, [groupsData]);
 
-  const datasetOrderMap = useMemo(() => {
-    if (!datasetsData?.content) return undefined;
+  const datasetOrderMap = useMemo(
+    () => buildOrderMap(datasetsData?.content),
+    [datasetsData?.content],
+  );
 
-    const orderMap: Record<string, number> = {};
-    datasetsData.content.forEach((dataset, index) => {
-      orderMap[dataset.id] = index;
-    });
-
-    return orderMap;
-  }, [datasetsData?.content]);
-
-  const projectOrderMap = useMemo(() => {
-    if (!projectsData?.content) return undefined;
-
-    const orderMap: Record<string, number> = {};
-    projectsData.content.forEach((project, index) => {
-      orderMap[project.id] = index;
-    });
-
-    return orderMap;
-  }, [projectsData?.content]);
+  const projectOrderMap = useMemo(
+    () => buildOrderMap(projectsData?.content),
+    [projectsData?.content],
+  );
 
   const flattenGroups = useMemo(
     () =>
