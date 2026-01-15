@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
 import random
 
@@ -15,6 +15,9 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+
+if TYPE_CHECKING:
+    from ...base_optimizer import OptimizationContext
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +49,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         base_prompts: dict[str, chat_prompt.ChatPrompt],
         agent: OptimizableAgent,
         optimizer: Any,
+        context: OptimizationContext,
         metric: MetricFunction,
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
@@ -54,6 +58,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._base_prompts = base_prompts
         self._agent = agent
         self._optimizer = optimizer
+        self._context = context
         self._metric = metric
         self._dataset = dataset
         self._validation_dataset = validation_dataset
@@ -222,7 +227,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 scores.append(score)
                 try:
                     self._optimizer._gepa_live_metric_calls += 1
-                    self._optimizer._trials_completed += 1
+                    self._context.trials_completed += 1
                 except Exception:
                     pass
 
@@ -333,7 +338,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             scores.append(score_value)
             try:
                 self._optimizer._gepa_live_metric_calls += 1
-                self._optimizer._trials_completed += 1
+                self._context.trials_completed += 1
             except Exception:
                 pass
 

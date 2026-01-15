@@ -1290,6 +1290,232 @@ class TestFinalizeOptimization:
         optimizer._finalize_optimization(context, status="completed")
 
 
+class TestFinalizeFinishReason:
+    """Tests for _finalize_finish_reason method.
+
+    This method sets finish_reason after optimization completes, ensuring
+    correct reporting of whether optimization hit max_trials limit or
+    completed normally.
+
+    Bug this catches: Previously, when a while loop exited because
+    trials_completed >= max_trials (loop condition false), the finish_reason
+    was incorrectly set to "completed" instead of "max_trials" because the
+    max_trials check was inside the loop and didn't run after loop exit.
+    """
+
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    @pytest.fixture
+    def base_context(self) -> OptimizationContext:
+        """Create a minimal context for testing."""
+        return OptimizationContext(
+            prompts={},
+            initial_prompts={},
+            is_single_prompt_optimization=True,
+            dataset=MagicMock(),
+            evaluation_dataset=MagicMock(),
+            validation_dataset=None,
+            metric=MagicMock(),
+            agent=MagicMock(),
+            optimization=None,
+            optimization_id=None,
+            experiment_config=None,
+            n_samples=None,
+            max_trials=10,
+            project_name="Test",
+        )
+
+    def test_sets_max_trials_when_limit_reached(self, optimizer, base_context) -> None:
+        """finish_reason should be 'max_trials' when trials_completed >= max_trials.
+
+        This is the key test that would fail with the old implementation.
+        The bug was: when a while loop exits because trials_completed >= max_trials,
+        the code after the loop would unconditionally set finish_reason = "completed"
+        instead of checking if max_trials was reached.
+        """
+        base_context.trials_completed = 10  # Equal to max_trials
+        base_context.finish_reason = None  # Not set by early stop
+
+        optimizer._finalize_finish_reason(base_context)
+
+        assert base_context.finish_reason == "max_trials"
+
+    def test_sets_max_trials_when_over_limit(self, optimizer, base_context) -> None:
+        """finish_reason should be 'max_trials' when trials_completed > max_trials."""
+        base_context.trials_completed = 15  # Over max_trials (10)
+        base_context.finish_reason = None
+
+        optimizer._finalize_finish_reason(base_context)
+
+        assert base_context.finish_reason == "max_trials"
+
+    def test_sets_completed_when_under_limit(self, optimizer, base_context) -> None:
+        """finish_reason should be 'completed' when trials_completed < max_trials."""
+        base_context.trials_completed = 5  # Under max_trials (10)
+        base_context.finish_reason = None
+
+        optimizer._finalize_finish_reason(base_context)
+
+        assert base_context.finish_reason == "completed"
+
+    def test_preserves_existing_finish_reason(self, optimizer, base_context) -> None:
+        """Should not override finish_reason if already set (e.g., by early stop)."""
+        base_context.trials_completed = 10  # At limit
+        base_context.finish_reason = "perfect_score"  # Set by early stop
+
+        optimizer._finalize_finish_reason(base_context)
+
+        # Should preserve the early stop reason
+        assert base_context.finish_reason == "perfect_score"
+
+    def test_preserves_early_stop_reasons(self, optimizer, base_context) -> None:
+        """Various early stop reasons should be preserved."""
+        for early_reason in ["perfect_score", "no_improvement", "convergence"]:
+            base_context.trials_completed = 10
+            base_context.finish_reason = early_reason
+
+            optimizer._finalize_finish_reason(base_context)
+
+            assert base_context.finish_reason == early_reason
+
+    def test_zero_trials_sets_completed(self, optimizer, base_context) -> None:
+        """Edge case: 0 trials completed should set 'completed'."""
+        base_context.trials_completed = 0
+        base_context.max_trials = 10
+        base_context.finish_reason = None
+
+        optimizer._finalize_finish_reason(base_context)
+
+        assert base_context.finish_reason == "completed"
+
+    def test_zero_max_trials_edge_case(self, optimizer, base_context) -> None:
+        """Edge case: max_trials=0, trials_completed=0 should set 'max_trials'."""
+        base_context.trials_completed = 0
+        base_context.max_trials = 0
+        base_context.finish_reason = None
+
+        optimizer._finalize_finish_reason(base_context)
+
+        # 0 >= 0 is True, so should be "max_trials"
+        assert base_context.finish_reason == "max_trials"
+
+
+class TestBuildFinalResultStoppedEarly:
+    """Tests for stopped_early and stop_reason in _build_final_result."""
+
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    @pytest.fixture
+    def base_context(self, simple_chat_prompt) -> OptimizationContext:
+        """Create a context with required fields for _build_final_result."""
+        return OptimizationContext(
+            prompts={"main": simple_chat_prompt},
+            initial_prompts={"main": simple_chat_prompt},
+            is_single_prompt_optimization=True,
+            dataset=MagicMock(id="ds-123"),
+            evaluation_dataset=MagicMock(),
+            validation_dataset=None,
+            metric=MagicMock(__name__="test_metric"),
+            agent=MagicMock(),
+            optimization=None,
+            optimization_id="opt-123",
+            experiment_config=None,
+            n_samples=None,
+            max_trials=10,
+            project_name="Test",
+            baseline_score=0.5,
+        )
+
+    def test_stopped_early_true_for_max_trials(
+        self, optimizer, base_context, simple_chat_prompt
+    ) -> None:
+        """stopped_early should be True when finish_reason is 'max_trials'."""
+        from opik_optimizer.base_optimizer import AlgorithmResult
+
+        base_context.finish_reason = "max_trials"
+        base_context.trials_completed = 10
+
+        algorithm_result = AlgorithmResult(
+            best_prompts={"main": simple_chat_prompt},
+            best_score=0.8,
+            history=[],
+            metadata={},
+        )
+
+        result = optimizer._build_final_result(algorithm_result, base_context)
+
+        assert result.details["stopped_early"] is True
+        assert result.details["stop_reason"] == "max_trials"
+        assert result.details["finish_reason"] == "max_trials"
+
+    def test_stopped_early_false_for_completed(
+        self, optimizer, base_context, simple_chat_prompt
+    ) -> None:
+        """stopped_early should be False when finish_reason is 'completed'."""
+        from opik_optimizer.base_optimizer import AlgorithmResult
+
+        base_context.finish_reason = "completed"
+        base_context.trials_completed = 5
+
+        algorithm_result = AlgorithmResult(
+            best_prompts={"main": simple_chat_prompt},
+            best_score=0.8,
+            history=[],
+            metadata={},
+        )
+
+        result = optimizer._build_final_result(algorithm_result, base_context)
+
+        assert result.details["stopped_early"] is False
+        assert result.details["stop_reason"] == "completed"
+
+    def test_stopped_early_true_for_perfect_score(
+        self, optimizer, base_context, simple_chat_prompt
+    ) -> None:
+        """stopped_early should be True when finish_reason is 'perfect_score'."""
+        from opik_optimizer.base_optimizer import AlgorithmResult
+
+        base_context.finish_reason = "perfect_score"
+        base_context.trials_completed = 3
+
+        algorithm_result = AlgorithmResult(
+            best_prompts={"main": simple_chat_prompt},
+            best_score=0.99,
+            history=[],
+            metadata={},
+        )
+
+        result = optimizer._build_final_result(algorithm_result, base_context)
+
+        assert result.details["stopped_early"] is True
+        assert result.details["stop_reason"] == "perfect_score"
+
+    def test_stopped_early_true_for_no_improvement(
+        self, optimizer, base_context, simple_chat_prompt
+    ) -> None:
+        """stopped_early should be True when finish_reason is 'no_improvement'."""
+        from opik_optimizer.base_optimizer import AlgorithmResult
+
+        base_context.finish_reason = "no_improvement"
+        base_context.trials_completed = 7
+
+        algorithm_result = AlgorithmResult(
+            best_prompts={"main": simple_chat_prompt},
+            best_score=0.75,
+            history=[],
+            metadata={},
+        )
+
+        result = optimizer._build_final_result(algorithm_result, base_context)
+
+        assert result.details["stopped_early"] is True
+        assert result.details["stop_reason"] == "no_improvement"
+
+
 class TestOptimizationContextDataclass:
     """Tests for OptimizationContext dataclass."""
 

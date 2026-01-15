@@ -291,6 +291,7 @@ class GepaOptimizer(BaseOptimizer):
             base_prompts=optimizable_prompts,
             agent=self.agent,
             optimizer=self,
+            context=context,
             metric=metric,
             dataset=dataset,
             experiment_config=experiment_config,
@@ -488,9 +489,7 @@ class GepaOptimizer(BaseOptimizer):
                 best_score,
             )
 
-        # Set finish_reason if not already set
-        if context.finish_reason is None:
-            context.finish_reason = "completed"
+        # finish_reason, stopped_early, stop_reason are handled by base class
 
         # Build metadata for the result
         metadata: dict[str, Any] = {

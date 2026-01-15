@@ -340,7 +340,6 @@ class ParameterOptimizer(BaseOptimizer):
                     "parameter_precision": 6,
                     "stopped_early": True,
                     "stop_reason": "baseline_score_met_threshold",
-                    "stop_reason_details": {"best_score": baseline_score},
                     "perfect_score": self.perfect_score,
                     "skip_perfect_score": self.skip_perfect_score,
                 },
@@ -705,7 +704,6 @@ class ParameterOptimizer(BaseOptimizer):
             "rounds_completed": len(rounds_summary),
             "stopped_early": len(history) < total_trials,
             "stop_reason": None,
-            "stop_reason_details": {"best_score": best_score},
         }
 
         # Prepare result prompt based on single vs multi-prompt optimization

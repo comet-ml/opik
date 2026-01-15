@@ -416,7 +416,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         agent = context.agent
         n_samples = context.n_samples
         max_trials = context.max_trials
-        auto_continue = context.extra_params.get("auto_continue", False)
         max_retries = context.extra_params.get("max_retries", 2)
         optimization = context.optimization
 
@@ -586,34 +585,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             # Update previous score for next iteration
             previous_iteration_score = best_score
 
-        # Set finish_reason if not already set by early stop
-        if context.finish_reason is None:
-            context.finish_reason = "completed"
-
-        stopped_early = context.finish_reason != "completed"
-        first_best_prompt = list(best_prompts.values())[0]
-
+        # finish_reason, stopped_early, stop_reason are handled by base class
         return AlgorithmResult(
             best_prompts=best_prompts,
             best_score=best_score,
             history=[],  # HierarchicalReflective doesn't track per-round history
             metadata={
-                "model": self.model,
-                "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
-                or self.model_parameters.get("temperature"),
+                # Algorithm-specific fields only (framework fields handled by base)
                 "n_threads": self.n_threads,
                 "max_parallel_batches": self.max_parallel_batches,
                 "max_retries": max_retries,
-                "n_samples": n_samples,
-                "auto_continue": auto_continue,
-                "max_trials": max_trials,
                 "convergence_threshold": self.convergence_threshold,
                 "iterations_completed": iteration,
-                "trials_requested": max_trials,
-                "trials_completed": context.trials_completed,
-                "rounds_completed": iteration,
-                "stopped_early": stopped_early,
-                "stop_reason": context.finish_reason,
-                "stop_reason_details": {"best_score": best_score},
             },
         )

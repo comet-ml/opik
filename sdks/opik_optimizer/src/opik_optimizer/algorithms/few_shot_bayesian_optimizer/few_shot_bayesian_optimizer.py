@@ -740,32 +740,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 fewshot_prompt_template=fewshot_prompt_template,
             )
 
-        # Set finish_reason if not already set by early stop
-        if context.finish_reason is None:
-            context.finish_reason = "completed"
-
-        finish_reason = context.finish_reason
-        stopped_early = finish_reason != "completed"
+        # finish_reason, stopped_early, stop_reason are handled by base class
 
         return AlgorithmResult(
             best_prompts=best_prompts,
             best_score=best_score,
             history=optuna_history_processed,
             metadata={
+                # Algorithm-specific fields only (framework fields handled by base)
                 "prompt_parameter": best_trial.user_attrs.get("config", {}),
                 "example_indices": best_example_indices,
                 "trial_number": best_trial.number,
-                "total_trials": n_trials,
-                "total_rounds": n_trials,
-                "rounds": [],
-                "trials_requested": n_trials,
-                "trials_completed": context.trials_completed,
-                "rounds_completed": context.trials_completed,
-                "stopped_early": stopped_early,
-                "stop_reason": finish_reason,
-                "stop_reason_details": {"best_score": best_score},
-                "model": self.model,
-                "temperature": self.model_parameters.get("temperature"),
             },
         )
 

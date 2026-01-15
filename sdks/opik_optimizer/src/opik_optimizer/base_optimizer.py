@@ -3,7 +3,7 @@ import copy
 import inspect
 import logging
 import time
-from abc import ABC, abstractmethod
+from abc import ABC
 import random
 import importlib.metadata
 from dataclasses import dataclass, field
@@ -821,6 +821,10 @@ class BaseOptimizer(ABC):
         # Get optimizer-specific metadata
         optimizer_metadata = self.get_metadata(context)
 
+        # Compute stopped_early from finish_reason
+        finish_reason = context.finish_reason or "completed"
+        stopped_early = finish_reason != "completed"
+
         # Build details dict - framework fields + algorithm metadata
         details = {
             "initial_score": context.baseline_score,
@@ -828,7 +832,9 @@ class BaseOptimizer(ABC):
             "temperature": self.model_parameters.get("temperature"),
             "trials_completed": context.trials_completed,
             "rounds_completed": getattr(self, "_current_round", 0) + 1,
-            "finish_reason": context.finish_reason or "completed",
+            "finish_reason": finish_reason,
+            "stopped_early": stopped_early,
+            "stop_reason": finish_reason,
         }
 
         # Merge in optimizer-specific metadata
@@ -1246,12 +1252,11 @@ class BaseOptimizer(ABC):
 
         return helpers.drop_none(base_config)
 
-    @abstractmethod
     def get_config(self, context: "OptimizationContext") -> dict[str, Any]:
         """
         Return optimizer-specific configuration for display.
 
-        Subclasses must implement this to provide their configuration
+        Subclasses can override this to provide their configuration
         parameters that will be displayed to the user.
 
         Args:
@@ -1260,9 +1265,28 @@ class BaseOptimizer(ABC):
         Returns:
             Dictionary of configuration parameters to display
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement get_config()"
-        )
+        return {}
+
+    def _finalize_finish_reason(self, context: "OptimizationContext") -> None:
+        """
+        Set finish_reason if not already set by early stop conditions.
+
+        This method is called after run_optimization() returns but before
+        building the final result. It ensures finish_reason is properly set
+        based on whether max_trials was reached or the optimization completed
+        normally.
+
+        Subclasses can override this to add custom finish reasons (e.g.,
+        EvolutionaryOptimizer adds "no_improvement" for stagnation detection).
+
+        Args:
+            context: The optimization context
+        """
+        if context.finish_reason is None:
+            if context.trials_completed >= context.max_trials:
+                context.finish_reason = "max_trials"
+            else:
+                context.finish_reason = "completed"
 
     def _run_optimization(
         self,
@@ -1533,6 +1557,9 @@ class BaseOptimizer(ABC):
 
         try:
             raw_result = self.run_optimization(context)
+
+            # Finalize finish_reason if not set by optimizer
+            self._finalize_finish_reason(context)
 
             # Handle both new AlgorithmResult and legacy OptimizationResult
             if isinstance(raw_result, AlgorithmResult):

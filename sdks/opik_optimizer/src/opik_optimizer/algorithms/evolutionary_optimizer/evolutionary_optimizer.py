@@ -129,6 +129,24 @@ class EvolutionaryOptimizer(BaseOptimizer):
             "enable_moo": self.enable_moo,
         }
 
+    def _finalize_finish_reason(self, context: OptimizationContext) -> None:
+        """
+        Set finish_reason with evolutionary-specific stagnation detection.
+
+        Adds "no_improvement" finish reason when generations without improvement
+        exceeds the early stopping threshold.
+        """
+        if context.finish_reason is None:
+            if context.trials_completed >= context.max_trials:
+                context.finish_reason = "max_trials"
+            elif (
+                self._generations_without_overall_improvement
+                >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
+            ):
+                context.finish_reason = "no_improvement"
+            else:
+                context.finish_reason = "completed"
+
     DEFAULT_POPULATION_SIZE = 30
     DEFAULT_NUM_GENERATIONS = 15
     DEFAULT_MUTATION_RATE = 0.2
@@ -810,15 +828,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
             self._add_to_history(gen_round_data)
 
-        # Set finish_reason if not already set by early stop
-        if context.finish_reason is None:
-            if (
-                self._generations_without_overall_improvement
-                >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
-            ):
-                context.finish_reason = "no_improvement"
-            else:
-                context.finish_reason = "completed"
+        # finish_reason is handled by _finalize_finish_reason override
 
         final_details = {}
 

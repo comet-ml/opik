@@ -290,7 +290,6 @@ def mock_dataset():
         dataset_id: str = "dataset-123",
     ):
         mock = MagicMock(spec=Dataset)
-        mock = MagicMock(spec=Dataset)
         mock.name = name
         mock.id = dataset_id
 

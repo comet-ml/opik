@@ -505,9 +505,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             # Increment round counter
             round_num += 1
 
-        # Set finish_reason if not already set by early stop
-        if context.finish_reason is None:
-            context.finish_reason = "completed"
+        # finish_reason, stopped_early, stop_reason are handled by base class
 
         # Build history for result (convert OptimizationRound to dicts)
         history = [
