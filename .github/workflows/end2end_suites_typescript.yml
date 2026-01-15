@@ -38,7 +38,7 @@ on:
     pull_request:
       paths:
         - 'sdks/code_generation/fern/openapi/openapi.yaml'
-        - 'tests_end_to_end/tests_end_to_end_ts/**'
+        - 'tests_end_to_end/**'
 
 run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'fullregression' }}
 
@@ -60,7 +60,7 @@ jobs:
               with:
                 node-version: '20'
                 cache: 'npm'
-                cache-dependency-path: tests_end_to_end/tests_end_to_end_ts/typescript-tests/package-lock.json
+                cache-dependency-path: tests_end_to_end/typescript-tests/package-lock.json
 
             - name: Setup Python
               uses: actions/setup-python@v5
@@ -72,10 +72,10 @@ jobs:
 
             - name: Install Test Helper Service Dependencies
               run: |
-                pip install -r ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/test-helper-service/requirements.txt
+                pip install -r ${{ github.workspace }}/tests_end_to_end/test-helper-service/requirements.txt
 
             - name: Install TypeScript Test Dependencies
-              working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
+              working-directory: ${{ github.workspace }}/tests_end_to_end/typescript-tests
               run: |
                 npm ci
                 npx playwright install chromium
@@ -102,14 +102,18 @@ jobs:
                 ./tests_end_to_end/installer_utils/check_backend.sh
               shell: bash
 
-            - name: Check app is up via the UI (Local)
+            - name: Verify app is up via UI (smoke test)
+              working-directory: ${{ github.workspace }}/tests_end_to_end/typescript-tests
+              env:
+                OPIK_BASE_URL: http://localhost:5173
+                OPIK_TEST_WORKSPACE: default
+                OPIK_TEST_PROJECT_NAME: automated_tests_project
               run: |
-                pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
-                playwright install
-                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
+                # Run a single quick sanity test to verify UI is accessible
+                npx playwright test --grep "Projects created via SDK are visible" --reporter=list
 
             - name: Run TypeScript E2E suite
-              working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
+              working-directory: ${{ github.workspace }}/tests_end_to_end/typescript-tests
               env:
                 OPIK_BASE_URL: http://localhost:5173
                 OPIK_TEST_WORKSPACE: default
@@ -119,7 +123,7 @@ jobs:
                 TEST_SUITE: ${{ github.event.inputs.suite || 'fullregression' }}
               run: |
                 # Configure Allure results directory
-                export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests/${ALLURE_RESULTS}"
+                export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/typescript-tests/${ALLURE_RESULTS}"
 
                 # Run tests with allurectl watch for TestOps integration
                 allurectl watch -- npx playwright test
@@ -129,7 +133,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                 name: allure-results
-                path: tests_end_to_end/tests_end_to_end_ts/typescript-tests/allure-results
+                path: tests_end_to_end/typescript-tests/allure-results
                 retention-days: 7
 
             - name: Upload Playwright Report
@@ -137,7 +141,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                 name: playwright-report
-                path: tests_end_to_end/tests_end_to_end_ts/typescript-tests/playwright-report
+                path: tests_end_to_end/typescript-tests/playwright-report
                 retention-days: 7
 
             - name: Stop Opik server (Local)
