@@ -146,6 +146,7 @@ const CompareOptimizationsPage: React.FC = () => {
           onRowClick={handleRowClick}
           onSortChange={setSortedColumns}
           onColumnsWidthChange={setColumnsWidth}
+          highlightedTrialId={bestExperiment?.id}
         />
         <CompareOptimizationsSidebar
           optimization={optimization}
