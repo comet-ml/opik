@@ -88,6 +88,7 @@ public class FilterQueryBuilder {
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String SPAN_FEEDBACK_SCORE_COUNT_DB = "sfsc.span_feedback_scores_count";
+    private static final String EXPERIMENT_SCORE_COUNT_DB = "esc.experiment_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
@@ -121,7 +122,8 @@ public class FilterQueryBuilder {
             SpanField.FEEDBACK_SCORES,
             TraceThreadField.FEEDBACK_SCORES,
             ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
-            ExperimentField.FEEDBACK_SCORES);
+            ExperimentField.FEEDBACK_SCORES,
+            ExperimentField.EXPERIMENT_SCORES);
 
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
@@ -347,6 +349,7 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
                     .put(ExperimentField.TAGS, TAGS_DB)
                     .put(ExperimentField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentField.EXPERIMENT_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
     private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
@@ -545,6 +548,8 @@ public class FilterQueryBuilder {
 
         map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(SpanField.FEEDBACK_SCORES));
 
+        map.put(FilterStrategy.EXPERIMENT_SCORES, Set.of(ExperimentField.EXPERIMENT_SCORES));
+
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
                 ExperimentsComparisonValidKnownField.OUTPUT,
                 ExperimentsComparisonValidKnownField.DURATION));
@@ -731,6 +736,10 @@ public class FilterQueryBuilder {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
         }
 
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES));
+        }
+
         if (isNotEmptyScoresFilter(filterStrategy, filter)) {
             return Optional.empty();
         }
@@ -745,7 +754,7 @@ public class FilterQueryBuilder {
     private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
         return filter.operator() == Operator.IS_NOT_EMPTY
                 && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY,
-                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY)
                         .contains(filterStrategy);
     }
 
@@ -767,6 +776,10 @@ public class FilterQueryBuilder {
 
         if (filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return SPAN_FEEDBACK_SCORE_COUNT_DB;
+        }
+
+        if (filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
+            return EXPERIMENT_SCORE_COUNT_DB;
         }
 
         return switch (field) {

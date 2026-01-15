@@ -327,6 +327,23 @@ class ExperimentDAO {
                  HAVING <feedback_scores_empty_filters>
             ),
             <endif>
+            experiment_scores_final AS (
+                SELECT
+                    e.id AS experiment_id,
+                    JSON_VALUE(score, '$.name') AS name,
+                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                FROM experiments_final AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            ),
+            <if(experiment_scores_empty_filters)>
+             esc AS (SELECT experiment_id, COUNT(experiment_id) AS experiment_scores_count
+                 FROM experiment_scores_final
+                 GROUP BY experiment_id
+                 HAVING <experiment_scores_empty_filters>
+            ),
+            <endif>
             experiment_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -334,16 +351,7 @@ class ExperimentDAO {
                         groupArray(name),
                         groupArray(value)
                     ) AS experiment_scores
-                FROM (
-                    SELECT
-                        e.id AS experiment_id,
-                        JSON_VALUE(score, '$.name') AS name,
-                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
-                    FROM experiments_final AS e
-                    ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
-                    WHERE length(e.experiment_scores) > 2
-                      AND length(JSON_VALUE(score, '$.name')) > 0
-                ) AS es
+                FROM experiment_scores_final
                 GROUP BY experiment_id
             ),
             comments_agg AS (
@@ -452,6 +460,17 @@ class ExperimentDAO {
                WHERE trace_id IN (SELECT entity_id FROM fsc)
             )
             <endif>
+            <if(experiment_scores_filters)>
+            AND id IN (
+                SELECT experiment_id
+                FROM experiment_scores_final
+                GROUP BY experiment_id
+                HAVING <experiment_scores_filters>
+            )
+            <endif>
+            <if(experiment_scores_empty_filters)>
+            AND id NOT IN (SELECT experiment_id FROM esc)
+            <endif>
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'
@@ -550,6 +569,25 @@ class ExperimentDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
+            <if(experiment_scores_filters || experiment_scores_empty_filters)>
+             , experiment_scores_final AS (
+                SELECT
+                    e.id AS experiment_id,
+                    JSON_VALUE(score, '$.name') AS name,
+                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                FROM experiments_initial AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            )
+            <endif>
+            <if(experiment_scores_empty_filters)>
+             , esc AS (SELECT experiment_id, COUNT(experiment_id) AS experiment_scores_count
+                 FROM experiment_scores_final
+                 GROUP BY experiment_id
+                 HAVING <experiment_scores_empty_filters>
+            )
+            <endif>
             SELECT count(id) as count
             FROM experiments_initial
             WHERE 1=1
@@ -575,6 +613,17 @@ class ExperimentDAO {
                SELECT DISTINCT experiment_id FROM experiment_items_final
                WHERE trace_id IN (SELECT entity_id FROM fsc)
             )
+            <endif>
+            <if(experiment_scores_filters)>
+            AND id IN (
+                SELECT experiment_id
+                FROM experiment_scores_final
+                GROUP BY experiment_id
+                HAVING <experiment_scores_filters>
+            )
+            <endif>
+            <if(experiment_scores_empty_filters)>
+            AND id NOT IN (SELECT experiment_id FROM esc)
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1296,6 +1345,16 @@ class ExperimentDAO {
                         FilterStrategy.FEEDBACK_SCORES_IS_EMPTY))
                 .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
                         feedbackScoresEmptyFilters));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.EXPERIMENT_SCORES))
+                .ifPresent(
+                        experimentScoresFilters -> template.add("experiment_scores_filters", experimentScoresFilters));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY))
+                .ifPresent(experimentScoresEmptyFilters -> template.add("experiment_scores_empty_filters",
+                        experimentScoresEmptyFilters));
         return template;
     }
 
@@ -1321,6 +1380,8 @@ class ExperimentDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
                 });
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
