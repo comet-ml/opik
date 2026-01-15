@@ -178,6 +178,16 @@ class ExperimentDAO {
                     )
                 )
                 <endif>
+                <if(project_deleted)>
+                AND id IN (
+                    SELECT DISTINCT ei.experiment_id
+                    FROM experiment_items ei
+                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                    WHERE ei.workspace_id = :workspace_id
+                    GROUP BY ei.experiment_id
+                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+                )
+                <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -472,6 +482,16 @@ class ExperimentDAO {
                         AND project_id = :project_id
                         LIMIT 1 BY id
                     )
+                )
+                <endif>
+                <if(project_deleted)>
+                AND id IN (
+                    SELECT DISTINCT ei.experiment_id
+                    FROM experiment_items ei
+                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                    WHERE ei.workspace_id = :workspace_id
+                    GROUP BY ei.experiment_id
+                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
                 )
                 <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
@@ -1221,6 +1241,9 @@ class ExperimentDAO {
                 .ifPresent(promptId -> template.add("prompt_ids", promptId));
         Optional.ofNullable(criteria.projectId())
                 .ifPresent(projectId -> template.add("project_id", projectId));
+        if (criteria.projectDeleted()) {
+            template.add("project_deleted", true);
+        }
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> template.add("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())

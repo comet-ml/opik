@@ -121,6 +121,7 @@ public class ExperimentsResource {
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("project_id") UUID projectId,
+            @QueryParam("project_deleted") boolean projectDeleted,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -149,6 +150,7 @@ public class ExperimentsResource {
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
                 .projectId(projectId)
+                .projectDeleted(projectDeleted)
                 .sortingFields(sortingFields)
                 .optimizationId(optimizationId)
                 .types(types)

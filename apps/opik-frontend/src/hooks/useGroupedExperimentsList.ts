@@ -498,11 +498,14 @@ export default function useGroupedExperimentsList(
         (f) => f.field !== COLUMN_PROJECT_ID,
       );
 
-      // Only pass projectId if it's a valid non-empty string
+      // Check if project filter value is valid or represents deleted/orphan projects
       const projectIdValue = projectFilter?.value as string | undefined;
-      const validProjectId = projectIdValue?.trim()
-        ? projectIdValue
-        : undefined;
+      const isInvalidProjectId =
+        !projectIdValue?.trim() || projectIdValue.includes("\u0000");
+      const validProjectId =
+        projectFilter && !isInvalidProjectId ? projectIdValue : undefined;
+      // If there's a project filter but the value is invalid, it means we're filtering for orphan experiments
+      const projectDeleted = projectFilter && isInvalidProjectId;
 
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
@@ -511,6 +514,7 @@ export default function useGroupedExperimentsList(
         search: params.search,
         promptId: params.promptId,
         projectId: validProjectId,
+        projectDeleted,
         page: 1,
         size: extractPageSize(id, params.groupLimit),
       };
