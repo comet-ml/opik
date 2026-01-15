@@ -122,7 +122,7 @@ public class ExperimentsResource {
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters,
-            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIdsQueryParam) {
+            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
@@ -142,7 +142,7 @@ public class ExperimentsResource {
                 .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
                 .orElse(null);
 
-        var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
+        var experimentIdsParsed = Optional.ofNullable(experimentIds)
                 .filter(param -> !param.isBlank())
                 .map(ParamsValidator::getIds)
                 .orElse(null);
@@ -157,7 +157,7 @@ public class ExperimentsResource {
                 .optimizationId(optimizationId)
                 .types(types)
                 .filters(experimentFilters)
-                .experimentIds(experimentIds)
+                .experimentIds(experimentIdsParsed)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);

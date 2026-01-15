@@ -1280,6 +1280,60 @@ class ExperimentsResourceTest {
         }
 
         @Test
+        @DisplayName("when filtering by experiment_ids, then return only matching experiments")
+        void findByExperimentIds() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create 5 experiments
+            var allExperiments = IntStream.range(0, 5)
+                    .mapToObj(i -> generateExperiment())
+                    .toList();
+            allExperiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+            // Select 2 experiments to filter by
+            var experimentIdsToFilter = Set.of(allExperiments.get(1).id(), allExperiments.get(3).id());
+            var unexpectedExperiments = allExperiments.stream()
+                    .filter(e -> !experimentIdsToFilter.contains(e.id()))
+                    .toList();
+
+            // Build experiment_ids query param as comma-separated UUIDs
+            var experimentIdsParam = JsonUtils.writeValueAsString(experimentIdsToFilter);
+
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                assertThat(actualPage.page()).isEqualTo(1);
+                assertThat(actualPage.total()).isEqualTo(2);
+                assertThat(actualPage.content()).hasSize(2);
+
+                // Verify the returned experiments match the requested IDs
+                var actualIds = actualPage.content().stream()
+                        .map(Experiment::id)
+                        .collect(Collectors.toSet());
+                assertThat(actualIds).isEqualTo(experimentIdsToFilter);
+
+                // Verify unexpected experiments are not in the response
+                var unexpectedIds = unexpectedExperiments.stream()
+                        .map(Experiment::id)
+                        .collect(Collectors.toSet());
+                assertThat(actualIds).doesNotContainAnyElementsOf(unexpectedIds);
+            }
+        }
+
+        @Test
         void findAll() {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
