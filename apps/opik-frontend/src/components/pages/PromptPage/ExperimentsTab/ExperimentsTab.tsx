@@ -29,6 +29,7 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
@@ -50,7 +51,6 @@ import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceC
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import {
   getIsGroupRow,
-  getRowId,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -273,6 +273,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         cell: CommentsCell as never,
       },
       {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
+        cell: ListCell as never,
+      },
+      {
         id: COLUMN_METADATA_ID,
         label: "Configuration",
         type: COLUMN_TYPE.dictionary,
@@ -351,6 +358,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     setSelectedColumns,
     columnsOrder,
     setColumnsOrder,
+    getExperimentRowId,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
@@ -449,7 +457,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         }}
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
-        getRowId={getRowId}
+        getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={<DataTableNoData title={noDataText}></DataTableNoData>}
         TableBody={DataTableVirtualBody}

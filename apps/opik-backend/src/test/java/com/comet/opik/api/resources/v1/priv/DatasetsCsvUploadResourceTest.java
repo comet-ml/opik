@@ -309,6 +309,75 @@ class DatasetsCsvUploadResourceTest {
                 });
     }
 
+    @Test
+    @DisplayName("Upload CSV file with UTF-8 BOM - should strip BOM and create items with clean headers (OPIK-3747)")
+    void uploadCsvFile__withBom() throws Exception {
+        // Given: Create a dataset
+        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Prepare CSV content WITH UTF-8 BOM (0xEF 0xBB 0xBF)
+        // Simulating customer's issue where CSV has BOM in first column name
+        byte[] bomBytes = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        String csvContentWithoutBom = "Standard Question,Standard Answer,Other Field\n" +
+                "\"如何强制触发4G/5G后台搜索？\",\"测试答案\",\"测试值\"\n" +
+                "\"Second question\",\"Second answer\",\"Value2\"\n";
+
+        byte[] csvBytesWithBom = new byte[bomBytes.length
+                + csvContentWithoutBom.getBytes(StandardCharsets.UTF_8).length];
+        System.arraycopy(bomBytes, 0, csvBytesWithBom, 0, bomBytes.length);
+        System.arraycopy(csvContentWithoutBom.getBytes(StandardCharsets.UTF_8), 0, csvBytesWithBom, bomBytes.length,
+                csvContentWithoutBom.getBytes(StandardCharsets.UTF_8).length);
+
+        // When: Upload CSV file with BOM
+        try (var response = uploadCsvFile(createdDatasetId, csvBytesWithBom)) {
+            // Then: Should return 202 Accepted
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+        }
+
+        // Wait for async processing to complete
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    var items = getDatasetItems(createdDatasetId);
+                    assertThat(items).hasSize(2);
+
+                    // Verify items have clean column names WITHOUT BOM
+                    DatasetItem item1 = items.stream()
+                            .filter(item -> item.data().containsKey("Standard Question") &&
+                                    item.data().get("Standard Question").asText().contains("4G/5G"))
+                            .findFirst()
+                            .orElseThrow(() -> new AssertionError(
+                                    "Expected to find item with Chinese text '4G/5G' in 'Standard Question' field (without BOM)"));
+
+                    // Verify the column name is clean without BOM character
+                    assertThat(item1.data().get("Standard Question").asText())
+                            .as("Field should be accessible with clean name (no BOM)")
+                            .isEqualTo("如何强制触发4G/5G后台搜索？");
+
+                    assertThat(item1.data().get("Standard Answer").asText()).isEqualTo("测试答案");
+                    assertThat(item1.data().get("Other Field").asText()).isEqualTo("测试值");
+
+                    // Verify second item
+                    DatasetItem item2 = items.stream()
+                            .filter(item -> item.data().get("Standard Question").asText().equals("Second question"))
+                            .findFirst()
+                            .orElseThrow();
+                    assertThat(item2.data().get("Standard Answer").asText()).isEqualTo("Second answer");
+
+                    // Verify dataset status is COMPLETED
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
+                });
+    }
+
     @ParameterizedTest
     @DisplayName("Upload CSV file with invalid headers - should return 400 Bad Request")
     @MethodSource("provideInvalidCsvHeaders")
@@ -371,6 +440,10 @@ class DatasetsCsvUploadResourceTest {
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {
         byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
+        return uploadCsvFile(datasetId, csvBytes);
+    }
+
+    private Response uploadCsvFile(UUID datasetId, byte[] csvBytes) {
         InputStream csvInputStream = new ByteArrayInputStream(csvBytes);
 
         FormDataMultiPart multiPart = new FormDataMultiPart();

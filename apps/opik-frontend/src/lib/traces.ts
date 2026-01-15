@@ -61,7 +61,11 @@ const prettifyOpenAIMessageLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const lastMessage = last(message.messages);
+    // Filter for user messages only, then get the last one
+    const userMessages = message.messages.filter(
+      (m) => isObject(m) && "role" in m && m.role === "user" && "content" in m,
+    );
+    const lastMessage = last(userMessages);
     if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
       if (isString(lastMessage.content) && lastMessage.content.length > 0) {
         return lastMessage.content;
@@ -212,18 +216,37 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const humanMessages = message.messages.filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+    // Get the last human message, supporting both string and array content formats
+    const humanMessages = [];
+
+    for (const m of message.messages) {
+      if (isObject(m) && "type" in m && m.type === "human" && "content" in m) {
+        // Content can be a string
+        if (isString(m.content) && m.content !== "") {
+          humanMessages.push(m.content);
+        }
+        // Or content can be an array with text content (e.g., LangChain with OpenAI)
+        else if (isArray(m.content)) {
+          const lastTextContent = findLast(
+            m.content,
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text) &&
+              c.text !== "",
+          );
+
+          if (lastTextContent && "text" in lastTextContent) {
+            humanMessages.push(lastTextContent.text);
+          }
+        }
+      }
+    }
 
     if (humanMessages.length > 0) {
-      return last(humanMessages).content;
+      return last(humanMessages);
     }
   } else if (
     config.type === "output" &&
@@ -285,18 +308,37 @@ const prettifyLangChainLogic = (
     message.messages.length == 1 &&
     isArray(message.messages[0])
   ) {
-    const humanMessages = message.messages[0].filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+    // Get the last human message, supporting both string and array content formats
+    const humanMessages = [];
+
+    for (const m of message.messages[0]) {
+      if (isObject(m) && "type" in m && m.type === "human" && "content" in m) {
+        // Content can be a string
+        if (isString(m.content) && m.content !== "") {
+          humanMessages.push(m.content);
+        }
+        // Or content can be an array with text content
+        else if (isArray(m.content)) {
+          const lastTextContent = findLast(
+            m.content,
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text) &&
+              c.text !== "",
+          );
+
+          if (lastTextContent && "text" in lastTextContent) {
+            humanMessages.push(lastTextContent.text);
+          }
+        }
+      }
+    }
 
     if (humanMessages.length > 0) {
-      return last(humanMessages).content;
+      return last(humanMessages);
     }
   } else if (
     config.type === "output" &&

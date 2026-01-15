@@ -19,6 +19,7 @@ type UseDatasetItemBatchUpdateMutationParams = {
   isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
+  batchGroupId?: string;
 };
 
 const useDatasetItemBatchUpdateMutation = () => {
@@ -34,6 +35,7 @@ const useDatasetItemBatchUpdateMutation = () => {
       isAllItemsSelected,
       filters = [],
       search,
+      batchGroupId,
     }: UseDatasetItemBatchUpdateMutationParams) => {
       let payload;
 
@@ -48,6 +50,7 @@ const useDatasetItemBatchUpdateMutation = () => {
           filters: processFiltersArray(combinedFilters),
           update: item,
           merge_tags: mergeTags,
+          ...(batchGroupId && { batch_group_id: batchGroupId }),
         };
       } else {
         payload = { ids: itemIds, update: item, merge_tags: mergeTags };
@@ -76,6 +79,9 @@ const useDatasetItemBatchUpdateMutation = () => {
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["dataset-items", { datasetId: variables.datasetId }],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
       });
     },
   });
