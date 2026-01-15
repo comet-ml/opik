@@ -65,6 +65,7 @@ def start_as_current_span(
         opik_distributed_trace_headers=distributed_headers,
         opik_args_data=None,
         tracing_active=True,
+        create_duplicate_root_span=True,
     )
 
     end_arguments = arguments_helpers.EndSpanParameters(
@@ -85,6 +86,7 @@ def start_as_current_span(
         end_arguments.metadata = span_creation_result.span_data.metadata or metadata
         end_arguments.provider = span_creation_result.span_data.provider or provider
         end_arguments.model = span_creation_result.span_data.model or model
+        end_arguments.attachments = span_creation_result.span_data.attachments
     except Exception as exception:
         LOGGER.error(
             "Error in user's script while executing span context manager: %s",
@@ -100,8 +102,10 @@ def start_as_current_span(
         # save span/trace data at the end of the context manager
         client = opik_client.get_client_cached()
 
+        # Don't pass attachments to update() since they're already set on span_data
+        # and _update_attachments would duplicate them
         span_creation_result.span_data.init_end_time().update(
-            **end_arguments.to_kwargs(),
+            **end_arguments.to_kwargs(ignore_keys=["attachments"]),
         )
         client.span(**span_creation_result.span_data.as_parameters)
 

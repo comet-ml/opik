@@ -2,13 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.RowUtils;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,7 +32,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -60,13 +61,21 @@ public interface ProjectMetricsDAO {
     }
 
     Mono<List<Entry>> getDuration(UUID projectId, ProjectMetricRequest request);
+
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getThreadDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getThreadFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
     Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 
     Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
@@ -77,6 +86,14 @@ public interface ProjectMetricsDAO {
 
     Mono<BigDecimal> getAverageFeedbackScore(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime,
             EntityType entityType, String feedbackScoreName);
+
+    Mono<List<Entry>> getSpanDuration(UUID projectId, ProjectMetricRequest request);
+
+    Mono<List<Entry>> getSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    Mono<List<Entry>> getSpanTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    Mono<List<Entry>> getSpanFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -93,6 +110,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             TimeInterval.DAILY, "toIntervalDay(1)",
             TimeInterval.HOURLY, "toIntervalHour(1)");
 
+    private static final EnumSet<MetricType> SPAN_METRICS = EnumSet.of(
+            MetricType.SPAN_COUNT,
+            MetricType.SPAN_DURATION,
+            MetricType.SPAN_TOKEN_USAGE,
+            MetricType.SPAN_FEEDBACK_SCORES);
+
+    private static final String PROJECT_METRIC_QUERY_NAME_PREFIX = "ProjectMetrics_";
+    private static final String ALERT_METRIC_QUERY_NAME_PREFIX = "AlertMetrics_";
+
     private static final String TRACE_FILTERED_PREFIX = """
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -106,6 +132,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -118,6 +146,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                  WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
+                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
              ),
              feedback_scores_with_ranking AS (
                  SELECT workspace_id,
@@ -221,6 +251,127 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         )
                         GROUP BY entity_id
                         HAVING <trace_feedback_scores_filters>
+                    )
+                    <endif>
+                    <if(feedback_scores_empty_filters)>
+                    AND fsc.feedback_scores_count = 0
+                    <endif>
+                ) AS t
+            )
+            """;
+
+    private static final String SPAN_FILTERED_PREFIX = """
+            WITH feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                 FROM authored_feedback_scores FINAL
+                 WHERE entity_type = 'span'
+                   AND workspace_id = :workspace_id
+                   AND project_id = :project_id
+                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
+             ),
+             feedback_scores_with_ranking AS (
+                 SELECT workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY workspace_id, project_id, entity_id, name, author
+                            ORDER BY last_updated_at DESC
+                        ) as rn
+                 FROM feedback_scores_combined_raw
+             ),
+             feedback_scores_combined AS (
+                 SELECT workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author
+                 FROM feedback_scores_with_ranking
+                 WHERE rn = 1
+             ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ),
+            <if(feedback_scores_empty_filters)>
+             fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores_final
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            ),
+            <endif>
+            spans_filtered AS (
+                SELECT
+                    id,
+                    UUIDv7ToDateTime(toUUID(id)) as span_time,
+                    duration,
+                    usage
+                FROM (
+                    SELECT
+                        id,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                         NULL) AS duration,
+                         usage
+                    FROM spans FINAL
+                    <if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = spans.id
+                    <endif>
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(span_filters)> AND <span_filters> <endif>
+                    <if(span_feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores_final
+                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY entity_id
+                        HAVING <span_feedback_scores_filters>
                     )
                     <endif>
                     <if(feedback_scores_empty_filters)>
@@ -416,7 +567,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_COUNT = """
@@ -429,7 +581,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES = """
@@ -449,8 +602,89 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_SPAN_FEEDBACK_SCORES = """
+            %s, span_feedback_scores AS (
+                SELECT s.span_time,
+                        fs.name,
+                        fs.value
+                FROM feedback_scores_final fs
+                JOIN spans_filtered s ON s.id = fs.entity_id
+            )
+            SELECT <bucket> AS bucket,
+                    name,
+                    nullIf(avg(value), 0) AS value
+            FROM span_feedback_scores
+            GROUP BY name, bucket
+            ORDER BY name, bucket
+            <if(with_fill)>WITH FILL
+                FROM <fill_from>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
+
+    private static final String GET_SPAN_DURATION = """
+            %s
+            SELECT <bucket> AS bucket,
+                   arrayMap(
+                     v -> toDecimal64(
+                            greatest(
+                              least(if(isFinite(v), v, 0),  999999999.999999999),
+                              -999999999.999999999
+                            ),
+                            9
+                          ),
+                     quantiles(0.5, 0.9, 0.99)(duration)
+                   ) AS duration
+            FROM spans_filtered
+            GROUP BY bucket
+            ORDER BY bucket
+            <if(with_fill)>WITH FILL
+                FROM <fill_from>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
+
+    private static final String GET_SPAN_COUNT = """
+            %s
+            SELECT <bucket> AS bucket,
+                   nullIf(count(DISTINCT id), 0) as count
+            FROM spans_filtered
+            GROUP BY bucket
+            ORDER BY bucket
+            <if(with_fill)>WITH FILL
+                FROM <fill_from>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
+
+    private static final String GET_SPAN_TOKEN_USAGE = """
+            %s, spans_usage AS (
+                SELECT span_time,
+                       name,
+                       value
+                FROM spans_filtered s
+                ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
+                WHERE value > 0
+            )
+            SELECT <bucket> AS bucket,
+                    name,
+                    nullIf(sum(value), 0) AS value
+            FROM spans_usage
+            GROUP BY name, bucket
+            ORDER BY name, bucket
+            <if(with_fill)>WITH FILL
+                FROM <fill_from>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
@@ -474,7 +708,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_TOKEN_USAGE = """
@@ -503,7 +738,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_COST = """
@@ -528,7 +764,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_GUARDRAILS_FAILED_COUNT = """
@@ -543,7 +780,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TOTAL_COST = """
@@ -553,7 +791,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>;
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+            SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String GET_AVERAGE_DURATION = """
@@ -568,7 +807,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+            SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String GET_TOTAL_TRACE_ERRORS = """
@@ -579,7 +819,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 AND length(error_info) > 0
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+            SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String GET_AVERAGE_FEEDBACK_SCORE = """
@@ -591,7 +832,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 AND name = :feedback_score_name
                 AND created_at >= parseDateTime64BestEffort(:start_time, 9)
                 AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
-                <if(project_ids)> AND project_id IN :project_ids <endif>;
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+            SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String GET_THREAD_COUNT = """
@@ -604,7 +846,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_DURATION = """
@@ -626,7 +869,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step><endif>;
+                STEP <step><endif>
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
     @Override
@@ -787,8 +1031,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<BigDecimal> getAverageFeedbackScore(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime,
             EntityType entityType, String feedbackScoreName) {
-        return template.nonTransaction(connection -> {
-            var stTemplate = TemplateUtils.newST(GET_AVERAGE_FEEDBACK_SCORE);
+        return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var stTemplate = getSTWithLogComment(GET_AVERAGE_FEEDBACK_SCORE, "get_average_feedback_score", workspaceId,
+                    feedbackScoreName);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -800,7 +1045,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     .bind("start_time", startTime.toString())
                     .bind("end_time", endTime.toString())
                     .bind("entity_type", entityType.getType())
-                    .bind("feedback_score_name", feedbackScoreName);
+                    .bind("feedback_score_name", feedbackScoreName)
+                    .bind("workspace_id", workspaceId);
 
             // Bind project IDs if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -809,7 +1055,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
             InstrumentAsyncUtils.Segment segment = startSegment("getAverageFeedbackScore", "Clickhouse", "get");
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            return Mono.from(statement.execute())
                     .flatMapMany(result -> result
                             .map((row, metadata) -> Optional
                                     .ofNullable(
@@ -817,13 +1063,56 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     .next()
                     .mapNotNull(opt -> opt.orElse(null))
                     .doFinally(signalType -> endSegment(segment));
-        });
+        }));
+    }
+
+    @Override
+    public Mono<List<Entry>> getSpanDuration(UUID projectId, ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_SPAN_DURATION, "spanDuration")
+                .flatMapMany(result -> result
+                        .map((row, metadata) -> mapDuration(row, "duration")))
+                .reduce(Stream::concat)
+                .map(Stream::toList));
+    }
+
+    @Override
+    public Mono<List<Entry>> getSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_SPAN_COUNT, "spanCount")
+                .flatMapMany(result -> rowToDataPoint(result, row -> "spans",
+                        row -> row.get("count", Integer.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getSpanTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_SPAN_TOKEN_USAGE, "spanTokenUsage")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> row.get("name", String.class),
+                        row -> row.get("value", Long.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getSpanFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_SPAN_FEEDBACK_SCORES,
+                "spanFeedbackScores")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> row.get("name", String.class),
+                        row -> row.get("value", BigDecimal.class)))
+                .collectList());
     }
 
     private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
             Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
-        return template.nonTransaction(connection -> {
-            var stTemplate = TemplateUtils.newST(query);
+        return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var stTemplate = getSTWithLogComment(query, ALERT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
+                    projectIds != null ? projectIds.size() : 0);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -843,7 +1132,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
             // Create statement once with all flags set
             var statement = connection.createStatement(stTemplate.render())
-                    .bind("uuid_from_time", uuidFromTime);
+                    .bind("uuid_from_time", uuidFromTime)
+                    .bind("workspace_id", workspaceId);
 
             // Bind uuid_to_time only if endTime is provided
             if (uuidToTime != null) {
@@ -857,86 +1147,119 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            return Mono.from(statement.execute())
                     .flatMapMany(result -> result
                             .map((row, metadata) -> Optional
                                     .ofNullable(RowUtils.getOptionalValue(row, rowName, BigDecimal.class))))
                     .next()
                     .mapNotNull(opt -> opt.orElse(null))
                     .doFinally(signalType -> endSegment(segment));
-        });
+        }));
     }
 
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
-        var template = TemplateUtils.newST(query)
-                .add("step", intervalToSql(request.interval()))
-                .add("bucket", wrapWeekly(request.interval(),
-                        "toStartOfInterval(trace_time, %s)".formatted(intervalToSql(request.interval()))))
-                .add("fill_from", wrapWeekly(request.interval(),
-                        "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
-                                .formatted(intervalToSql(request.interval()))));
+        return makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(query, PROJECT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
+                    projectId.toString())
+                    .add("step", intervalToSql(request.interval()))
+                    .add("bucket", wrapWeekly(request.interval(),
+                            "toStartOfInterval(%s, %s)".formatted(getTimeField(request.metricType()),
+                                    intervalToSql(request.interval()))))
+                    .add("fill_from", wrapWeekly(request.interval(),
+                            "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
+                                    .formatted(intervalToSql(request.interval()))));
 
-        // Add uuid flags for conditional SQL generation
-        template.add("uuid_from_time", true);
-        if (request.uuidToTime() != null) {
-            template.add("uuid_to_time", true);
-            template.add("with_fill", true);
-        }
-        // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
+            // Add uuid flags for conditional SQL generation
+            template.add("uuid_from_time", true);
+            if (request.uuidToTime() != null) {
+                template.add("uuid_to_time", true);
+                template.add("with_fill", true);
+            }
+            // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
 
-        Optional.ofNullable(request.traceFilters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
-                            .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                            .ifPresent(scoresFilters -> template.add("trace_feedback_scores_filters", scoresFilters));
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                            .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                    feedbackScoreIsEmptyFilters));
-                    filterQueryBuilder.hasGuardrailsFilter(filters)
-                            .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
-                });
+            Optional.ofNullable(request.traceFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                .ifPresent(
+                                        scoresFilters -> template.add("trace_feedback_scores_filters", scoresFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                        feedbackScoreIsEmptyFilters));
+                        filterQueryBuilder.hasGuardrailsFilter(filters)
+                                .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
+                    });
 
-        Optional.ofNullable(request.threadFilters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
-                            .ifPresent(traceFilters -> template.add("trace_thread_filters", traceFilters));
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                            .ifPresent(scoresFilters -> template.add("thread_feedback_scores_filters", scoresFilters));
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                            .ifPresent(
-                                    feedbackScoreIsEmptyFilters -> template.add("thread_feedback_scores_empty_filters",
-                                            feedbackScoreIsEmptyFilters));
-                });
+            Optional.ofNullable(request.threadFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                                .ifPresent(traceFilters -> template.add("trace_thread_filters", traceFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                .ifPresent(
+                                        scoresFilters -> template.add("thread_feedback_scores_filters", scoresFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                .ifPresent(
+                                        feedbackScoreIsEmptyFilters -> template.add(
+                                                "thread_feedback_scores_empty_filters",
+                                                feedbackScoreIsEmptyFilters));
+                    });
 
-        var statement = connection.createStatement(template.render())
-                .bind("project_id", projectId)
-                .bind("uuid_from_time", request.uuidFromTime().toString());
+            Optional.ofNullable(request.spanFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                                .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                                .ifPresent(
+                                        scoresFilters -> template.add("span_feedback_scores_filters", scoresFilters));
+                        filterQueryBuilder
+                                .toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                                .ifPresent(
+                                        feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                                feedbackScoreIsEmptyFilters));
+                    });
 
-        // Bind uuid_to_time only if present
-        if (request.uuidToTime() != null) {
-            statement.bind("uuid_to_time", request.uuidToTime().toString());
-        }
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", projectId)
+                    .bind("uuid_from_time", request.uuidFromTime().toString())
+                    .bind("workspace_id", workspaceId);
 
-        Optional.ofNullable(request.traceFilters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                });
+            // Bind uuid_to_time only if present
+            if (request.uuidToTime() != null) {
+                statement.bind("uuid_to_time", request.uuidToTime().toString());
+            }
 
-        Optional.ofNullable(request.threadFilters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                });
+            Optional.ofNullable(request.traceFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    });
 
-        InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
+            Optional.ofNullable(request.threadFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    });
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .doFinally(signalType -> endSegment(segment));
+            Optional.ofNullable(request.spanFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
+                    });
+
+            InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    private String getTimeField(MetricType metricType) {
+        return SPAN_METRICS.contains(metricType) ? "span_time" : "trace_time";
     }
 
     private Publisher<Entry> rowToDataPoint(

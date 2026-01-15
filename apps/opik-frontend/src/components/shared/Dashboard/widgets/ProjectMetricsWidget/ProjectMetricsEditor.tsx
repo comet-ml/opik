@@ -23,6 +23,7 @@ import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/s
 import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
+import WidgetOverrideDefaultsSection from "@/components/shared/Dashboard/widgets/shared/WidgetOverrideDefaultsSection/WidgetOverrideDefaultsSection";
 
 import { cn } from "@/lib/utils";
 import {
@@ -30,11 +31,6 @@ import {
   selectMixedConfig,
   selectUpdatePreviewWidget,
 } from "@/store/DashboardStore";
-import {
-  UNSET_PROJECT_OPTION,
-  UNSET_PROJECT_VALUE,
-  WIDGET_PROJECT_SELECTOR_DESCRIPTION,
-} from "@/lib/dashboard/utils";
 
 import get from "lodash/get";
 
@@ -50,6 +46,7 @@ import {
 } from "./schema";
 import WidgetEditorBaseLayout from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetEditorBaseLayout";
 import { CHART_TYPE } from "@/constants/chart";
+import { Filter } from "@/types/filters";
 
 const METRIC_OPTIONS = [
   {
@@ -97,6 +94,26 @@ const METRIC_OPTIONS = [
     label: "Thread metrics",
     filterType: "thread" as const,
   },
+  {
+    value: METRIC_NAME_TYPE.SPAN_COUNT,
+    label: "Number of spans",
+    filterType: "span" as const,
+  },
+  {
+    value: METRIC_NAME_TYPE.SPAN_DURATION,
+    label: "Span duration",
+    filterType: "span" as const,
+  },
+  {
+    value: METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES,
+    label: "Span metrics",
+    filterType: "span" as const,
+  },
+  {
+    value: METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
+    label: "Span token usage",
+    filterType: "span" as const,
+  },
 ];
 
 const CHART_TYPE_OPTIONS = [
@@ -114,17 +131,22 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const metricType = config.metricType || "";
   const chartType = config.chartType || CHART_TYPE.line;
   const localProjectId = config.projectId;
+  const overrideDefaults = config.overrideDefaults || false;
 
-  const traceFilters = useMemo(
-    () => config.traceFilters || [],
+  const traceFilters = useMemo<Filter[]>(
+    () => (config.traceFilters as Filter[] | undefined) || [],
     [config.traceFilters],
   );
-  const threadFilters = useMemo(
-    () => config.threadFilters || [],
+  const threadFilters = useMemo<Filter[]>(
+    () => (config.threadFilters as Filter[] | undefined) || [],
     [config.threadFilters],
   );
-  const feedbackScores = useMemo(
-    () => config.feedbackScores || [],
+  const spanFilters = useMemo<Filter[]>(
+    () => (config.spanFilters as Filter[] | undefined) || [],
+    [config.spanFilters],
+  );
+  const feedbackScores = useMemo<string[]>(
+    () => (config.feedbackScores as string[] | undefined) || [],
     [config.feedbackScores],
   );
 
@@ -137,9 +159,11 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
   const isThreadMetric = metricType && selectedMetric?.filterType === "thread";
+  const isSpanMetric = metricType && selectedMetric?.filterType === "span";
   const isFeedbackScoreMetric =
     metricType === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
-    metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES;
+    metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES ||
+    metricType === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
 
   const form = useForm<ProjectMetricsWidgetFormData>({
     resolver: zodResolver(ProjectMetricsWidgetSchema),
@@ -150,13 +174,17 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       projectId: localProjectId,
       traceFilters,
       threadFilters,
+      spanFilters,
       feedbackScores,
+      overrideDefaults,
     },
   });
 
   const currentFilters = isTraceMetric
     ? form.watch("traceFilters") || []
-    : form.watch("threadFilters") || [];
+    : isThreadMetric
+      ? form.watch("threadFilters") || []
+      : form.watch("spanFilters") || [];
 
   useEffect(() => {
     if (isTraceMetric && form.formState.errors.traceFilters) {
@@ -165,7 +193,16 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     if (isThreadMetric && form.formState.errors.threadFilters) {
       form.clearErrors("threadFilters");
     }
-  }, [currentFilters.length, form, isTraceMetric, isThreadMetric]);
+    if (isSpanMetric && form.formState.errors.spanFilters) {
+      form.clearErrors("spanFilters");
+    }
+  }, [
+    currentFilters.length,
+    form,
+    isTraceMetric,
+    isThreadMetric,
+    isSpanMetric,
+  ]);
 
   useImperativeHandle(ref, () => ({
     submit: async () => {
@@ -214,38 +251,6 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     <Form {...form}>
       <WidgetEditorBaseLayout>
         <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="projectId"
-            render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["projectId"]);
-              return (
-                <FormItem>
-                  <FormLabel>Project</FormLabel>
-                  <FormControl>
-                    <ProjectsSelectBox
-                      className={cn({
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      })}
-                      value={field.value || UNSET_PROJECT_VALUE}
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        handleProjectChange(value);
-                      }}
-                      customOptions={UNSET_PROJECT_OPTION}
-                    />
-                  </FormControl>
-                  <Description>
-                    {WIDGET_PROJECT_SELECTOR_DESCRIPTION}
-                  </Description>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
-
           <FormField
             control={form.control}
             name="metricType"
@@ -300,7 +305,10 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                         scoreSource={
                           metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
                             ? ScoreSource.THREADS
-                            : ScoreSource.TRACES
+                            : metricType ===
+                                METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES
+                              ? ScoreSource.SPANS
+                              : ScoreSource.TRACES
                         }
                         entityIds={[projectId]}
                         multiselect={true}
@@ -326,16 +334,26 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
 
           <ProjectWidgetFiltersSection
             control={form.control}
-            fieldName={isTraceMetric ? "traceFilters" : "threadFilters"}
+            fieldName={
+              isTraceMetric
+                ? "traceFilters"
+                : isThreadMetric
+                  ? "threadFilters"
+                  : "spanFilters"
+            }
             projectId={projectId}
-            filterType={isTraceMetric ? "trace" : "thread"}
+            filterType={
+              isTraceMetric ? "trace" : isThreadMetric ? "thread" : "span"
+            }
             onFiltersChange={(filters) => {
               updatePreviewWidget({
                 config: {
                   ...config,
                   ...(isTraceMetric
                     ? { traceFilters: filters }
-                    : { threadFilters: filters }),
+                    : isThreadMetric
+                      ? { threadFilters: filters }
+                      : { spanFilters: filters }),
                 },
               });
             }}
@@ -370,6 +388,49 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
               );
             }}
           />
+
+          <WidgetOverrideDefaultsSection
+            value={form.watch("overrideDefaults") || false}
+            onChange={(value) => {
+              form.setValue("overrideDefaults", value);
+              updatePreviewWidget({
+                config: {
+                  ...config,
+                  overrideDefaults: value,
+                },
+              });
+            }}
+            description="Turn this on to override the dashboard's default project for this widget."
+          >
+            <FormField
+              control={form.control}
+              name="projectId"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, ["projectId"]);
+                return (
+                  <FormItem>
+                    <FormLabel>Project override</FormLabel>
+                    <FormControl>
+                      <ProjectsSelectBox
+                        className={cn("flex-1", {
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        value={field.value || ""}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          handleProjectChange(value);
+                        }}
+                        showClearButton
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          </WidgetOverrideDefaultsSection>
         </div>
       </WidgetEditorBaseLayout>
     </Form>

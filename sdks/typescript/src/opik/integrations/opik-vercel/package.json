@@ -1,7 +1,7 @@
 {
   "name": "opik-vercel",
   "description": "Opik TypeScript and JavaScript SDK integration with Vercel AI SDK",
-  "version": "1.9.71",
+  "version": "1.9.84",
   "engines": {
     "node": ">=18"
   },
@@ -66,7 +66,7 @@
   "devDependencies": {
     "@eslint/js": "^9.38.0",
     "@opentelemetry/auto-instrumentations-node": "^0.66.0",
-    "ai": "^5.0.76",
+    "ai": "^6.0.13",
     "eslint": "^9.38.0",
     "globals": "^16.4.0",
     "msw": "^2.7.0",

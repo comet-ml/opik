@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.CommentAssertionUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.ExperimentsTestUtils;
+import com.comet.opik.api.resources.utils.ListComparators;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -149,6 +150,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.ExperimentsTestUtils.getQuantities;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
@@ -1121,6 +1123,61 @@ class ExperimentsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void findByFilterTags(Operator operator, String value) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var name = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .datasetName(datasetName)
+                            .name(name)
+                            .tags(Set.of("tag1", "tag2", "tag3"))
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment().toBuilder().tags(Set.of("other")).build());
+
+            unexpectedExperiments
+                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
+                    .datasetId();
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.TAGS)
+                    .operator(operator)
+                    .value(value)
+                    .build());
+
+            findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+            findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+        }
+
+        private Stream<Arguments> findByFilterTags() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL, "tag1"),
+                    Arguments.of(Operator.NOT_EQUAL, "other"),
+                    Arguments.of(Operator.CONTAINS, "tag"),
+                    Arguments.of(Operator.NOT_CONTAINS, "other"));
+        }
+
+        @ParameterizedTest
         @MethodSource("getValidFilters")
         void findByFiltering(Function<Experiment, ExperimentFilter> getFilter) {
             var workspaceName = UUID.randomUUID().toString();
@@ -1991,7 +2048,19 @@ class ExperimentsResourceTest {
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field("duration.p50").direction(Direction.DESC)
-                                    .build()));
+                                    .build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
+                                    ListComparators.ascending())
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.tags().stream().toList(),
+                                    ListComparators.descending())
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
@@ -2277,6 +2346,11 @@ class ExperimentsResourceTest {
                     "{\"provider\":\"anthropic\",\"model\":\"claude-3\"}",
                     "{\"provider\":\"openai\",\"model\":\"gpt-3.5\"}");
 
+            List<Set<String>> tagsList = List.of(
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
+
             Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
             List<Trace> tracesAll = new ArrayList<>();
             Map<UUID, List<Span>> traceToSpans = new HashMap<>();
@@ -2297,6 +2371,7 @@ class ExperimentsResourceTest {
                                 .promptVersions(List.of(versionLink))
                                 .metadata(JsonUtils
                                         .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2425,7 +2500,35 @@ class ExperimentsResourceTest {
                                     .value(experiment.promptVersion().promptId().toString())
                                     .build(),
                             (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
-                                    .equals(experiment.promptVersion())));
+                                    .equals(experiment.promptVersion())),
+                    // Test grouping by TAGS without filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            null, null),
+                    // Test grouping by TAGS with DATASET_ID, no filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            null, null),
+                    // Test grouping by TAGS with filter on TAGS using CONTAINS
+                    Arguments.of(true, List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
+                                    && exp.tags().contains(experiment.tags().stream().sorted().findFirst().orElse(""))),
+                    // Test grouping by DATASET_ID and TAGS with filter on TAGS using CONTAINS
+                    Arguments.of(true,
+                            List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                                    GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
+                                    && exp.tags()
+                                            .contains(experiment.tags().stream().sorted().findFirst().orElse(""))));
         }
 
         @ParameterizedTest
@@ -2447,7 +2550,8 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
         }
 
         @Test
@@ -2522,6 +2626,11 @@ class ExperimentsResourceTest {
 
             var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
 
+            List<Set<String>> tagsList = List.of(
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
+
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -2535,6 +2644,7 @@ class ExperimentsResourceTest {
                                                 "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
                                                         .formatted(random.nextBoolean() ? "2024" : "2025") +
                                                         "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2566,6 +2676,11 @@ class ExperimentsResourceTest {
 
             var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
 
+            List<Set<String>> tagsList = List.of(
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
+                    PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
+
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -2585,6 +2700,7 @@ class ExperimentsResourceTest {
                                                 "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
                                                         .formatted(random.nextBoolean() ? "2024" : "2025") +
                                                         "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
@@ -2692,7 +2808,9 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field("NOT_SUPPORTED").type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
         }
 
         private Stream<Arguments> groupExperiments() {
@@ -2706,7 +2824,12 @@ class ExperimentsResourceTest {
                             .of(GroupBy.builder().field(METADATA).key("invalid key").type(FieldType.DICTIONARY)
                                     .build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
-                            GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
+                            GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())),
+                    // Test grouping by TAGS
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build())),
+                    // Test grouping by TAGS with DATASET_ID
+                    Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build())));
         }
 
         private Stream<Arguments> groupExperimentsWithFilter() {
@@ -2747,7 +2870,36 @@ class ExperimentsResourceTest {
                                     .value(experiment.promptVersion().promptId().toString())
                                     .build(),
                             (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.promptVersion()
-                                    .equals(experiment.promptVersion())));
+                                    .equals(experiment.promptVersion())),
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags()
+                                    .contains(experiment.tags().iterator().next())),
+                    Arguments.of(
+                            List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build(),
+                                    GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.DATASET_ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(experiment.datasetId().toString())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.datasetId()
+                                    .equals(experiment.datasetId())),
+                    Arguments.of(
+                            List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build(),
+                                    GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY)
+                                            .build()),
+                            (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
+                                    .field(ExperimentField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(experiment.tags().iterator().next())
+                                    .build(),
+                            (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags()
+                                    .contains(experiment.tags().iterator().next())));
         }
     }
 
@@ -3515,6 +3667,8 @@ class ExperimentsResourceTest {
         void createWithInvalidPromptVersionId() {
             var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
                     .build();
 
             var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, "Prompt version not found");
@@ -4746,7 +4900,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4848,7 +5003,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4901,7 +5057,8 @@ class ExperimentsResourceTest {
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4976,7 +5133,7 @@ class ExperimentsResourceTest {
                                     .datasetName("Test Dataset")
                                     .items(List.of())
                                     .build(),
-                            "items size must be between 1 and 250"));
+                            "items Experiment items list size must be between 1 and 1000"));
         }
 
         @Test
@@ -4985,7 +5142,7 @@ class ExperimentsResourceTest {
             var bulkUpload = ExperimentItemBulkUpload.builder()
                     .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
                     .datasetName("Test Dataset")
-                    .items(IntStream.range(0, 251)
+                    .items(IntStream.range(0, 1001)
                             .mapToObj(i -> ExperimentItemBulkRecord.builder()
                                     .datasetItemId(UUID.randomUUID())
                                     .trace(Trace.builder()
@@ -4993,6 +5150,7 @@ class ExperimentsResourceTest {
                                             .startTime(Instant.now())
                                             .endTime(Instant.now().plusSeconds(1))
                                             .build())
+                                    .spans(List.of())
                                     .build())
                             .toList())
                     .build();
@@ -5005,7 +5163,8 @@ class ExperimentsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
                 var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
 
-                assertThat(errorMessage.errors()).contains("items size must be between 1 and 250");
+                assertThat(errorMessage.errors())
+                        .contains("items Experiment items list size must be between 1 and 1000");
             }
         }
 
@@ -5055,7 +5214,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5097,7 +5257,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5159,7 +5320,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem1, datasetItem2)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5244,7 +5406,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset1.name(), null, List.of(datasetItem1)),
+                    DatasetItemBatch.builder().datasetName(dataset1.name())
+                            .items(List.of(datasetItem1)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5279,7 +5442,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset2.name(), null, List.of(datasetItem2)),
+                    DatasetItemBatch.builder().datasetName(dataset2.name())
+                            .items(List.of(datasetItem2)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5341,7 +5505,8 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
+                    DatasetItemBatch.builder().datasetName(dataset.name())
+                            .items(List.of(datasetItem1, datasetItem2)).build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5745,6 +5910,242 @@ class ExperimentsResourceTest {
                     .metadata(thirdUpdateMetadata)
                     .build();
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+    }
+
+    @Nested
+    @DisplayName("Experiment Tags:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentTags {
+
+        @ParameterizedTest
+        @MethodSource("createExperimentTagsProvider")
+        @DisplayName("when creating experiment with various tag inputs, then tags are handled correctly")
+        void createExperimentWithVariousTags_thenTagsHandledCorrectly(Set<String> inputTags, Set<String> expectedTags) {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(inputTags)
+                    .build();
+
+            // when
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // then
+            var expectedExperiment = experiment.toBuilder().tags(expectedTags).build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        private Stream<Arguments> createExperimentTagsProvider() {
+            var testRandomTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
+            return Stream.of(
+                    Arguments.of(testRandomTags, testRandomTags),
+                    Arguments.of(Set.of(), null),
+                    Arguments.of(null, null));
+        }
+
+        @Test
+        @DisplayName("when updating experiment tags, then tags are replaced correctly")
+        void updateExperimentTags_thenTagsReplacedCorrectly() {
+            // given - create experiment with initial tags
+            Set<String> initialTags = Set.of("initial1", "initial2");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update with new tags
+            Set<String> updatedTags = Set.of("updated1", "updated2", "updated3");
+            var updateRequest = ExperimentUpdate.builder()
+                    .tags(updatedTags)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify tags are replaced
+            var expectedExperiment = experiment.toBuilder()
+                    .tags(updatedTags)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment to remove tags, then tags are cleared correctly")
+        void updateExperimentToRemoveTags_thenTagsClearedCorrectly() {
+            // given - create experiment with tags
+            var initialTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update with empty tags
+            var updateRequest = ExperimentUpdate.builder()
+                    .tags(Set.of())
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify tags are cleared (backend returns null for empty tags)
+            var expectedExperiment = experiment.toBuilder()
+                    .tags(null)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with null tags, then existing tags are preserved")
+        void updateExperimentWithNullTags_thenExistingTagsPreserved() {
+            // given - create experiment with tags
+            var initialTags = PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class);
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update with null tags (should preserve existing tags)
+            var updateRequest = ExperimentUpdate.builder()
+                    .name("Updated Name")
+                    .tags(null)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify existing tags are preserved
+            var expectedExperiment = experiment.toBuilder()
+                    .name("Updated Name")
+                    .tags(initialTags)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating only experiment name, then tags are preserved")
+        void updateExperimentName_thenTagsPreserved() {
+            // given - create experiment with tags
+            Set<String> initialTags = Set.of("preserve1", "preserve2");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update only the name
+            var updateRequest = ExperimentUpdate.builder()
+                    .name("New Name")
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify tags are preserved
+            var expectedExperiment = experiment.toBuilder()
+                    .name("New Name")
+                    .tags(initialTags)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with multiple fields including tags, then all fields are updated correctly")
+        void updateExperimentWithMultipleFieldsIncludingTags_thenAllFieldsUpdatedCorrectly() {
+            // given
+            var originalMetadata = JsonUtils.getJsonNodeFromString("{\"original\": \"value\"}");
+            Set<String> initialTags = Set.of("initial");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .metadata(originalMetadata)
+                    .tags(initialTags)
+                    .type(ExperimentType.REGULAR)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - update multiple fields including tags
+            var updatedMetadata = JsonUtils.getJsonNodeFromString("{\"updated\": \"value\"}");
+            Set<String> updatedTags = Set.of("updated1", "updated2");
+            var updateRequest = ExperimentUpdate.builder()
+                    .name("Updated Name")
+                    .metadata(updatedMetadata)
+                    .tags(updatedTags)
+                    .type(ExperimentType.TRIAL)
+                    .status(ExperimentStatus.RUNNING)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify all fields are updated
+            var expectedExperiment = experiment.toBuilder()
+                    .name("Updated Name")
+                    .metadata(updatedMetadata)
+                    .tags(updatedTags)
+                    .type(ExperimentType.TRIAL)
+                    .status(ExperimentStatus.RUNNING)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when creating multiple experiments with different tags, then each experiment has correct tags")
+        void createMultipleExperimentsWithDifferentTags_thenEachHasCorrectTags() {
+            // given
+            Set<String> tags1 = Set.of("experiment1", "common");
+            Set<String> tags2 = Set.of("experiment2", "common");
+            Set<String> tags3 = Set.of("experiment3");
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .tags(tags1)
+                    .build();
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .tags(tags2)
+                    .build();
+            var experiment3 = experimentResourceClient.createPartialExperiment()
+                    .tags(tags3)
+                    .build();
+
+            // when
+            var experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+            var experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+            var experimentId3 = experimentResourceClient.create(experiment3, API_KEY, TEST_WORKSPACE);
+
+            // then - verify each experiment has its own tags
+            getAndAssert(experimentId1, experiment1, TEST_WORKSPACE, API_KEY);
+            getAndAssert(experimentId2, experiment2, TEST_WORKSPACE, API_KEY);
+            getAndAssert(experimentId3, experiment3, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when sequentially updating tags multiple times, then latest tags are applied")
+        void sequentiallyUpdateTags_thenLatestTagsApplied() {
+            // given - create experiment with initial tags
+            Set<String> initialTags = Set.of("initial");
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .tags(initialTags)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when - first update
+            Set<String> firstUpdateTags = Set.of("first", "first_update");
+            var firstUpdate = ExperimentUpdate.builder()
+                    .tags(firstUpdateTags)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, firstUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify the first update
+            var expectedExperiment = experiment.toBuilder().tags(firstUpdateTags).build();
+            var afterFirstUpdate = getAndAssert(experimentId, expectedExperiment,
+                    TEST_WORKSPACE, API_KEY);
+            assertThat(afterFirstUpdate.tags()).containsExactlyInAnyOrderElementsOf(firstUpdateTags);
+
+            // when - second update
+            Set<String> secondUpdateTags = Set.of("second", "second_update", "tags");
+            var secondUpdate = ExperimentUpdate.builder()
+                    .tags(secondUpdateTags)
+                    .build();
+            experimentResourceClient.updateExperiment(experimentId, secondUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then - verify the second update (should replace first update tags)
+            expectedExperiment = experiment.toBuilder().tags(secondUpdateTags).build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
     }
 }

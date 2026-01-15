@@ -57,6 +57,21 @@ const shouldIncludeScore = (
   );
 };
 
+const createUniqueEntityLabels = (data: DataRecord[]): string[] => {
+  const nameCounts: Record<string, number> = {};
+
+  data.forEach((record) => {
+    nameCounts[record.entityName] = (nameCounts[record.entityName] || 0) + 1;
+  });
+
+  return data.map((record) => {
+    const isDuplicate = (nameCounts[record.entityName] || 0) > 1;
+    return isDuplicate
+      ? `${record.entityName} (${record.entityId})`
+      : record.entityName;
+  });
+};
+
 function transformGroupedExperimentsToChartData(
   groupsAggregationsData:
     | { content: Record<string, ExperimentsGroupNodeWithAggregations> }
@@ -214,6 +229,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
   const feedbackScores = widgetConfig?.feedbackScores;
+  const overrideDefaults = widgetConfig?.overrideDefaults;
 
   const validFilters = useMemo(() => {
     const filters = (widgetConfig?.filters || []) as Filters;
@@ -226,26 +242,26 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   }, [widgetConfig?.groups]);
 
   const experimentIds = useMemo(() => {
-    const localExperimentIds = widgetConfig?.experimentIds;
-    if (localExperimentIds && localExperimentIds.length > 0) {
-      return localExperimentIds;
+    // If overrideDefaults is true, use widget's own experimentIds
+    // Otherwise, always use global experimentIds
+    if (overrideDefaults) {
+      return widgetConfig?.experimentIds || [];
     }
     return globalConfig.experimentIds || [];
-  }, [globalConfig.experimentIds, widgetConfig?.experimentIds]);
-
-  const isUsingGlobalExperiments =
-    isEmpty(widgetConfig?.experimentIds) &&
-    !isEmpty(globalConfig.experimentIds);
+  }, [
+    globalConfig.experimentIds,
+    widgetConfig?.experimentIds,
+    overrideDefaults,
+  ]);
 
   const hasGroups = validGroups.length > 0;
 
   const isSelectExperimentsMode =
     dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
 
-  const infoMessage =
-    isUsingGlobalExperiments && isSelectExperimentsMode
-      ? "Using the dashboard's default experiment settings"
-      : undefined;
+  const infoMessage = overrideDefaults
+    ? "This widget uses custom experiments instead of the dashboard default."
+    : undefined;
 
   // Limit to first 10 experiments
   const limitedExperimentIds = useMemo(
@@ -350,20 +366,21 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       : undefined;
 
   const { transformedData, chartConfig } = useMemo(() => {
-    if (chartType === CHART_TYPE.radar) {
-      const entityNames = chartData.data.map((record) => record.entityName);
-      const radarData = chartData.lines.map((scoreName) => {
+    if (chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar) {
+      const entityLabels = createUniqueEntityLabels(chartData.data);
+      const data = chartData.lines.map((scoreName) => {
         const point: Record<string, string | number> = { name: scoreName };
-        chartData.data.forEach((record) => {
+        chartData.data.forEach((record, index) => {
           if (record.scores[scoreName] !== undefined) {
-            point[record.entityName] = record.scores[scoreName];
+            point[entityLabels[index]] = record.scores[scoreName];
           }
         });
         return point;
       });
+
       return {
-        transformedData: radarData,
-        chartConfig: getDefaultHashedColorsChartConfig(entityNames),
+        transformedData: data,
+        chartConfig: getDefaultHashedColorsChartConfig(entityLabels),
       };
     }
 
@@ -405,6 +422,17 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   }
 
   const renderChartContent = () => {
+    if (isSelectExperimentsMode && experimentIds.length === 0) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Experiments not configured"
+          message="This widget needs experiments to display data. Select default experiments for the dashboard or set custom ones in the widget settings."
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
     if (isPending) {
       return (
         <div className="flex size-full min-h-32 items-center justify-center">
@@ -440,7 +468,6 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           xAxisKey="name"
-          renderTooltipHeader={renderHeader}
           className="size-full"
         />
       );
@@ -476,7 +503,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}

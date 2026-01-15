@@ -6,9 +6,11 @@ import {
   PromptType,
   type PromptVariables,
   type PromptVersionData,
+  type ChatMessage,
 } from "./types";
 import { PromptValidationError } from "./errors";
 import { formatPromptTemplate } from "./formatting";
+import { formatChatMessagesForComparison } from "./formatting/chatMessageFormatter";
 
 /**
  * Represents a specific immutable snapshot of a prompt template at a point in time.
@@ -23,6 +25,7 @@ export class PromptVersion {
   public readonly type: PromptType;
   public readonly metadata?: OpikApi.JsonNode;
   public readonly changeDescription?: string;
+  public readonly tags?: string[];
   public readonly createdAt?: Date;
   public readonly createdBy?: string;
 
@@ -34,6 +37,7 @@ export class PromptVersion {
     this.type = data.type;
     this.metadata = data.metadata;
     this.changeDescription = data.changeDescription;
+    this.tags = data.tags;
     this.createdAt = data.createdAt;
     this.createdBy = data.createdBy;
   }
@@ -82,6 +86,7 @@ export class PromptVersion {
   /**
    * Compare this version's template with another version and return a formatted diff.
    * Displays a git-style unified diff showing additions, deletions, and changes.
+   * For chat prompts, provides intelligent formatting with structured message display.
    * The diff is automatically logged to the terminal and also returned as a string.
    * The output is colored and formatted for terminal display.
    *
@@ -102,7 +107,19 @@ export class PromptVersion {
     const thisLabel = `Current version [${this.commit}]`;
     const otherLabel = `Other version [${other.commit}]`;
 
-    const diffOutput = diffStringsUnified(other.prompt, this.prompt, {
+    // Check if this is a chat prompt (template structure is chat)
+    let thisFormatted = this.prompt;
+    let otherFormatted = other.prompt;
+
+    // Try to detect and format chat prompts
+    if (this.isChatPrompt(this.prompt)) {
+      thisFormatted = this.formatChatPromptString(this.prompt);
+    }
+    if (this.isChatPrompt(other.prompt)) {
+      otherFormatted = this.formatChatPromptString(other.prompt);
+    }
+
+    const diffOutput = diffStringsUnified(otherFormatted, thisFormatted, {
       aAnnotation: otherLabel,
       bAnnotation: thisLabel,
       includeChangeCounts: true,
@@ -114,6 +131,37 @@ export class PromptVersion {
     logger.info(`\nPrompt version comparison:\n${diffOutput}`);
 
     return diffOutput;
+  }
+
+  /**
+   * Check if a prompt string is a chat prompt (JSON array of messages)
+   */
+  private isChatPrompt(prompt: string): boolean {
+    try {
+      const parsed = JSON.parse(prompt);
+      return (
+        Array.isArray(parsed) &&
+        parsed.length > 0 &&
+        typeof parsed[0] === "object" &&
+        "role" in parsed[0] &&
+        "content" in parsed[0]
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Format chat prompt string (JSON) for human-readable comparison.
+   */
+  private formatChatPromptString(prompt: string): string {
+    try {
+      const messages: ChatMessage[] = JSON.parse(prompt);
+      return formatChatMessagesForComparison(messages);
+    } catch {
+      // If parsing fails, return original prompt
+      return prompt;
+    }
   }
 
   /**
@@ -157,6 +205,7 @@ export class PromptVersion {
       type: apiResponse.type ?? PromptType.MUSTACHE,
       metadata: apiResponse.metadata,
       changeDescription: apiResponse.changeDescription,
+      tags: apiResponse.tags,
       createdAt: apiResponse.createdAt
         ? new Date(apiResponse.createdAt)
         : undefined,

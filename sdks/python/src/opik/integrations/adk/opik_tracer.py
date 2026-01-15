@@ -173,7 +173,7 @@ class OpikTracer:
             # ADK runs `before_model_callback` before running `start_as_current_span` function for the LLM call,
             # which makes it impossible to update the Opik span from this method.
             # So we create a span manually here. This flow is handled inside ADKTracerWrapper.
-            _, span_data = span_creation_handler.create_span_respecting_context(
+            result = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
                     name=model,
                     project_name=self.project_name,
@@ -189,7 +189,7 @@ class OpikTracer:
                 distributed_trace_headers=None,
             )
 
-            context_storage.add_span_data(span_data)
+            context_storage.add_span_data(result.span_data)
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 

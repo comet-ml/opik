@@ -28,6 +28,7 @@ public class DatabaseUtils {
 
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
     public static final int UUID_POOL_MULTIPLIER = 2;
+    private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<details>";
 
     /**
      * Generates a pool of UUIDv7 identifiers for batch operations.
@@ -110,7 +111,7 @@ public class DatabaseUtils {
                                     traceAggregationFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
-                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES)
                             .ifPresent(spanScoresFilters -> template.add("span_feedback_scores_filters",
                                     spanScoresFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
@@ -124,7 +125,7 @@ public class DatabaseUtils {
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
-                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("span_feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
                     FilterQueryBuilder.hasGuardrailsFilter(filters)
@@ -147,12 +148,12 @@ public class DatabaseUtils {
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
+                    FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY);
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
@@ -161,5 +162,19 @@ public class DatabaseUtils {
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
+    }
+
+    public static ST getSTWithLogComment(String query, String queryName, String workspaceId, Object details) {
+        var logComment = getLogComment(queryName, workspaceId, details);
+        return TemplateUtils.newST(query)
+                .add("log_comment", logComment);
+    }
+
+    public static String getLogComment(String queryName, String workspaceId, Object details) {
+        return TemplateUtils.newST(LOG_COMMENT)
+                .add("query_name", queryName != null ? queryName.replace("'", "''") : null)
+                .add("workspace_id", workspaceId != null ? workspaceId.replace("'", "''") : null)
+                .add("details", details != null ? details.toString().replace("'", "''") : null)
+                .render();
     }
 }

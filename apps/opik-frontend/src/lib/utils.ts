@@ -6,6 +6,7 @@ import get from "lodash/get";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
+import isInteger from "lodash/isInteger";
 import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
@@ -16,6 +17,7 @@ import mapValues from "lodash/mapValues";
 import pickBy from "lodash/pickBy";
 import { twMerge } from "tailwind-merge";
 import isEqual from "fast-deep-equal";
+import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
 
@@ -228,12 +230,15 @@ export const formatNumberInK = (value: number, precision = 1): string => {
     { threshold: 1000, suffix: "K", divider: 1000 },
   ];
 
+  const formatValue = (num: number): string =>
+    isInteger(num) ? num.toString() : num.toFixed(precision);
+
   const range = ranges.find((r) => value >= r.threshold);
 
   return range
-    ? `${(value / range.divider).toFixed(precision)}${range.suffix}`
+    ? `${formatValue(value / range.divider)}${range.suffix}`
     : isNumber(value)
-      ? value.toFixed(precision)
+      ? formatValue(value)
       : String(value);
 };
 
@@ -299,3 +304,5 @@ export const removeUndefinedKeys = <T>(value: T): T => {
 export const isLooseEqual = <T>(a: T, b: T): boolean => {
   return isEqual(removeUndefinedKeys(a), removeUndefinedKeys(b));
 };
+
+export const generateBatchGroupId = (): string => uuidv4();

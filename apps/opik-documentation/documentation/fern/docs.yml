@@ -15,6 +15,9 @@ metadata:
   twitter:card: "summary_large_image"
   twitter:site: "@CometML"
 
+announcement:
+  message: "🎉 Join our Global AI Hackathon with <a href=\"https://www.encodeclub.com/programmes/comet-resolution-v2-hackathon?utm_source=opik-docs\" rel=\"nofollow\" target=\"_blank\">$30,000 in cash prizes</a>."
+
 title: Opik Documentation
 favicon: img/logo.svg
 

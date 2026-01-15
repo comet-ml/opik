@@ -11,6 +11,7 @@ export interface ExperimentPublic {
     projectId?: string;
     name?: string;
     metadata?: OpikApi.JsonListStringPublic;
+    tags?: string[];
     type?: OpikApi.ExperimentPublicType;
     optimizationId?: string;
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
@@ -28,4 +29,7 @@ export interface ExperimentPublic {
     experimentScores?: OpikApi.ExperimentScorePublic[];
     promptVersion?: OpikApi.PromptVersionLinkPublic;
     promptVersions?: OpikApi.PromptVersionLinkPublic[];
+    /** ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version. */
+    datasetVersionId?: string;
+    datasetVersionSummary?: OpikApi.DatasetVersionSummaryPublic;
 }

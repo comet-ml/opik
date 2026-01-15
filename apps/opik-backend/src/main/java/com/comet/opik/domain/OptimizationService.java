@@ -88,8 +88,6 @@ class OptimizationServiceImpl implements OptimizationService {
 
     // Redis key pattern for cancellation signals (Python worker checks this)
     private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
-    // TTL for cancellation keys (1 hour - longer than max optimization timeout)
-    private static final long CANCEL_KEY_TTL_SECONDS = 3600;
     // Statuses that can be cancelled
     private static final Set<OptimizationStatus> CANCELLABLE_STATUSES = EnumSet.of(
             OptimizationStatus.INITIALIZED,
@@ -253,9 +251,11 @@ class OptimizationServiceImpl implements OptimizationService {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
                     // Validate cancellation request for Studio optimizations
-                    if (update.status() == OptimizationStatus.CANCELLED
-                            && optimization.studioConfig() != null
-                            && !CANCELLABLE_STATUSES.contains(optimization.status())) {
+                    boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
+                            && optimization.studioConfig() != null;
+                    boolean isNotCancellable = !CANCELLABLE_STATUSES.contains(optimization.status());
+
+                    if (isStudioCancellation && isNotCancellable) {
                         return Mono.error(new ClientErrorException(
                                 "Cannot cancel optimization with status '%s'. Only optimizations with status %s can be cancelled."
                                         .formatted(optimization.status(), CANCELLABLE_STATUSES),
@@ -284,9 +284,11 @@ class OptimizationServiceImpl implements OptimizationService {
      * @return Mono that completes when the signal is set, or empty if no signal is needed
      */
     private Mono<Void> signalCancellationIfNeeded(UUID id, Optimization optimization, OptimizationUpdate update) {
-        if (update.status() != OptimizationStatus.CANCELLED
-                || optimization.studioConfig() == null
-                || !CANCELLABLE_STATUSES.contains(optimization.status())) {
+        boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
+                && optimization.studioConfig() != null;
+        boolean isCancellable = CANCELLABLE_STATUSES.contains(optimization.status());
+
+        if (!isStudioCancellation || !isCancellable) {
             return Mono.empty();
         }
 
@@ -294,8 +296,10 @@ class OptimizationServiceImpl implements OptimizationService {
                 id, optimization.status());
 
         String cancelKey = String.format(CANCEL_KEY_PATTERN, id);
+        long ttlSeconds = config.getOptimizationLogs().getCancellationKeyTtlSeconds();
+
         return redisClient.getBucket(cancelKey)
-                .set("1", CANCEL_KEY_TTL_SECONDS, TimeUnit.SECONDS)
+                .set("1", ttlSeconds, TimeUnit.SECONDS)
                 .doOnSuccess(__ -> log.debug("Set cancellation signal in Redis for optimization '{}'", id))
                 .then();
     }

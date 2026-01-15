@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment_public import CommentPublic
+from .dataset_version_summary_public import DatasetVersionSummaryPublic
 from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
 from .experiment_score_public import ExperimentScorePublic
@@ -22,6 +23,7 @@ class ExperimentPublic(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListStringPublic] = None
+    tags: typing.Optional[typing.List[str]] = None
     type: typing.Optional[ExperimentPublicType] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
@@ -39,6 +41,12 @@ class ExperimentPublic(UniversalBaseModel):
     experiment_scores: typing.Optional[typing.List[ExperimentScorePublic]] = None
     prompt_version: typing.Optional[PromptVersionLinkPublic] = None
     prompt_versions: typing.Optional[typing.List[PromptVersionLinkPublic]] = None
+    dataset_version_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.
+    """
+
+    dataset_version_summary: typing.Optional[DatasetVersionSummaryPublic] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

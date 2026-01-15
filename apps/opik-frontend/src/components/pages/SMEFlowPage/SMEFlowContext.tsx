@@ -14,7 +14,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadsList from "@/api/traces/useThreadsList";
-import { createFilter } from "@/lib/filters";
+import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import {
   AnnotationQueue,
   ANNOTATION_QUEUE_SCOPE,
@@ -226,7 +226,7 @@ interface SMEFlowContextValue {
   currentItem: Trace | Thread | undefined;
   nextItem: Trace | Thread | undefined;
   currentView: WORKFLOW_STATUS;
-  isLastUnprocessedItem: boolean;
+  isCurrentItemProcessed: boolean;
 
   // Computed state
   processedCount: number;
@@ -323,17 +323,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     },
   );
 
-  const annotationQueueFilter = useMemo(() => {
-    if (!annotationQueue?.id) return [];
-    return [
-      createFilter({
-        id: "annotation_queue_ids",
-        field: "annotation_queue_ids",
-        value: annotationQueue.id,
-        operator: "contains",
-      }),
-    ];
-  }, [annotationQueue?.id]);
+  const annotationQueueFilter = useMemo(
+    () => generateAnnotationQueueIdFilter(annotationQueue?.id),
+    [annotationQueue?.id],
+  );
 
   const { data: tracesData, isLoading: isTracesLoading } = useTracesList(
     {
@@ -465,15 +458,11 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     [queueItems, unprocessedIds, allItemIds],
   );
 
-  const isLastUnprocessedItem = useMemo(() => {
-    if (unprocessedIds.length === 0) return true;
-
-    const currentId = currentItem?.id;
-    if (!currentId) return false;
-
-    const currentUnprocessedIdx = unprocessedIds.indexOf(currentId);
-    return currentUnprocessedIdx === unprocessedIds.length - 1;
-  }, [unprocessedIds, currentItem?.id]);
+  const isCurrentItemProcessed = useMemo(() => {
+    if (!currentItem || !annotationQueue) return false;
+    const feedbackScoreNames = annotationQueue.feedback_definition_names ?? [];
+    return isItemProcessed(currentItem, feedbackScoreNames, currentUserName);
+  }, [currentItem, annotationQueue, currentUserName]);
 
   const handleNextUnprocessed = useCallback(() => {
     const nextIndex = getNextUnprocessedIndex(currentIndex);
@@ -790,7 +779,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     currentItem,
     nextItem,
     currentView: currentView || WORKFLOW_STATUS.INITIAL,
-    isLastUnprocessedItem,
+    isCurrentItemProcessed,
 
     // Computed state
     processedCount,

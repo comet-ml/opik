@@ -13,6 +13,7 @@ import { PercentageValues } from "./PercentageValues";
 import { ExperimentStatus } from "./ExperimentStatus";
 import { ExperimentScore } from "./ExperimentScore";
 import { PromptVersionLink } from "./PromptVersionLink";
+import { DatasetVersionSummary } from "./DatasetVersionSummary";
 
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
     core.serialization.object({
@@ -22,6 +23,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
         metadata: JsonListString.optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         type: ExperimentType.optional(),
         optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
@@ -51,6 +53,8 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
             "prompt_versions",
             core.serialization.list(PromptVersionLink).optional(),
         ),
+        datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
+        datasetVersionSummary: core.serialization.property("dataset_version_summary", DatasetVersionSummary.optional()),
     });
 
 export declare namespace Experiment {
@@ -61,6 +65,7 @@ export declare namespace Experiment {
         project_id?: string | null;
         name?: string | null;
         metadata?: JsonListString.Raw | null;
+        tags?: string[] | null;
         type?: ExperimentType.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
@@ -78,5 +83,7 @@ export declare namespace Experiment {
         experiment_scores?: ExperimentScore.Raw[] | null;
         prompt_version?: PromptVersionLink.Raw | null;
         prompt_versions?: PromptVersionLink.Raw[] | null;
+        dataset_version_id?: string | null;
+        dataset_version_summary?: DatasetVersionSummary.Raw | null;
     }
 }

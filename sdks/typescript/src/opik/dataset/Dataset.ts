@@ -59,12 +59,15 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
 
     const batches = splitIntoBatches(reqItems, { maxBatchSize: 1000 });
 
+    const batchGroupId = generateId();
+
     try {
       let totalInserted = 0;
       for (const batch of batches) {
         await this.opik.api.datasets.createOrUpdateDatasetItems({
           datasetId: this.id,
           items: batch,
+          batchGroupId,
         });
         totalInserted += batch.length;
         logger.info(
@@ -113,6 +116,8 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
 
     const batches = splitIntoBatches(itemIds, { maxBatchSize: 100 });
 
+    const batchGroupId = generateId();
+
     for await (const batch of batches) {
       logger.debug("Deleting dataset items batch", {
         batchSize: batch.length,
@@ -120,6 +125,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       });
       await this.opik.api.datasets.deleteDatasetItems({
         itemIds: batch,
+        batchGroupId,
       });
 
       for (const itemId of batch) {

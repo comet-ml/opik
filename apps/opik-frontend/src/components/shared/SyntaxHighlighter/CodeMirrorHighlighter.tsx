@@ -1,4 +1,10 @@
-import React, { ReactNode, useRef, useEffect, useCallback } from "react";
+import React, {
+  ReactNode,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -11,6 +17,7 @@ import { CodeOutput } from "./types";
 import SyntaxHighlighterLayout from "./SyntaxHighlighterLayout";
 import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
 import { hyperLink } from "@uiw/codemirror-extensions-hyper-link";
+import { createBase64ExpandExtension } from "./base64Extension";
 
 export interface CodeMirrorHighlighterProps {
   searchValue?: string;
@@ -52,6 +59,8 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     view: viewRef.current,
     codeOutput,
   });
+
+  const base64Extension = useMemo(() => createBase64ExpandExtension(), []);
 
   // Keep latest onScroll callback in ref to avoid stale closures
   const onScrollRef = useRef(onScroll);
@@ -111,7 +120,6 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           searchKeymap: false,
         }}
         extensions={[
-          EXTENSION_MAP[codeOutput.mode] as LRLanguage,
           EditorView.lineWrapping,
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
@@ -119,6 +127,8 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           searchPanelTheme,
           searchExtension,
           hyperLink,
+          base64Extension,
+          EXTENSION_MAP[codeOutput.mode] as LRLanguage,
         ]}
         maxHeight={maxHeight || "700px"}
         onCreateEditor={handleCreateEditor}

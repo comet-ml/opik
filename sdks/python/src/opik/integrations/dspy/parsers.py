@@ -6,7 +6,7 @@ extracting relevant information like usage, provider, and cost data.
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 import logging
 
 import dspy
@@ -31,6 +31,9 @@ class LMHistoryInfo:
         actual_provider: The actual provider that served the request.
             This is useful for LLM routers like OpenRouter that may route
             to different underlying providers (e.g., "Novita", "Together").
+        actual_model: The actual model that served the request.
+            This is useful for LLM routers like OpenRouter when using presets
+            (e.g., "@preset/qwen" resolves to "qwen/qwen3-235b-a22b-2507").
         total_cost: The total cost of the request from the provider.
             This includes accurate pricing for all token types.
     """
@@ -38,18 +41,8 @@ class LMHistoryInfo:
     usage: Optional[llm_usage.OpikUsage]
     cache_hit: Optional[bool]
     actual_provider: Optional[str]
+    actual_model: Optional[str]
     total_cost: Optional[float]
-
-    def as_tuple(
-        self,
-    ) -> Tuple[
-        Optional[llm_usage.OpikUsage],
-        Optional[bool],
-        Optional[str],
-        Optional[float],
-    ]:
-        """Return the info as a tuple for backwards compatibility."""
-        return (self.usage, self.cache_hit, self.actual_provider, self.total_cost)
 
 
 def get_span_type(instance: Any) -> types.SpanType:
@@ -101,6 +94,7 @@ def extract_lm_info_from_history(
         usage=None,
         cache_hit=None,
         actual_provider=None,
+        actual_model=None,
         total_cost=None,
     )
 
@@ -121,20 +115,24 @@ def extract_lm_info_from_history(
         response = last_entry.get("response")
         usage_dict = last_entry.get("usage")
 
-        # Extract actual provider from response (useful for routers like OpenRouter)
-        # The response is a LiteLLM ModelResponse object with a 'provider' attribute
+        # Extract actual provider and model from response (useful for routers like OpenRouter)
+        # The response is a LiteLLM ModelResponse object with 'provider' and 'model' attributes
         # when using routers like OpenRouter
         actual_provider: Optional[str] = None
-        if response is not None and hasattr(response, "provider"):
-            actual_provider = response.provider
+        actual_model: Optional[str] = None
+        if response is not None:
+            if hasattr(response, "provider"):
+                actual_provider = response.provider
+            if hasattr(response, "model"):
+                actual_model = response.model
 
         # Extract cost from history entry or usage dict
         # OpenRouter and other providers return accurate cost including all token types
         total_cost: Optional[float] = None
-        if last_entry.get("cost") is not None:
-            total_cost = last_entry.get("cost")
-        elif usage_dict and usage_dict.get("cost") is not None:
-            total_cost = usage_dict.get("cost")
+        if (cost := last_entry.get("cost") or 0) > 0:
+            total_cost = cost
+        elif usage_dict and (cost := usage_dict.get("cost") or 0) > 0:
+            total_cost = cost
 
         # Get explicit cache_hit if set, otherwise infer from usage (empty = cached)
         if response is None:
@@ -151,6 +149,7 @@ def extract_lm_info_from_history(
                 usage=usage,
                 cache_hit=cache_hit,
                 actual_provider=actual_provider,
+                actual_model=actual_model,
                 total_cost=total_cost,
             )
         else:
@@ -158,7 +157,8 @@ def extract_lm_info_from_history(
                 usage=None,
                 cache_hit=cache_hit,
                 actual_provider=actual_provider,
-                total_cost=total_cost,
+                actual_model=actual_model,
+                total_cost=None,
             )
     except Exception:
         LOGGER.debug(

@@ -105,6 +105,28 @@ class TestExtractLMInfoFromHistory:
 
         assert result.actual_provider == "Novita"
 
+    def test_extracts_model_from_response(self):
+        """Should extract actual_model from response.model attribute."""
+        mock_response = MagicMock()
+        mock_response.model = "qwen/qwen-2.5-72b-instruct"
+        mock_response.provider = "Hyperbolic"
+        mock_response.cache_hit = False
+
+        mock_lm = MagicMock()
+        expected_messages = [{"role": "user", "content": "test"}]
+        mock_lm.history = [
+            {
+                "messages": expected_messages,
+                "response": mock_response,
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, expected_messages)
+
+        assert result.actual_model == "qwen/qwen-2.5-72b-instruct"
+        assert result.actual_provider == "Hyperbolic"
+
     def test_extracts_cost_from_history_entry(self):
         """Should extract cost from history entry's 'cost' field."""
         mock_response = MagicMock()
@@ -212,12 +234,30 @@ class TestExtractLMInfoFromHistory:
 
         assert result.actual_provider is None
 
+    def test_no_model_when_not_in_response(self):
+        """Should return None for actual_model when not in response."""
+        mock_response = MagicMock(spec=[])  # No model attribute
+
+        mock_lm = MagicMock()
+        expected_messages = [{"role": "user", "content": "test"}]
+        mock_lm.history = [
+            {
+                "messages": expected_messages,
+                "response": mock_response,
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, expected_messages)
+
+        assert result.actual_model is None
+
 
 class TestLMHistoryInfo:
     """Tests for the LMHistoryInfo dataclass."""
 
-    def test_as_tuple_returns_correct_order(self):
-        """as_tuple() should return values in correct order."""
+    def test_all_fields_set(self):
+        """LMHistoryInfo should store all fields correctly."""
         from opik.llm_usage import OpikUsage
 
         usage = OpikUsage(
@@ -234,22 +274,31 @@ class TestLMHistoryInfo:
             usage=usage,
             cache_hit=False,
             actual_provider="Novita",
+            actual_model="qwen/qwen-2.5-72b-instruct",
             total_cost=1.0e-05,
         )
 
-        result = info.as_tuple()
+        assert info.usage == usage
+        assert info.cache_hit is False
+        assert info.actual_provider == "Novita"
+        assert info.actual_model == "qwen/qwen-2.5-72b-instruct"
+        assert info.total_cost == 1.0e-05
 
-        assert result == (usage, False, "Novita", 1.0e-05)
-
-    def test_empty_info_as_tuple(self):
-        """Empty LMHistoryInfo should return tuple of Nones."""
+    def test_empty_info(self):
+        """Empty LMHistoryInfo should have all None values."""
         info = LMHistoryInfo(
-            usage=None, cache_hit=None, actual_provider=None, total_cost=None
+            usage=None,
+            cache_hit=None,
+            actual_provider=None,
+            actual_model=None,
+            total_cost=None,
         )
 
-        result = info.as_tuple()
-
-        assert result == (None, None, None, None)
+        assert info.usage is None
+        assert info.cache_hit is None
+        assert info.actual_provider is None
+        assert info.actual_model is None
+        assert info.total_cost is None
 
 
 class TestOpikCallbackLLMRouter:
@@ -383,6 +432,62 @@ class TestOpikCallbackLLMRouter:
         assert lm_info.actual_provider is None
         # No cost provided in this case either
         assert lm_info.total_cost is None
+
+
+class TestCacheHitCostCalculation:
+    """Tests for cache hit scenarios and cost calculation."""
+
+    def test_cache_hit_returns_no_cost(self):
+        """
+        When a response is served from cache (no usage data), total_cost should be None.
+        Cached responses don't incur API costs, so cost should not be reported.
+        """
+        mock_response = MagicMock()
+        mock_response.cache_hit = True
+
+        mock_lm = MagicMock()
+        expected_messages = [{"role": "user", "content": "test"}]
+        mock_lm.history = [
+            {
+                "messages": expected_messages,
+                "response": mock_response,
+                "usage": None,  # No usage for cached responses
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, expected_messages)
+
+        assert result.cache_hit is True
+        assert result.usage is None
+        assert result.total_cost is None
+
+    def test_non_cached_response_returns_cost(self):
+        """
+        When a response is not cached and has cost data, total_cost should be extracted.
+        """
+        mock_response = MagicMock()
+        mock_response.cache_hit = False
+
+        mock_lm = MagicMock()
+        expected_messages = [{"role": "user", "content": "test"}]
+        mock_lm.history = [
+            {
+                "messages": expected_messages,
+                "response": mock_response,
+                "cost": 0.00025,
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                },
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, expected_messages)
+
+        assert result.cache_hit is False
+        assert result.usage is not None
+        assert result.total_cost == 0.00025
 
 
 class TestOpikCallbackCaseInsensitiveProvider:

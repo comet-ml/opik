@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
-import { Dashboard, TEMPLATE_TYPE, TEMPLATE_SCOPE } from "@/types/dashboard";
+import { Dashboard, TEMPLATE_TYPE } from "@/types/dashboard";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
@@ -37,50 +37,21 @@ enum DialogStep {
   DETAILS = "details",
 }
 
-const getTemplateScope = (templateType?: string): TEMPLATE_SCOPE | null => {
-  if (!templateType) return null;
-  const template = DASHBOARD_TEMPLATES[templateType as TEMPLATE_TYPE];
-  return template?.scope ?? null;
-};
-
-const DashboardFormSchema = z
-  .object({
-    name: z
-      .string()
-      .min(1, "Name is required")
-      .max(100, "Name must be less than 100 characters")
-      .trim(),
-    description: z
-      .string()
-      .max(255, "Description must be less than 255 characters")
-      .optional()
-      .or(z.literal("")),
-    projectId: z.string().optional(),
-    experimentIds: z.array(z.string()).optional(),
-    templateType: z.string().optional(),
-  })
-  .superRefine((data, ctx) => {
-    const scope = getTemplateScope(data.templateType);
-
-    if (scope === TEMPLATE_SCOPE.PROJECT && !data.projectId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Project is required when using a project template",
-        path: ["projectId"],
-      });
-    }
-
-    if (scope === TEMPLATE_SCOPE.EXPERIMENTS) {
-      if (!data.experimentIds || data.experimentIds.length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "At least one experiment is required when using an experiments template",
-          path: ["experimentIds"],
-        });
-      }
-    }
-  });
+const DashboardFormSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(100, "Name must be less than 100 characters")
+    .trim(),
+  description: z
+    .string()
+    .max(255, "Description must be less than 255 characters")
+    .optional()
+    .or(z.literal("")),
+  projectId: z.string().optional(),
+  experimentIds: z.array(z.string()).optional(),
+  templateType: z.string().optional(),
+});
 
 type DashboardFormData = z.infer<typeof DashboardFormSchema>;
 
@@ -270,25 +241,26 @@ const AddEditCloneDashboardDialog: React.FC<
             const template =
               DASHBOARD_TEMPLATES[values.templateType as TEMPLATE_TYPE];
             dashboardConfig = regenerateAllIds(template.config);
-
-            if (template.scope === TEMPLATE_SCOPE.PROJECT) {
-              dashboardConfig.config.projectIds = values.projectId
-                ? [values.projectId]
-                : [];
-            } else if (template.scope === TEMPLATE_SCOPE.EXPERIMENTS) {
-              dashboardConfig.config.experimentIds = values.experimentIds || [];
-            }
           } else {
             dashboardConfig = generateEmptyDashboard();
           }
+
+          dashboardConfig.config.projectIds = values.projectId
+            ? [values.projectId]
+            : [];
+          dashboardConfig.config.experimentIds = values.experimentIds || [];
         } else if (mode === "save_as" || mode === "clone") {
           dashboardConfig = regenerateAllIds(dashboard!.config);
-          if (defaultProjectId) {
-            dashboardConfig.config.projectIds = [defaultProjectId];
-          }
-          if (defaultExperimentIds && defaultExperimentIds.length > 0) {
-            dashboardConfig.config.experimentIds = defaultExperimentIds;
-          }
+          dashboardConfig.config.projectIds = values.projectId
+            ? [values.projectId]
+            : defaultProjectId
+              ? [defaultProjectId]
+              : [];
+          dashboardConfig.config.experimentIds =
+            values.experimentIds ||
+            (defaultExperimentIds && defaultExperimentIds.length > 0
+              ? defaultExperimentIds
+              : []);
         }
 
         createMutate(
@@ -350,18 +322,8 @@ const AddEditCloneDashboardDialog: React.FC<
                   templateType={
                     isCreateMode ? form.watch("templateType") : undefined
                   }
-                  showProjectSelect={
-                    isCreateMode &&
-                    !defaultProjectId &&
-                    getTemplateScope(form.watch("templateType")) ===
-                      TEMPLATE_SCOPE.PROJECT
-                  }
-                  showExperimentsSelect={
-                    isCreateMode &&
-                    !defaultExperimentIds?.length &&
-                    getTemplateScope(form.watch("templateType")) ===
-                      TEMPLATE_SCOPE.EXPERIMENTS
-                  }
+                  showDataSourceSection={isCreateMode}
+                  descriptionExpanded={!isCreateMode}
                   onSubmit={form.handleSubmit(onSubmit)}
                 />
               </form>

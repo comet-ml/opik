@@ -72,7 +72,7 @@ const FiltersAccordionSection = <TColumnData,>({
       <AccordionItem value="filters" className={hideBorder ? "" : "border-t"}>
         <AccordionTrigger
           className={cn(
-            "py-3 hover:no-underline",
+            "h-11 py-1.5 hover:no-underline",
             hasErrors &&
               "text-destructive hover:text-destructive active:text-destructive",
           )}
@@ -88,7 +88,7 @@ const FiltersAccordionSection = <TColumnData,>({
                 setFilters={onChange}
                 columns={columns as ColumnData<unknown>[]}
                 config={config}
-                className="py-0"
+                className="overflow-x-auto py-0"
               />
             )}
 

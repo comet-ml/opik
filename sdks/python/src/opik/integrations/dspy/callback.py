@@ -205,6 +205,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         usage: Optional[llm_usage.OpikUsage] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
         actual_provider: Optional[str] = None,
+        actual_model: Optional[str] = None,
         total_cost: Optional[float] = None,
     ) -> None:
         if span_data := self._map_call_id_to_span_data.pop(call_id, None):
@@ -219,20 +220,34 @@ class OpikCallback(dspy_callback.BaseCallback):
                 "total_cost": total_cost,
             }
 
-            # Handle LLM routers like OpenRouter that return the actual serving provider
+            # Handle LLM routers like OpenRouter that return the actual serving provider/model
+            if extra_metadata is None:
+                extra_metadata = {}
+
+            # Update provider if actual provider differs (e.g., OpenRouter -> Hyperbolic)
             if (
                 actual_provider is not None
                 and span_data.provider is not None
                 and span_data.provider.lower() != actual_provider.lower()
             ):
                 # Store the original provider (e.g., "openrouter") in metadata
-                if extra_metadata is None:
-                    extra_metadata = {}
                 extra_metadata["llm_router"] = span_data.provider
                 # Update to the actual provider for accurate cost tracking
-                update_kwargs["provider"] = actual_provider
+                update_kwargs["provider"] = actual_provider.lower()
 
-            update_kwargs["metadata"] = extra_metadata
+            if (
+                actual_model is not None
+                and span_data.model is not None
+                and span_data.model != actual_model
+            ):
+                # Store the original model (e.g., "@preset/qwen") in metadata
+                extra_metadata["original_model"] = span_data.model
+                # Update to the actual model for accurate cost tracking
+                update_kwargs["model"] = actual_model
+
+            # Only set metadata if we have something to add
+            if extra_metadata:
+                update_kwargs["metadata"] = extra_metadata
 
             span_data.update(**update_kwargs).init_end_time()
             if tracing_runtime_config.is_tracing_active():
@@ -322,6 +337,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             usage=lm_info.usage,
             extra_metadata=extra_metadata,
             actual_provider=lm_info.actual_provider,
+            actual_model=lm_info.actual_model,
             total_cost=lm_info.total_cost,
         )
 
@@ -385,7 +401,11 @@ class OpikCallback(dspy_callback.BaseCallback):
         lm_info = self._map_call_id_to_lm_info.pop(call_id, None)
         if lm_info is None:
             return LMHistoryInfo(
-                usage=None, cache_hit=None, actual_provider=None, total_cost=None
+                usage=None,
+                cache_hit=None,
+                actual_provider=None,
+                actual_model=None,
+                total_cost=None,
             )
 
         lm_instance, expected_messages = lm_info
