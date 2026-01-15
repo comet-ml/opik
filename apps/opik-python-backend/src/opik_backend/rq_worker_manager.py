@@ -17,6 +17,7 @@ import socket
 import threading
 from typing import List, Optional
 
+import redis.exceptions
 from opik_backend.utils import redis_utils
 from rq import Queue, Worker
 from rq.serializers import JSONSerializer
@@ -31,6 +32,10 @@ ENV_MAX_CONCURRENT_JOBS = "OPTSTUDIO_MAX_CONCURRENT_JOBS"
 # Default values
 DEFAULT_QUEUE_NAME = "opik:optimizer-cloud"
 DEFAULT_MAX_CONCURRENT_JOBS = 5
+
+# Redis key constants
+RQ_WORKERS_SET_KEY = "rq:workers"
+RQ_WORKER_KEY_PREFIX = "rq:worker:"
 
 
 class WorkerThread:
@@ -134,23 +139,26 @@ class RqWorkerManager:
                     f"Found {len(our_workers)} stale worker registrations for {our_prefix}*, cleaning up..."
                 )
                 for worker in our_workers:
+                    worker_key = f"{RQ_WORKER_KEY_PREFIX}{worker.name}"
                     try:
                         # Remove from workers set first
-                        redis_client.srem("rq:workers", f"rq:worker:{worker.name}")
+                        redis_client.srem(RQ_WORKERS_SET_KEY, worker_key)
                         # Delete the worker hash
-                        redis_client.delete(f"rq:worker:{worker.name}")
+                        redis_client.delete(worker_key)
                         # Try register_death for any additional cleanup
                         try:
                             worker.register_death()
-                        except Exception:
-                            pass  # May fail if already cleaned up
+                        except redis.exceptions.ResponseError:
+                            # Worker was already cleaned up from Redis
+                            logger.debug(f"Worker {worker.name} already cleaned up")
                         logger.info(f"Cleaned up stale worker: {worker.name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to clean up worker {worker.name}: {e}")
+                    except redis.exceptions.RedisError as e:
+                        # Redis connectivity or protocol error - log and continue
+                        logger.warning(
+                            f"Redis error cleaning up worker {worker.name}: {e}"
+                        )
             else:
-                logger.debug(
-                    f"No stale workers found for prefix {our_prefix}"
-                )
+                logger.debug(f"No stale workers found for prefix {our_prefix}")
 
         except Exception as e:
             logger.warning(f"Failed to cleanup stale workers: {e}")
