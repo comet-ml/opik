@@ -548,7 +548,7 @@ class ExperimentDAO {
                  )
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
-            ),
+            )
             <endif>
             SELECT count(id) as count
             FROM experiments_initial
