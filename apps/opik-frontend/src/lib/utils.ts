@@ -17,6 +17,7 @@ import mapValues from "lodash/mapValues";
 import pickBy from "lodash/pickBy";
 import { twMerge } from "tailwind-merge";
 import isEqual from "fast-deep-equal";
+import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
 
@@ -303,3 +304,5 @@ export const removeUndefinedKeys = <T>(value: T): T => {
 export const isLooseEqual = <T>(a: T, b: T): boolean => {
   return isEqual(removeUndefinedKeys(a), removeUndefinedKeys(b));
 };
+
+export const generateBatchGroupId = (): string => uuidv4();

@@ -16,6 +16,7 @@ import {
   useBulkEditItems,
   useIsAllItemsSelected,
 } from "@/store/DatasetDraftStore";
+import { generateBatchGroupId } from "@/lib/utils";
 
 type AddTagDialogProps = {
   datasetId: string;
@@ -77,6 +78,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
           isAllItemsSelected,
           filters,
           search,
+          batchGroupId: isAllItemsSelected ? generateBatchGroupId() : undefined,
         },
         {
           onSuccess: () => {
