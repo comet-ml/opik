@@ -27,7 +27,9 @@ public record DatasetItemBatch(
                 DatasetItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, dataset_id must be provided") String datasetName,
         @JsonView({
                 DatasetItem.View.Write.class}) @Schema(description = "If null, dataset_name must be provided") UUID datasetId,
-        @JsonView({DatasetItem.View.Write.class}) @NotNull @Size(min = 1, max = 1000) @Valid List<DatasetItem> items)
+        @JsonView({DatasetItem.View.Write.class}) @NotNull @Size(min = 1, max = 1000) @Valid List<DatasetItem> items,
+        @JsonView({
+                DatasetItem.View.Write.class}) @Schema(description = "Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.") UUID batchGroupId)
         implements
             RateEventContainer{
 

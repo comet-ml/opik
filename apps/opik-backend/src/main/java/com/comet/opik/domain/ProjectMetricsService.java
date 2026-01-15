@@ -36,16 +36,20 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
             @NonNull ProjectService projectService,
             @NonNull InstantToUUIDMapper instantToUUIDMapper) {
-        projectMetricHandler = Map.of(
-                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount,
-                MetricType.THREAD_DURATION, projectMetricsDAO::getThreadDuration,
-                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
-                MetricType.THREAD_FEEDBACK_SCORES, projectMetricsDAO::getThreadFeedbackScores,
-                MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
-                MetricType.COST, projectMetricsDAO::getCost,
-                MetricType.DURATION, projectMetricsDAO::getDuration,
-                MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
+        projectMetricHandler = Map.ofEntries(
+                Map.entry(MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount),
+                Map.entry(MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount),
+                Map.entry(MetricType.THREAD_DURATION, projectMetricsDAO::getThreadDuration),
+                Map.entry(MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores),
+                Map.entry(MetricType.THREAD_FEEDBACK_SCORES, projectMetricsDAO::getThreadFeedbackScores),
+                Map.entry(MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage),
+                Map.entry(MetricType.COST, projectMetricsDAO::getCost),
+                Map.entry(MetricType.DURATION, projectMetricsDAO::getDuration),
+                Map.entry(MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount),
+                Map.entry(MetricType.SPAN_FEEDBACK_SCORES, projectMetricsDAO::getSpanFeedbackScores),
+                Map.entry(MetricType.SPAN_COUNT, projectMetricsDAO::getSpanCount),
+                Map.entry(MetricType.SPAN_DURATION, projectMetricsDAO::getSpanDuration),
+                Map.entry(MetricType.SPAN_TOKEN_USAGE, projectMetricsDAO::getSpanTokenUsage));
         this.projectService = projectService;
         this.instantToUUIDMapper = instantToUUIDMapper;
     }

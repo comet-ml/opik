@@ -8967,6 +8967,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItem"
+        batch_group_id:
+          type: string
+          description: "Optional batch group ID to group multiple batches into a single\
+            \ dataset version. If null, mutates the latest version instead of creating\
+            \ a new one."
+          format: uuid
     ExperimentItem:
       required:
       - dataset_item_id
@@ -9129,6 +9135,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItem_Write"
+        batch_group_id:
+          type: string
+          description: "Optional batch group ID to group multiple batches into a single\
+            \ dataset version. If null, mutates the latest version instead of creating\
+            \ a new one."
+          format: uuid
     DatasetItem_Write:
       required:
       - data
@@ -9259,6 +9271,12 @@ components:
             Empty array means 'delete all items in the dataset'.
           items:
             $ref: "#/components/schemas/DatasetItemFilter"
+        batch_group_id:
+          type: string
+          description: "Optional batch group ID to group multiple delete operations\
+            \ into a single dataset version. If null, mutates the latest version instead\
+            \ of creating a new one."
+          format: uuid
       description: Request to delete multiple dataset items
     DatasetExpansionResponse:
       type: object
@@ -12875,6 +12893,10 @@ components:
           - THREAD_COUNT
           - THREAD_DURATION
           - THREAD_FEEDBACK_SCORES
+          - SPAN_FEEDBACK_SCORES
+          - SPAN_COUNT
+          - SPAN_DURATION
+          - SPAN_TOKEN_USAGE
         interval:
           type: string
           enum:
@@ -12909,6 +12931,10 @@ components:
           - THREAD_COUNT
           - THREAD_DURATION
           - THREAD_FEEDBACK_SCORES
+          - SPAN_FEEDBACK_SCORES
+          - SPAN_COUNT
+          - SPAN_DURATION
+          - SPAN_TOKEN_USAGE
         interval:
           type: string
           enum:
@@ -12921,6 +12947,10 @@ components:
         interval_end:
           type: string
           format: date-time
+        span_filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanFilter_Public"
         trace_filters:
           type: array
           items:
