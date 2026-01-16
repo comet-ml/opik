@@ -45,27 +45,27 @@ jobs:
           with:
             version: v3.13.0
 
-        - name: Run lint on Helm chart
-          shell: bash
-          working-directory: src
-          run: |
-            set -e
-            cd deployment/helm_chart/opik
-            helm repo add bitnami https://charts.bitnami.com/bitnami
-            helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
-            helm dependency build
-            helm lint --values values.yaml .
-            cd -
+        # - name: Run lint on Helm chart
+        #   shell: bash
+        #   working-directory: src
+        #   run: |
+        #     set -e
+        #     cd deployment/helm_chart/opik
+        #     helm repo add bitnami https://charts.bitnami.com/bitnami
+        #     helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
+        #     helm dependency build
+        #     helm lint --values values.yaml .
+        #     cd -
 
-        - name: Package helm chart
-          shell: bash
-          working-directory: src
-          run: |
-            cd deployment/helm_chart
-            helm package --version ${{inputs.version}} --app-version ${{inputs.version}} opik/ -u -d ../../../dest
-            cd -
-            echo "Copy updated README"
-            cp deployment/helm_chart/opik/README.md ../dest/.
+        # - name: Package helm chart
+        #   shell: bash
+        #   working-directory: src
+        #   run: |
+        #     cd deployment/helm_chart
+        #     helm package --version ${{inputs.version}} --app-version ${{inputs.version}} opik/ -u -d ../../../dest
+        #     cd -
+        #     echo "Copy updated README"
+        #     cp deployment/helm_chart/opik/README.md ../dest/.
 
         - name: Push New Files
           shell: bash
@@ -74,7 +74,7 @@ jobs:
               helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/
               git config user.name "Helm Updater"
               git config user.email "actions@users.noreply.github.com"
-              git add $(git ls-files -o --exclude-standard)
+              # git add $(git ls-files -o --exclude-standard)
               git add index.yaml README.md
               git commit -m "Release Opik helm chart ${{inputs.version}}"
               git push   
