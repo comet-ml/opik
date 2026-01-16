@@ -13,15 +13,11 @@ public class FeedbackScoreAssertionUtils {
 
     public static void assertFeedbackScoreNames(FeedbackScoreNames actual, List<String> expectedNames) {
         // Filter to only feedback_scores (exclude experiment_scores) since this test is about feedback score names
-        var feedbackScores = actual.scores().stream()
+        var actualNames = actual.scores().stream()
                 .filter(score -> score.type() == null || "feedback_scores".equals(score.type()))
-                .toList();
-
-        assertThat(feedbackScores).hasSize(expectedNames.size());
-        assertThat(feedbackScores
-                .stream()
                 .map(FeedbackScoreNames.ScoreName::name)
-                .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+                .toList();
+        assertThat(actualNames).containsExactlyInAnyOrderElementsOf(expectedNames);
     }
 
     public static ExperimentItem assertFeedbackScoresIgnoredFieldsAndSetThemToNull(ExperimentItem actualExperimentItem,
