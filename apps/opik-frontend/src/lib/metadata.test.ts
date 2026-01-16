@@ -92,10 +92,7 @@ describe("normalizeMetadataPaths", () => {
     // The function filters paths where ANY segment starts with underscore
     // Nested paths like "metadata.nested._internal" are filtered because
     // the "_internal" segment starts with "_"
-    expect(result).toEqual([
-      "metadata.nested.public",
-      "metadata.public",
-    ]);
+    expect(result).toEqual(["metadata.nested.public", "metadata.public"]);
   });
 
   it("should handle array paths with private fields", () => {

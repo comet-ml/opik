@@ -245,7 +245,6 @@ const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
 
-
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
