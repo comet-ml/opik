@@ -73,6 +73,7 @@ This workflow will:
   - Prompt for PR link and validate URL format
   - If provided, fetch PR details using GitHub MCP
   - If PR cannot be fetched, stop with error message
+  - **After successfully fetching PR by manual link**: Extract PR number, URL, title, and description and store PR information for extraction steps (same as "PR found" branch)
 
 ---
 
