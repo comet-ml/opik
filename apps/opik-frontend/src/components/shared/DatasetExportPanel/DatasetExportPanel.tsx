@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import {
   useActiveExportJobs,
   useHasActiveExportJobs,
@@ -88,20 +87,15 @@ const DatasetExportPanel: React.FC = () => {
   };
 
   return (
-    <Card
-      className={cn(
-        "fixed bottom-0 right-4 w-72 shadow-lg z-40",
-        "transition-all duration-200 ease-in-out",
-      )}
-    >
+    <Card className="fixed bottom-0 right-4 z-40 w-72 shadow-lg transition-all duration-200 ease-in-out">
       <CardHeader
         className="flex cursor-pointer flex-row items-center justify-between border-b px-3 py-2.5"
         onClick={togglePanelExpanded}
       >
         <div className="flex items-center gap-2">
-          {hasOnlyCompleted ? (
+          {hasOnlyCompleted && (
             <CheckCircle2 className="size-4 text-green-600" />
-          ) : null}
+          )}
           <CardTitle className="text-sm font-medium">
             {getStatusText()}
           </CardTitle>

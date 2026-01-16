@@ -11,8 +11,8 @@ import useDatasetExportJob from "@/api/datasets/useDatasetExportJob";
 import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewedMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useToast } from "@/components/ui/use-toast";
-import { BASE_API_URL, DATASETS_REST_ENDPOINT } from "@/api/api";
 import { isJobLoading, isJobCompleted, isJobFailed } from "./utils";
+import { getExportJobDownloadUrl } from "@/api/datasets/exportJobHelpers";
 
 interface ExportJobItemProps {
   jobInfo: ExportJobInfo;
@@ -27,7 +27,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
 
   // Poll for job status updates (every 5 seconds for PENDING/PROCESSING jobs)
   // Also enable for failed jobs that haven't been viewed so we can refetch after marking as viewed
-  const { data: updatedJob, refetch } = useDatasetExportJob(
+  const { data: updatedJob } = useDatasetExportJob(
     {
       jobId: job.id,
     },
@@ -37,19 +37,20 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     },
   );
 
-  // Mark as viewed mutation with refetch on success
+  // Mark as viewed mutation - query invalidation is handled in the hook
   const { mutate: markAsViewed } = useMarkExportJobViewedMutation();
-  // Update store when job status changes
-  useEffect(() => {
-    if (updatedJob && updatedJob.status !== job.status) {
-      updateJob(updatedJob);
-    }
-  }, [updatedJob, job.status, updateJob]);
 
-  // Show error toast for failed jobs that haven't been viewed yet
+  // Combined effect: Update store when job status changes, and show toast for failed jobs
   // This handles both jobs that fail during polling and jobs loaded from API
   useEffect(() => {
     const currentJob = updatedJob || job;
+
+    // Update store when job status changes
+    if (updatedJob && updatedJob.status !== job.status) {
+      updateJob(updatedJob);
+    }
+
+    // Show error toast for failed jobs that haven't been viewed yet (viewed_at is null)
     const shouldShowToast =
       isJobFailed(currentJob.status) && !currentJob.viewed_at;
 
@@ -62,26 +63,19 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
         variant: "destructive",
       });
 
-      // Mark as viewed so it won't show again, and refetch to get updated viewed_at
-      markAsViewed(
-        { jobId: currentJob.id },
-        {
-          onSuccess: () => {
-            // Refetch job after marking as viewed to get updated viewed_at
-            refetch();
-          },
-        },
-      );
+      // Mark as viewed so it won't show again
+      // Query invalidation in the mutation hook will automatically refetch the job
+      markAsViewed({ jobId: currentJob.id });
     }
   }, [
     updatedJob,
     job,
     job.status,
     job.viewed_at,
+    updateJob,
     datasetName,
     toast,
     markAsViewed,
-    refetch,
   ]);
 
   const isLoading = isJobLoading(job.status);
@@ -90,7 +84,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
 
   const handleDownload = () => {
     // Use the proxy download endpoint instead of direct MinIO URL
-    const downloadUrl = `${BASE_API_URL}${DATASETS_REST_ENDPOINT}export-jobs/${job.id}/download`;
+    const downloadUrl = getExportJobDownloadUrl(job.id);
     window.open(downloadUrl, "_blank");
   };
 
@@ -123,7 +117,10 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={handleDownload}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDownload();
+            }}
             className="size-5"
           >
             <Download className="size-4 text-foreground-secondary" />

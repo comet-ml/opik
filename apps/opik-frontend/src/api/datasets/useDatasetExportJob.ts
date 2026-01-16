@@ -30,7 +30,7 @@ export default function useDatasetExportJob(
   options?: QueryConfig<DatasetExportJob>,
 ) {
   return useQuery({
-    queryKey: ["dataset-export-job", params],
+    queryKey: ["dataset-export-job", params.jobId],
     queryFn: (context) => getDatasetExportJob(context, params),
     enabled: Boolean(params.jobId),
     // Poll every 5 seconds until terminal status

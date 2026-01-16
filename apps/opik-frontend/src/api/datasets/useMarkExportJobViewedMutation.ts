@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 
 type UseMarkExportJobViewedMutationParams = {
@@ -17,11 +17,19 @@ const markExportJobViewed = async ({
 };
 
 export default function useMarkExportJobViewedMutation() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: markExportJobViewed,
-    onSuccess: () => {
-      // Mutation completed successfully
-      // The caller can handle refetching if needed
+    onSuccess: (_, variables) => {
+      // Invalidate the specific job query to get updated viewed_at
+      queryClient.invalidateQueries({
+        queryKey: ["dataset-export-job", variables.jobId],
+      });
+      // Also invalidate the all jobs query to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: ["dataset-export-jobs"],
+      });
     },
   });
 }

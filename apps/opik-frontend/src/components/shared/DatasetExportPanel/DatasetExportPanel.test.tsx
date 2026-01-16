@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import DatasetExportPanel from "./DatasetExportPanel";
@@ -262,14 +262,9 @@ describe("DatasetExportPanel", () => {
       render(<DatasetExportPanel />, { wrapper });
 
       await waitFor(() => {
-        expect(mockMarkAsViewed).toHaveBeenCalledWith(
-          {
-            jobId: "failed-job-2",
-          },
-          expect.objectContaining({
-            onSuccess: expect.any(Function),
-          }),
-        );
+        expect(mockMarkAsViewed).toHaveBeenCalledWith({
+          jobId: "failed-job-2",
+        });
       });
     });
 
@@ -293,12 +288,10 @@ describe("DatasetExportPanel", () => {
 
       render(<DatasetExportPanel />, { wrapper });
 
-      // Wait a bit to ensure no toast is called
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitFor(() => {
+        expect(mockToast).not.toHaveBeenCalled();
       });
 
-      expect(mockToast).not.toHaveBeenCalled();
       expect(mockMarkAsViewed).not.toHaveBeenCalled();
     });
 
@@ -376,12 +369,9 @@ describe("DatasetExportPanel", () => {
 
       render(<DatasetExportPanel />, { wrapper });
 
-      // Wait a bit and verify toast was not called since job is already viewed
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitFor(() => {
+        expect(mockToast).not.toHaveBeenCalled();
       });
-
-      expect(mockToast).not.toHaveBeenCalled();
     });
   });
 

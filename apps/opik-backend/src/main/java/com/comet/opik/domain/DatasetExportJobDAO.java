@@ -192,7 +192,6 @@ public interface DatasetExportJobDAO {
                 d.name AS dataset_name,
                 j.status,
                 j.file_path,
-                j.download_url,
                 j.error_message,
                 j.created_at,
                 j.last_updated_at,
@@ -206,97 +205,6 @@ public interface DatasetExportJobDAO {
             ORDER BY j.id DESC
             """)
     List<DatasetExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId);
-
-    /**
-     * Finds expired completed export jobs across all workspaces for cleanup.
-     *
-     * <p><strong>Security Warning:</strong> This query operates across ALL workspaces without filtering.
-     * It should ONLY be called by system-level cleanup jobs. The userName parameter MUST be
-     * {@link com.comet.opik.infrastructure.auth.RequestContext#SYSTEM_USER}.</p>
-     *
-     * @param userName  The name of the user making the request (must be SYSTEM_USER)
-     * @param now       Current timestamp for expiration comparison
-     * @param limit     Maximum number of jobs to return
-     * @return List of expired completed jobs across all workspaces, or empty list if userName is not SYSTEM_USER
-     */
-    @SqlQuery("""
-            SELECT
-                id,
-                dataset_id,
-                NULL AS dataset_name,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                viewed_at,
-                created_by,
-                last_updated_by
-            FROM dataset_export_jobs
-            WHERE expires_at < :now
-                AND status = 'COMPLETED'
-                AND :userName = '""" + RequestContext.SYSTEM_USER + "'"
-            + """
-                        ORDER BY expires_at ASC
-                        LIMIT :limit
-                    """)
-    List<DatasetExportJob> findExpiredCompletedJobs(@Bind("userName") String userName,
-            @Bind("now") Instant now,
-            @Bind("limit") int limit);
-
-    /**
-     * Finds viewed failed export jobs across all workspaces for cleanup.
-     *
-     * <p><strong>Security Warning:</strong> This query operates across ALL workspaces without filtering.
-     * It should ONLY be called by system-level cleanup jobs. The userName parameter MUST be
-     * {@link com.comet.opik.infrastructure.auth.RequestContext#SYSTEM_USER}.</p>
-     *
-     * @param userName  The name of the user making the request (must be SYSTEM_USER)
-     * @param limit     Maximum number of jobs to return
-     * @return List of viewed failed jobs across all workspaces, or empty list if userName is not SYSTEM_USER
-     */
-    @SqlQuery("""
-            SELECT
-                id,
-                dataset_id,
-                NULL AS dataset_name,
-                status,
-                file_path,
-                error_message,
-                created_at,
-                last_updated_at,
-                expires_at,
-                viewed_at,
-                created_by,
-                last_updated_by
-            FROM dataset_export_jobs
-            WHERE status = 'FAILED'
-                AND viewed_at IS NOT NULL
-                AND :userName = '""" + RequestContext.SYSTEM_USER + "'"
-            + """
-                        ORDER BY viewed_at ASC
-                        LIMIT :limit
-                    """)
-    List<DatasetExportJob> findViewedFailedJobs(@Bind("userName") String userName, @Bind("limit") int limit);
-
-    /**
-     * Deletes export jobs by their IDs across all workspaces.
-     * Used by cleanup job to delete both expired completed jobs and viewed failed jobs.
-     *
-     * <p><strong>Security Warning:</strong> This operation affects ALL workspaces without filtering.
-     * It should ONLY be called by system-level cleanup jobs. The userName parameter MUST be
-     * {@link com.comet.opik.infrastructure.auth.RequestContext#SYSTEM_USER}.</p>
-     *
-     * @param userName  The name of the user making the request (must be SYSTEM_USER)
-     * @param ids       Set of job IDs to delete
-     * @return Number of deleted records, or 0 if userName is not SYSTEM_USER
-     */
-    @SqlUpdate("""
-            DELETE FROM dataset_export_jobs
-            WHERE id IN (<ids>)
-            AND :userName = '""" + RequestContext.SYSTEM_USER + "'")
-    int deleteJobsByIds(@Bind("userName") String userName, @BindList("ids") Set<UUID> ids);
 
     @SqlUpdate("""
             UPDATE dataset_export_jobs
