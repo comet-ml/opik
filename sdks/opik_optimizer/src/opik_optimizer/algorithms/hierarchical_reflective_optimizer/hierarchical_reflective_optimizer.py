@@ -17,7 +17,7 @@ from .types import (
     ImprovedPrompt,
     HierarchicalRootCauseAnalysis,
 )
-from . import prompts as hierarchical_prompts
+from . import helpers, prompts as hierarchical_prompts
 from . import reporting
 
 # Set up logging
@@ -153,6 +153,60 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             evaluation_result, project_name=self.project_name
         )
 
+    def _record_trial_score(
+        self,
+        context: OptimizationContext,
+        score: float,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+    ) -> None:
+        """Update trial counters and best score tracking for one evaluation.
+
+        Centralizes trial accounting so hierarchy-specific evaluation calls can
+        keep BaseOptimizer stop logic aligned with actual scoring events.
+        """
+        coerced_score = self._coerce_score(score)
+        context.trials_completed += 1
+        if (
+            context.current_best_score is None
+            or coerced_score > context.current_best_score
+        ):
+            context.current_best_score = coerced_score
+            context.current_best_prompt = prompts
+        self._should_stop_context(context)
+
+    def _evaluate_prompts_with_result(
+        self,
+        *,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        dataset: opik.Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent,
+        n_samples: int | None,
+        context: OptimizationContext,
+        empty_score: float | None = None,
+    ) -> tuple[float, EvaluationResult]:
+        """Evaluate prompts, update trial state, and return score + result.
+
+        Returns the average score across EvaluationResult test results; when no
+        scores exist, falls back to empty_score (or 0.0).
+        """
+        evaluation_result = self.evaluate_prompt(
+            prompt=prompts,
+            dataset=dataset,
+            metric=metric,
+            agent=agent,
+            n_samples=n_samples,
+            n_threads=self.n_threads,
+            return_evaluation_result=True,
+        )
+        scores = [x.score_results[0].value for x in evaluation_result.test_results]
+        if scores:
+            score = sum(scores) / len(scores)
+        else:
+            score = empty_score if empty_score is not None else 0.0
+        self._record_trial_score(context, score, prompts)
+        return score, evaluation_result
+
     def _improve_prompt(
         self,
         prompts: dict[str, chat_prompt.ChatPrompt],
@@ -272,18 +326,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # TODO: Refactor to use BaseOptimizer.evaluate() so trial accounting and
         # early-stop logic are centralized instead of manually maintained here.
-        def _record_trial(
-            score: float, prompts: dict[str, chat_prompt.ChatPrompt]
-        ) -> None:
-            coerced_score = self._coerce_score(score)
-            context.trials_completed += 1
-            if (
-                context.current_best_score is None
-                or coerced_score > context.current_best_score
-            ):
-                context.current_best_score = coerced_score
-                context.current_best_prompt = prompts
-            self._should_stop_context(context)
 
         # Logic on which dataset to use for scoring
         evaluation_dataset = (
@@ -332,24 +374,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
         if not improved_chat_prompts_candidates:
-            fallback_result = self.evaluate_prompt(
-                prompt=best_prompts,
+            fallback_score, fallback_result = self._evaluate_prompts_with_result(
+                prompts=best_prompts,
                 dataset=evaluation_dataset,
                 metric=metric,
                 agent=agent,
                 n_samples=n_samples,
-                n_threads=self.n_threads,
-                return_evaluation_result=True,
+                context=context,
+                empty_score=best_score,
             )
-            fallback_scores = [
-                x.score_results[0].value for x in fallback_result.test_results
-            ]
-            fallback_score = (
-                sum(fallback_scores) / len(fallback_scores)
-                if fallback_scores
-                else best_score
-            )
-            _record_trial(fallback_score, best_prompts)
             self.record_candidate_entry(
                 prompt_or_payload=best_prompts,
                 score=fallback_score,
@@ -364,19 +397,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             return best_prompts, fallback_score, fallback_result
 
         best_prompt_bundle = improved_chat_prompts_candidates[0]
-        best_result = self.evaluate_prompt(
-            prompt=best_prompt_bundle,
-            dataset=evaluation_dataset,  # use right dataset for scoring
+        best_score_local, best_result = self._evaluate_prompts_with_result(
+            prompts=best_prompt_bundle,
+            dataset=evaluation_dataset,
             metric=metric,
             agent=agent,
             n_samples=n_samples,
-            n_threads=self.n_threads,
-            return_evaluation_result=True,
+            context=context,
         )
-        best_score_local = sum(
-            [x.score_results[0].value for x in best_result.test_results]
-        ) / len(best_result.test_results)
-        _record_trial(best_score_local, best_prompt_bundle)
         self.record_candidate_entry(
             prompt_or_payload=best_prompt_bundle,
             score=best_score_local,
@@ -393,23 +421,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         for idx, improved_chat_prompts in enumerate(
             improved_chat_prompts_candidates[1:], start=1
         ):
-            improved_experiment_result = self.evaluate_prompt(
-                prompt=improved_chat_prompts,
-                dataset=evaluation_dataset,  # use right dataset for scoring
-                metric=metric,
-                agent=agent,
-                n_samples=n_samples,
-                n_threads=self.n_threads,
-                return_evaluation_result=True,
+            improved_score, improved_experiment_result = (
+                self._evaluate_prompts_with_result(
+                    prompts=improved_chat_prompts,
+                    dataset=evaluation_dataset,
+                    metric=metric,
+                    agent=agent,
+                    n_samples=n_samples,
+                    context=context,
+                )
             )
-
-            improved_score = sum(
-                [
-                    x.score_results[0].value
-                    for x in improved_experiment_result.test_results
-                ]
-            ) / len(improved_experiment_result.test_results)
-            _record_trial(improved_score, improved_chat_prompts)
             self.record_candidate_entry(
                 prompt_or_payload=improved_chat_prompts,
                 score=improved_score,
