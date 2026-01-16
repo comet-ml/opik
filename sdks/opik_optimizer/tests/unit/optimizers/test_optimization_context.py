@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
 from opik_optimizer.api_objects import chat_prompt
-from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.base_optimizer import AlgorithmResult
 
 if TYPE_CHECKING:

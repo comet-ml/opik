@@ -14,6 +14,7 @@ support content_parts. These will be updated to support multimodal prompts.
 from typing import Any
 
 import pytest
+import os
 
 import opik
 from opik.evaluation.metrics import LevenshteinRatio

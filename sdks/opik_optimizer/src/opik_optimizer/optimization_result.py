@@ -365,11 +365,17 @@ class OptimizationHistoryState:
             },
         )
         score_val = self._coerce_float(score) if score is not None else None
-        candidate_payload: Any = (
+        candidate_payload_raw: Any = (
             candidate.to_dict()
             if isinstance(candidate, OptimizerCandidate)
             else candidate
         )
+        candidate_payload: Any
+        if isinstance(candidate_payload_raw, dict):
+            # Work on a shallow copy to avoid mutating source prompt dicts.
+            candidate_payload = dict(candidate_payload_raw)
+        else:
+            candidate_payload = candidate_payload_raw
         dataset_split_val = dataset_split or self._default_dataset_split
         trial_payload: dict[str, Any] = {
             "trial_index": int(trial_index) if isinstance(trial_index, int) else None,
@@ -381,13 +387,20 @@ class OptimizationHistoryState:
             "extra": extras,
             "timestamp": timestamp or _now_iso(),
         }
+        candidate_id: str | None = None
         if trial_payload["trial_index"] is None:
             # Auto-assign a trial index if one wasn't provided.
             trial_payload["trial_index"] = sum(
                 len(e.get("trials") or []) for e in self.entries
             ) + len(entry.get("trials") or [])
-        if isinstance(candidate_payload, dict) and candidate_payload.get("id") is None:
-            candidate_payload["id"] = self._next_candidate_id(candidate_id_prefix)
+        if isinstance(candidate_payload, dict):
+            candidate_id = candidate_payload.get("id")
+        # TODO: Align history schema and downstream consumers with candidate_id
+        # stored on trials (not injected into candidate payloads).
+        if candidate_id is None and candidate_id_prefix is not None:
+            candidate_id = self._next_candidate_id(candidate_id_prefix)
+        if candidate_id is not None:
+            trial_payload["candidate_id"] = candidate_id
         entry.setdefault("trials", []).append(trial_payload)
         if score_val is not None:
             self._best_so_far = (

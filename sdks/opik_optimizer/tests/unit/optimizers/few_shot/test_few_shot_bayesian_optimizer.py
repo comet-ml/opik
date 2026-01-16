@@ -146,9 +146,13 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             prompts_arg = context.prompts
             original_prompts = context.initial_prompts
             is_single = context.is_single_prompt_optimization
-            best_prompt = prompts_arg if not is_single else list(prompts_arg.values())[0]
+            best_prompt = (
+                prompts_arg if not is_single else list(prompts_arg.values())[0]
+            )
             initial_prompt = (
-                original_prompts if not is_single else list(original_prompts.values())[0]
+                original_prompts
+                if not is_single
+                else list(original_prompts.values())[0]
             )
             return AlgorithmResult(
                 best_prompts=best_prompt,
