@@ -31,90 +31,6 @@ if isinstance(numeric_level, int):
     logger.setLevel(numeric_level)
 
 
-class OptimizationContextManager:
-    """
-    Context manager for handling optimization lifecycle.
-    Automatically updates optimization status to "completed" or "cancelled" based on context exit.
-    """
-
-    def __init__(
-        self,
-        client: Opik,
-        dataset_name: str,
-        objective_name: str,
-        name: str | None = None,
-        metadata: dict[str, Any] | None = None,
-        optimization_id: str | None = None,
-    ):
-        """
-        Initialize the optimization context.
-
-        Args:
-            client: The Opik client instance
-            dataset_name: Name of the dataset for optimization
-            objective_name: Name of the optimization objective
-            name: Optional name for the optimization
-            metadata: Optional metadata for the optimization
-        """
-        self.client = client
-        self.dataset_name = dataset_name
-        self.objective_name = objective_name
-        self.name = name
-        self.metadata = metadata
-        self.optimization_id = optimization_id
-        self.optimization: Optimization | None = None
-
-    def __enter__(self) -> Optimization | None:
-        """Get existing optimization or create a new one."""
-        try:
-            if self.optimization_id:
-                # If optimization_id is provided, get the existing optimization
-                # instead of creating a new one. This is used by Optimization Studio
-                # where the optimization is pre-created by the Java backend.
-                self.optimization = self.client.get_optimization_by_id(
-                    self.optimization_id
-                )
-            else:
-                # Create a new optimization
-                self.optimization = self.client.create_optimization(
-                    dataset_name=self.dataset_name,
-                    objective_name=self.objective_name,
-                    name=self.name,
-                    metadata=self.metadata,
-                )
-
-            if self.optimization:
-                return self.optimization
-            else:
-                return None
-        except Exception:
-            logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
-            )
-            logger.warning("Continuing without Opik optimization tracking.")
-            return None
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        _exc_val: BaseException | None,
-        _exc_tb: TracebackType | None,
-    ) -> Literal[False]:
-        """Update optimization status based on context exit."""
-        if self.optimization is None:
-            return False
-
-        try:
-            if exc_type is None:
-                self.optimization.update(status="completed")
-            else:
-                self.optimization.update(status="cancelled")
-        except Exception as e:
-            logger.error(f"Failed to update optimization status: {e}")
-
-        return False
-
-
 def format_prompt(prompt: str, **kwargs: Any) -> str:
     """
     Format a prompt string with the given keyword arguments.
@@ -237,38 +153,7 @@ def _convert_literals_to_json_compatible(value: Any) -> Any:
     return str(value)
 
 
-def optimization_context(
-    client: Opik,
-    dataset_name: str,
-    objective_name: str,
-    name: str | None = None,
-    metadata: dict[str, Any] | None = None,
-    optimization_id: str | None = None,
-) -> OptimizationContextManager:
-    """
-    Create a context manager for handling optimization lifecycle.
-    Automatically updates optimization status to "completed" or "cancelled" based on context exit.
-
-    Args:
-        client: The Opik client instance
-        dataset_name: Name of the dataset for optimization
-        objective_name: Name of the optimization objective
-        name: Optional name for the optimization
-        metadata: Optional metadata for the optimization
-
-    Returns:
-        OptimizationContextManager: A context manager that handles optimization lifecycle
-    """
-    return OptimizationContextManager(
-        client=client,
-        dataset_name=dataset_name,
-        objective_name=objective_name,
-        name=name,
-        metadata=metadata,
-        optimization_id=optimization_id,
-    )
-
-
+# FIXME: We now have a OptimizationContext
 def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
@@ -292,62 +177,7 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-# FIXME: Dead code, should be wired or removed
-def function_to_tool_definition(
-    func: Callable, description: str | None = None
-) -> dict[str, Any]:
-    sig = inspect.signature(func)
-    doc = description or func.__doc__ or ""
-
-    properties: dict[str, dict[str, str]] = {}
-    required: list[str] = []
-
-    for name, param in sig.parameters.items():
-        param_type = (
-            param.annotation if param.annotation != inspect.Parameter.empty else str
-        )
-        json_type = python_type_to_json_type(param_type)
-        properties[name] = {"type": json_type, "description": f"{name} parameter"}
-        if param.default == inspect.Parameter.empty:
-            required.append(name)
-
-    return {
-        "type": "function",
-        "function": {
-            "name": getattr(func, "__name__", "<unknown>"),
-            "description": doc.strip(),
-            "parameters": {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-            },
-        },
-    }
-
-
-def python_type_to_json_type(python_type: type) -> str:
-    # Basic type mapping
-    if python_type in [str]:
-        return "string"
-    elif python_type in [int]:
-        return "integer"
-    elif python_type in [float]:
-        return "number"
-    elif python_type in [bool]:
-        return "boolean"
-    elif python_type in [dict]:
-        return "object"
-    elif python_type in [list, list]:
-        return "array"
-    else:
-        return "string"  # default fallback
-
-
-# =============================================================================
-# Deprecation: Wikipedia functions moved to tools/wikipedia.py
-# =============================================================================
-
-
+# FIXME: Refactor and move to tools/wikipedia.py
 def __getattr__(name: str) -> Any:
     """Provide backward compatibility for moved Wikipedia functions."""
     if name == "search_wikipedia":
