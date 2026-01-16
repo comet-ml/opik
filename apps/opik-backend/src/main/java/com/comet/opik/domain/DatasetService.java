@@ -808,7 +808,7 @@ class DatasetServiceImpl implements DatasetService {
                     try {
                         String workspaceName = workspaceNameService.getWorkspaceName(workspaceId, reactServiceBaseUrl.get());
                         return new Dataset.PublicWorkspaceInfo(workspaceId, workspaceName);
-                    } catch (Exception e) {
+                    } catch (javax.ws.rs.WebApplicationException | javax.ws.rs.ProcessingException e) {
                         log.warn("Failed to get workspace name for workspaceId '{}': {}", workspaceId, e.getMessage());
                         // Use workspace ID as fallback if name resolution fails
                         return new Dataset.PublicWorkspaceInfo(workspaceId, workspaceId);
