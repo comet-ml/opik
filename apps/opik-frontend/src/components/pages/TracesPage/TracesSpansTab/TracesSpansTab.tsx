@@ -1115,10 +1115,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     ];
 
-    // Add Metadata items section if there are metadata columns
+    // Add Metadata fields section if there are metadata columns
     if (metadataColumnsData.length > 0) {
       sections.push({
-        title: "Metadata items",
+        title: "Metadata fields",
         columns: metadataColumnsData,
         order: metadataColumnsOrder,
         onOrderChange: setMetadataColumnsOrder,

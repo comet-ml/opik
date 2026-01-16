@@ -68,7 +68,7 @@ const ColumnsButton = <TColumnData,>({
     [columns, sections],
   );
 
-  // Columns to select when "Select all" is checked (excludes metadata items)
+  // Columns to select when "Select all" is checked (excludes metadata fields)
   const selectAllColumnsIds = useMemo(
     () => computeSelectAllColumnsIds(allColumnsIds, excludeFromSelectAll),
     [allColumnsIds, excludeFromSelectAll],
@@ -84,16 +84,16 @@ const ColumnsButton = <TColumnData,>({
 
   const toggleColumns = (value: boolean) => {
     if (value) {
-      // Selecting all: select all non-metadata columns + preserve any already-selected metadata items
-      const currentlySelectedMetadataItems = selectedColumns.filter((id) =>
+      // Selecting all: select all non-metadata columns + preserve any already-selected metadata fields
+      const currentlySelectedMetadataFields = selectedColumns.filter((id) =>
         excludeFromSelectAll.includes(id),
       );
       onSelectionChange([
         ...selectAllColumnsIds,
-        ...currentlySelectedMetadataItems,
+        ...currentlySelectedMetadataFields,
       ]);
     } else {
-      // Deselecting all: clear everything including metadata items
+      // Deselecting all: clear everything including metadata fields
       onSelectionChange([]);
     }
   };

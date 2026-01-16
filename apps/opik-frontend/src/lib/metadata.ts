@@ -94,21 +94,18 @@ export function normalizeMetadataPaths(paths: string[]): string[] {
 
 /**
  * Builds DynamicColumn array from normalized metadata paths.
- * Formats labels with "." prefix (e.g., "metadata.time_to_first_token" -> ".time_to_first_token")
  */
 export function buildDynamicMetadataColumns(paths: string[]): DynamicColumn[] {
   return paths.map<DynamicColumn>((path: string) => {
-    // Use "." prefix to indicate it's a path
-    // e.g., "metadata.time_to_first_token" -> ".time_to_first_token"
-    // Indentation is handled by SortableMenuItem component (adds pl-4 padding)
+    // Strip "metadata." prefix from label for display, keep full path as id for data access
     const label = path.startsWith("metadata.")
-      ? `.${path.substring("metadata.".length)}`
-      : `.${path}`;
+      ? path.substring("metadata.".length)
+      : path;
 
     return {
-      id: path, // e.g., "metadata.time_to_first_token" or "metadata.some_list"
-      label: label, // e.g., ".time_to_first_token" or ".some_list"
-      columnType: COLUMN_TYPE.string, // Default to string, could auto-detect
+      id: path,
+      label: label,
+      columnType: COLUMN_TYPE.string,
     };
   });
 }

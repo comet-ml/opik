@@ -4,14 +4,14 @@ import { computeSelectAllColumnsIds } from "./ColumnsButton";
 /**
  * Tests for ColumnsButton excludeFromSelectAll logic
  *
- * These tests verify the core logic for excluding metadata items from "Select all"
+ * These tests verify the core logic for excluding metadata fields from "Select all"
  * functionality. The tests focus on the computed values rather than UI interactions
  * since Radix UI dropdown menus require special handling in test environments.
  */
 
 describe("ColumnsButton excludeFromSelectAll logic", () => {
   describe("selectAllColumnsIds computation", () => {
-    it("should exclude metadata items from select all columns", () => {
+    it("should exclude metadata fields from select all columns", () => {
       const allColumnsIds = [
         "name",
         "duration",
@@ -101,7 +101,7 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
       const selectedColumns = ["name", "duration", "input"];
       const selectAllColumnsIds = ["name", "duration", "input"];
 
-      // Metadata items are not in selectedColumns, but that's OK
+      // Metadata fields are not in selectedColumns, but that's OK
       const allColumnsSelected =
         selectAllColumnsIds.length > 0 &&
         selectAllColumnsIds.every((id) => selectedColumns.includes(id));
