@@ -11,11 +11,7 @@ import rich.table
 import rich.text
 
 from ..api_objects import chat_prompt
-from .reporting import (
-    format_prompt_snippet,
-    _format_message_content,
-    get_link_text,
-)
+from .reporting import _format_message_content, get_link_text
 
 
 def format_float(value: Any, digits: int = 6) -> str:
@@ -361,3 +357,21 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
         box=rich.box.DOUBLE_EDGE,
         padding=1,
     )
+
+
+def format_prompt_snippet(text: str, max_length: int = 100) -> str:
+    """
+    Normalize whitespace in a prompt snippet and truncate it for compact display.
+
+    Args:
+        text: Raw text to summarize.
+        max_length: Maximum characters to keep before adding an ellipsis.
+
+    Returns:
+        str: Condensed snippet safe for inline logging.
+    """
+    normalized = text.strip()
+    normalized = " ".join(normalized.split())
+    if len(normalized) > max_length:
+        return normalized[:max_length] + "…"
+    return normalized

@@ -497,7 +497,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 }
             )
             # Record each evaluated candidate as trials
-            for cand_prompt, cand_score in prompt_scores:
+            first_trial_index = context.trials_completed - len(prompt_scores) + 1
+            for idx, (cand_prompt, cand_score) in enumerate(prompt_scores):
+                trial_index = first_trial_index + idx
                 self.record_candidate_entry(
                     prompt_or_payload=cand_prompt,
                     score=cand_score,
@@ -507,7 +509,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 self.finish_candidate(
                     cand_prompt,
                     score=cand_score,
-                    trial_index=context.trials_completed,
+                    trial_index=trial_index,
                     round_handle=round_handle,
                     extras={"round_num": round_num},
                 )

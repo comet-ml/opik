@@ -606,7 +606,7 @@ class ParameterOptimizer(BaseOptimizer):
         for trial in study.trials:
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
-            timestamp = (
+            timestamp_source = (
                 trial.datetime_complete
                 or trial.datetime_start
                 or datetime.now(timezone.utc)
@@ -638,7 +638,7 @@ class ParameterOptimizer(BaseOptimizer):
                 trial_index=trial.number,
                 extras=None,
                 round_handle=round_handle,
-                timestamp=timestamp.isoformat(),
+                timestamp=timestamp_source.isoformat(),
             )
             self.finish_round(
                 round_handle=round_handle,

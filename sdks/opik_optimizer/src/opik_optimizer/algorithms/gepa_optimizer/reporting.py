@@ -21,9 +21,9 @@ from ...utils.reporting import (  # noqa: F401
     display_result,
     get_console,
     convert_tqdm_to_rich,
-    format_prompt_snippet,
     suppress_opik_logs,
 )
+from ...utils.display import format_prompt_snippet
 
 console = get_console()
 

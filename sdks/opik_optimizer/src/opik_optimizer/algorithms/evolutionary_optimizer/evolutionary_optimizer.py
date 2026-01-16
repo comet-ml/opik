@@ -805,7 +805,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
                     # History logging for this transition
                     candidate_entries: list[dict[str, Any]] = []
-                    for idx, ind in enumerate(deap_population):
+                    valid_individuals = [
+                        ind for ind in deap_population if ind.fitness.valid
+                    ]
+                    first_trial_index = (
+                        context.trials_completed - len(valid_individuals) + 1
+                    )
+                    valid_idx = 0
+                    for ind in deap_population:
                         if not ind.fitness.valid:
                             continue
                         candidate_prompts = self._individual_to_prompts(ind)
@@ -819,34 +826,48 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         entry = self.record_candidate_entry(
                             prompt_or_payload=candidate_prompts,
                             score=primary_score,
-                            id=f"gen{generation_idx}_ind{idx}",
+                            id=f"gen{generation_idx}_ind{valid_idx}",
                             metrics=metrics,
                         )
                         candidate_entries.append(entry)
                         self.finish_candidate(
                             candidate_prompts,
                             score=primary_score,
-                            trial_index=context.trials_completed,
+                            trial_index=first_trial_index + valid_idx,
                             metrics=metrics,
                             round_handle=round_handle,
                         )
+                        valid_idx += 1
 
-                    self.finish_round(
-                        round_handle=round_handle,
-                        best_score=best_primary_score_overall,
-                        best_candidate=best_prompts_overall,
-                        stop_reason=context.finish_reason,
-                        candidates=candidate_entries,
-                        extras={
-                            "pareto_front": [
+                    pareto_front = None
+                    selection_meta = None
+                    if self.enable_moo:
+                        pareto_front = (
+                            [
                                 {
                                     "primary": ind.fitness.values[0],
                                     "length": ind.fitness.values[1],
                                 }
                                 for ind in hof
                             ]
-                            if self.enable_moo and hof
-                            else None,
+                            if hof
+                            else []
+                        )
+                        selection_meta = {
+                            "selection_policy": getattr(
+                                self, "selection_policy", "tournament"
+                            ),
+                            "pareto_front": pareto_front,
+                        }
+                    self.finish_round(
+                        round_handle=round_handle,
+                        best_score=best_primary_score_overall,
+                        best_candidate=best_prompts_overall,
+                        stop_reason=context.finish_reason,
+                        candidates=candidate_entries,
+                        pareto_front=pareto_front,
+                        selection_meta=selection_meta,
+                        extras={
                             "stopped": context.should_stop,
                             "stop_reason": context.finish_reason,
                             "improvement": (

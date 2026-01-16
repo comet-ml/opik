@@ -453,6 +453,10 @@ class OptimizationHistoryState:
         self._stamp_stop_reason(stop_reason)
 
     def get_entries(self) -> list[dict[str, Any]]:
+        # Flush any open rounds into finalized entries before returning.
+        for entry in list(self._open_rounds.values()):
+            self._merge_round(entry)
+        self._open_rounds.clear()
         return list(self.entries)
 
     def clear(self) -> None:
@@ -538,8 +542,12 @@ class OptimizationResult(pydantic.BaseModel):
         self.details = dict(self.details)
         self.details.setdefault("schema_version", OPTIMIZATION_RESULT_SCHEMA_VERSION)
         # Fill counters from current history if not provided explicitly.
-        self.details.setdefault("trials_completed", len(self.history))
-        self.details.setdefault("rounds_completed", len(self.history))
+        trials_from_history = sum(
+            len(round_state.get("trials", [])) for round_state in self.history
+        )
+        rounds_from_history = len(self.history)
+        self.details.setdefault("trials_completed", trials_from_history)
+        self.details.setdefault("rounds_completed", rounds_from_history)
         # Populate stop_reason_details if stop_reason is provided.
         if (
             self.details.get("stop_reason") is not None
