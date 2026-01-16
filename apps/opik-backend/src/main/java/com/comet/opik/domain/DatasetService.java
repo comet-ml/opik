@@ -967,7 +967,7 @@ class DatasetServiceImpl implements DatasetService {
         String userName = requestContext.get().getUserName();
 
         // First, get the source dataset to obtain its name
-        Dataset sourceDataset = findById(sourceDatasetId, sourceWorkspaceId, Visibility.PUBLIC);
+        Dataset sourceDataset = findById(sourceDatasetId, sourceWorkspaceId, null);
 
         // Stream items from source dataset
         DatasetItemStreamRequest streamRequest = DatasetItemStreamRequest.builder()
@@ -975,11 +975,8 @@ class DatasetServiceImpl implements DatasetService {
                 .steamLimit(2000)
                 .build();
 
-        return datasetItemService.getItems(sourceWorkspaceId, streamRequest, Visibility.PUBLIC)
+        return datasetItemService.getItems(sourceWorkspaceId, streamRequest, null)
                 .buffer(100) // Batch items in groups of 100
-                .flatMap(itemList -> {
-                    if (itemList.isEmpty()) {
-                        return Mono.empty();
                     }
 
                     // Create batch with items (remove IDs so new ones are generated)
