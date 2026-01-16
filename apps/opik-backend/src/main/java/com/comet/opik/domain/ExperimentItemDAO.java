@@ -29,6 +29,8 @@ import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TruncationUtils.SMART_INPUT_TRUNCATION;
+import static com.comet.opik.utils.TruncationUtils.SMART_OUTPUT_TRUNCATION;
 import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
@@ -274,9 +276,18 @@ class ExperimentItemDAO {
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
-                        visibility_mode
+                        <if(truncate)>
+                            """
+            + SMART_INPUT_TRUNCATION + """
+                             as input
+                        <else> input <endif>,
+                        <if(truncate)>
+                            """
+            + SMART_OUTPUT_TRUNCATION + """
+                             as output
+                        <else> output <endif>,
+                        visibility_mode,
+                        output_keys
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_scope)

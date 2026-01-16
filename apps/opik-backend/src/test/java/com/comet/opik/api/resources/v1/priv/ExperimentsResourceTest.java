@@ -4874,6 +4874,105 @@ class ExperimentsResourceTest {
                                     .build())
                             .collect(toList()));
         }
+
+        @Test
+        @DisplayName("when trace has large output with multiple keys, then all keys should be preserved in truncated output")
+        void streamByExperimentName__whenTraceHasLargeOutputWithMultipleKeys__thenAllKeysShouldBePreserved() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a large string that exceeds the truncation threshold (10KB)
+            String largeString = RandomStringUtils.secure().nextAlphanumeric(15000);
+
+            // Create trace with output containing multiple keys, one with large value
+            var outputJson = JsonUtils.readTree("""
+                    {
+                        "short_key": "small value",
+                        "long_key": "%s",
+                        "number_key": 42,
+                        "boolean_key": true,
+                        "nested_key": {"inner": "value"}
+                    }
+                    """.formatted(largeString));
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .output(outputJson)
+                    .input(JsonUtils.readTree("{\"prompt\": \"test\"}"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Create experiment and experiment item
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .totalEstimatedCost(null)
+                    .usage(null)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            trace.endTime()))
+                    .output(trace.output())
+                    .input(trace.input())
+                    .comments(null)
+                    .feedbackScores(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+
+            var createRequest = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build();
+            createAndAssert(createRequest, apiKey, workspaceName);
+
+            // Stream experiment items with truncation enabled (default)
+            var streamRequest = ExperimentItemStreamRequest.builder()
+                    .experimentName(experiment.name())
+                    .truncate(true)
+                    .build();
+
+            var streamedItems = experimentResourceClient.streamExperimentItems(streamRequest, apiKey, workspaceName);
+
+            assertThat(streamedItems).hasSize(1);
+            var streamedItem = streamedItems.getFirst();
+
+            // Verify output is valid JSON (not a truncated string)
+            assertThat(streamedItem.output()).isNotNull();
+            assertThat(streamedItem.output().isObject())
+                    .as("Output should be a valid JSON object, not a truncated string")
+                    .isTrue();
+
+            // Verify all keys are present in the output
+            assertThat(streamedItem.output().has("short_key"))
+                    .as("short_key should be present")
+                    .isTrue();
+            assertThat(streamedItem.output().has("long_key"))
+                    .as("long_key should be present")
+                    .isTrue();
+            assertThat(streamedItem.output().has("number_key"))
+                    .as("number_key should be present")
+                    .isTrue();
+            assertThat(streamedItem.output().has("boolean_key"))
+                    .as("boolean_key should be present")
+                    .isTrue();
+            assertThat(streamedItem.output().has("nested_key"))
+                    .as("nested_key should be present")
+                    .isTrue();
+
+            // Verify short values are preserved exactly
+            assertThat(streamedItem.output().get("short_key").asText())
+                    .isEqualTo("small value");
+
+            // Verify the long value is truncated but still accessible
+            var longKeyValue = streamedItem.output().get("long_key").asText();
+            assertThat(longKeyValue)
+                    .as("long_key value should be truncated")
+                    .contains("[truncated]");
+        }
     }
 
     @Nested

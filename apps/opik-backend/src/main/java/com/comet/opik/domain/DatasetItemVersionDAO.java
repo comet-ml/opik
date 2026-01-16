@@ -47,6 +47,8 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TruncationUtils.SMART_INPUT_TRUNCATION;
+import static com.comet.opik.utils.TruncationUtils.SMART_OUTPUT_TRUNCATION;
 
 @ImplementedBy(DatasetItemVersionDAOImpl.class)
 public interface DatasetItemVersionDAO {
@@ -490,13 +492,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             LEFT JOIN (
                 SELECT
                     t.id,
-                    <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                    <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>
+                    <if(truncate)>
+                        """
+            + SMART_INPUT_TRUNCATION + """
+                         as input
+                    <else> input <endif>,
+                    <if(truncate)>
+                        """
+            + SMART_OUTPUT_TRUNCATION + """
+                         as output
+                    <else> output <endif>
                 FROM (
                     SELECT
                         id,
                         input,
-                        output
+                        output,
+                        output_keys
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
@@ -866,10 +877,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        <if(truncate)>
+                            """
+            + SMART_INPUT_TRUNCATION + """
+                             as input
+                        <else> input <endif>,
+                        <if(truncate)>
+                            """
+            + SMART_OUTPUT_TRUNCATION + """
+                             as output
+                        <else> output <endif>,
                         metadata,
-                        visibility_mode
+                        visibility_mode,
+                        output_keys
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
