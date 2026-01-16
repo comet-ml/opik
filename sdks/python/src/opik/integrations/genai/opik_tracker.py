@@ -1,6 +1,6 @@
 from typing import Optional
 
-from google import genai
+import google.genai as genai
 
 from . import (
     generate_content_decorator,
@@ -8,6 +8,11 @@ from . import (
     stream_wrappers,
     encoder_extension,
 )
+
+
+def _get_provider(client: genai.Client) -> str:
+    """Get the provider name from the GenAI client."""
+    return "google_vertexai" if client.vertexai else "google_ai"
 
 
 def track_genai(
@@ -21,6 +26,10 @@ def track_genai(
     * client.models.generate_content_stream
     * client.aio.models.generate_content
     * client.aio.models.generate_content_stream
+    * client.models.generate_videos (Veo video generation)
+    * client.aio.models.generate_videos (async Veo video generation)
+    * client.operations.get (for polling video generation status)
+    * video.save (when saving generated videos)
 
     Can be used within other Opik-tracked functions.
 
@@ -37,8 +46,20 @@ def track_genai(
 
     client.opik_tracked = True
 
-    provider = "google_vertexai" if client.vertexai else "google_ai"
+    provider = _get_provider(client)
 
+    _patch_generate_content(client, provider, project_name)
+    _patch_generate_videos(client, provider, project_name)
+
+    return client
+
+
+def _patch_generate_content(
+    client: genai.Client,
+    provider: str,
+    project_name: Optional[str],
+) -> None:
+    """Patch generate_content methods with Opik tracking."""
     decorator_factory = generate_content_decorator.GenerateContentTrackDecorator(
         provider=provider
     )
@@ -79,4 +100,59 @@ def track_genai(
         generations_aggregator=generations_aggregators.aggregate_response_content_items,
     )(client.aio.models.generate_content_stream)
 
-    return client
+
+GENAI_VIDEOS_TAGS = ["genai"]
+GENAI_VIDEOS_METADATA = {"created_from": "genai", "type": "genai_videos"}
+
+
+def _patch_generate_videos(
+    client: genai.Client,
+    provider: str,
+    project_name: Optional[str],
+) -> None:
+    """Patch generate_videos and operations.get methods with Opik tracking."""
+    from . import videos
+
+    if not hasattr(client.models, "generate_videos"):
+        return
+
+    video_decorator_factory = videos.GenerateVideosTrackDecorator(provider=provider)
+
+    # Patch sync generate_videos
+    client.models.generate_videos = video_decorator_factory.track(
+        name="models.generate_videos",
+        type="llm",
+        project_name=project_name,
+        tags=GENAI_VIDEOS_TAGS,
+        metadata=GENAI_VIDEOS_METADATA,
+    )(client.models.generate_videos)
+
+    # Patch async generate_videos
+    if hasattr(client.aio.models, "generate_videos"):
+        client.aio.models.generate_videos = video_decorator_factory.track(
+            name="models.generate_videos",
+            type="llm",
+            project_name=project_name,
+            tags=GENAI_VIDEOS_TAGS,
+            metadata=GENAI_VIDEOS_METADATA,
+        )(client.aio.models.generate_videos)
+
+    # Patch operations.get to track polling and patch Video.save on completed videos
+    _patch_operations_get(client, project_name)
+
+
+def _patch_operations_get(client: genai.Client, project_name: Optional[str]) -> None:
+    """Patch operations.get to track polling and patch Video.save on completed videos."""
+    from . import videos
+
+    if not hasattr(client, "operations") or not hasattr(client.operations, "get"):
+        return
+
+    operations_decorator = videos.OperationsGetTrackDecorator(project_name=project_name)
+    client.operations.get = operations_decorator.track(
+        name="operations.get",
+        type="general",
+        project_name=project_name,
+        tags=GENAI_VIDEOS_TAGS,
+        metadata=GENAI_VIDEOS_METADATA,
+    )(client.operations.get)

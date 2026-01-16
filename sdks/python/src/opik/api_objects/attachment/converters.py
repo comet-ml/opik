@@ -1,10 +1,15 @@
 import base64
+import logging
 import os
+import shutil
+import tempfile
 from typing import Literal, Optional
 
 from ...file_upload import mime_type
 from ...message_processing import messages
 from . import attachment
+
+LOGGER = logging.getLogger(__name__)
 
 
 def attachment_to_message(
@@ -25,6 +30,12 @@ def attachment_to_message(
     if file_name is None:
         file_name = os.path.basename(file_path)
 
+    # Create a temporary copy if requested
+    should_delete_after_upload = delete_after_upload
+    if attachment_data.create_temp_copy:
+        file_path = _create_temp_copy(file_path)
+        should_delete_after_upload = True
+
     return messages.CreateAttachmentMessage(
         file_path=file_path,
         file_name=file_name,
@@ -33,8 +44,40 @@ def attachment_to_message(
         entity_id=entity_id,
         project_name=project_name,
         encoded_url_override=base_url_path,
-        delete_after_upload=delete_after_upload,
+        delete_after_upload=should_delete_after_upload,
     )
+
+
+def _create_temp_copy(file_path: str) -> str:
+    """
+    Create a temporary copy of a file.
+
+    This ensures the file remains available for upload even if the user
+    deletes the original file. The temp file is created with delete=False
+    so it persists until the upload manager processes and deletes it.
+
+    Args:
+        file_path: Path to the original file.
+
+    Returns:
+        Path to the temporary copy.
+    """
+    _, extension = os.path.splitext(file_path)
+    temp_file = tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=extension)
+    try:
+        with open(file_path, "rb") as original_file:
+            shutil.copyfileobj(original_file, temp_file)
+        temp_file.flush()
+        temp_file.close()
+        LOGGER.debug(
+            "Created temporary copy of attachment: %s -> %s",
+            file_path,
+            temp_file.name,
+        )
+        return temp_file.name
+    except Exception:
+        temp_file.close()
+        raise
 
 
 def guess_attachment_type(attachment_data: attachment.Attachment) -> Optional[str]:
