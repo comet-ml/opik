@@ -68,10 +68,13 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                 message.jobId(), message.datasetId(), message.workspaceId());
 
         // Set reactive context for the processing
-        return csvProcessor.generateAndUploadCsv(message.datasetId())
-                .flatMap(filePath -> {
-                    log.info("CSV generated successfully for job '{}', file path: '{}'", message.jobId(), filePath);
-                    return jobService.updateJobToCompleted(message.jobId(), filePath);
+        return jobService.updateJobToProcessing(message.jobId()) // Set status to PROCESSING first
+                .then(csvProcessor.generateAndUploadCsv(message.datasetId()))
+                .flatMap(result -> {
+                    log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
+                            message.jobId(), result.filePath(), result.expiresAt());
+                    return jobService.updateJobToCompleted(message.jobId(), result.filePath(),
+                            result.expiresAt());
                 })
                 .then()
                 .onErrorResume(throwable -> {
