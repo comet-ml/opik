@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from contextlib import contextmanager
 
 import pydantic
+import rich.panel
 from .utils.reporting import (
     get_console,
     get_optimization_run_url_by_id,
@@ -30,6 +31,7 @@ def _now_iso() -> str:
     )
 
 
+# FIXME: Move to helpers.py if we add a time utilities module.
 @dataclass
 class OptimizerCandidate:
     """
@@ -427,6 +429,7 @@ class OptimizationHistoryState:
             entry["dataset_split"] = dataset_split_val
 
         # FIXME: Move to pareto_front utils
+        # FIXME: Move pareto handling into a shared pareto utils module if we add one.
         pareto_payload = pareto_front
         if pareto_payload is None:
             pareto_payload = self._current_pareto_front
@@ -613,13 +616,16 @@ class OptimizationResult(pydantic.BaseModel):
         else:
             return "0.00% (no improvement from 0)"
 
+    def _rounds_completed(self) -> int:
+        """Return rounds_completed from details or fallback to history length."""
+        rounds_completed = self.details.get("rounds_completed")
+        if isinstance(rounds_completed, int):
+            return rounds_completed
+        return len(self.history)
+
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
-        rounds_ran = (
-            self.details.get("rounds_completed")
-            if isinstance(self.details.get("rounds_completed"), int)
-            else len(self.history)
-        )
+        rounds_ran = self._rounds_completed()
         trials_completed = self.details.get("trials_completed")
         improvement_str = (
             self._calculate_improvement_str()
@@ -653,9 +659,7 @@ class OptimizationResult(pydantic.BaseModel):
             trials_completed=trials_completed
             if isinstance(trials_completed, int)
             else None,
-            rounds_ran=int(rounds_ran)
-            if isinstance(rounds_ran, int)
-            else len(self.history),
+            rounds_ran=rounds_ran,
             optimized_params=optimized_params,
             parameter_importance=parameter_importance,
             search_ranges=search_ranges,

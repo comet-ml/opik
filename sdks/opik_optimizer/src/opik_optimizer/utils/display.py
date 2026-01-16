@@ -164,9 +164,13 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     model_name = result.details.get("model", "[dim]N/A[/dim]")
     trials_completed = result.details.get("trials_completed")
     rounds_ran = (
-        result.details.get("rounds_completed")
-        if isinstance(result.details.get("rounds_completed"), int)
-        else len(result.history)
+        result._rounds_completed()
+        if hasattr(result, "_rounds_completed")
+        else (
+            result.details.get("rounds_completed")
+            if isinstance(result.details.get("rounds_completed"), int)
+            else len(result.history)
+        )
     )
     improvement_str = result._calculate_improvement_str()
     initial_score = result.initial_score

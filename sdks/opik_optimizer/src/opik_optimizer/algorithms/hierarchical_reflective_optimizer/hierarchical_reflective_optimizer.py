@@ -290,6 +290,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         attempt: int,
         max_attempts: int,
         context: OptimizationContext,
+        round_handle: Any,
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], float, EvaluationResult]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
@@ -309,6 +310,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_samples: Optional number of samples
             attempt: Current attempt number (1-indexed)
             max_attempts: Total number of attempts
+            round_handle: Active round handle for history recording
 
         Returns:
             Tuple of (improved_prompts_dict, improved_score, improved_experiment_result)
@@ -382,7 +384,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 best_prompts,
                 score=fallback_score,
                 trial_index=context.trials_completed,
-                round_handle=None,
+                round_handle=round_handle,
             )
             return best_prompts, fallback_score, fallback_result
 
@@ -404,7 +406,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             best_prompt_bundle,
             score=best_score_local,
             trial_index=context.trials_completed,
-            round_handle=None,
+            round_handle=round_handle,
         )
 
         # Evaluate remaining candidates and keep the best-scoring bundle.
@@ -430,7 +432,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 improved_chat_prompts,
                 score=improved_score,
                 trial_index=context.trials_completed,
-                round_handle=None,
+                round_handle=round_handle,
             )
 
             if improved_score > best_score_local:
@@ -508,6 +510,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 context.should_stop = True
                 context.finish_reason = "max_trials"
                 break
+            round_handle = self.begin_round()
 
             # Perform hierarchical root cause analysis
             with reporting.display_root_cause_analysis(
@@ -590,6 +593,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             attempt=attempt,
                             max_attempts=max_attempts,
                             context=context,
+                            round_handle=round_handle,
                         )
                         if context.trials_completed == trials_before_attempt:
                             # Guard against trial counters not being updated by mocks.
@@ -686,7 +690,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
-            round_handle = self.begin_round(improvement=iteration_improvement)
             history_candidate = {name: prompt for name, prompt in best_prompts.items()}
             self.finish_candidate(
                 history_candidate,
