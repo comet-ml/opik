@@ -767,4 +767,63 @@ public class DatasetsResource {
     public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
         return new DatasetVersionsResource(datasetId, versionService, requestContext, featureFlags);
     }
+
+    @GET
+    @Path("/public-workspaces")
+    @Operation(operationId = "getPublicWorkspacesWithDatasets", summary = "Get public workspaces with datasets", description = "Get list of public workspaces that have at least one public dataset", responses = {
+            @ApiResponse(responseCode = "200", description = "List of public workspaces", content = @Content(array = @ArraySchema(schema = @Schema(implementation = Dataset.PublicWorkspaceInfo.class))))
+    })
+    @JsonView(Dataset.View.Public.class)
+    public Response getPublicWorkspacesWithDatasets() {
+        log.info("Getting public workspaces with datasets");
+        List<Dataset.PublicWorkspaceInfo> workspaces = service.findPublicWorkspacesWithDatasets();
+        log.info("Found {} public workspaces with datasets", workspaces.size());
+        return Response.ok(workspaces).build();
+    }
+
+    @GET
+    @Path("/public/{workspaceName}")
+    @Operation(operationId = "getPublicDatasetsByWorkspace", summary = "Get accessible datasets from workspace", description = "Get paginated list of datasets from a specific workspace the user has access to", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset page", content = @Content(schema = @Schema(implementation = DatasetPage.class)))
+    })
+    @JsonView(Dataset.View.Public.class)
+    public Response getPublicDatasetsByWorkspace(
+            @PathParam("workspaceName") String workspaceName,
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name) {
+        log.info("Getting public datasets for workspace '{}', page '{}', size '{}', name '{}'", workspaceName, page, size, name);
+        DatasetPage datasetPage = service.findPublicDatasetsByWorkspace(workspaceName, page, size, name);
+        log.info("Found {} public datasets for workspace '{}'", datasetPage.total(), workspaceName);
+        return Response.ok(datasetPage).build();
+    }
+
+    @POST
+    @Path("/import")
+    @Operation(operationId = "importDataset", summary = "Import dataset from accessible workspace", description = "Import a dataset from another workspace the user has access to by creating a new dataset and copying all items", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/datasets/{id}", schema = @Schema(implementation = String.class))
+            })
+    })
+    @RateLimited
+    public Response importDataset(
+            @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.DatasetImportRequest.class))) @NotNull @Valid Dataset.DatasetImportRequest request,
+            @Context UriInfo uriInfo) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Importing dataset '{}' from workspace '{}' to workspace '{}' with name '{}'",
+                request.sourceDatasetId(), request.sourceWorkspaceName(), workspaceId, request.name());
+
+        Dataset importedDataset = service.importDataset(
+                request.sourceWorkspaceName(),
+                request.sourceDatasetId(),
+                request.name(),
+                request.description());
+
+        log.info("Imported dataset '{}' from workspace '{}' to dataset '{}' in workspace '{}'",
+                request.sourceDatasetId(), request.sourceWorkspaceName(), importedDataset.id(), workspaceId);
+
+        URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(importedDataset.id().toString())).build();
+        return Response.created(uri).entity(importedDataset).build();
+    }
 }

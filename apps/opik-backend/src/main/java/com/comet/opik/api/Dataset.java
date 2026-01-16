@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
@@ -74,4 +75,18 @@ public record Dataset(
             return new DatasetPage(List.of(), page, 0, 0, sortableBy);
         }
     }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record DatasetImportRequest(
+            @NotNull String sourceWorkspaceName,
+            @NotNull UUID sourceDatasetId,
+            @NotBlank String name,
+            @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "cannot exceed 255 characters") String description
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record PublicWorkspaceInfo(
+            String workspaceId,
+            String workspaceName
+    ) {}
 }

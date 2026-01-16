@@ -192,3 +192,15 @@ export interface DatasetExpansionResponse {
   total_generated: number;
   generation_time: string;
 }
+
+export interface PublicWorkspaceInfo {
+  workspace_id: string;
+  workspace_name: string;
+}
+
+export interface DatasetImportRequest {
+  source_workspace_name: string;
+  source_dataset_id: string;
+  name: string;
+  description?: string;
+}

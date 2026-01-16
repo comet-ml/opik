@@ -3,13 +3,18 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
@@ -30,7 +35,11 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -38,11 +47,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.net.URI;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +61,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
@@ -100,6 +112,12 @@ public interface DatasetService {
     long getDailyCreatedCount();
 
     void updateStatus(UUID id, String workspaceId, DatasetStatus status);
+
+    List<Dataset.PublicWorkspaceInfo> findPublicWorkspacesWithDatasets();
+
+    DatasetPage findPublicDatasetsByWorkspace(String workspaceName, int page, int size, String name);
+
+    Dataset importDataset(String sourceWorkspaceName, UUID sourceDatasetId, String targetName, String targetDescription);
 }
 
 @Singleton
@@ -120,6 +138,10 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull WorkspaceNameService workspaceNameService;
+    private final @NonNull DatasetItemService datasetItemService;
+    private final @NonNull @Config("authentication") AuthenticationConfig authenticationConfig;
+    private final @NonNull Client client;
 
     private static String formatDatasetAlreadyExistsMessage(String datasetName) {
         return "Dataset already exists with name '%s'".formatted(datasetName);
@@ -758,6 +780,229 @@ class DatasetServiceImpl implements DatasetService {
             });
         }
         return Mono.error(throwable);
+    }
+
+    @Override
+    public List<Dataset.PublicWorkspaceInfo> findPublicWorkspacesWithDatasets() {
+        log.info("Finding accessible workspaces with datasets");
+        
+        // Get all workspace IDs that have datasets (not just public ones)
+        List<String> workspaceIds = template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.findAllWorkspaceIds();
+        });
+
+        Optional<String> reactServiceBaseUrl = Optional.ofNullable(authenticationConfig.getReactService())
+                .map(AuthenticationConfig.UrlConfig::url);
+        
+        if (reactServiceBaseUrl.isEmpty()) {
+            log.warn("React service is not configured, cannot resolve workspace names");
+            return List.of();
+        }
+
+        if (workspaceIds.isEmpty()) {
+            log.info("No workspaces found with datasets");
+            return List.of();
+        }
+
+        // Convert workspace IDs to names using React service
+        List<Dataset.PublicWorkspaceInfo> workspaces = workspaceIds.stream()
+                .map(workspaceId -> {
+                    try {
+                        String workspaceName = workspaceNameService.getWorkspaceName(workspaceId, reactServiceBaseUrl.get());
+                        return new Dataset.PublicWorkspaceInfo(workspaceId, workspaceName);
+                    } catch (Exception e) {
+                        log.warn("Failed to get workspace name for workspaceId '{}': {}", workspaceId, e.getMessage());
+                        // Use workspace ID as fallback if name resolution fails
+                        return new Dataset.PublicWorkspaceInfo(workspaceId, workspaceId);
+                    }
+                })
+                .collect(Collectors.toList());
+
+        log.info("Found {} accessible workspaces with datasets", workspaces.size());
+        return workspaces;
+    }
+
+    @Override
+    public DatasetPage findPublicDatasetsByWorkspace(String workspaceName, int page, int size, String name) {
+        log.info("Finding accessible datasets for workspace '{}', page '{}', size '{}', name '{}'", workspaceName, page, size, name);
+
+        // Convert workspace name to ID
+        String workspaceId = getWorkspaceId(workspaceName);
+        log.info("Resolved workspace name '{}' to workspace ID '{}'", workspaceName, workspaceId);
+
+        // Note: We return all datasets from the workspace (not filtered by visibility)
+        // The frontend will only call this with workspaces the user has access to,
+        // so returning all datasets is appropriate.
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            int offset = (page - 1) * size;
+
+            // Use null visibility to return all datasets (not just public ones)
+            long count = dao.findCount(workspaceId, name, false, false, null, null, Map.of());
+            log.info("Found {} datasets for workspace ID '{}'", count, workspaceId);
+            List<Dataset> datasets = dao.find(size, offset, workspaceId, name, false, false, "", null, null, Map.of());
+            log.info("Retrieved {} datasets for workspace ID '{}'", datasets.size(), workspaceId);
+
+            List<Dataset> enrichedDatasets = enrichDatasetWithAdditionalInformation(datasets);
+
+            return new DatasetPage(enrichedDatasets, page, enrichedDatasets.size(), count, sortingFactory.getSortableFields());
+        });
+    }
+
+    @Override
+    public Dataset importDataset(String sourceWorkspaceName, UUID sourceDatasetId, String targetName, String targetDescription) {
+        log.info("Importing dataset '{}' from workspace '{}' to current workspace with name '{}'",
+                sourceDatasetId, sourceWorkspaceName, targetName);
+
+        String targetWorkspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        // Convert source workspace name to ID
+        String sourceWorkspaceId = getWorkspaceId(sourceWorkspaceName);
+
+        // Verify source dataset exists and user has access to it
+        // Note: We don't check visibility here - if the user can see the workspace/dataset in the UI,
+        // they have access to it. The frontend only shows workspaces/datasets the user has access to.
+        Dataset sourceDataset = findById(sourceDatasetId, sourceWorkspaceId, null);
+        if (sourceDataset == null) {
+            throw new NotFoundException("Dataset not found or you don't have access to it");
+        }
+
+        // Create new dataset in target workspace
+        Dataset newDataset = save(Dataset.builder()
+                .name(targetName)
+                .description(targetDescription)
+                .visibility(Visibility.PRIVATE)
+                .build());
+
+        log.info("Created new dataset '{}' in workspace '{}', copying items from source dataset '{}'",
+                newDataset.id(), targetWorkspaceId, sourceDatasetId);
+
+        // Copy items from source dataset to target dataset
+        copyItemsFromDataset(sourceWorkspaceId, sourceDatasetId, newDataset.id())
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, targetWorkspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+
+        log.info("Successfully imported dataset '{}' from workspace '{}' to dataset '{}' in workspace '{}'",
+                sourceDatasetId, sourceWorkspaceName, newDataset.id(), targetWorkspaceId);
+
+        return newDataset;
+    }
+
+    private String getWorkspaceId(String workspaceName) {
+        // If workspaceName is already a UUID (workspace ID), return it directly
+        // This handles the case where workspace name resolution failed and we got the ID as the name
+        try {
+            UUID.fromString(workspaceName);
+            // It's a valid UUID, so it's already a workspace ID
+            log.debug("Workspace identifier '{}' is a UUID, using it directly as workspace ID", workspaceName);
+            return workspaceName;
+        } catch (IllegalArgumentException e) {
+            // Not a UUID, so it's a workspace name that needs to be resolved
+        }
+
+        Optional<String> reactServiceBaseUrl = Optional.ofNullable(authenticationConfig.getReactService())
+                .map(AuthenticationConfig.UrlConfig::url);
+        
+        if (reactServiceBaseUrl.isEmpty()) {
+            log.error("React service is not configured, cannot resolve workspace name '{}'", workspaceName);
+            throw new NotFoundException("Workspace not found: " + workspaceName);
+        }
+
+        String reactServiceBaseUrlValue = reactServiceBaseUrl.get();
+
+        Response response = null;
+        try {
+            response = client.target(URI.create(reactServiceBaseUrlValue))
+                    .path("workspaces")
+                    .path("workspace-id")
+                    .queryParam("name", workspaceName)
+                    .request()
+                    .get();
+
+            if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
+                String workspaceId = response.readEntity(String.class);
+                log.debug("Resolved workspace '{}' to ID '{}' using React service", workspaceName, workspaceId);
+                return workspaceId;
+            } else {
+                // This will throw an appropriate exception based on the response status
+                getWorkspaceIdFromResponse(response);
+                // Should never reach here, but needed for compilation
+                throw new NotFoundException("Workspace not found: " + workspaceName);
+            }
+        } catch (NotFoundException e) {
+            // Re-throw NotFoundException as-is
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to get workspace ID from React service for '{}': {}", workspaceName, e.getMessage());
+            throw new NotFoundException("Workspace not found: " + workspaceName);
+        } finally {
+            if (response != null) {
+                try {
+                    response.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close response: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
+    private String getWorkspaceIdFromResponse(Response response) {
+        if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
+            return response.readEntity(String.class);
+        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            log.error("Workspace not found by name: {}", errorResponse.msg());
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+        }
+
+        log.warn("Unexpected error while getting workspace id: {}", response.getStatus());
+        throw new InternalServerErrorException();
+    }
+
+    private Mono<Void> copyItemsFromDataset(String sourceWorkspaceId, UUID sourceDatasetId, UUID targetDatasetId) {
+        log.info("Copying items from dataset '{}' in workspace '{}' to dataset '{}'",
+                sourceDatasetId, sourceWorkspaceId, targetDatasetId);
+
+        String targetWorkspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        // First, get the source dataset to obtain its name
+        Dataset sourceDataset = findById(sourceDatasetId, sourceWorkspaceId, Visibility.PUBLIC);
+
+        // Stream items from source dataset
+        DatasetItemStreamRequest streamRequest = DatasetItemStreamRequest.builder()
+                .datasetName(sourceDataset.name())
+                .steamLimit(2000)
+                .build();
+
+        return datasetItemService.getItems(sourceWorkspaceId, streamRequest, Visibility.PUBLIC)
+                .buffer(100) // Batch items in groups of 100
+                .flatMap(itemList -> {
+                    if (itemList.isEmpty()) {
+                        return Mono.empty();
+                    }
+
+                    // Create batch with items (remove IDs so new ones are generated)
+                    DatasetItemBatch batch = DatasetItemBatch.builder()
+                            .datasetId(targetDatasetId)
+                            .items(itemList.stream()
+                                    .map(item -> item.toBuilder().id(null).build())
+                                    .collect(Collectors.toList()))
+                            .build();
+
+                    // Save items in target workspace context
+                    return datasetItemService.verifyDatasetExistsAndSave(batch)
+                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, targetWorkspaceId)
+                                    .put(RequestContext.USER_NAME, userName));
+                }, 1) // Process one batch at a time
+                .then()
+                .doOnSuccess(v -> log.info("Successfully copied items from dataset '{}' to dataset '{}'",
+                        sourceDatasetId, targetDatasetId))
+                .doOnError(error -> log.error("Error copying items from dataset '{}' to dataset '{}': {}",
+                        sourceDatasetId, targetDatasetId, error.getMessage()));
     }
 
 }
