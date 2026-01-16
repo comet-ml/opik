@@ -151,13 +151,12 @@ const ColumnsButton = <TColumnData,>({
             const hasTitle = section.title && section.title.trim().length > 0;
             // Generate a stable key: use title if available, otherwise use column IDs
             // Sort column IDs for stability regardless of order
-            const sectionKey =
-              hasTitle && section.title
-                ? section.title
-                : section.columns
-                    .map((col) => col.id)
-                    .sort()
-                    .join("-");
+            const sectionKey = hasTitle
+              ? section.title
+              : section.columns
+                  .map((col) => col.id)
+                  .sort()
+                  .join("-");
 
             return (
               <React.Fragment key={`fragment-${sectionKey}`}>
