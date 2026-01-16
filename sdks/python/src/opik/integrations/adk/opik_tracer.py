@@ -327,7 +327,7 @@ class OpikTracer:
                 request_start_time, first_token_time = ttft_data
                 if first_token_time is not None:
                     time_to_first_token = first_token_time - request_start_time
-                    metadata_update["time_to_first_token"] = time_to_first_token
+                    metadata_update["_time_to_first_token"] = time_to_first_token
 
             # Merge with existing metadata
             if current_span.metadata is None:

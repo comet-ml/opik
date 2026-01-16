@@ -1986,16 +1986,16 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
     for llm_span in llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
         assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"LLM span metadata should contain 'time_to_first_token', got: {llm_span.metadata.keys()}"
-        ttft = llm_span.metadata["time_to_first_token"]
+            "_time_to_first_token" in llm_span.metadata
+        ), f"LLM span metadata should contain '_time_to_first_token', got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["_time_to_first_token"]
         assert isinstance(
             ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
-        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        ), f"_time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"_time_to_first_token should be non-negative, got {ttft}"
         assert (
             ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        ), f"_time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
 
 @pytest_skip_for_adk_older_than_1_3_0
@@ -2052,16 +2052,16 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
     for llm_span in llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
         assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"LLM span metadata should contain 'time_to_first_token' for streaming responses, got: {llm_span.metadata.keys()}"
-        ttft = llm_span.metadata["time_to_first_token"]
+            "_time_to_first_token" in llm_span.metadata
+        ), f"LLM span metadata should contain '_time_to_first_token' for streaming responses, got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["_time_to_first_token"]
         assert isinstance(
             ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
-        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        ), f"_time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"_time_to_first_token should be non-negative, got {ttft}"
         assert (
             ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        ), f"_time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
 
 @pytest_skip_for_adk_older_than_1_3_0
@@ -2119,20 +2119,20 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
     for llm_span in llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
         assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"All LLM spans should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
-        ttft = llm_span.metadata["time_to_first_token"]
+            "_time_to_first_token" in llm_span.metadata
+        ), f"All LLM spans should have '_time_to_first_token', got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["_time_to_first_token"]
         assert isinstance(
             ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
-        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        ), f"_time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"_time_to_first_token should be non-negative, got {ttft}"
         assert (
             ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        ), f"_time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
     # Verify that different LLM calls have different (or same) TTFT values
     # They might be similar but should be tracked independently
-    ttft_values = [span.metadata["time_to_first_token"] for span in llm_spans]
+    ttft_values = [span.metadata["_time_to_first_token"] for span in llm_spans]
     assert len(set(ttft_values)) >= 1, "Should have at least one unique TTFT value"
 
 
@@ -2191,20 +2191,20 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             assert llm_span.metadata is not None, "LLM span should have metadata"
             # Note: Even if content exists, TTFT should be tracked
             # The test verifies that when content exists, TTFT is present
-            if "time_to_first_token" in llm_span.metadata:
-                ttft = llm_span.metadata["time_to_first_token"]
+            if "_time_to_first_token" in llm_span.metadata:
+                ttft = llm_span.metadata["_time_to_first_token"]
                 assert isinstance(
                     ttft, (int, float)
-                ), f"time_to_first_token should be a number, got {type(ttft)}"
+                ), f"_time_to_first_token should be a number, got {type(ttft)}"
                 assert (
                     ttft >= 0
-                ), f"time_to_first_token should be non-negative, got {ttft}"
+                ), f"_time_to_first_token should be non-negative, got {ttft}"
         else:
             # When span has no output or no usage, TTFT should not be present
             assert not (
-                llm_span.metadata and "time_to_first_token" in llm_span.metadata
+                llm_span.metadata and "_time_to_first_token" in llm_span.metadata
             ), (
-                f"LLM span without content should not have 'time_to_first_token' in metadata. "
+                f"LLM span without content should not have '_time_to_first_token' in metadata. "
                 f"Span output: {llm_span.output}, usage: {llm_span.usage}, metadata: {llm_span.metadata}"
             )
 
@@ -2284,13 +2284,13 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
     for llm_span in all_llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
         assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"All LLM spans in sequential agents should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
-        ttft = llm_span.metadata["time_to_first_token"]
+            "_time_to_first_token" in llm_span.metadata
+        ), f"All LLM spans in sequential agents should have '_time_to_first_token', got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["_time_to_first_token"]
         assert isinstance(
             ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
-        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        ), f"_time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"_time_to_first_token should be non-negative, got {ttft}"
         assert (
             ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        ), f"_time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
