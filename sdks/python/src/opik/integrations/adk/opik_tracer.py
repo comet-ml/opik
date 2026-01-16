@@ -86,10 +86,10 @@ class OpikTracer:
             if llm_response.content is not None and llm_response.content.parts:
                 for part in llm_response.content.parts:
                     # Check for text content
-                    if part.text is not None and len(part.text.strip()) > 0:
+                    if part.text and part.text.strip():
                         return True
                     # Check for function call content (tool calls)
-                    if part.function_call is not None:
+                    if part.function_call:
                         return True
             return False
         except Exception as e:
@@ -101,7 +101,7 @@ class OpikTracer:
 
     def _safe_ttft_tracking(
         self, span_id: Optional[str], pop: bool = False
-    ) -> Optional[Tuple[float, Optional[float]]]:
+    ) -> Tuple[Optional[float], Optional[float]]:
         """
         Safely retrieve time-to-first-token tracking data for a span.
 
@@ -110,11 +110,11 @@ class OpikTracer:
             pop: If True, remove the entry after fetching. If False, keep it.
 
         Returns:
-            Tuple of (request_start_time, first_token_time) if span_id exists in tracking,
-            None otherwise.
+            Tuple of (request_start_time, first_token_time). Returns (None, None) if
+            span_id is None or not found in tracking.
         """
         if span_id is None or span_id not in self._ttft_tracking:
-            return None
+            return (None, None)
         if pop:
             return self._ttft_tracking.pop(span_id)
         return self._ttft_tracking[span_id]
@@ -261,6 +261,7 @@ class OpikTracer:
             is_partial = False
 
         span_id: Optional[str] = None
+        exception_occurred = False
         try:
             model = None
             usage = None
@@ -270,7 +271,7 @@ class OpikTracer:
                 # Clean up TTFT tracking if it exists before early return
                 current_span = context_storage.top_span_data()
                 if current_span is not None and current_span.id is not None:
-                    self._ttft_tracking.pop(current_span.id, None)
+                    self._safe_ttft_tracking(current_span.id, pop=True)
                 return
 
             current_span = context_storage.top_span_data()
@@ -286,19 +287,23 @@ class OpikTracer:
             # Track time-to-first-token: detect first token arrival
             # We check for first token on EVERY callback (including partial chunks)
             # to catch the first moment content appears
-            ttft_data = self._safe_ttft_tracking(span_id, pop=False)
-            if ttft_data is not None and span_id is not None:
-                request_start_time, first_token_time = ttft_data
-                if first_token_time is None:
-                    # Check if this response contains actual content (first token)
-                    # Content can be text or function calls (tool calls)
-                    if self._has_response_content(llm_response):
-                        # First token detected - record the time
-                        first_token_time = time.time()
-                        self._ttft_tracking[span_id] = (
-                            request_start_time,
-                            first_token_time,
-                        )
+            request_start_time, first_token_time = self._safe_ttft_tracking(
+                span_id, pop=False
+            )
+            if (
+                first_token_time is None
+                and request_start_time is not None
+                and span_id is not None
+            ):
+                # Check if this response contains actual content (first token)
+                # Content can be text or function calls (tool calls)
+                if self._has_response_content(llm_response):
+                    # First token detected - record the time
+                    first_token_time = time.time()
+                    self._ttft_tracking[span_id] = (
+                        request_start_time,
+                        first_token_time,
+                    )
 
             # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
             # Note: We intentionally keep the TTFT tracking entry for partial chunks since ADK will call
@@ -322,12 +327,12 @@ class OpikTracer:
 
             # Calculate time-to-first-token and add to metadata
             metadata_update = {}
-            ttft_data = self._safe_ttft_tracking(span_id, pop=True)
-            if ttft_data is not None:
-                request_start_time, first_token_time = ttft_data
-                if first_token_time is not None:
-                    time_to_first_token = first_token_time - request_start_time
-                    metadata_update["time_to_first_token"] = time_to_first_token
+            request_start_time, first_token_time = self._safe_ttft_tracking(
+                span_id, pop=True
+            )
+            if first_token_time is not None and request_start_time is not None:
+                time_to_first_token = first_token_time - request_start_time
+                metadata_update["time_to_first_token"] = time_to_first_token
 
             # Merge with existing metadata
             if current_span.metadata is None:
@@ -356,10 +361,15 @@ class OpikTracer:
             self._last_model_output = output
 
         except Exception as e:
-            # Clean up TTFT tracking entry before re-logging error to prevent memory leak
-            if span_id is not None:
-                self._ttft_tracking.pop(span_id, None)
+            exception_occurred = True
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
+        finally:
+            # Clean up TTFT tracking entry on all exit paths to prevent memory leak
+            # Skip cleanup for partial chunks (normal return) since ADK will call again with final response
+            # For final responses, entry is already popped at line 325, so this is a no-op
+            # For errors (exception_occurred=True) or early returns, this ensures cleanup happens
+            if span_id is not None and (exception_occurred or not is_partial):
+                self._ttft_tracking.pop(span_id, None)
 
     def before_tool_callback(
         self,
