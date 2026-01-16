@@ -5,7 +5,7 @@ Tracks video saves with attachments.
 """
 
 import functools
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 import opik
 from opik.api_objects import attachment
@@ -15,7 +15,10 @@ if TYPE_CHECKING:
 
 
 def patch_videos_save(
-    operation: "GenerateVideosOperation", project_name: Optional[str]
+    operation: "GenerateVideosOperation",
+    project_name: Optional[str],
+    tags: Optional[List[str]],
+    metadata: Optional[Dict[str, Any]],
 ) -> None:
     """Patch save method on all videos in the operation response."""
     if not operation.response or not operation.response.generated_videos:
@@ -31,14 +34,18 @@ def patch_videos_save(
             continue
 
         original_save = video.save
-        decorator = _create_video_save_decorator(project_name=project_name)
+        decorator = _create_video_save_decorator(
+            project_name=project_name, tags=tags, metadata=metadata
+        )
         # Use object.__setattr__ to bypass Pydantic's attribute validation
         object.__setattr__(video, "save", decorator(original_save))
         object.__setattr__(video, "_opik_save_patched", True)
 
 
 def _create_video_save_decorator(
-    project_name: Optional[str] = None,
+    project_name: Optional[str],
+    tags: Optional[List[str]],
+    metadata: Optional[Dict[str, Any]],
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """Create a decorator that tracks Video.save calls."""
 
@@ -48,8 +55,8 @@ def _create_video_save_decorator(
             with opik.start_as_current_span(
                 name="video.save",
                 input={"file": str(file)},
-                metadata={"created_from": "genai", "type": "genai_videos"},
-                tags=["genai"],
+                metadata=metadata,
+                tags=tags,
                 type="general",
                 project_name=project_name,
             ) as span_data:

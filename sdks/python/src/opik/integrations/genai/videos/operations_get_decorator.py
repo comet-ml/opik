@@ -80,7 +80,12 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 output_data["error"] = str(output.error)
 
             if output.done and output.response:
-                video_save_decorator.patch_videos_save(output, self._project_name)
+                video_save_decorator.patch_videos_save(
+                    output,
+                    project_name=self._project_name,
+                    tags=current_span_data.tags,
+                    metadata=current_span_data.metadata,
+                )
 
         return arguments_helpers.EndSpanParameters(
             output=output_data,
