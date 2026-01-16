@@ -8,6 +8,7 @@ import {
   createMockHttpResponsePromise,
 } from "../../mockUtils";
 import * as OpikApi from "@/rest_api/api";
+import { PromptTemplateStructure } from "@/prompt/types";
 
 describe("Opik prompt operations", () => {
   let client: Opik;
@@ -120,6 +121,7 @@ describe("Opik prompt operations", () => {
             metadata: undefined,
             type: PromptType.MUSTACHE,
           },
+          templateStructure: PromptTemplateStructure.Text,
         },
         client.api.requestOptions
       );
@@ -213,6 +215,7 @@ describe("Opik prompt operations", () => {
             metadata: undefined,
             type: PromptType.MUSTACHE,
           },
+          templateStructure: PromptTemplateStructure.Text,
         },
         client.api.requestOptions
       );
