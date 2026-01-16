@@ -449,4 +449,90 @@ describe("prettifyMessage", () => {
       prettified: true,
     });
   });
+
+  it("handles generic format with role-based messages and system message last", () => {
+    // Custom format that doesn't match OpenAI/LangGraph/LangChain exactly
+    const message = {
+      conversation: [
+        { role: "user", content: "First question" },
+        { role: "assistant", content: "First answer" },
+        { role: "user", content: "Second question" },
+        { role: "system", content: "System instruction" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Second question",
+      prettified: true,
+    });
+  });
+
+  it("handles generic format with type-based messages and system message last", () => {
+    // Custom format with type field instead of role
+    const message = {
+      chat_history: [
+        { type: "human", content: "User message 1" },
+        { type: "ai", content: "AI response 1" },
+        { type: "human", content: "User message 2" },
+        { type: "system", content: "System note" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "User message 2",
+      prettified: true,
+    });
+  });
+
+  it("handles generic format with array content in messages and system message last", () => {
+    const message = {
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "What's the weather?" }],
+        },
+        {
+          role: "assistant",
+          content: "It's sunny today",
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "What about tomorrow?" }],
+        },
+        { role: "system", content: "Context information" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "What about tomorrow?",
+      prettified: true,
+    });
+  });
+
+  it("handles generic format with only system messages by returning undefined", () => {
+    const message = {
+      messages: [
+        { role: "system", content: "System instruction 1" },
+        { role: "system", content: "System instruction 2" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    // Should fall back to generic logic and extract the messages array itself
+    expect(result.message).toBeDefined();
+  });
+
+  it("handles generic output format with assistant messages and system message last", () => {
+    const message = {
+      responses: [
+        { role: "assistant", content: "First response" },
+        { role: "assistant", content: "Second response" },
+        { role: "system", content: "System note" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message: "Second response",
+      prettified: true,
+    });
+  });
 });

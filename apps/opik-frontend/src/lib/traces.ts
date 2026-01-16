@@ -485,6 +485,88 @@ const prettifyCustomMessagingLogic = (
   return undefined;
 };
 
+/**
+ * Extracts content from a generic message array by filtering for user/human/ai messages
+ * and ignoring system messages. This handles various message formats that don't match
+ * specific framework patterns.
+ */
+const extractMessageFromGenericArray = (
+  messages: unknown[],
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  if (!isArray(messages) || messages.length === 0) {
+    return undefined;
+  }
+
+  const relevantMessages: string[] = [];
+
+  for (const msg of messages) {
+    if (!isObject(msg)) continue;
+
+    // Check for role-based messages (OpenAI-style variants)
+    if ("role" in msg && "content" in msg) {
+      const role = msg.role;
+      const content = msg.content;
+
+      // For input, look for user messages; for output, look for assistant messages
+      if (config.type === "input" && role === "user") {
+        if (isString(content) && content.trim() !== "") {
+          relevantMessages.push(content);
+        } else if (isArray(content)) {
+          // Handle array content (e.g., with text/image parts)
+          const textContent = content.find(
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text),
+          );
+          if (textContent && "text" in textContent) {
+            relevantMessages.push(textContent.text);
+          }
+        }
+      } else if (config.type === "output" && role === "assistant") {
+        if (isString(content) && content.trim() !== "") {
+          relevantMessages.push(content);
+        }
+      }
+    }
+    // Check for type-based messages (LangChain/LangGraph-style variants)
+    else if ("type" in msg && "content" in msg) {
+      const type = msg.type;
+      const content = msg.content;
+
+      // For input, look for human messages; for output, look for ai messages
+      if (config.type === "input" && type === "human") {
+        if (isString(content) && content.trim() !== "") {
+          relevantMessages.push(content);
+        } else if (isArray(content)) {
+          // Handle array content
+          const textContent = content.find(
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text),
+          );
+          if (textContent && "text" in textContent) {
+            relevantMessages.push(textContent.text);
+          }
+        }
+      } else if (config.type === "output" && type === "ai") {
+        if (isString(content) && content.trim() !== "") {
+          relevantMessages.push(content);
+        }
+      }
+    }
+  }
+
+  // Return the last relevant message found
+  return relevantMessages.length > 0 ? last(relevantMessages) : undefined;
+};
+
 const prettifyGenericLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -530,6 +612,17 @@ const prettifyGenericLogic = (
     return unwrappedMessage;
   }
 
+  // Check if unwrappedMessage is an array of messages (after unwrapping single-key objects)
+  if (isArray(unwrappedMessage)) {
+    const extractedMessage = extractMessageFromGenericArray(
+      unwrappedMessage,
+      config,
+    );
+    if (extractedMessage) {
+      return extractedMessage;
+    }
+  }
+
   if (isObject(unwrappedMessage)) {
     if (Object.keys(unwrappedMessage).length === 1) {
       const value = get(unwrappedMessage, Object.keys(unwrappedMessage)[0]);
@@ -537,11 +630,27 @@ const prettifyGenericLogic = (
       if (isString(value)) {
         return value;
       }
+
+      // Handle message arrays with role/type fields
+      if (isArray(value)) {
+        const extractedMessage = extractMessageFromGenericArray(value, config);
+        if (extractedMessage) {
+          return extractedMessage;
+        }
+      }
     } else {
       for (const key of PREDEFINED_KEYS_MAP[config.type]) {
         const value = get(unwrappedMessage, key);
         if (isString(value)) {
           return value;
+        }
+
+        // Handle message arrays with role/type fields
+        if (isArray(value)) {
+          const extractedMessage = extractMessageFromGenericArray(value, config);
+          if (extractedMessage) {
+            return extractedMessage;
+          }
         }
       }
     }
