@@ -1086,7 +1086,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       const metadataIds = metadataMainColumnData.map((col) => col.id);
 
       const newScoresOrder = newOrder.filter((id) => scoresIds.includes(id));
-      const newMetadataOrder = newOrder.filter((id) => metadataIds.includes(id));
+      const newMetadataOrder = newOrder.filter((id) =>
+        metadataIds.includes(id),
+      );
 
       setScoresColumnsOrder(newScoresOrder);
       setMetadataMainColumnOrder(newMetadataOrder);
