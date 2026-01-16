@@ -119,7 +119,8 @@ const DatasetExportPanel: React.FC = () => {
         </div>
       </CardHeader>
 
-      {isPanelExpanded && (
+      {/* Always render ExportJobItem components for polling, but only show when expanded */}
+      <div className={isPanelExpanded ? "" : "hidden"}>
         <CardContent className="px-3 pb-2 pt-0">
           <div className="max-h-48 overflow-y-auto">
             {activeJobs.map((jobInfo) => (
@@ -127,7 +128,7 @@ const DatasetExportPanel: React.FC = () => {
             ))}
           </div>
         </CardContent>
-      )}
+      </div>
 
       <ConfirmDialog
         open={showCloseConfirm}

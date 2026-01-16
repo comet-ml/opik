@@ -26,14 +26,17 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   const { toast } = useToast();
 
   // Poll for job status updates (every 5 seconds for PENDING/PROCESSING jobs)
-  // Also enable for failed jobs that haven't been viewed so we can refetch after marking as viewed
+  // Also enable for completed jobs to ensure we capture the status change
+  // And for failed jobs that haven't been viewed so we can refetch after marking as viewed
   const { data: updatedJob } = useDatasetExportJob(
     {
       jobId: job.id,
     },
     {
       enabled:
-        isJobLoading(job.status) || (isJobFailed(job.status) && !job.viewed_at),
+        isJobLoading(job.status) ||
+        isJobCompleted(job.status) ||
+        (isJobFailed(job.status) && !job.viewed_at),
     },
   );
 
