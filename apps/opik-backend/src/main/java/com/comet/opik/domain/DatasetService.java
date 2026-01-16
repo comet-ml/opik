@@ -835,11 +835,11 @@ class DatasetServiceImpl implements DatasetService {
             var dao = handle.attach(DatasetDAO.class);
             int offset = (page - 1) * size;
 
-            // Use null visibility to return all datasets (not just public ones)
-            long count = dao.findCount(workspaceId, name, false, false, null, null, Map.of());
-            log.info("Found {} datasets for workspace ID '{}'", count, workspaceId);
-            List<Dataset> datasets = dao.find(size, offset, workspaceId, name, false, false, "", null, null, Map.of());
-            log.info("Retrieved {} datasets for workspace ID '{}'", datasets.size(), workspaceId);
+            // Use PUBLIC visibility to return only public datasets
+            long count = dao.findCount(workspaceId, name, false, false, Visibility.PUBLIC, null, Map.of());
+            log.info("Found {} public datasets for workspace ID '{}'", count, workspaceId);
+            List<Dataset> datasets = dao.find(size, offset, workspaceId, name, false, false, "", Visibility.PUBLIC, null, Map.of());
+            log.info("Retrieved {} public datasets for workspace ID '{}'", datasets.size(), workspaceId);
 
             List<Dataset> enrichedDatasets = enrichDatasetWithAdditionalInformation(datasets);
 
