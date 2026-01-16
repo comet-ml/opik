@@ -192,3 +192,26 @@ export interface DatasetExpansionResponse {
   total_generated: number;
   generation_time: string;
 }
+
+export enum DATASET_EXPORT_STATUS {
+  PENDING = "PENDING",
+  PROCESSING = "PROCESSING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+}
+
+export interface DatasetExportJob {
+  id: string;
+  dataset_id: string;
+  dataset_name?: string;
+  status: DATASET_EXPORT_STATUS;
+  file_path?: string;
+  download_url?: string;
+  error_message?: string;
+  created_at: string;
+  last_updated_at: string;
+  expires_at?: string;
+  viewed_at?: string;
+  created_by?: string;
+  last_updated_by?: string;
+}

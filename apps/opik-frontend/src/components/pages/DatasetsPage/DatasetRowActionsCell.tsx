@@ -5,14 +5,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Download, MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dataset } from "@/types/datasets";
 import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
+import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
+import {
+  useAddExportJob,
+  useSetPanelExpanded,
+} from "@/store/DatasetExportStore";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { useToast } from "@/components/ui/use-toast";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const DatasetRowActionsCell: React.FunctionComponent<
   CellContext<Dataset, unknown>
@@ -21,13 +29,47 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   const dataset = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
-  const { mutate } = useDatasetDeleteMutation();
+  const { mutate: deleteDataset } = useDatasetDeleteMutation();
+  const { mutate: startExport, isPending: isExportStarting } =
+    useStartDatasetExportMutation();
+  const addExportJob = useAddExportJob();
+  const setPanelExpanded = useSetPanelExpanded();
+  const { toast } = useToast();
+  const isDatasetExportEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
+  );
 
   const deleteDatasetHandler = useCallback(() => {
-    mutate({
+    deleteDataset({
       datasetId: dataset.id,
     });
-  }, [dataset.id, mutate]);
+  }, [dataset.id, deleteDataset]);
+
+  const downloadDatasetHandler = useCallback(() => {
+    startExport(
+      { datasetId: dataset.id },
+      {
+        onSuccess: (job) => {
+          addExportJob(job, dataset.name);
+          setPanelExpanded(true);
+        },
+        onError: () => {
+          toast({
+            title: "Export failed",
+            description: "Failed to start dataset export. Please try again.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }, [
+    dataset.id,
+    dataset.name,
+    startExport,
+    addExportJob,
+    setPanelExpanded,
+    toast,
+  ]);
 
   return (
     <CellWrapper
@@ -69,6 +111,15 @@ export const DatasetRowActionsCell: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
+          {isDatasetExportEnabled && (
+            <DropdownMenuItem
+              onClick={downloadDatasetHandler}
+              disabled={isExportStarting}
+            >
+              <Download className="mr-2 size-4" />
+              Download
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={() => {
               setOpen(1);
