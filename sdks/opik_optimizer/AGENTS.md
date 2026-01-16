@@ -3,7 +3,7 @@
 ## Rule References
 
 - Repo guardrails: `../../.cursor/rules/` (`project-structure.mdc`, `clean-code.mdc`, `git-workflow.mdc`, `test-workflow.mdc`).
-- Optimizer SDK rules: `.cursor/rules/` (`architecture.mdc`, `code-structure.mdc`, `dependencies.mdc`, `documentation-style.mdc`, `error-handling.mdc`, `logging.mdc`, `test-best-practices.mdc`, `test-organization.mdc`).
+- Optimizer SDK rules: `.cursor/rules/` (`algorithm-structure.mdc`, `architecture.mdc`, `code-structure.mdc`, `dependencies.mdc`, `documentation-style.mdc`, `error-handling.mdc`, `logging.mdc`, `test-best-practices.mdc`, `test-organization.mdc`).
 
 ## Architecture & Purpose
 
@@ -15,6 +15,7 @@
 ## Project Structure & Module Organization
 
 - Source lives in `src/opik_optimizer/`, with shared components (`base_optimizer.py`, `optimization_result.py`, `optimizable_agent.py`) and optimizer packages (for example `evolutionary_optimizer/`, `meta_prompt_optimizer/`).
+- **All optimizer algorithms MUST follow the standardized structure** defined in `.cursor/rules/algorithm-structure.mdc`. See `algorithms/template_optimizer/` for a complete working template.
 - Shared utilities sit under `optimization_config/`, `utils/`, `metrics/`, `mcp_utils/`, and `integrations/`.
 - Tests are in `tests/`, split into `tests/unit/` for fast, deterministic coverage and `tests/e2e/optimizers/` for higher-level optimizer runs.
 - Examples and runnable scripts live in `scripts/`; `benchmarks/` is a standalone harness for large optimizer runs.

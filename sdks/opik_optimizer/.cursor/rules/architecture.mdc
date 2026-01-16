@@ -17,7 +17,16 @@ The optimizer SDK layers iterative search loops on top of Opik's evaluation stac
 
 ## Package Layout
 
-Each algorithm sits in its own package (`evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `mipro_optimizer/`, `parameter_optimizer/`). Keep algorithm-specific helpers, prompts, and operators inside the corresponding package. Cross-cutting utilities belong at the root (`optimization_config/`, `utils/`, `mcp_utils/`, `metrics/`). Production code must never import from `tests/`.
+Each algorithm sits in its own package under `algorithms/` (`evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `mipro_optimizer/`, `parameter_optimizer/`).
+
+**All algorithms MUST follow the standardized structure** (see `code-structure.mdc` for details):
+- Required files: `__init__.py`, `{algorithm_name}.py`, `helpers.py`, `types.py`, `prompts.py`, `reporting.py`
+- Optional files: `adapter.py` (if needed), `ops/` directory (if operations are complex)
+- Algorithm-specific domain files are allowed when they represent core concepts
+
+Keep algorithm-specific helpers, prompts, and operators inside the corresponding package. Cross-cutting utilities belong at the root (`optimization_config/`, `utils/`, `metrics/`). Production code must never import from `tests/`.
+
+Reference `algorithms/template_optimizer/` for the complete standardized structure template.
 
 ## Execution Flow
 
@@ -72,8 +81,24 @@ class BaseOptimizer:
 
 ## Adding a New Optimizer
 
-1. Create a new package under `src/opik_optimizer/` with an `__init__.py` that re-exports the public class.
-2. Subclass `BaseOptimizer` and implement `optimize_prompt` (and optionally `optimize_mcp`). Extract helper modules for mutation, selection, or reporting to keep the main loop readable.
-3. Reuse `reporting_utils` context managers for console output and populate `OptimizationResult` with baseline, final metrics, metadata, and counters.
-4. Document new configuration knobs in `optimization_config/` and update README/docs/notebooks.
-5. Add unit coverage for helper modules plus a lightweight e2e test under `tests/e2e/optimizers/` running on a tiny dataset to prove the interface contract.
+1. **Copy the template**: Start from `algorithms/template_optimizer/` as a base structure
+2. **Create package**: Create new package under `src/opik_optimizer/algorithms/` following the standardized structure:
+   - Required: `__init__.py`, `{algorithm_name}.py`, `helpers.py`, `types.py`, `prompts.py`, `reporting.py`
+   - Optional: `adapter.py`, `ops/` directory as needed
+3. **Implement BaseOptimizer hooks**:
+   - **Required**: `run_optimization(context) -> AlgorithmResult` - core algorithm logic
+   - **Optional**: `pre_optimization(context)`, `get_config(context)`, `get_metadata(context)`
+4. **Follow structure standards**:
+   - Put utility functions in `helpers.py`
+   - Put type definitions in `types.py`
+   - Put LLM prompt templates in `prompts.py` (export as `DEFAULT_PROMPTS`)
+   - Put reporting utilities in `reporting.py`
+   - Put discrete operations in `ops/` if complex enough
+5. **Reuse framework features**:
+   - Use `self.evaluate(prompts)` for candidate evaluation (handles trial tracking, early stop)
+   - Use `reporting_utils` context managers for console output
+   - Populate `AlgorithmResult` with best prompts, score, and history
+6. **Documentation**: Update README/docs/notebooks with new optimizer
+7. **Testing**: Add unit coverage for helper modules plus lightweight e2e test under `tests/e2e/optimizers/`
+
+See `algorithms/template_optimizer/README.md` for detailed structure documentation.
