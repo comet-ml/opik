@@ -728,74 +728,74 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         <if(truncate)>
                             """
             + SMART_INPUT_TRUNCATION + """
-                             as input
-                        <else> input <endif>,
-                        <if(truncate)>
-                            """
+                         as input
+                    <else> input <endif>,
+                    <if(truncate)>
+                        """
             + SMART_OUTPUT_TRUNCATION + """
-                             as output
-                        <else> output <endif>,
-                        metadata,
-                        visibility_mode,
-                        output_keys
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-                LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
-                LEFT JOIN comments_final AS c ON t.id = c.entity_id
-                LEFT JOIN (
-                SELECT
-                    trace_id,
-                    SUM(total_estimated_cost) AS total_estimated_cost,
-                    sumMap(usage) AS usage
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                GROUP BY workspace_id, trace_id
-                ) s ON t.id = s.trace_id
-                GROUP BY
-                    t.id,
-                    t.input,
-                    t.output,
-                    t.metadata,
-                    t.duration,
-                    t.visibility_mode,
-                    s.total_estimated_cost,
-                    s.usage
-            ) AS tfs ON ei.trace_id = tfs.id
-            GROUP BY
-                ei.dataset_item_id,
-                :datasetId,
-                COALESCE(di.data, map()),
-                di.trace_id,
-                di.span_id,
-                di.source,
-                di.tags,
-                di.created_at,
-                di.last_updated_at,
-                di.created_by,
-                di.last_updated_by
-            <if(dataset_item_filters || search_filter)>
-            HAVING 1=1
-            <if(dataset_item_filters)>
-            AND <dataset_item_filters>
-            <endif>
-            <if(search_filter)>
-            AND <search_filter>
-            <endif>
-            <endif>
-            <if(sort_fields)>
-            ORDER BY <sort_fields>
-            <else>
-            ORDER BY id DESC, last_updated_at DESC
-            <endif>
-            LIMIT :limit OFFSET :offset
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                                     as output
+                                <else> output <endif>,
+                                metadata,
+                                visibility_mode,
+                                output_keys
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                            AND id IN (SELECT trace_id FROM experiment_items_final)
+                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) AS t
+                        LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
+                        LEFT JOIN comments_final AS c ON t.id = c.entity_id
+                        LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            SUM(total_estimated_cost) AS total_estimated_cost,
+                            sumMap(usage) AS usage
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                        GROUP BY workspace_id, trace_id
+                        ) s ON t.id = s.trace_id
+                        GROUP BY
+                            t.id,
+                            t.input,
+                            t.output,
+                            t.metadata,
+                            t.duration,
+                            t.visibility_mode,
+                            s.total_estimated_cost,
+                            s.usage
+                    ) AS tfs ON ei.trace_id = tfs.id
+                    GROUP BY
+                        ei.dataset_item_id,
+                        :datasetId,
+                        COALESCE(di.data, map()),
+                        di.trace_id,
+                        di.span_id,
+                        di.source,
+                        di.tags,
+                        di.created_at,
+                        di.last_updated_at,
+                        di.created_by,
+                        di.last_updated_by
+                    <if(dataset_item_filters || search_filter)>
+                    HAVING 1=1
+                    <if(dataset_item_filters)>
+                    AND <dataset_item_filters>
+                    <endif>
+                    <if(search_filter)>
+                    AND <search_filter>
+                    <endif>
+                    <endif>
+                    <if(sort_fields)>
+                    ORDER BY <sort_fields>
+                    <else>
+                    ORDER BY id DESC, last_updated_at DESC
+                    <endif>
+                    LIMIT :limit OFFSET :offset
+                    SETTINGS log_comment = '<log_comment>'
+                    ;
+                    """;
 
     public static final String DATASET_ITEMS = "dataset_items";
     public static final String CLICKHOUSE = "Clickhouse";

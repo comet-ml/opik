@@ -279,46 +279,46 @@ class ExperimentItemDAO {
                         <if(truncate)>
                             """
             + SMART_INPUT_TRUNCATION + """
-                             as input
-                        <else> input <endif>,
-                        <if(truncate)>
-                            """
+                         as input
+                    <else> input <endif>,
+                    <if(truncate)>
+                        """
             + SMART_OUTPUT_TRUNCATION + """
-                             as output
-                        <else> output <endif>,
-                        visibility_mode,
-                        output_keys
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_scope)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-                LEFT JOIN (
-                    SELECT
-                        trace_id,
-                        sum(total_estimated_cost) AS total_estimated_cost,
-                        sumMap(usage) AS usage
-                    FROM spans final
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                    GROUP BY workspace_id, project_id, trace_id
-                ) s ON s.trace_id = t.id
-                LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
-                LEFT JOIN comments_final AS c ON t.id = c.entity_id
-                GROUP BY
-                    t.id,
-                    t.input,
-                    t.output,
-                    t.duration,
-                    t.visibility_mode,
-                    s.total_estimated_cost,
-                    s.usage
-            ) AS tfs ON ei.trace_id = tfs.id
-            ORDER BY ei.experiment_id DESC
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                                     as output
+                                <else> output <endif>,
+                                visibility_mode,
+                                output_keys
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                            AND id IN (SELECT trace_id FROM experiment_items_scope)
+                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) AS t
+                        LEFT JOIN (
+                            SELECT
+                                trace_id,
+                                sum(total_estimated_cost) AS total_estimated_cost,
+                                sumMap(usage) AS usage
+                            FROM spans final
+                            WHERE workspace_id = :workspace_id
+                            AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                            GROUP BY workspace_id, project_id, trace_id
+                        ) s ON s.trace_id = t.id
+                        LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
+                        LEFT JOIN comments_final AS c ON t.id = c.entity_id
+                        GROUP BY
+                            t.id,
+                            t.input,
+                            t.output,
+                            t.duration,
+                            t.visibility_mode,
+                            s.total_estimated_cost,
+                            s.usage
+                    ) AS tfs ON ei.trace_id = tfs.id
+                    ORDER BY ei.experiment_id DESC
+                    SETTINGS log_comment = '<log_comment>'
+                    ;
+                    """;
 
     private static final String DELETE = """
             DELETE FROM experiment_items

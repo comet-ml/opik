@@ -499,26 +499,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     <else> input <endif>,
                     <if(truncate)>
                         """
-            + SMART_OUTPUT_TRUNCATION + """
-                         as output
-                    <else> output <endif>
-                FROM (
-                    SELECT
-                        id,
-                        input,
-                        output,
-                        output_keys
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-            ) AS tfs ON ei.trace_id = tfs.id
-            <if(search)>
-            WHERE multiSearchAnyCaseInsensitive(toString(COALESCE(di.data, map())), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(tfs.input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(tfs.output), :searchTerms)
-            <endif>
-            """;
+            + SMART_OUTPUT_TRUNCATION
+            + """
+                                 as output
+                            <else> output <endif>
+                        FROM (
+                            SELECT
+                                id,
+                                input,
+                                output,
+                                output_keys
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                            AND id IN (SELECT trace_id FROM experiment_items_final)
+                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) AS t
+                    ) AS tfs ON ei.trace_id = tfs.id
+                    <if(search)>
+                    WHERE multiSearchAnyCaseInsensitive(toString(COALESCE(di.data, map())), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(tfs.input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(tfs.output), :searchTerms)
+                    <endif>
+                    """;
 
     // Query to extract columns from trace output for experiment items view
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
@@ -880,70 +881,71 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         <if(truncate)>
                             """
             + SMART_INPUT_TRUNCATION + """
-                             as input
-                        <else> input <endif>,
-                        <if(truncate)>
-                            """
-            + SMART_OUTPUT_TRUNCATION + """
-                             as output
-                        <else> output <endif>,
-                        metadata,
-                        visibility_mode,
-                        output_keys
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-                LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
-                LEFT JOIN comments_final AS c ON t.id = c.entity_id
-                LEFT JOIN (
-                SELECT
-                    trace_id,
-                    SUM(total_estimated_cost) AS total_estimated_cost,
-                    sumMap(usage) AS usage
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                GROUP BY workspace_id, trace_id
-                ) s ON t.id = s.trace_id
-                GROUP BY
-                    t.id,
-                    t.input,
-                    t.output,
-                    t.metadata,
-                    t.duration,
-                    t.visibility_mode,
-                    s.total_estimated_cost,
-                    s.usage
-            ) AS tfs ON ei.trace_id = tfs.id
-            GROUP BY
-                ei.dataset_item_id,
-                :datasetId,
-                COALESCE(di.data, map()),
-                di.trace_id,
-                di.span_id,
-                di.source,
-                di.tags,
-                di.item_created_at,
-                di.item_last_updated_at,
-                di.item_created_by,
-                di.item_last_updated_by
-            <if(search)>
-            HAVING multiSearchAnyCaseInsensitive(toString(data_final), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(output), :searchTerms)
-            <endif>
-            <if(filters)>
-            HAVING <filters>
-            <endif>
-            <if(sorting)>
-            ORDER BY <sorting>
-            <else>
-            ORDER BY created_at DESC
-            <endif>
-            LIMIT :limit
-            OFFSET :offset
-            """;
+                         as input
+                    <else> input <endif>,
+                    <if(truncate)>
+                        """
+            + SMART_OUTPUT_TRUNCATION
+            + """
+                                     as output
+                                <else> output <endif>,
+                                metadata,
+                                visibility_mode,
+                                output_keys
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                            AND id IN (SELECT trace_id FROM experiment_items_final)
+                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) AS t
+                        LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
+                        LEFT JOIN comments_final AS c ON t.id = c.entity_id
+                        LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            SUM(total_estimated_cost) AS total_estimated_cost,
+                            sumMap(usage) AS usage
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                        GROUP BY workspace_id, trace_id
+                        ) s ON t.id = s.trace_id
+                        GROUP BY
+                            t.id,
+                            t.input,
+                            t.output,
+                            t.metadata,
+                            t.duration,
+                            t.visibility_mode,
+                            s.total_estimated_cost,
+                            s.usage
+                    ) AS tfs ON ei.trace_id = tfs.id
+                    GROUP BY
+                        ei.dataset_item_id,
+                        :datasetId,
+                        COALESCE(di.data, map()),
+                        di.trace_id,
+                        di.span_id,
+                        di.source,
+                        di.tags,
+                        di.item_created_at,
+                        di.item_last_updated_at,
+                        di.item_created_by,
+                        di.item_last_updated_by
+                    <if(search)>
+                    HAVING multiSearchAnyCaseInsensitive(toString(data_final), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(output), :searchTerms)
+                    <endif>
+                    <if(filters)>
+                    HAVING <filters>
+                    <endif>
+                    <if(sorting)>
+                    ORDER BY <sorting>
+                    <else>
+                    ORDER BY created_at DESC
+                    <endif>
+                    LIMIT :limit
+                    OFFSET :offset
+                    """;
 
     // Batch insert items
     private static final String BATCH_INSERT_ITEMS = """
