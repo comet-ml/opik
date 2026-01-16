@@ -30,35 +30,55 @@ The test suite is pytest-based and aims to keep optimizers deterministic, fast, 
 - End-to-end tests may require provider credentials (for example, `OPENAI_API_KEY`). Guard them with explicit failure messages so contributors understand the prerequisite before running the suite.
 - When adding a new e2e test, document any required environment variables in the test docstring.
 
-## Optimizer Setup Flow Tests
+## Test Organization
 
-The `tests/unit/optimizers/test_optimizer_setup_flow.py` file contains comprehensive tests for the common setup logic shared across all optimizers. These tests ensure consistent behavior and provide a safety net for refactoring.
+Tests are organized per-optimizer in subdirectories with shared logic in root-level files:
 
-### When to Update These Tests
-
-- **Adding a new optimizer**: Add to `OPTIMIZERS_WITH_OPTIMIZE_PROMPT` list in the test file
-- **Changing validation logic**: Update `TestInputValidation` tests
-- **Changing result format**: Update `TestFullOptimizationFlow` tests
-- **Changing dataset selection**: Update `TestEvaluationDatasetSelection` tests
-- **Changing prompt normalization**: Update `TestPromptNormalization` tests
-
-### Using Parameterized Tests
-
-Use parameterized tests to cover all optimizers consistently:
-
-```python
-@pytest.mark.parametrize("optimizer_class", OPTIMIZERS_WITH_OPTIMIZE_PROMPT)
-def test_behavior(self, optimizer_class, mock_full_optimization_flow, ...):
-    mocks = mock_full_optimization_flow()
-    optimizer = optimizer_class(model="gpt-4o-mini", verbose=0, seed=42)
-    # Test the behavior
+```text
+tests/unit/optimizers/
+├── test_base_optimizer.py       # Shared BaseOptimizer tests
+├── test_prompt_factory.py       # prompt_overrides feature tests
+├── evolutionary/                # EvolutionaryOptimizer tests
+├── few_shot/                    # FewShotBayesianOptimizer tests
+├── gepa_optimizer/              # GEPAOptimizer tests
+├── hierarchical/                # HierarchicalReflectiveOptimizer tests
+├── meta_prompt/                 # MetaPromptOptimizer tests
+└── parameter/                   # ParameterOptimizer tests
 ```
 
-### Key Fixtures
+### When to Update Tests
 
-- `mock_full_optimization_flow`: Comprehensive mock for full optimization testing
-- `mock_optimization_context`: Mock Opik optimization creation and updates
+- **Adding a new optimizer**: Create `tests/unit/optimizers/<name>/test_<name>.py` with standard test classes
+- **Changing validation logic**: Update `TestValidateOptimizationInputs` in `test_base_optimizer.py`
+- **Changing result format**: Update `TestSkipAndResultHelpers` or optimizer-specific result tests
+- **Changing dataset selection**: Update `TestSelectEvaluationDataset` in `test_base_optimizer.py`
+- **Changing prompt normalization**: Update `TestNormalizePromptInput` in `test_base_optimizer.py`
+
+### Standard Test Classes Per Optimizer
+
+Each optimizer should have these test classes in its main test file:
+
+```python
+class TestOptimizerInit:
+    """Initialization with default and custom parameters."""
+
+class TestOptimizerOptimizePrompt:
+    """optimize_prompt behavior: prompt normalization, result format."""
+
+class TestOptimizerEarlyStop:
+    """Early-stop when baseline meets threshold."""
+```
+
+### Key Fixtures (from conftest.py)
+
+- `mock_llm_call`: Mock synchronous LLM calls with configurable responses
+- `mock_opik_client`: Mock Opik client for optimization tracking
+- `mock_dataset`: Factory for mock datasets with configurable items
+- `simple_chat_prompt`: Basic ChatPrompt fixture
+- `multimodal_chat_prompt`: ChatPrompt with image content parts
+- `chat_prompt_with_tools`: ChatPrompt with tool definitions
 - `mock_task_evaluator`: Mock task evaluator with configurable scores
+- `mock_full_optimization_flow`: Comprehensive mock for full optimization testing
 - `optimizer_test_params`: Standard minimal test parameters
 
 ### Documentation

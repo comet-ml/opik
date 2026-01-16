@@ -39,17 +39,13 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
         def round_start(self, round_number: int) -> None:
             if verbose >= 1:
                 console.print(
-                    Text(
-                        f"│ - Starting optimization round {round_number + 1} of {max_rounds}"
-                    )
+                    Text(f"│ - Starting round {round_number + 1} of {max_rounds}")
                 )
 
         def round_end(self, round_number: int, score: float, best_score: float) -> None:
             if verbose >= 1:
                 console.print(
-                    Text(
-                        f"│    Completed optimization round {round_number + 1} of {max_rounds}"
-                    )
+                    Text(f"│    Completed round {round_number + 1} of {max_rounds}")
                 )
                 if best_score == 0 and score == 0:
                     console.print(

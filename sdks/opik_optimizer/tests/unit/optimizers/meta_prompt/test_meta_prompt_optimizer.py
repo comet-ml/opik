@@ -94,7 +94,47 @@ class TestMetaPromptOptimizerOptimizePrompt:
 
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, dict)
-        assert isinstance(result.initial_prompt, dict)
+
+    def test_sets_reporter_during_optimization(
+        self,
+        mock_full_optimization_flow,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mock_full_optimization_flow(
+            llm_response="Improved prompt",
+            evaluation_scores=[0.5, 0.8],
+        )
+
+        optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompt = ChatPrompt(system="Test", user="{question}")
+        dataset = _make_dataset()
+
+        events: list[str] = []
+
+        orig_set = optimizer._set_reporter
+        orig_clear = optimizer._clear_reporter
+
+        def tracking_set(reporter):
+            events.append("set")
+            orig_set(reporter)
+
+        def tracking_clear():
+            events.append("clear")
+            orig_clear()
+
+        monkeypatch.setattr(optimizer, "_set_reporter", tracking_set)
+        monkeypatch.setattr(optimizer, "_clear_reporter", tracking_clear)
+
+        optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+            n_samples=2,
+        )
+
+        assert events == ["set", "clear"]
+        assert optimizer._reporter is None
 
     def test_invalid_prompt_raises_error(
         self,
@@ -139,6 +179,145 @@ class TestMetaPromptOptimizerOptimizePrompt:
         assert isinstance(result.score, (int, float))
         assert hasattr(result, "history")
         assert hasattr(result, "details")
+
+
+class TestMetaPromptOptimizerMultiPrompt:
+    """Tests for multi-prompt (bundle) optimization."""
+
+    def test_dict_prompt_preserves_all_keys(
+        self,
+        mock_full_optimization_flow,
+    ) -> None:
+        """Verify multi-prompt optimization preserves all prompt keys in result."""
+        mock_full_optimization_flow(
+            llm_response="Improved prompt",
+            evaluation_scores=[0.5, 0.8],
+        )
+
+        optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompts = {
+            "system_prompt": ChatPrompt(
+                name="system_prompt", system="System", user="{question}"
+            ),
+            "assistant_prompt": ChatPrompt(
+                name="assistant_prompt", system="Assistant", user="{input}"
+            ),
+            "reviewer_prompt": ChatPrompt(
+                name="reviewer_prompt", system="Reviewer", user="{text}"
+            ),
+        }
+        dataset = _make_dataset()
+
+        result = optimizer.optimize_prompt(
+            prompt=prompts,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+            n_samples=2,
+        )
+
+        assert isinstance(result.prompt, dict)
+        # Result should have the same keys as input (or a subset if optimization selected fewer)
+        assert isinstance(result.initial_prompt, dict)
+        # Initial prompt should preserve all original keys
+        assert set(result.initial_prompt.keys()) == set(prompts.keys())
+
+    def test_dict_prompt_each_value_is_chat_prompt(
+        self,
+        mock_full_optimization_flow,
+    ) -> None:
+        """Verify each prompt in multi-prompt result is a ChatPrompt."""
+        mock_full_optimization_flow(
+            llm_response="Improved prompt",
+            evaluation_scores=[0.5, 0.8],
+        )
+
+        optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompts = {
+            "main": ChatPrompt(name="main", system="Main", user="{question}"),
+            "helper": ChatPrompt(name="helper", system="Helper", user="{context}"),
+        }
+        dataset = _make_dataset()
+
+        result = optimizer.optimize_prompt(
+            prompt=prompts,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+            n_samples=2,
+        )
+
+        assert isinstance(result.prompt, dict)
+        for key, value in result.prompt.items():
+            assert isinstance(value, ChatPrompt), f"Prompt {key} should be ChatPrompt"
+
+        assert isinstance(result.initial_prompt, dict)
+        for key, value in result.initial_prompt.items():
+            assert isinstance(value, ChatPrompt), (
+                f"Initial prompt {key} should be ChatPrompt"
+            )
+
+    def test_dict_prompt_result_has_score(
+        self,
+        mock_full_optimization_flow,
+    ) -> None:
+        """Verify multi-prompt optimization returns proper score."""
+        mock_full_optimization_flow(
+            llm_response="Improved prompt",
+            evaluation_scores=[0.4, 0.9],  # baseline=0.4, improved=0.9
+        )
+
+        optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompts = {
+            "main": ChatPrompt(name="main", system="Main", user="{question}"),
+            "secondary": ChatPrompt(
+                name="secondary", system="Secondary", user="{input}"
+            ),
+        }
+        dataset = _make_dataset()
+
+        result = optimizer.optimize_prompt(
+            prompt=prompts,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+            n_samples=2,
+        )
+
+        assert isinstance(result.score, (int, float))
+        assert result.score >= 0
+        assert result.initial_score is not None
+        assert isinstance(result.initial_score, (int, float))
+
+    def test_dict_prompt_result_has_details(
+        self,
+        mock_full_optimization_flow,
+    ) -> None:
+        """Verify multi-prompt optimization result contains proper details."""
+        mock_full_optimization_flow(
+            llm_response="Improved prompt",
+            evaluation_scores=[0.5, 0.8],
+        )
+
+        optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompts = {
+            "agent1": ChatPrompt(name="agent1", system="Agent 1", user="{question}"),
+            "agent2": ChatPrompt(name="agent2", system="Agent 2", user="{input}"),
+        }
+        dataset = _make_dataset()
+
+        result = optimizer.optimize_prompt(
+            prompt=prompts,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+            n_samples=2,
+        )
+
+        assert result.optimizer == "MetaPromptOptimizer"
+        assert hasattr(result, "details")
+        assert isinstance(result.details, dict)
+        assert hasattr(result, "history")
 
 
 class TestMetaPromptOptimizerEarlyStop:

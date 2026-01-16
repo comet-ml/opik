@@ -3,10 +3,10 @@ import json
 import os
 import copy
 
-from opik.opik_context import update_current_trace
-
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
+from opik.opik_context import update_current_trace
+from .constants import resolve_project_name
 from . import _throttle
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -54,7 +54,7 @@ class OptimizableAgent:
             prompt: a chat prompt
             project_name: Optional project name for Opik tracking
         """
-        self.project_name = project_name or "Default Project"
+        self.project_name = resolve_project_name(project_name)
         self.init_llm()
         self.init_agent(prompt)
 

@@ -232,13 +232,13 @@ def start_evolutionary_algo(verbose: int = 1) -> Any:
     class Reporter:
         def start_gen(self, gen: int, num_gens: int) -> None:
             if verbose >= 1:
-                console.print(Text(f"│   Starting generation {gen} of {num_gens}"))
+                console.print(Text(f"│   Starting round {gen} of {num_gens}"))
 
         def restart_population(self, restart_generation_nb: int) -> None:
             if verbose >= 1:
                 console.print(
                     Text(
-                        f"│      Re-creating the population as we have not made progress in {restart_generation_nb} generations."
+                        f"│      Re-creating the population as we have not made progress in {restart_generation_nb} rounds."
                     )
                 )
 

@@ -16,6 +16,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
     MetaPromptOptimizer,
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops import candidate_ops
+from opik_optimizer import task_evaluator
 
 
 pytestmark = pytest.mark.usefixtures(
@@ -63,7 +64,13 @@ def test_synthesis_prompts_called_on_schedule(
     monkeypatch.setattr(
         candidate_ops, "generate_synthesis_prompts", fake_generate_synthesis_prompts
     )
-    monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.1)
+
+    # Mock task_evaluator.evaluate to return a fixed score
+    monkeypatch.setattr(
+        task_evaluator,
+        "evaluate",
+        lambda **kwargs: 0.1,
+    )
 
     prompt = ChatPrompt(system="baseline", user="{question}")
 

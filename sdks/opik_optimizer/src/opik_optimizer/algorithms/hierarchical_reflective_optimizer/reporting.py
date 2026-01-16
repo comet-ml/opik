@@ -213,22 +213,18 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
         def round_start(self, round_number: int) -> None:
             if verbose >= 1:
                 console.print(
-                    Text(
-                        f"│ - Starting optimization round {round_number + 1} of {max_rounds}"
-                    )
+                    Text(f"│ - Starting round {round_number + 1} of {max_rounds}")
                 )
 
         def round_end(self, round_number: int, score: float, best_score: float) -> None:
             if verbose >= 1:
                 console.print(
-                    Text(
-                        f"│    Completed optimization round {round_number + 1} of {max_rounds}"
-                    )
+                    Text(f"│    Completed round {round_number + 1} of {max_rounds}")
                 )
                 if best_score == 0 and score == 0:
                     console.print(
                         Text(
-                            "│    No improvement in this optimization round - score is 0",
+                            "│    No improvement in this round - score is 0",
                             style="yellow",
                         )
                     )
@@ -250,7 +246,7 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
                 elif score <= best_score:
                     console.print(
                         Text(
-                            "│    No improvement in this optimization round",
+                            "│    No improvement in this round",
                             style="red",
                         )
                     )
@@ -484,13 +480,13 @@ def display_prompt_candidate_scoring_report(
 
 
 @contextmanager
-def display_optimization_iteration(iteration: int, verbose: int = 1) -> Iterator[Any]:
-    """Context manager to display progress for a single optimization iteration."""
+def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterator[Any]:
+    """Context manager to display progress for a single optimization round."""
     if verbose >= 1:
         console.print(Text("│"))
         console.print(Text("│"))
         console.print(
-            Text("│ ").append(Text(f"Iteration {iteration}", style="bold cyan"))
+            Text("│ ").append(Text(f"Round {round_index}", style="bold cyan"))
         )
 
     class Reporter:
@@ -500,7 +496,7 @@ def display_optimization_iteration(iteration: int, verbose: int = 1) -> Iterator
                     console.print(
                         Text("│ ").append(
                             Text(
-                                f"Iteration {iteration} complete - New best score: {best_score:.4f}",
+                                f"Round {round_index} complete - New best score: {best_score:.4f}",
                                 style="green",
                             )
                         )
@@ -509,7 +505,7 @@ def display_optimization_iteration(iteration: int, verbose: int = 1) -> Iterator
                     console.print(
                         Text("│ ").append(
                             Text(
-                                f"Iteration {iteration} complete - No improvement (best: {best_score:.4f})",
+                                f"Round {round_index} complete - No improvement (best: {best_score:.4f})",
                                 style="yellow",
                             )
                         )
@@ -730,7 +726,7 @@ def display_prompt_improvement(
 def display_iteration_improvement(
     improvement: float, current_score: float, best_score: float, verbose: int = 1
 ) -> None:
-    """Display the improvement result for a failure mode iteration."""
+    """Display the improvement result for a failure mode round."""
     if verbose < 1:
         return
 

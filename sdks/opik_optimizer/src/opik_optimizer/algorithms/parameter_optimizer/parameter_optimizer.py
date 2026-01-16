@@ -13,7 +13,7 @@ from optuna.trial import Trial, TrialState
 
 from opik import Dataset
 
-from ...base_optimizer import BaseOptimizer
+from ...base_optimizer import BaseOptimizer, OptimizationContext
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -93,7 +93,7 @@ class ParameterOptimizer(BaseOptimizer):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        project_name: str = "Optimization",
+        project_name: str | None = None,
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
@@ -105,6 +105,20 @@ class ParameterOptimizer(BaseOptimizer):
             "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
             "where parameter_space is a ParameterSearchSpace or dict defining the parameters to optimize."
         )
+
+    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
+        raise NotImplementedError(
+            "ParameterOptimizer does not use the standard run_optimization flow. "
+            "Use optimize_parameter() instead."
+        )
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer-specific configuration for display."""
+        return {
+            "optimizer": self.__class__.__name__,
+            "n_trials": self.default_n_trials,
+            "n_samples": context.n_samples,
+        }
 
     def optimize_parameter(
         self,
@@ -168,13 +182,8 @@ class ParameterOptimizer(BaseOptimizer):
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
 
-        # Normalize prompt to dict format
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            prompts: dict[str, chat_prompt.ChatPrompt] = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            prompts = prompt
-            is_single_prompt_optimization = False
+        # Normalize prompt input using base class helper
+        prompts, is_single_prompt_optimization = self._normalize_prompt_input(prompt)
 
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
@@ -195,9 +204,9 @@ class ParameterOptimizer(BaseOptimizer):
             experiment_config["validation_dataset"] = validation_dataset.name
             experiment_config["validation_dataset_id"] = validation_dataset.id
 
-        # Logic on which dataset to use for scoring
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
+        # Select evaluation dataset using base class helper
+        evaluation_dataset = self._select_evaluation_dataset(
+            dataset, validation_dataset
         )
 
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
@@ -231,21 +240,13 @@ class ParameterOptimizer(BaseOptimizer):
 
         metric_name = metric.__name__
 
-        # Create optimization run
-        optimization = self.opik_client.create_optimization(
-            dataset_name=dataset.name,
-            objective_name=metric_name,
-            metadata=self._build_optimization_metadata(),
-            name=self.name,
-            optimization_id=optimization_id,
-        )
-        self.current_optimization_id = optimization.id
-        logger.debug(f"Created optimization with ID: {optimization.id}")
+        # Create optimization run using base class helper
+        optimization = self._create_optimization_run(dataset, metric, optimization_id)
 
         # Display header with optimization link
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=optimization.id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -339,14 +340,13 @@ class ParameterOptimizer(BaseOptimizer):
                     "parameter_precision": 6,
                     "stopped_early": True,
                     "stop_reason": "baseline_score_met_threshold",
-                    "stop_reason_details": {"best_score": baseline_score},
                     "perfect_score": self.perfect_score,
                     "skip_perfect_score": self.skip_perfect_score,
                 },
                 history=[],
                 llm_calls=self.llm_call_counter,
                 llm_calls_tools=self.llm_calls_tools_counter,
-                optimization_id=optimization.id,
+                optimization_id=self.current_optimization_id,
                 dataset_id=dataset.id,
             )
 
@@ -422,6 +422,7 @@ class ParameterOptimizer(BaseOptimizer):
                     tuned_prompts
                 ),
             ) as trial_reporter:
+                self._set_reporter(trial_reporter)
                 score = self.evaluate_prompt(
                     prompt=tuned_prompts,
                     agent=agent,
@@ -440,6 +441,7 @@ class ParameterOptimizer(BaseOptimizer):
                     best_tuned_prompts = copy.deepcopy(tuned_prompts)
 
                 trial_reporter.set_score(score, is_best=is_best)
+                self._clear_reporter()
 
             # Store per-prompt model_kwargs in trial attrs
             trial.set_user_attr("parameters", sampled_values)
@@ -653,7 +655,6 @@ class ParameterOptimizer(BaseOptimizer):
                 completed_trials, expanded_parameter_space.parameters
             )
 
-        # Display final results - use first prompt for single, dict for multi
         display_prompt = (
             list(best_tuned_prompts.values())[0]
             if is_single_prompt_optimization
@@ -666,12 +667,22 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
-        # Update optimization status to completed
-        try:
-            optimization.update(status="completed")
-            logger.info(f"Optimization {optimization.id} status updated to completed.")
-        except Exception as e:
-            logger.warning(f"Failed to update optimization status: {e}")
+        if optimization is not None:
+            count = 0
+            while count < 3:
+                try:
+                    optimization.update(status="completed")
+                    logger.info(
+                        f"Optimization {self.current_optimization_id} status updated to completed."
+                    )
+                    break
+                except Exception:
+                    count += 1
+                    import time
+
+                    time.sleep(5)
+            if count == 3:
+                logger.warning("Unable to update optimization status; continuing...")
 
         details = {
             "initial_score": baseline_score,
@@ -695,7 +706,6 @@ class ParameterOptimizer(BaseOptimizer):
             "rounds_completed": len(rounds_summary),
             "stopped_early": len(history) < total_trials,
             "stop_reason": None,
-            "stop_reason_details": {"best_score": best_score},
         }
 
         # Prepare result prompt based on single vs multi-prompt optimization
@@ -716,6 +726,6 @@ class ParameterOptimizer(BaseOptimizer):
             history=history,
             llm_calls=self.llm_call_counter,
             llm_calls_tools=self.llm_calls_tools_counter,
-            optimization_id=optimization.id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
         )

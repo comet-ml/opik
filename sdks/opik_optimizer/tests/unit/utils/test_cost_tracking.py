@@ -7,7 +7,8 @@ import pytest
 
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
 from opik_optimizer.api_objects import chat_prompt
-from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
+from opik_optimizer.optimization_result import OptimizationResult
 
 
 class DummyOptimizer(BaseOptimizer):
@@ -18,6 +19,12 @@ class DummyOptimizer(BaseOptimizer):
 
     def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("not used in this test")
+
+    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
+        raise NotImplementedError("not used in this test")
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        return {"optimizer": "DummyOptimizer"}
 
     def run_tool_invoke(
         self,

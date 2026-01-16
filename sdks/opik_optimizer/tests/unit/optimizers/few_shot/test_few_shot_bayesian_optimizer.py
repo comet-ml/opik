@@ -73,10 +73,10 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template
         )
 
-        def mock_run_optimization(**kwargs):
-            prompts = kwargs.get("prompts", {})
-            original_prompts = kwargs.get("original_prompts", prompts)
-            is_single = kwargs.get("is_single_prompt_optimization", True)
+        def mock_run_optimization(context):
+            prompts = context.prompts
+            original_prompts = context.initial_prompts
+            is_single = context.is_single_prompt_optimization
             best_prompt = list(prompts.values())[0] if is_single else prompts
             initial_prompt = (
                 list(original_prompts.values())[0] if is_single else original_prompts
@@ -92,7 +92,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
                 history=[],
             )
 
-        monkeypatch.setattr(optimizer, "_run_optimization", mock_run_optimization)
+        monkeypatch.setattr(optimizer, "run_optimization", mock_run_optimization)
 
         result = optimizer.optimize_prompt(
             prompt=prompt,
@@ -140,10 +140,10 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template
         )
 
-        def mock_run_optimization(**kwargs):
-            prompts_arg = kwargs.get("prompts", {})
-            original_prompts = kwargs.get("original_prompts", prompts_arg)
-            is_single = kwargs.get("is_single_prompt_optimization", False)
+        def mock_run_optimization(context):
+            prompts_arg = context.prompts
+            original_prompts = context.initial_prompts
+            is_single = context.is_single_prompt_optimization
             best_prompt = list(prompts_arg.values())[0] if is_single else prompts_arg
             initial_prompt = (
                 list(original_prompts.values())[0] if is_single else original_prompts
@@ -159,7 +159,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
                 history=[],
             )
 
-        monkeypatch.setattr(optimizer, "_run_optimization", mock_run_optimization)
+        monkeypatch.setattr(optimizer, "run_optimization", mock_run_optimization)
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
@@ -203,8 +203,8 @@ class TestFewShotBayesianOptimizerEarlyStop:
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
         monkeypatch.setattr(
             optimizer,
-            "_run_optimization",
-            lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
+            "run_optimization",
+            lambda context: (_ for _ in ()).throw(AssertionError("should not run")),
         )
 
         prompt = ChatPrompt(system="baseline", user="{question}")
@@ -219,3 +219,30 @@ class TestFewShotBayesianOptimizerEarlyStop:
         assert result.details["stop_reason"] == "baseline_score_met_threshold"
         assert result.details["perfect_score"] == 0.95
         assert result.initial_score == result.score
+
+    def test_early_stop_reports_at_least_one_trial(
+        self,
+        mock_opik_client: Callable[..., MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify FewShotBayesianOptimizer early stop reports at least 1 trial."""
+        mock_opik_client()
+        dataset = _make_dataset()
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o", perfect_score=0.95)
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
+
+        prompt = ChatPrompt(system="baseline", user="{question}")
+        result = optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=_metric,
+            max_trials=1,
+        )
+
+        assert result.details["stopped_early"] is True
+        # Early stop happens before _run_optimization, so only baseline was evaluated
+        # The optimizer returns 0 from get_metadata (no optimization trials yet)
+        # The base class defaults this to 1 to reflect the baseline evaluation
+        assert result.details["trials_completed"] == 1
+        assert result.details["rounds_completed"] == 1

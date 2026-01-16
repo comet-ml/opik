@@ -22,6 +22,7 @@ from opik_optimizer._llm_calls import (
     StructuredOutputParsingError,
 )
 from opik_optimizer import _llm_calls
+from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
 
 
 class TestBuildCallTimeParams:
@@ -683,13 +684,18 @@ class TestCounterIncrement:
 
     def test_increment_llm_counter_walks_stack(self) -> None:
         """Test that counter increment walks call stack to find optimizer."""
-        from opik_optimizer.base_optimizer import BaseOptimizer
 
         class MockOptimizer(BaseOptimizer):
             DEFAULT_PROMPTS: dict[str, str] = {}
 
             def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
                 pass
+
+            def run_optimization(self, context: OptimizationContext) -> Any:
+                pass
+
+            def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+                return {"optimizer": "MockOptimizer"}
 
             def get_optimizer_metadata(self) -> dict[str, Any]:
                 return {}
@@ -707,13 +713,18 @@ class TestCounterIncrement:
 
     def test_increment_tool_counter_walks_stack(self) -> None:
         """Test that tool counter increment walks call stack."""
-        from opik_optimizer.base_optimizer import BaseOptimizer
 
         class MockOptimizer(BaseOptimizer):
             DEFAULT_PROMPTS: dict[str, str] = {}
 
             def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
                 pass
+
+            def run_optimization(self, context: OptimizationContext) -> Any:
+                pass
+
+            def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+                return {"optimizer": "MockOptimizer"}
 
             def get_optimizer_metadata(self) -> dict[str, Any]:
                 return {}
