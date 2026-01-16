@@ -14,12 +14,12 @@ import java.io.UncheckedIOException;
 /**
  * Utility class for handling data truncation operations in DAO classes.
  * Contains shared methods for JSON node processing and truncation threshold binding.
- * 
+ *
  * <h2>Smart JSON Truncation</h2>
  * <p>The smart truncation approach preserves JSON structure by truncating individual field values
  * rather than the entire JSON string. This ensures all keys remain accessible even when values
  * exceed the truncation threshold.
- * 
+ *
  * <h3>Output Truncation</h3>
  * <p>Uses the materialized {@code output_keys} column (Array of Tuple(key, type)) for efficient
  * key extraction. The SQL pattern is:
@@ -32,7 +32,7 @@ import java.io.UncheckedIOException;
  *     substring(output, 1, truncationSize)  -- fallback for legacy data
  * )
  * }</pre>
- * 
+ *
  * <h3>Input Truncation</h3>
  * <p>Uses {@code JSONExtractKeys(input)} at query time since there's no materialized input_keys column.
  * The SQL pattern is:
@@ -45,7 +45,7 @@ import java.io.UncheckedIOException;
  *     substring(input, 1, truncationSize)  -- fallback for non-JSON input
  * )
  * }</pre>
- * 
+ *
  * <p>The truncation logic for each field value:
  * <ul>
  *   <li>String values exceeding limit: truncated with "...[truncated]" marker</li>
@@ -53,7 +53,7 @@ import java.io.UncheckedIOException;
  *   <li>Values within limit: preserved with original type</li>
  *   <li>Image patterns: replaced with "[image]" placeholder</li>
  * </ul>
- * 
+ *
  * @see com.comet.opik.domain.ExperimentItemDAO
  * @see com.comet.opik.domain.DatasetItemVersionDAO
  */
@@ -65,7 +65,7 @@ public final class TruncationUtils {
      * SQL template for smart truncation of the input field.
      * Uses JSONExtractKeys at runtime since there's no materialized input_keys column.
      * Preserves JSON structure by truncating individual field values rather than the entire string.
-     * 
+     *
      * <p>Template parameters:
      * <ul>
      *   <li>{@code <truncationSize>} - maximum size for each field value</li>
@@ -97,13 +97,13 @@ public final class TruncationUtils {
      * SQL template for smart truncation of the output field.
      * Uses the materialized output_keys column (Array of Tuple(key, type)) for efficient key extraction.
      * Preserves JSON structure by truncating individual field values rather than the entire string.
-     * 
+     *
      * <p>Template parameters:
      * <ul>
      *   <li>{@code <truncationSize>} - maximum size for each field value</li>
      *   <li>{@code <truncate>} - regex pattern for image data to replace with [image]</li>
      * </ul>
-     * 
+     *
      * <p>Requires the query to select {@code output_keys} from the traces table.
      */
     public static final String SMART_OUTPUT_TRUNCATION = """
