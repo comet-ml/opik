@@ -139,7 +139,7 @@ class ExperimentDAO {
             LEFT JOIN (
                 SELECT
                 id
-                FROM experiments
+                FROM experiments final
                 WHERE id = :id
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
@@ -153,7 +153,7 @@ class ExperimentDAO {
             WITH experiments_final AS (
                 SELECT
                     *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
-                FROM experiments
+                FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
@@ -480,7 +480,7 @@ class ExperimentDAO {
     private static final String FIND_COUNT = """
             WITH experiments_initial AS (
                 SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids, experiment_scores
-                FROM experiments
+                FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
@@ -863,7 +863,7 @@ class ExperimentDAO {
                 null AS total_estimated_cost_avg,
                 null AS usage,
                 null AS comments_array_agg
-            FROM experiments
+            FROM experiments final
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
             ORDER BY id DESC, last_updated_at DESC
@@ -875,7 +875,7 @@ class ExperimentDAO {
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
             SELECT
                 DISTINCT id, workspace_id
-            FROM experiments
+            FROM experiments final
             WHERE id in :experiment_ids
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -897,7 +897,7 @@ class ExperimentDAO {
                     id,
                     dataset_id,
                     created_at
-                FROM experiments
+                FROM experiments final
                 WHERE dataset_id IN :dataset_ids
             	AND workspace_id = :workspace_id
                 ORDER BY id DESC, last_updated_at DESC
@@ -911,7 +911,7 @@ class ExperimentDAO {
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
                 distinct dataset_id, type
-            FROM experiments
+            FROM experiments final
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
             <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
@@ -926,11 +926,11 @@ class ExperimentDAO {
                  workspace_id,
                  created_by AS user,
                  COUNT(DISTINCT id) AS experiment_count
-            FROM experiments
+            FROM experiments final
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
             AND id NOT IN (
                 SELECT id
-                FROM experiments
+                FROM experiments final
                 WHERE name IN :excluded_names
             )
             GROUP BY workspace_id, created_by
@@ -976,11 +976,58 @@ class ExperimentDAO {
                 <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
                 created_at,
                 now64(9) as last_updated_at
-            FROM experiments
+            FROM experiments final
             WHERE id = :id
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String BULK_UPDATE = """
+            INSERT INTO experiments (
+                id,
+                dataset_id,
+                name,
+                workspace_id,
+                metadata,
+                tags,
+                created_by,
+                last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                type,
+                optimization_id,
+                status,
+                experiment_scores,
+                created_at,
+                last_updated_at
+            )
+            SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
+                created_by,
+                :user_name as last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                <if(type)> :type <else> type <endif> as type,
+                optimization_id,
+                <if(status)> :status <else> status <endif> as status,
+                <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
+                created_at,
+                now64(9) as last_updated_at
+            FROM experiments final
+            WHERE id IN (:ids)
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1644,6 +1691,85 @@ class ExperimentDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
                 .then();
+    }
+
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull ExperimentUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' experiments", ids.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = buildBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId);
+                    var query = template.render();
+
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId)
+                            .bind("user_name", userName);
+
+                    bindBulkUpdateParams(update, statement);
+
+                    return Flux.from(statement.execute());
+                }))
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' experiments", ids.size()));
+    }
+
+    private ST buildBulkUpdateTemplate(ExperimentUpdate experimentUpdate, String sql, boolean mergeTags, String workspaceId) {
+        var template = getSTWithLogComment(sql, "bulk_update_experiments", workspaceId, "");
+
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            template.add("name", experimentUpdate.name());
+        }
+
+        if (experimentUpdate.metadata() != null) {
+            template.add("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.tags() != null) {
+            template.add("tags", true);
+            template.add("merge_tags", mergeTags);
+        }
+
+        if (experimentUpdate.type() != null) {
+            template.add("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            template.add("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.experimentScores() != null) {
+            template.add("experiment_scores", true);
+        }
+
+        return template;
+    }
+
+    private void bindBulkUpdateParams(ExperimentUpdate experimentUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            statement.bind("name", experimentUpdate.name());
+        }
+
+        if (experimentUpdate.metadata() != null) {
+            statement.bind("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.tags() != null) {
+            statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
+        }
+
+        if (experimentUpdate.type() != null) {
+            statement.bind("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            statement.bind("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.experimentScores() != null) {
+            statement.bind("experiment_scores", JsonUtils.writeValueAsString(experimentUpdate.experimentScores()));
+        }
     }
 
     private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
