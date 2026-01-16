@@ -9,7 +9,9 @@ import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -61,6 +63,8 @@ public interface AnnotationQueueDAO {
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
+
+    Flux<AnnotationQueue> findDynamicQueuesByProjectId(UUID projectId);
 }
 
 @Singleton
@@ -79,6 +83,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 comments_enabled,
                 feedback_definitions,
+                queue_type,
+                filter_criteria,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -93,6 +99,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         :scope<item.index>,
                         :comments_enabled<item.index>,
                         :feedback_definitions<item.index>,
+                        :queue_type<item.index>,
+                        :filter_criteria<item.index>,
                         :user_name,
                         :user_name
                     )
@@ -112,6 +120,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 comments_enabled,
                 feedback_definitions,
+                queue_type,
+                filter_criteria,
                 created_at,
             	created_by,
             	last_updated_by
@@ -126,6 +136,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 scope,
                 <if(comments_enabled)> :comments_enabled <else> comments_enabled <endif> as comments_enabled,
                 <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
+                queue_type,
+                filter_criteria,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -197,6 +209,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     scope,
                     comments_enabled,
                     feedback_definitions,
+                    queue_type,
+                    filter_criteria,
                     created_by,
                     created_at,
                     last_updated_by,
@@ -361,6 +375,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.comments_enabled,
                 q.feedback_definitions,
                 q.scope,
+                q.queue_type,
+                q.filter_criteria,
                 q.created_at,
                 q.created_by,
                 q.last_updated_at,
@@ -390,6 +406,33 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             )
             SELECT count(id) as count
             FROM queues_final
+            """;
+
+    private static final String FIND_DYNAMIC_QUEUES_BY_PROJECT = """
+            SELECT
+                id,
+                project_id,
+                name,
+                description,
+                instructions,
+                scope,
+                comments_enabled,
+                feedback_definitions,
+                queue_type,
+                filter_criteria,
+                created_by,
+                created_at,
+                last_updated_by,
+                last_updated_at,
+                0 as items_count,
+                map() as feedback_scores,
+                map() as reviewers
+            FROM annotation_queues
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND queue_type = 'dynamic'
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -473,6 +516,20 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
+    public Flux<AnnotationQueue> findDynamicQueuesByProjectId(@NonNull UUID projectId) {
+        log.debug("Finding dynamic annotation queues for project '{}'", projectId);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(FIND_DYNAMIC_QUEUES_BY_PROJECT)
+                            .bind("project_id", projectId.toString());
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(this::mapAnnotationQueue);
+    }
+
+    @Override
     public Mono<Long> deleteBatch(@NonNull Set<UUID> ids) {
         if (ids.isEmpty()) {
             return Mono.just(0L);
@@ -516,6 +573,22 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         int i = 0;
         for (AnnotationQueue annotationQueue : annotationQueues) {
+            // Determine queue type based on filter criteria
+            boolean hasFilters = annotationQueue.filterCriteria() != null
+                    && annotationQueue.filterCriteria().isArray()
+                    && annotationQueue.filterCriteria().size() > 0;
+            var queueType = hasFilters
+                    ? AnnotationQueue.QueueType.DYNAMIC
+                    : (annotationQueue.queueType() != null
+                            ? annotationQueue.queueType()
+                            : AnnotationQueue.QueueType.MANUAL);
+
+            // Serialize filter criteria to JSON
+            String filterCriteriaJson = "";
+            if (hasFilters) {
+                filterCriteriaJson = JsonUtils.writeValueAsString(annotationQueue.filterCriteria());
+            }
+
             statement.bind("id" + i, annotationQueue.id())
                     .bind("project_id" + i, annotationQueue.projectId())
                     .bind("name" + i, annotationQueue.name())
@@ -527,7 +600,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("feedback_definitions" + i,
                             annotationQueue.feedbackDefinitionNames() != null
                                     ? annotationQueue.feedbackDefinitionNames().toArray(String[]::new)
-                                    : new String[]{});
+                                    : new String[]{})
+                    .bind("queue_type" + i, queueType.getValue())
+                    .bind("filter_criteria" + i, filterCriteriaJson);
             i++;
         }
 
@@ -566,24 +641,40 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private Publisher<AnnotationQueue> mapAnnotationQueue(Result result) {
-        return result.map((row, rowMetadata) -> AnnotationQueue.builder()
-                .id(row.get("id", UUID.class))
-                .projectId(row.get("project_id", UUID.class))
-                .name(row.get("name", String.class))
-                .description(row.get("description", String.class))
-                .instructions(row.get("instructions", String.class))
-                .commentsEnabled(row.get("comments_enabled", Integer.class) == 1)
-                .feedbackDefinitionNames(Arrays.stream(row.get("feedback_definitions", String[].class))
-                        .toList())
-                .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
-                .itemsCount(row.get("items_count", Long.class))
-                .reviewers(mapReviewers(row))
-                .feedbackScores(getFeedbackScores(row, "feedback_scores"))
-                .createdAt(row.get("created_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .build());
+        return result.map((row, rowMetadata) -> {
+            var scope = AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class));
+            var queueTypeStr = row.get("queue_type", String.class);
+            var filterCriteriaJson = row.get("filter_criteria", String.class);
+
+            return AnnotationQueue.builder()
+                    .id(row.get("id", UUID.class))
+                    .projectId(row.get("project_id", UUID.class))
+                    .name(row.get("name", String.class))
+                    .description(row.get("description", String.class))
+                    .instructions(row.get("instructions", String.class))
+                    .commentsEnabled(row.get("comments_enabled", Integer.class) == 1)
+                    .feedbackDefinitionNames(Arrays.stream(row.get("feedback_definitions", String[].class))
+                            .toList())
+                    .scope(scope)
+                    .queueType(AnnotationQueue.QueueType.fromString(queueTypeStr))
+                    .filterCriteria(parseFilterCriteriaToJsonNode(filterCriteriaJson))
+                    .itemsCount(row.get("items_count", Long.class))
+                    .reviewers(mapReviewers(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
+                    .createdAt(row.get("created_at", Instant.class))
+                    .createdBy(row.get("created_by", String.class))
+                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                    .lastUpdatedBy(row.get("last_updated_by", String.class))
+                    .build();
+        });
+    }
+
+    private JsonNode parseFilterCriteriaToJsonNode(String filterCriteriaJson) {
+        if (filterCriteriaJson == null || filterCriteriaJson.isEmpty()) {
+            return null;
+        }
+        // Use getJsonNodeFromString which properly parses JSON strings
+        return JsonUtils.getJsonNodeFromString(filterCriteriaJson);
     }
 
     private List<AnnotationQueueReviewer> mapReviewers(Row row) {
