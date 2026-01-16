@@ -995,8 +995,8 @@ class DatasetServiceImpl implements DatasetService {
                 .then()
                 .doOnSuccess(v -> log.info("Successfully copied items from dataset '{}' to dataset '{}'",
                         sourceDatasetId, targetDatasetId))
-                .doOnError(error -> log.error("Error copying items from dataset '{}' to dataset '{}': {}",
-                        sourceDatasetId, targetDatasetId, error.getMessage()));
+                .doOnError(error -> log.error("Error copying items from dataset '{}' to dataset '{}'",
+                        sourceDatasetId, targetDatasetId, error));
     }
 
 }
