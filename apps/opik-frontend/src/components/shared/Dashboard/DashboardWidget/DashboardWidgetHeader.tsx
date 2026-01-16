@@ -47,7 +47,9 @@ const DashboardWidgetHeader: React.FunctionComponent<
         <div
           className={cn(
             "flex w-full items-center justify-center pb-0.5 transition-opacity",
-            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            menuOpen
+              ? "opacity-100"
+              : "opacity-0 group-hover/widget:opacity-100",
           )}
         >
           {dragHandle}
@@ -80,7 +82,9 @@ const DashboardWidgetHeader: React.FunctionComponent<
           <div
             className={cn(
               "flex shrink-0 items-center gap-2 transition-opacity",
-              menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+              menuOpen
+                ? "opacity-100"
+                : "opacity-0 group-hover/widget:opacity-100",
             )}
           >
             {actionsWithHandler}

@@ -12,7 +12,7 @@ const DashboardWidgetActions: React.FunctionComponent<
   return (
     <div
       className={cn(
-        "flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100",
+        "flex items-center gap-2 opacity-0 transition-opacity group-hover/widget:opacity-100",
         className,
       )}
     >

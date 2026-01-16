@@ -3,12 +3,14 @@ import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { Groups } from "@/types/groups";
 import { CHART_TYPE } from "@/constants/chart";
+import { Sorting } from "@/types/sorting";
 
 export enum WIDGET_TYPE {
   PROJECT_METRICS = "project_metrics",
   PROJECT_STATS_CARD = "project_stats_card",
   TEXT_MARKDOWN = "text_markdown",
   EXPERIMENTS_FEEDBACK_SCORES = "experiments_feedback_scores",
+  EXPERIMENT_LEADERBOARD = "experiment_leaderboard",
 }
 
 export enum EXPERIMENT_DATA_SOURCE {
@@ -79,11 +81,32 @@ export interface ExperimentsFeedbackScoresWidgetType {
   } & Record<string, unknown>;
 }
 
+export interface ExperimentsLeaderboardWidgetType {
+  type: WIDGET_TYPE.EXPERIMENT_LEADERBOARD;
+  config: {
+    overrideDefaults?: boolean;
+    dataSource?: EXPERIMENT_DATA_SOURCE;
+    experimentIds?: string[];
+    filters?: Filters;
+    selectedColumns?: string[];
+    enableRanking?: boolean;
+    rankingMetric?: string;
+    rankingDirection?: boolean;
+    columnsOrder?: string[];
+    scoresColumnsOrder?: string[];
+    metadataColumnsOrder?: string[];
+    columnsWidth?: Record<string, number>;
+    maxRows?: number;
+    sorting?: Sorting;
+  } & Record<string, unknown>;
+}
+
 type WidgetConfigUnion =
   | ProjectMetricsWidget
   | TextMarkdownWidget
   | ProjectStatsCardWidget
   | ExperimentsFeedbackScoresWidgetType
+  | ExperimentsLeaderboardWidgetType
   | {
       type: string;
       config: Record<string, unknown>;

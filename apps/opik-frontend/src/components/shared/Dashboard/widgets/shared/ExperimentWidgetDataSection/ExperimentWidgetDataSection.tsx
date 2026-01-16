@@ -39,6 +39,12 @@ const EXPERIMENT_DATA_COLUMNS: ColumnData<ExperimentColumnData>[] = [
     disposable: true,
   },
   {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+  },
+  {
     id: COLUMN_METADATA_ID,
     label: "Configuration",
     type: COLUMN_TYPE.dictionary,
@@ -48,9 +54,9 @@ const EXPERIMENT_DATA_COLUMNS: ColumnData<ExperimentColumnData>[] = [
 interface ExperimentWidgetDataSectionProps<T extends FieldValues> {
   control: Control<T>;
   filtersFieldName: FieldPath<T>;
-  groupsFieldName: FieldPath<T>;
+  groupsFieldName?: FieldPath<T> | "";
   filters: Filters;
-  groups: Groups;
+  groups?: Groups;
   onFiltersChange?: (filters: Filters) => void;
   onGroupsChange?: (groups: Groups) => void;
   className?: string;
@@ -73,7 +79,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
 
   const { field: groupsField } = useController({
     control,
-    name: groupsFieldName,
+    name: (groupsFieldName || "groups") as FieldPath<T>,
   });
 
   const dataConfig = useMemo(
@@ -128,6 +134,8 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
 
   const setGroups = useCallback(
     (groupsOrUpdater: Groups | ((prev: Groups) => Groups)) => {
+      if (!groupsFieldName) return;
+
       let updatedGroups: Groups;
 
       if (isFunction(groupsOrUpdater)) {
@@ -140,7 +148,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
       groupsField.onChange(updatedGroups);
       onGroupsChange?.(updatedGroups);
     },
-    [groupsField, onGroupsChange],
+    [groupsFieldName, groupsField, onGroupsChange],
   );
 
   const { errors: formErrors } = useFormState({ control });
@@ -159,7 +167,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
         )
       : undefined;
 
-  const groupErrors = formErrors[groupsFieldName];
+  const groupErrors = groupsFieldName ? formErrors[groupsFieldName] : undefined;
   const parsedGroupErrors =
     groupErrors && isArray(groupErrors)
       ? (groupErrors as unknown[]).map((e) =>
@@ -170,8 +178,9 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
   return (
     <div className={cn("flex flex-col", className)}>
       <Description className="mb-4">
-        Add filters to focus on specific experiments and group them by
-        configuration to aggregate feedback scores.
+        {groupsFieldName
+          ? "Add filters to focus on specific experiments and group them by configuration to aggregate feedback scores."
+          : "Add filters to focus on specific experiments."}
       </Description>
 
       <FiltersAccordionSection
@@ -183,17 +192,19 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
         errors={parsedFilterErrors}
       />
 
-      <GroupsAccordionSection
-        columns={EXPERIMENT_DATA_COLUMNS as ColumnData<unknown>[]}
-        config={dataConfig}
-        groups={groups}
-        onChange={setGroups}
-        label="Group by"
-        errors={parsedGroupErrors}
-        className="w-full"
-        hideSorting
-        hideBorder
-      />
+      {groupsFieldName && (
+        <GroupsAccordionSection
+          columns={EXPERIMENT_DATA_COLUMNS as ColumnData<unknown>[]}
+          config={dataConfig}
+          groups={groups || []}
+          onChange={setGroups}
+          label="Group by"
+          errors={parsedGroupErrors}
+          className="w-full"
+          hideSorting
+          hideBorder
+        />
+      )}
     </div>
   );
 };
