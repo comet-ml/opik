@@ -1078,23 +1078,40 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
+  // Handler to update combined order for Feedback scores and Metadata main column
+  const handleCombinedOrderChange = useCallback(
+    (newOrder: string[]) => {
+      // Split the combined order back into scores and metadata orders
+      const scoresIds = scoresColumnsData.map((col) => col.id);
+      const metadataIds = metadataMainColumnData.map((col) => col.id);
+
+      const newScoresOrder = newOrder.filter((id) => scoresIds.includes(id));
+      const newMetadataOrder = newOrder.filter((id) => metadataIds.includes(id));
+
+      setScoresColumnsOrder(newScoresOrder);
+      setMetadataMainColumnOrder(newMetadataOrder);
+    },
+    [
+      scoresColumnsData,
+      metadataMainColumnData,
+      setScoresColumnsOrder,
+      setMetadataMainColumnOrder,
+    ],
+  );
+
   const columnSections = useMemo(() => {
+    // Combine Feedback scores and Metadata main column into one section
+    const combinedColumns = [...scoresColumnsData, ...metadataMainColumnData];
+    const combinedOrder = [...scoresColumnsOrder, ...metadataMainColumnOrder];
+
     const sections = [
       {
         title: "Feedback scores",
-        columns: scoresColumnsData,
-        order: scoresColumnsOrder,
-        onOrderChange: setScoresColumnsOrder,
+        columns: combinedColumns,
+        order: combinedOrder,
+        onOrderChange: handleCombinedOrderChange,
       },
     ];
-
-    // Add Metadata section (single column, no title) between Feedback scores and Metadata items
-    sections.push({
-      title: "", // Empty title to hide section label
-      columns: metadataMainColumnData,
-      order: metadataMainColumnOrder,
-      onOrderChange: setMetadataMainColumnOrder,
-    });
 
     // Add Metadata items section if there are metadata columns
     if (metadataColumnsData.length > 0) {
@@ -1110,10 +1127,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [
     scoresColumnsData,
     scoresColumnsOrder,
-    setScoresColumnsOrder,
     metadataMainColumnData,
     metadataMainColumnOrder,
-    setMetadataMainColumnOrder,
+    handleCombinedOrderChange,
     metadataColumnsData,
     metadataColumnsOrder,
     setMetadataColumnsOrder,
