@@ -1,16 +1,23 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any
+from typing import Any, cast
 
 import pydantic
-import rich
+import rich.box
+import rich.console
+import rich.panel
+import rich.table
+import rich.text
 
 from .reporting_utils import (
     _format_message_content,
+    format_prompt_snippet,
     get_console,
     get_link_text,
     get_optimization_run_url_by_id,
 )
+
+from .api_objects import chat_prompt
 
 
 def _format_float(value: Any, digits: int = 6) -> str:
@@ -20,12 +27,144 @@ def _format_float(value: Any, digits: int = 6) -> str:
     return str(value)
 
 
+def _format_prompt_for_plaintext(
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Format a prompt (single or dict) for plain text display."""
+    if isinstance(prompt, dict):
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+        parts = []
+        for key, chat_p in prompt_dict.items():
+            parts.append(f"[{key}]")
+            for msg in chat_p.get_messages():
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                # Handle both string and multimodal content
+                if isinstance(content, str):
+                    snippet = format_prompt_snippet(content, max_length=150)
+                else:
+                    snippet = "[multimodal content]"
+                parts.append(f"  {role}: {snippet}")
+        return "\n".join(parts)
+    else:
+        # Single ChatPrompt
+        parts = []
+        for msg in prompt.get_messages():
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                snippet = format_prompt_snippet(content, max_length=150)
+            else:
+                snippet = "[multimodal content]"
+            parts.append(f"  {role}: {snippet}")
+        return "\n".join(parts)
+
+
+DETAILS_SCHEMA_VERSION = "1"
+DETAILS_RESERVED_KEYS = {
+    "schema_version",
+    "trials_requested",
+    "trials_completed",
+    "rounds_completed",
+    "stopped_early",
+    "stop_reason",
+    "stop_reason_details",
+    "model",
+    "temperature",
+    "trial_history",
+    "round_history",
+    "optimizer_details",
+}
+
+
+def _normalize_details(
+    details: dict[str, Any], *, default_best_score: float | None
+) -> dict[str, Any]:
+    """Normalize details to the shared OptimizationResult schema."""
+    normalized = dict(details)
+    normalized.setdefault("schema_version", DETAILS_SCHEMA_VERSION)
+
+    round_history = normalized.get("round_history")
+    if round_history is None and isinstance(normalized.get("rounds"), list):
+        round_history = normalized.get("rounds")
+        normalized["round_history"] = round_history
+
+    trial_history = normalized.get("trial_history")
+    if trial_history is None and isinstance(normalized.get("trials"), list):
+        trial_history = normalized.get("trials")
+        normalized["trial_history"] = trial_history
+
+    if normalized.get("rounds_completed") is None:
+        iterations_completed = normalized.get("iterations_completed")
+        if isinstance(iterations_completed, int):
+            normalized["rounds_completed"] = iterations_completed
+        elif isinstance(round_history, list):
+            normalized["rounds_completed"] = len(round_history)
+
+    if normalized.get("trials_requested") is None:
+        for key in ("total_trials", "n_trials", "max_trials", "total_rounds"):
+            value = normalized.get(key)
+            if isinstance(value, int):
+                normalized["trials_requested"] = value
+                break
+
+    if normalized.get("trials_completed") is None:
+        trials_used = normalized.get("trials_used")
+        if isinstance(trials_used, int):
+            normalized["trials_completed"] = trials_used
+        elif isinstance(trial_history, list):
+            normalized["trials_completed"] = len(trial_history)
+        elif isinstance(normalized.get("rounds_completed"), int):
+            normalized["trials_completed"] = normalized.get("rounds_completed")
+
+    normalized.setdefault("stopped_early", None)
+    if normalized.get("stop_reason") is None:
+        stopped_early_reason = normalized.get("stopped_early_reason")
+        if isinstance(stopped_early_reason, str):
+            normalized["stop_reason"] = stopped_early_reason
+    normalized.setdefault("stop_reason", None)
+    stop_details = normalized.get("stop_reason_details")
+    if stop_details is None and normalized.get("stop_reason") is not None:
+        stop_details = {"best_score": default_best_score}
+        error_value = normalized.get("error") or normalized.get("exception")
+        if error_value is not None:
+            stop_details["error"] = str(error_value)
+    normalized["stop_reason_details"] = stop_details
+    normalized.setdefault("model", None)
+    normalized.setdefault("temperature", None)
+
+    if normalized.get("optimizer_details") is None:
+        optimizer_details = {
+            key: value
+            for key, value in normalized.items()
+            if key not in DETAILS_RESERVED_KEYS
+        }
+        normalized["optimizer_details"] = optimizer_details
+
+    return normalized
+
+
+def _resolve_rounds_ran(details: dict[str, Any]) -> int:
+    """Resolve a reasonable rounds-completed count from optimizer details."""
+    rounds = details.get("rounds")
+    if isinstance(rounds, list):
+        return len(rounds)
+    iterations_completed = details.get("iterations_completed")
+    if isinstance(iterations_completed, int):
+        return iterations_completed
+    total_rounds = details.get("total_rounds")
+    if isinstance(total_rounds, int):
+        return total_rounds
+    return 0
+
+
 class OptimizationResult(pydantic.BaseModel):
     """Result oan optimization run."""
 
+    details_version: str = DETAILS_SCHEMA_VERSION
     optimizer: str = "Optimizer"
 
-    prompt: list[dict[str, Any]]
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
     score: float
     metric_name: str
 
@@ -33,20 +172,22 @@ class OptimizationResult(pydantic.BaseModel):
     dataset_id: str | None = None
 
     # Initial score
-    initial_prompt: list[dict[str, Any]] | None = None
+    initial_prompt: (
+        chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt] | None
+    ) = None
     initial_score: float | None = None
 
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
     history: list[dict[str, Any]] = []
     llm_calls: int | None = None
-    tool_calls: int | None = None
-
-    # MIPRO specific
-    demonstrations: list[dict[str, Any]] | None = None
-    mipro_prompt: str | None = None
-    tool_prompts: dict[str, str] | None = None
+    llm_calls_tools: int | None = None
+    llm_cost_total: float | None = None
+    llm_token_usage_total: dict[str, int] | None = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    def model_post_init(self, _context: Any) -> None:
+        self.details = _normalize_details(self.details, default_best_score=self.score)
 
     def get_run_link(self) -> str:
         return get_optimization_run_url_by_id(
@@ -83,23 +224,6 @@ class OptimizationResult(pydantic.BaseModel):
         """
         return self.details.get("optimized_parameters", {})
 
-    def apply_to_prompt(self, prompt: Any) -> Any:
-        """
-        Apply optimized parameters to a prompt.
-
-        Args:
-            prompt: ChatPrompt instance to apply optimizations to
-
-        Returns:
-            New ChatPrompt instance with optimized parameters applied
-        """
-        prompt_copy = prompt.copy()
-        if "optimized_model_kwargs" in self.details:
-            prompt_copy.model_kwargs = self.details["optimized_model_kwargs"]
-        if "optimized_model" in self.details:
-            prompt_copy.model = self.details["optimized_model"]
-        return prompt_copy
-
     def _calculate_improvement_str(self) -> str:
         """Helper to calculate improvement percentage string."""
         initial_s = self.initial_score
@@ -128,7 +252,8 @@ class OptimizationResult(pydantic.BaseModel):
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
-        rounds_ran = len(self.details.get("rounds", []))
+        rounds_ran = _resolve_rounds_ran(self.details)
+        trials_completed = self.details.get("trials_completed")
         initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "N/A"
@@ -149,12 +274,7 @@ class OptimizationResult(pydantic.BaseModel):
         temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "N/A"
 
         try:
-            final_prompt_display = "\n".join(
-                [
-                    f"  {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:150]}..."
-                    for msg in self.prompt
-                ]
-            )
+            final_prompt_display = _format_prompt_for_plaintext(self.prompt)
         except Exception:
             final_prompt_display = str(self.prompt)
 
@@ -168,7 +288,7 @@ class OptimizationResult(pydantic.BaseModel):
             f"Initial Score:    {initial_score_str}",
             f"Final Best Score: {final_score_str}",
             f"Total Improvement:{improvement_str.rjust(max(0, 18 - len('Total Improvement:')))}",
-            f"Rounds Completed: {rounds_ran}",
+            f"Trials Completed: {trials_completed if isinstance(trials_completed, int) else rounds_ran}",
         ]
 
         optimized_params = self.details.get("optimized_parameters") or {}
@@ -265,7 +385,8 @@ class OptimizationResult(pydantic.BaseModel):
     def __rich__(self) -> rich.panel.Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()
-        rounds_ran = len(self.details.get("rounds", []))
+        rounds_ran = _resolve_rounds_ran(self.details)
+        trials_completed = self.details.get("trials_completed")
         initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}"
@@ -289,7 +410,12 @@ class OptimizationResult(pydantic.BaseModel):
         table.add_row("Initial Score:", initial_score_str)
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
-        table.add_row("Rounds Completed:", str(rounds_ran))
+        display_trials = (
+            str(trials_completed)
+            if isinstance(trials_completed, int)
+            else str(rounds_ran)
+        )
+        table.add_row("Trials Completed:", display_trials)
         table.add_row(
             "Optimization run link:",
             get_link_text(
@@ -309,25 +435,64 @@ class OptimizationResult(pydantic.BaseModel):
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
             chat_group_items: list[rich.console.RenderableType] = []
-            for msg in self.prompt:
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                role_style = (
-                    "bold green"
-                    if role == "user"
-                    else (
-                        "bold blue"
-                        if role == "assistant"
-                        else ("bold magenta" if role == "system" else "")
+
+            # Handle both single ChatPrompt and dict of ChatPrompts
+            if isinstance(self.prompt, dict):
+                # Dictionary of prompts
+                prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], self.prompt)
+                for key, chat_p in prompt_dict.items():
+                    # Add key header
+                    key_header = rich.text.Text(f"[{key}]", style="bold yellow")
+                    chat_group_items.append(key_header)
+                    chat_group_items.append(rich.text.Text("---", style="dim"))
+
+                    # Add messages for this prompt
+                    for msg in chat_p.get_messages():
+                        role = msg.get("role", "unknown")
+                        content = msg.get("content", "")
+                        role_style = (
+                            "bold green"
+                            if role == "user"
+                            else (
+                                "bold blue"
+                                if role == "assistant"
+                                else ("bold magenta" if role == "system" else "")
+                            )
+                        )
+                        formatted_content = _format_message_content(content)
+                        role_text = rich.text.Text(
+                            f"{role.capitalize()}:", style=role_style
+                        )
+                        chat_group_items.append(
+                            rich.console.Group(role_text, formatted_content)
+                        )
+                        chat_group_items.append(rich.text.Text("---", style="dim"))
+                    chat_group_items.append(
+                        rich.text.Text("")
+                    )  # Extra space between prompts
+            else:
+                # Single ChatPrompt
+                for msg in self.prompt.get_messages():
+                    role = msg.get("role", "unknown")
+                    content = msg.get("content", "")
+                    role_style = (
+                        "bold green"
+                        if role == "user"
+                        else (
+                            "bold blue"
+                            if role == "assistant"
+                            else ("bold magenta" if role == "system" else "")
+                        )
                     )
-                )
-                # Format content using Rich, handling both string and multimodal content
-                formatted_content = _format_message_content(content)
-                role_text = rich.text.Text(f"{role.capitalize()}:", style=role_style)
-                chat_group_items.append(
-                    rich.console.Group(role_text, formatted_content)
-                )
-                chat_group_items.append(rich.text.Text("---", style="dim"))  # Separator
+                    formatted_content = _format_message_content(content)
+                    role_text = rich.text.Text(
+                        f"{role.capitalize()}:", style=role_style
+                    )
+                    chat_group_items.append(
+                        rich.console.Group(role_text, formatted_content)
+                    )
+                    chat_group_items.append(rich.text.Text("---", style="dim"))
+
             prompt_renderable: rich.console.RenderableType = rich.console.Group(
                 *chat_group_items
             )

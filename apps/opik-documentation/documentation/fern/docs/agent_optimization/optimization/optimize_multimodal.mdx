@@ -8,26 +8,26 @@ og:title: Optimize multimodal performance with Opik
 title: Optimize multimodal prompts
 ---
 
-Multimodal agents often juggle text instructions, image references, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for images or videos (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
+Multimodal agents often juggle text instructions, images, audio, video, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for non-text modalities (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
 
 ### Optimizer multimodal support
 
-Use optimizers that can forward OpenAI-style content parts (string or an array of `{ type: "text" | "image_url" }` parts) to a vision-capable LLM. Current support:
+Use optimizers that can forward OpenAI-style content parts (string or an array of structured parts like `{ type: "text" | "image_url" }`) to a multimodal LLM. Current support:
 
 | Optimizer | Multimodal (text+image) | Notes |
 |---|---|---|
-| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
-| MetaPrompt Optimizer | ✗ | Planned |
-| Evolutionary Optimizer | ✗ | Planned |
-| Few-shot Bayesian Optimizer | ✗ | Planned |
-| Parameter Optimizer | ✗ | Not applicable (tunes parameters only) |
-| GEPA Optimizer | ✗ | Planned |
+| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Ensure both optimizer `model` and `ChatPrompt.model` are multimodal-capable. |
+| MetaPrompt Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
+| Evolutionary Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
+| Few-shot Bayesian Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
+| Parameter Optimizer | ✓ | Tunes parameters only, but supports multimodal prompts for evaluation. |
+| GEPA Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
 
 See also: [Evaluate multimodal](/evaluation/evaluate_multimodal) for model-family guidance and content block format.
 
 ## Dataset design
 
-- Store image or audio references as signed URLs in your dataset items (`metadata["image_url"]`).
+- Store image, audio, or video references as signed URLs in your dataset items (for example `metadata["image_url"]`, `metadata["audio_url"]`, or `metadata["video_url"]`).
 - Include textual descriptions alongside assets so metrics can run without downloading large files when possible.
 - Tag rows with modality info (`metadata["modality"] = "image+text"`) to filter during analysis.
 
@@ -65,7 +65,7 @@ prompt = ChatPrompt(
 - Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
 - Use HRPO to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
 - Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
-- If an optimizer does not support the modality (e.g., text-only GEPA with image inputs), it will still mutate the prompt but cannot execute candidate evaluations—stick to optimizers whose evaluation models accept the modality.
+- All prompt optimizers can forward multimodal content parts, but evaluation will fail if the chosen models do not support the modality. Use multimodal-capable models for both optimizer generation and prompt evaluation.
 
 ## Validation
 
@@ -77,3 +77,4 @@ prompt = ChatPrompt(
 
 - [Define datasets](/agent_optimization/optimization/define_datasets)
 - [Define metrics](/agent_optimization/optimization/define_metrics)
+- [Automatic Prompt Optimization for Multimodal Vision Agents (self-driving car example)](https://towardsdatascience.com/automatic-prompt-optimization-for-multimodal-vision-agents-a-self-driving-car-example/)

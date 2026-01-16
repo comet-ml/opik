@@ -55,7 +55,7 @@ parameter_space = ParameterSearchSpace.model_validate(
 
 optimization_result = optimizer.optimize_parameter(
     prompt=prompt,
-    agent_class=ADKAgent,
+    agent=ADKAgent(),
     dataset=dataset,
     metric=levenshtein_ratio,
     parameter_space=parameter_space,

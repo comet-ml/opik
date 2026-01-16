@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from io import StringIO
 from typing import Any
 
 from rich.panel import Panel
@@ -55,30 +54,6 @@ def infer_output_style(verbose: int = 1) -> Any:
                         Text("Continuing with default style", style="dim")
                     )
                 )
-
-        def display_style_inference_prompt(self, output_style_prompt: str) -> None:
-            if verbose >= 1:
-                panel = Panel(
-                    Text(output_style_prompt),
-                    title="Output style inference prompt",
-                    title_align="left",
-                    border_style="dim",
-                    width=PANEL_WIDTH,
-                    padding=(1, 2),
-                )
-
-                # Use a temporary buffer to render the panel
-                buffer = StringIO()
-                temp_console = get_console(file=buffer, width=console.width)
-                temp_console.print(panel)
-
-                # Add prefix to each line
-                panel_output = buffer.getvalue()
-                prefixed = "\n".join(f"│ {line}" for line in panel_output.splitlines())
-
-                # Print the final result
-                console.print(prefixed)
-                console.print(Text("│"))
 
         def success(self, output_style_prompt: str) -> None:
             if verbose >= 1:

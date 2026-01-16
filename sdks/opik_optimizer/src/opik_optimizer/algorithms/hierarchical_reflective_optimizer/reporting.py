@@ -362,13 +362,15 @@ def display_optimization_start_message(verbose: int = 1) -> None:
 
 
 class CandidateGenerationReporter:
-    def __init__(self, num_prompts: int):
+    def __init__(self, num_prompts: int, selection_summary: str | None = None):
         self.num_prompts = num_prompts
+        self.selection_summary = selection_summary
 
     def set_generated_prompts(self) -> None:
+        summary = f" ({self.selection_summary})" if self.selection_summary else ""
         console.print(
             Text(
-                f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}",
+                f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
                 style="dim",
             )
         )
@@ -389,21 +391,27 @@ def display_tool_description(description: str, label: str, color: str) -> None:
 
 @contextmanager
 def display_candidate_generation_report(
-    num_prompts: int, verbose: int = 1
+    num_prompts: int, verbose: int = 1, selection_summary: str | None = None
 ) -> Iterator[CandidateGenerationReporter]:
     if verbose >= 1:
         console.print(
             Text(f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:")
         )
+        if selection_summary:
+            console.print(
+                Text(f"│      Evaluation settings: {selection_summary}", style="dim")
+            )
 
     try:
-        yield CandidateGenerationReporter(num_prompts)
+        yield CandidateGenerationReporter(num_prompts, selection_summary)
     finally:
         pass
 
 
 @contextmanager
-def display_prompt_candidate_scoring_report(verbose: int = 1) -> Any:
+def display_prompt_candidate_scoring_report(
+    verbose: int = 1, selection_summary: str | None = None
+) -> Any:
     """Context manager to display messages during an evaluation phase."""
 
     # Create a simple object with a method to set the score
@@ -415,6 +423,13 @@ def display_prompt_candidate_scoring_report(verbose: int = 1) -> Any:
                 console.print(
                     Text(f"│       Evaluating candidate prompt {candidate_count + 1}:")
                 )
+                if selection_summary:
+                    console.print(
+                        Text(
+                            f"│            Evaluation settings: {selection_summary}",
+                            style="dim",
+                        )
+                    )
                 display_messages(prompt.get_messages(), "│            ")
 
         def set_final_score(self, best_score: float, score: float) -> None:
@@ -712,46 +727,6 @@ def display_prompt_improvement(
         pass
 
 
-def display_improvement_reasoning(
-    failure_mode_name: str, reasoning: str, verbose: int = 1
-) -> None:
-    """Display prompt improvement reasoning for a specific failure mode."""
-    if verbose < 1:
-        return
-
-    console.print(Text("│"))
-    console.print(Text("│   "))
-    console.print(
-        Text("│   ").append(Text(f"Addressing: {failure_mode_name}", style="bold cyan"))
-    )
-
-    reasoning_content = Text()
-    reasoning_content.append("Improvement Strategy:\n", style="cyan")
-    reasoning_content.append(reasoning)
-
-    panel = Panel(
-        reasoning_content,
-        title="💡 Reasoning",
-        title_align="left",
-        border_style="blue",
-        width=PANEL_WIDTH - 10,
-        padding=(0, 1),
-    )
-
-    # Capture and prefix each line
-    with console.capture() as capture:
-        console.print(panel)
-
-    rendered_panel = capture.get()
-
-    # Prefix each line with '│     ', preserving ANSI styles
-    prefixed_output = "\n".join(f"│     {line}" for line in rendered_panel.splitlines())
-
-    # Print the prefixed output (will include colors)
-    console.print(prefixed_output, highlight=False)
-    console.print(Text("│   "))
-
-
 def display_iteration_improvement(
     improvement: float, current_score: float, best_score: float, verbose: int = 1
 ) -> None:
@@ -785,6 +760,7 @@ def display_optimized_prompt_diff(
     initial_score: float,
     best_score: float,
     verbose: int = 1,
+    prompt_name: str | None = None,
 ) -> None:
     """Display git-style diff of prompt changes."""
     import difflib
@@ -794,8 +770,25 @@ def display_optimized_prompt_diff(
 
     console.print(Text("│"))
     console.print(Text("│"))
-    console.print(Text("│ ").append(Text("> Optimization Results", style="bold green")))
+
+    # Display prompt name if provided
+    if prompt_name:
+        console.print(
+            Text("│ ").append(
+                Text(f"> Optimization Results for '{prompt_name}'", style="bold green")
+            )
+        )
+    else:
+        console.print(
+            Text("│ ").append(Text("> Optimization Results", style="bold green"))
+        )
     console.print(Text("│"))
+
+    # Check if prompt is unchanged
+    if initial_messages == optimized_messages:
+        console.print(Text("│   ").append(Text("Prompt unchanged", style="dim")))
+        console.print(Text("│"))
+        return
 
     # Show score improvement
     if best_score > initial_score:

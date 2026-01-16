@@ -60,7 +60,9 @@ class EvaluationStage(BaseModel):
     stage: str
     split: str | None = None
     evaluation: TaskEvaluationResult | None = None
-    prompt_snapshot: opik_optimizer.ChatPrompt | None = None
+    prompt_snapshot: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
     step_ref: str | None = None
     notes: str | None = None
 
@@ -75,8 +77,12 @@ class TaskResult(BaseModel):
     model_parameters: dict[str, Any] | None = None
     timestamp_start: float
     status: TaskStatus
-    initial_prompt: opik_optimizer.ChatPrompt | None = None
-    optimized_prompt: opik_optimizer.ChatPrompt | None = None
+    initial_prompt: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
+    optimized_prompt: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
     evaluations: dict[str, EvaluationSet] = Field(default_factory=dict)
     stages: list[EvaluationStage] = Field(default_factory=list)
     optimization_history: dict[str, Any] = Field(default_factory=dict)
@@ -103,16 +109,40 @@ class TaskResult(BaseModel):
         by_name: bool | None = None,
     ) -> "TaskResult":
         """Custom validation method to handle nested objects during deserialization."""
-        # Handle ChatPrompt objects
-        if obj.get("initial_prompt") and isinstance(obj["initial_prompt"], dict):
-            obj["initial_prompt"] = opik_optimizer.ChatPrompt.model_validate(
-                obj["initial_prompt"]
-            )
 
-        if obj.get("optimized_prompt") and isinstance(obj["optimized_prompt"], dict):
-            obj["optimized_prompt"] = opik_optimizer.ChatPrompt.model_validate(
-                obj["optimized_prompt"]
-            )
+        def _deserialize_prompt(
+            prompt_data: Any,
+        ) -> opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None:
+            """Deserialize a prompt which can be single ChatPrompt or dict of ChatPrompts."""
+            if prompt_data is None:
+                return None
+            if isinstance(prompt_data, opik_optimizer.ChatPrompt):
+                return prompt_data
+            if isinstance(prompt_data, dict):
+                # Check if this is a dict of prompts (keys are prompt names)
+                # or a serialized single ChatPrompt (has 'messages' key)
+                if "messages" in prompt_data or "system" in prompt_data:
+                    # Single ChatPrompt serialized as dict
+                    return opik_optimizer.ChatPrompt.model_validate(prompt_data)
+                else:
+                    # Dict of prompts - deserialize each
+                    result: dict[str, opik_optimizer.ChatPrompt] = {}
+                    for key, value in prompt_data.items():
+                        if isinstance(value, opik_optimizer.ChatPrompt):
+                            result[key] = value
+                        elif isinstance(value, dict):
+                            result[key] = opik_optimizer.ChatPrompt.model_validate(
+                                value
+                            )
+                    return result
+            return prompt_data
+
+        # Handle ChatPrompt objects (single or dict)
+        if obj.get("initial_prompt"):
+            obj["initial_prompt"] = _deserialize_prompt(obj["initial_prompt"])
+
+        if obj.get("optimized_prompt"):
+            obj["optimized_prompt"] = _deserialize_prompt(obj["optimized_prompt"])
 
         if obj.get("evaluations") and isinstance(obj["evaluations"], dict):
             normalized: dict[str, EvaluationSet] = {}
@@ -130,13 +160,10 @@ class TaskResult(BaseModel):
                         entry["evaluation"] = TaskEvaluationResult.model_validate(
                             entry["evaluation"]
                         )
-                    if entry.get("prompt_snapshot") and isinstance(
-                        entry["prompt_snapshot"], dict
-                    ):
-                        entry["prompt_snapshot"] = (
-                            opik_optimizer.ChatPrompt.model_validate(  # type: ignore[attr-defined]
-                                entry["prompt_snapshot"]
-                            )
+                    if entry.get("prompt_snapshot"):
+                        # Use _deserialize_prompt to handle both single and dict prompts
+                        entry["prompt_snapshot"] = _deserialize_prompt(
+                            entry["prompt_snapshot"]
                         )
                     normalized_stages.append(EvaluationStage.model_validate(entry))
                 else:

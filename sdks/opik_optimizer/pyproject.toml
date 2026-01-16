@@ -1,6 +1,6 @@
 [project]
 name = "opik_optimizer"
-version = "2.3.11"
+version = "3.0.0rc4"
 description = "Agent optimization with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}
@@ -33,16 +33,32 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # Test Related
     "pytest",
     "pytest-cov",
     "pytest-xdist",
     "pytest-asyncio",
     "pytest-env",
     "pytest-profiling",
-    # "google-adk",
-    "langgraph",
+    # Pre-commit
     "pre-commit",
+    "radon",
+    "xenon",
+    "lizard",
+    # Test required packages
+    # "google-adk",
+    "huggingface-hub",
+    "langgraph",
+    "bm25s",
+    "PyStemmer",
     "scikit-learn",
+]
+bm25 = [ # Extras - pip install opik_optimizer[bm25]
+    "bm25s[full]",
+    "PyStemmer",
+    "huggingface-hub",
+    "ujson",
+    "pyarrow",  # For optimized Parquet format
 ]
 
 [tool.setuptools.packages.find]
@@ -61,7 +77,8 @@ ignore_missing_imports = false
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
-mypy_path = "sdks/opik_optimizer"
+mypy_path = ["typings", "src"]
+exclude = "(^|.*/)scripts/benchmarks/"
 
 [[tool.mypy.overrides]]
 module = [
@@ -75,10 +92,33 @@ module = [
     "rapidfuzz.*",
     "PIL.*",
     "datasets.*",
+    "pyarrow.*",
     "gepa.*",
     "mcp.*",
+    "bm25s.*",
+    "Stemmer.*",
+    "dsp.*",
+    "huggingface_hub.*",
+    "pydantic_ai.*",
+    "crewai.*",
+    "langgraph.*",
+    "agent_framework.*",
+    "langchain_openai.*",
+    "google.adk.*",
+    "google.genai.*",
+    "opik_optimizer.mcp_utils.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "scripts.optimizer_algorithms.*",
+    "scripts.llm_frameworks.*",
+    "scripts.archive.*",
+    "scripts.validation_dataset",
+    "validation_dataset",
+]
+ignore_errors = true
 
 [tool.uv]
 managed = false
@@ -88,6 +128,8 @@ filterwarnings = [
     "ignore::UserWarning:pydantic.main",
     "ignore::pytest.PytestConfigWarning",
     "ignore::RuntimeWarning:litellm.integrations.opik.opik",
+    "ignore:There is no current event loop:DeprecationWarning:litellm._service_logger",
+    "ignore:Argument ``multivariate`` is an experimental feature.:optuna._experimental",
 ]
 
 [tool.coverage.run]
@@ -113,4 +155,31 @@ combine-as-imports = true
 [tool.vulture]
 min_confidence = 60
 paths = ["src", "tests", "scripts", "benchmarks"]
-ignore_names = ["return_value", "side_effect"]
+ignore_names = [
+  "__getattr__",
+  "_coerce_aliases",
+  "_normalize",
+  "DATASET_CONFIG",
+  "HF_CACHE_HOME",
+  "HF_DATASETS_CACHE",
+  "OPTIMIZER_CONFIGS",
+  "additionalProperties",
+  "by_alias",
+  "by_name",
+  "detail",
+  "drop_params",
+  "from_attributes",
+  "get_optimized_model",
+  "get_optimized_model_kwargs",
+  "get_optimized_parameters",
+  "input_text",
+  "is_jupyter",
+  "llm_calls",
+  "llm_calls_tools",
+  "make_reflective_dataset",
+  "model_config",
+  "pytestmark",
+  "return_value",
+  "side_effect",
+  "strict",
+]

@@ -1,10 +1,14 @@
 import argparse
 import inspect
+import os
 import re
 from pathlib import Path
 from typing import Any, get_type_hints
 
-import opik_optimizer
+# Suppress banner for helper scripts
+os.environ["OPIK_OPTIMIZER_NO_BANNER"] = "1"
+
+import opik_optimizer  # noqa: E402
 from pydantic import BaseModel
 
 
@@ -23,7 +27,6 @@ class MethodInfo(BaseModel):
 
 
 class ClassInfo(BaseModel):
-    class_docstring: str | None
     init_parameters: list[ParameterInfo]
     public_methods: list[MethodInfo]
 
@@ -269,7 +272,6 @@ class ClassInspector:
             )
 
         return ClassInfo(
-            class_docstring=self.get_docstring(),
             init_parameters=init_params,
             public_methods=self.get_public_methods(),
         )

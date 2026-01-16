@@ -5,6 +5,8 @@ datasets are available, which metrics they should be evaluated with, the
 default optimizer classes/parameters, and the rollout budgets.
 """
 
+from __future__ import annotations
+
 from typing import Any
 from collections.abc import Callable
 
@@ -30,6 +32,8 @@ class BenchmarkDatasetConfig(BaseModel):
     metrics: list[Callable]
     rollout_budget: int | None = None
     train_rollout_budget: int | None = None
+    # If True, this dataset uses a custom agent (handled in task_runner)
+    uses_agent: bool = False
 
 
 class BenchmarkProjectConfig(BaseModel):
@@ -185,6 +189,7 @@ DATASET_CONFIG = {
         metrics=_HOT_POT_METRICS,
         rollout_budget=6438,
         train_rollout_budget=737,
+        uses_agent=True,
     ),
     "hotpot_validation": BenchmarkDatasetConfig(
         name="hotpot_validation",
@@ -192,6 +197,7 @@ DATASET_CONFIG = {
         metrics=_HOT_POT_METRICS,
         rollout_budget=6438,
         train_rollout_budget=737,
+        uses_agent=True,
     ),
     "hotpot_test": BenchmarkDatasetConfig(
         name="hotpot_test",
@@ -199,6 +205,7 @@ DATASET_CONFIG = {
         metrics=_HOT_POT_METRICS,
         rollout_budget=6438,
         train_rollout_budget=737,
+        uses_agent=True,
     ),
     "hover_train": BenchmarkDatasetConfig(
         name="hover_train",

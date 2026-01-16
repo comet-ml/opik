@@ -10,13 +10,13 @@ subtitle: Optimize prompts that use external tools and function calls
 title: Tool Optimization (MCP & Function Calling)
 ---
 
-Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is currently **exclusively supported by the MetaPrompt Optimizer** and is **currently in Beta**.
+Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is currently **exclusively supported by the MetaPrompt Optimizer**.
 
 ## What is Tool Optimization?
 
 Tool optimization extends traditional prompt optimization to handle prompts that include:
 
-- **MCP tools** - Model Context Protocol tools for external integrations (Beta)
+- **MCP tools** - Model Context Protocol tools for external integrations
 - **Tool schemas** - Structured tool definitions and parameters
 - **Multi-step workflows** - Complex agent workflows involving multiple tools
 
@@ -24,7 +24,7 @@ Tool optimization extends traditional prompt optimization to handle prompts that
   **Important Distinction:** Many optimizers (including GEPA, MetaPrompt, etc.) can optimize **agents that use tools** -
   this means optimizing prompts for agents that have access to function calling or external tools. However, **true tool
   optimization** (optimizing the tools themselves, their schemas, or MCP integrations) is currently only available
-  through MetaPrompt Optimizer and is in Beta.
+  through the MetaPrompt Optimizer.
 </Note>
 
 <Note>
@@ -89,13 +89,13 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
   the tools themselves).
 </Note>
 
-### 2. MCP (Model Context Protocol) Tools - Beta
+### 2. MCP (Model Context Protocol) Tools
 
-**True tool optimization** is currently only available for MCP tools and is in Beta. MCP tools provide standardized interfaces for external integrations:
+**True tool optimization** is currently only available for MCP tools through the MetaPrompt Optimizer. MCP tools provide standardized interfaces for external integrations:
 
 ```python
-# MCP tool optimization example (Beta)
-# See scripts/litellm_metaprompt_context7_mcp_example.py for working examples
+# MCP tool optimization example
+# See scripts/archive/litellm_metaprompt_context7_mcp_example.py for working examples
 
 from opik_optimizer import MetaPromptOptimizer
 
@@ -103,17 +103,15 @@ from opik_optimizer import MetaPromptOptimizer
 # The MetaPrompt Optimizer can optimize MCP tool descriptions and usage
 optimizer = MetaPromptOptimizer(model="gpt-4")
 
-# MCP tool optimization is currently in Beta
 # Check the scripts/ directory for working examples
 ```
 
 <Note>
-MCP Tool Optimization Status:
+MCP Tool Optimization:
 
-    - Currently in **Beta**
     - Only supported by **MetaPrompt Optimizer**
-    - See [PR#3341](https://github.com/comet-ml/opik/pull/3341) for implementation detail
-    - Working examples available in `scripts/litellm_metaprompt_context7_mcp_example.py`
+    - See [PR#3341](https://github.com/comet-ml/opik/pull/3341) for implementation details
+    - Working examples available in `scripts/archive/litellm_metaprompt_context7_mcp_example.py`
 
 </Note>
 

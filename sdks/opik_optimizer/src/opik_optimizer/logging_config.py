@@ -1,6 +1,8 @@
+import importlib.metadata
 import logging
 import os
 
+from rich.console import Console
 from rich.logging import RichHandler
 
 DEFAULT_LOG_FORMAT = "%(message)s"
@@ -106,10 +108,34 @@ def setup_logging(
     _logging_configured = True
     _configured_level = target_level
 
-    # Use level name provided by rich handler by default
-    package_logger.info(
-        f"Opik Agent Optimizer logging configured to level: [bold cyan]{logging.getLevelName(target_level)}[/bold cyan]"
+    # Skip banner for scripts/non-interactive contexts
+    show_banner = os.getenv("OPIK_OPTIMIZER_NO_BANNER", "").lower() not in (
+        "1",
+        "true",
+        "yes",
     )
+    if show_banner:
+        version = importlib.metadata.version("opik_optimizer")
+        banner = (
+            "\n[bold cyan]"
+            "  ░██████                 ░██    ░██                ░██                               \n"
+            " ░██   ░██                ░██                                                         \n"
+            "░██     ░██ ░████████  ░████████ ░██░█████████████  ░██░█████████  ░███████  ░██░████ \n"
+            "░██     ░██ ░██    ░██    ░██    ░██░██   ░██   ░██ ░██     ░███  ░██    ░██ ░███     \n"
+            "░██     ░██ ░██    ░██    ░██    ░██░██   ░██   ░██ ░██   ░███    ░█████████ ░██      \n"
+            " ░██   ░██  ░███   ░██    ░██    ░██░██   ░██   ░██ ░██ ░███      ░██        ░██      \n"
+            "  ░██████   ░██░█████      ░████ ░██░██   ░██   ░██ ░██░█████████  ░███████  ░██      \n"
+            "            ░██                                                                       \n"
+            "            ░██                                                                       "
+            "[/bold cyan]\n"
+            f"Opik Optimizer SDK [bold]Version:[/bold] {version}"
+        )
+        Console().print(banner)
+
+        # Use level name provided by rich handler by default
+        package_logger.info(
+            f"Opik Agent Optimizer logging configured to level: [bold cyan]{logging.getLevelName(target_level)}[/bold cyan]"
+        )
 
 
 # Ensure logger obtained after setup can be used immediately if needed

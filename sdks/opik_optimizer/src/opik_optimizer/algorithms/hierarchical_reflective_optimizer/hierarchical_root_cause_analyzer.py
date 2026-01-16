@@ -10,9 +10,9 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from . import reporting
-from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 from ...reporting_utils import get_console
 from ... import _llm_calls
+from ...utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,8 @@ class HierarchicalRootCauseAnalyzer:
         seed: int,
         max_parallel_batches: int,
         batch_size: int,
-        model_parameters: dict[str, Any],
+        model_parameters: dict[str, Any] | None,
+        prompts: PromptLibrary,
         verbose: int = 1,
     ) -> None:
         """
@@ -51,6 +52,7 @@ class HierarchicalRootCauseAnalyzer:
             seed: Random seed for reproducibility
             max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
             batch_size: Number of test cases per batch for analysis (default: 25)
+            prompts: PromptLibrary instance for accessing prompt templates
             verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         """
         self.reasoning_model = reasoning_model
@@ -58,7 +60,8 @@ class HierarchicalRootCauseAnalyzer:
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
         self.verbose = verbose
-        self.model_parameters = model_parameters
+        self.model_parameters = model_parameters or {}
+        self.prompts = prompts
 
     def _format_test_results_batch(
         self,
@@ -103,6 +106,13 @@ Scores:
 
         return "\n\n" + ("=" * 80 + "\n\n").join(formatted_results)
 
+    @staticmethod
+    def _extract_first_response(response: Any) -> Any:
+        """Normalize list responses to a single response object."""
+        if isinstance(response, list):
+            return response[0]
+        return response
+
     async def _analyze_batch_async(
         self,
         evaluation_result: EvaluationResult,
@@ -135,7 +145,8 @@ Scores:
             test_results, batch_start, batch_end
         )
 
-        batch_analysis_prompt = BATCH_ANALYSIS_PROMPT.format(
+        batch_analysis_prompt = self.prompts.get(
+            "batch_analysis_prompt",
             formatted_batch=formatted_batch,
         )
 
@@ -148,13 +159,15 @@ Scores:
             model_parameters=self.model_parameters,
             response_model=RootCauseAnalysis,
         )
+        root_cause = cast(
+            RootCauseAnalysis, self._extract_first_response(root_cause_response)
+        )
 
-        root_cause_response = cast(RootCauseAnalysis, root_cause_response)
         return BatchAnalysis(
             batch_number=batch_number,
             start_index=batch_start,
             end_index=actual_end,
-            failure_modes=root_cause_response.failure_modes,
+            failure_modes=root_cause.failure_modes,
         )
 
     async def _synthesize_batch_analyses_async(
@@ -193,7 +206,8 @@ Scores:
 {chr(10).join(failure_list)}"""
             batch_summaries.append(summary)
 
-        synthesis_prompt = SYNTHESIS_PROMPT.format(
+        synthesis_prompt = self.prompts.get(
+            "synthesis_prompt",
             batch_summaries=chr(10).join(batch_summaries),
         )
 
@@ -206,9 +220,8 @@ Scores:
             response_model=HierarchicalRootCauseAnalysis,
         )
 
-        synthesis_response = cast(HierarchicalRootCauseAnalysis, synthesis_response)
-
-        return synthesis_response
+        synthesis = self._extract_first_response(synthesis_response)
+        return cast(HierarchicalRootCauseAnalysis, synthesis)
 
     def _validate_reasons_present(self, test_results: list[Any]) -> None:
         """

@@ -5,7 +5,7 @@ import os
 from opik.evaluation.models.litellm import warning_filters
 
 from . import datasets
-from .optimizable_agent import OptimizableAgent
+from .agents.optimizable_agent import OptimizableAgent
 from .api_objects.chat_prompt import ChatPrompt
 from .base_optimizer import BaseOptimizer
 from .algorithms import (

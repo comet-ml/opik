@@ -1,4 +1,5 @@
 from .ai2_arc import ai2_arc
+from .arc_agi2 import arc_agi2
 from .cnn_dailymail import cnn_dailymail
 from .context7_eval import context7_eval
 from .election_questions import election_questions
@@ -30,6 +31,7 @@ from .driving_hazard import (
 
 __all__ = [
     "ai2_arc",
+    "arc_agi2",
     "cnn_dailymail",
     "context7_eval",
     "driving_hazard_50",

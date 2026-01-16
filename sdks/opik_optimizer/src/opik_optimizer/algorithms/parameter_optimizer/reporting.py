@@ -21,13 +21,19 @@ PANEL_WIDTH = 70
 
 @contextmanager
 def display_evaluation(
-    message: str = "First we will establish the baseline performance:", verbose: int = 1
+    message: str = "First we will establish the baseline performance:",
+    verbose: int = 1,
+    selection_summary: str | None = None,
 ) -> Iterator[Any]:
     """Context manager to display messages during an evaluation phase."""
 
     # Entry point
     if verbose >= 1:
         console.print(Text(f"> {message}"))
+        if selection_summary:
+            console.print(
+                Text(f"│ Evaluation settings: {selection_summary}", style="dim")
+            )
 
     # Create a simple object with a method to set the score
     class Reporter:
@@ -45,65 +51,13 @@ def display_evaluation(
 
 
 @contextmanager
-def display_trial_progress(
-    stage: str, n_trials: int, verbose: int = 1
-) -> Iterator[Any]:
-    """Context manager to display progress during Optuna trial optimization."""
-
-    if verbose >= 1:
-        console.print(Text(f"> Running {stage} search with {n_trials} trials"))
-
-    class Reporter:
-        def trial_complete(
-            self, trial_number: int, score: float, is_best: bool
-        ) -> None:
-            if verbose >= 1:
-                if is_best:
-                    console.print(
-                        Text(
-                            f"│ Trial {trial_number + 1}/{n_trials}: {score:.4f} (new best)",
-                            style="green",
-                        )
-                    )
-                else:
-                    console.print(
-                        Text(
-                            f"│ Trial {trial_number + 1}/{n_trials}: {score:.4f}",
-                            style="dim",
-                        )
-                    )
-
-    with suppress_opik_logs():
-        try:
-            yield Reporter()
-        finally:
-            if verbose >= 1:
-                console.print("")
-
-
-def display_search_stage_summary(
-    stage: str, best_score: float, best_params: dict[str, Any], verbose: int = 1
-) -> None:
-    """Display summary after a search stage completes."""
-    if verbose < 1:
-        return
-
-    console.print(Text(f"│ {stage.capitalize()} search complete", style="cyan"))
-    console.print(Text(f"│ Best score: {best_score:.4f}", style="green"))
-    if best_params:
-        console.print(Text("│ Best parameters:", style="dim"))
-        for key, value in best_params.items():
-            console.print(Text(f"│   {key}: {value}", style="dim cyan"))
-    console.print("")
-
-
-@contextmanager
 def display_trial_evaluation(
     trial_number: int,
     total_trials: int,
     stage: str,
     parameters: dict[str, Any],
     verbose: int = 1,
+    selection_summary: str | None = None,
 ) -> Iterator[Any]:
     """Context manager to display a single trial evaluation with parameters."""
 
@@ -115,6 +69,10 @@ def display_trial_evaluation(
                 style="cyan bold",
             )
         )
+        if selection_summary:
+            console.print(
+                Text(f"│ Evaluation settings: {selection_summary}", style="dim")
+            )
 
         # Display parameters being tested
         if parameters:

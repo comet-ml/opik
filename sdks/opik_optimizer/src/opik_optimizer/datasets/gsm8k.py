@@ -3,7 +3,7 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
 
 GSM8K_SPEC = DatasetSpec(
     name="gsm8k",
@@ -45,6 +45,7 @@ def gsm8k(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Grade-school math word problems (GSM8K) slices."""
     return _GSM8K_HANDLE.load(
@@ -55,4 +56,5 @@ def gsm8k(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

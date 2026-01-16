@@ -1,111 +1,84 @@
 import logging
 import math
-from typing import Any
+from typing import Any, overload, Literal
 from collections.abc import Callable
 
-
 import opik
+from .api_objects.types import MetricFunction
+from .reporting_utils import suppress_experiment_reporting
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
-from .metrics import multi_metric_objective
-from opik.message_processing.emulation.models import SpanModel
-from opik_optimizer.metrics import helpers
+from . import multi_metric_objective
 
 logger = logging.getLogger(__name__)
 
 
-def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
-    metric_name = metric.__name__
+def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
+    class MetricClass(base_metric.BaseMetric):
+        def __init__(self) -> None:
+            self.name = metric.__name__
 
-    needs_task_span = (
-        helpers.has_task_span_parameter(metric)
-        if not isinstance(metric, multi_metric_objective.MultiMetricObjective)
-        else metric.needs_task_span
-    )
+        def score(
+            self, llm_output: str, **kwargs: Any
+        ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+            try:
+                metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
 
-    def _process_metric_result(
-        metric: Callable,
-        metric_val: Any,
-        metric_name: str,
-    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-        """Process metric result and return appropriate ScoreResult(s)."""
-        if isinstance(metric, multi_metric_objective.MultiMetricObjective):
-            if (
-                hasattr(metric_val, "metadata")
-                and "raw_score_results" in metric_val.metadata
-            ):
-                return [metric_val, *metric_val.metadata["raw_score_results"]]
-            else:
-                return [metric_val]
+                # Handle list[ScoreResult] return type first
+                if isinstance(metric_val, list):
+                    return metric_val
 
-        if isinstance(metric_val, score_result.ScoreResult):
-            return score_result.ScoreResult(
-                name=metric_name,
-                value=metric_val.value,
-                scoring_failed=metric_val.scoring_failed,
-                metadata=metric_val.metadata,
-                reason=metric_val.reason,
-            )
-        else:
-            # metric returned a plain float/int value
-            return score_result.ScoreResult(
-                name=metric_name,
-                value=metric_val,
-                scoring_failed=False,
-                reason="Metric returned a numeric value",
-            )
+                # Handle MultiMetricObjective - always returns list (preserves original)
+                if isinstance(metric, multi_metric_objective.MultiMetricObjective):
+                    # MultiMetricObjective.__call__ always returns ScoreResult
+                    if isinstance(metric_val, score_result.ScoreResult):
+                        if (
+                            metric_val.metadata is not None
+                            and isinstance(metric_val.metadata, dict)
+                            and "raw_score_results" in metric_val.metadata
+                        ):
+                            raw_results = metric_val.metadata["raw_score_results"]
+                            if isinstance(raw_results, list):
+                                return [metric_val, *raw_results]
+                        # No raw_score_results - still return as list
+                        return [metric_val]
+                    # Type-safe fallback (shouldn't happen at runtime)
+                    return [
+                        score_result.ScoreResult(
+                            name=self.name,
+                            value=float(metric_val),
+                            scoring_failed=False,
+                        )
+                    ]
 
-    if not needs_task_span:
-
-        class _MetricClassWithoutSpan(base_metric.BaseMetric):
-            def __init__(self) -> None:
-                super().__init__(name=metric_name, track=True)
-
-            def score(
-                self, llm_output: str, **kwargs: Any
-            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-                try:
-                    metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
-                    return _process_metric_result(metric, metric_val, self.name)
-                except Exception as e:
+                # Handle ScoreResult return type (non-MultiMetricObjective)
+                if isinstance(metric_val, score_result.ScoreResult):
                     return score_result.ScoreResult(
                         name=self.name,
-                        value=0,
-                        scoring_failed=True,
-                        reason=f"Scoring failed with error: {type(e).__name__}: {e}",
+                        value=metric_val.value,
+                        scoring_failed=metric_val.scoring_failed,
+                        metadata=metric_val.metadata,
+                        reason=metric_val.reason,
                     )
 
-        return _MetricClassWithoutSpan()
-    else:
+                # Handle float/int return type
+                return score_result.ScoreResult(
+                    name=self.name, value=float(metric_val), scoring_failed=False
+                )
+            except Exception:
+                return score_result.ScoreResult(
+                    name=self.name, value=0, scoring_failed=True
+                )
 
-        class _MetricClassWithSpan(base_metric.BaseMetric):
-            def __init__(self) -> None:
-                super().__init__(name=metric_name, track=True)
-
-            def score(
-                self, llm_output: str, task_span: SpanModel, **kwargs: Any
-            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-                try:
-                    metric_val = metric(
-                        dataset_item=kwargs, llm_output=llm_output, task_span=task_span
-                    )
-                    return _process_metric_result(metric, metric_val, self.name)
-                except Exception as e:
-                    return score_result.ScoreResult(
-                        name=self.name,
-                        value=0,
-                        scoring_failed=True,
-                        reason=f"Scoring failed with error: {type(e).__name__}: {e}",
-                    )
-
-        return _MetricClassWithSpan()
+    return MetricClass()
 
 
+@overload
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
-    metric: Callable,
+    metric: MetricFunction,
     num_threads: int,
     optimization_id: str | None = None,
     dataset_item_ids: list[str] | None = None,
@@ -113,7 +86,39 @@ def evaluate(
     n_samples: int | None = None,
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
-) -> float:
+    return_evaluation_result: Literal[False] = False,
+) -> float: ...
+
+
+@overload
+def evaluate(
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    metric: MetricFunction,
+    num_threads: int,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
+    verbose: int = 1,
+    return_evaluation_result: Literal[True] = True,
+) -> opik_evaluation_result.EvaluationResult: ...
+
+
+def evaluate(
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    metric: MetricFunction,
+    num_threads: int,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
+    verbose: int = 1,
+    return_evaluation_result: bool = False,
+) -> float | opik_evaluation_result.EvaluationResult:
     """
     Evaluate a task on a dataset.
 
@@ -129,21 +134,15 @@ def evaluate(
         experiment_config: The dictionary with parameters that describe experiment
         optimization_id: Optional optimization ID for the experiment.
         verbose: Whether to print debug information.
+        return_evaluation_result: If True, return the full EvaluationResult instead of just the score.
 
     Returns:
-        float: The average score of the evaluated task.
+        float or EvaluationResult: The average score of the evaluated task, or the full result if return_evaluation_result=True.
 
     Note:
-        If you need access to the raw evaluation result, use `evaluate_with_result`.
+        If you need access to the raw evaluation result, use `evaluate_with_result` or set `return_evaluation_result=True`.
     """
-    # NOTE: GEPA needs both the aggregate score and the raw Opik result so it can map
-    # candidate trajectories back to GEPA's data structures. To avoid breaking every
-    # optimizer call site, we keep this helper returning only the float and expose a
-    # separate `evaluate_with_result` for the GEPA adapter. If more optimizers need
-    # access to the full result we should refactor both functions to return a typed
-    # dataclass (e.g., `EvaluationSummary` with `.score` and `.result`) or add an
-    # overload that keeps the return type stable.
-    score, _ = _evaluate_internal(
+    score, result = _evaluate_internal(
         dataset=dataset,
         evaluated_task=evaluated_task,
         metric=metric,
@@ -155,13 +154,18 @@ def evaluate(
         experiment_config=experiment_config,
         verbose=verbose,
     )
+
+    if return_evaluation_result:
+        if result is None:
+            raise ValueError("EvaluationResult is None, cannot return it")
+        return result
     return score
 
 
 def evaluate_with_result(
     dataset: opik.Dataset,
     evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
-    metric: Callable,
+    metric: MetricFunction,
     num_threads: int,
     optimization_id: str | None = None,
     dataset_item_ids: list[str] | None = None,
@@ -187,11 +191,12 @@ def evaluate_with_result(
     )
 
 
+@suppress_experiment_reporting
 def _evaluate_internal(
     *,
     dataset: opik.Dataset,
     evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
-    metric: Callable,
+    metric: MetricFunction,
     num_threads: int,
     optimization_id: str | None,
     dataset_item_ids: list[str] | None,

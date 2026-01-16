@@ -1,28 +1,23 @@
 import logging
-from typing import Any
-from collections.abc import Callable
+from typing import Any, cast
 
-import opik
 from opik import Dataset
 from ...base_optimizer import BaseOptimizer, OptimizationRound
+from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
-from ...optimizable_agent import OptimizableAgent
+from ...agents import OptimizableAgent, LiteLLMAgent
 from ... import _throttle
 from . import reporting
+from ... import reporting_utils
 from .ops.halloffame_ops import PromptHallOfFame
-from .ops.candidate_ops import _sync_tool_description_in_system
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
-from ...mcp_utils.mcp_workflow import (
-    MCPExecutionConfig,
-    MCPSecondPassCoordinator,
-    extract_tool_arguments,
-)
-from ...utils.prompt_segments import extract_prompt_segments
 
 # Import ops modules
-from .ops import evaluation_ops, candidate_ops, context_ops, result_ops
+from .ops import candidate_ops, context_ops, result_ops
+from . import prompts as meta_prompts
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -61,7 +56,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
         prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
+        prompt_overrides: Optional dict or callable to customize internal prompts.
+            Dict: {"prompt_key": "new_template"} to override specific prompts.
+            Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    # Prompt templates for this optimizer
+    # Keys match what ops files expect (e.g., optimizer.get_prompt("reasoning_system"))
+    DEFAULT_PROMPTS: dict[str, str] = {
+        "reasoning_system": meta_prompts.REASONING_SYSTEM_PROMPT_TEMPLATE,
+        "candidate_generation": meta_prompts.CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE,
+        "agent_bundle_user": meta_prompts.AGENT_BUNDLE_USER_PROMPT_TEMPLATE,
+        "pattern_extraction_system": meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE,
+        "pattern_extraction_user": meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE,
+        "synthesis": meta_prompts.SYNTHESIS_PROMPT_TEMPLATE,
+    }
 
     # --- Constants for Default Configuration ---
     DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
@@ -97,6 +106,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         name: str | None = None,
         use_hall_of_fame: bool = True,
         prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
+        prompt_overrides: PromptOverrides = None,
+        skip_perfect_score: bool = True,
+        perfect_score: float = 0.95,
     ) -> None:
         super().__init__(
             model=model,
@@ -104,6 +116,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             seed=seed,
             model_parameters=model_parameters,
             name=name,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
+            prompt_overrides=prompt_overrides,
         )
         self.prompts_per_round = prompts_per_round
         self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
@@ -129,11 +144,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
         self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
         self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
+
         self.hall_of_fame: PromptHallOfFame | None = None
         if self.use_hall_of_fame:
             self.hall_of_fame = PromptHallOfFame(
                 max_size=self.hall_of_fame_size,
                 pattern_extraction_interval=self.pattern_extraction_interval,
+                prompts=self._prompts,
             )
             logger.debug(
                 f"Hall of Fame enabled: size={self.hall_of_fame_size}, "
@@ -156,7 +173,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             from litellm import get_max_tokens
 
-            model_max_tokens = get_max_tokens(self.model)
+            model_max_tokens: int = get_max_tokens(self.model)  # type: ignore[assignment]
             # Use ~25% of model's context for dataset examples
             calculated_max = int(model_max_tokens * self.DEFAULT_DATASET_CONTEXT_RATIO)
             logger.debug(
@@ -194,50 +211,19 @@ class MetaPromptOptimizer(BaseOptimizer):
         }
         return metadata
 
-    def _evaluate_prompt(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
-        metric: Callable,
-        n_samples: int | None = None,
-        dataset_item_ids: list[str] | None = None,
-        experiment_config: dict | None = None,
-        use_full_dataset: bool = True,
-        optimization_id: str | None = None,
-        mcp_config: MCPExecutionConfig | None = None,
-        **kwargs: Any,
-    ) -> float:
-        """Evaluate a prompt on a dataset using a metric (delegates to ops)."""
-        return evaluation_ops.evaluate_prompt(
-            optimizer=self,
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            n_samples=n_samples,
-            dataset_item_ids=dataset_item_ids,
-            experiment_config=experiment_config,
-            use_full_dataset=use_full_dataset,
-            optimization_id=optimization_id,
-            mcp_config=mcp_config,
-            **kwargs,
-        )
-
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
-        mcp_config: MCPExecutionConfig | None = None,
-        candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
-        candidate_generator_kwargs: dict[str, Any] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -271,11 +257,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 provided it must be a valid UUIDv7 string.
             max_trials: Maximum total number of prompts to evaluate across all rounds.
                 Optimizer stops when this limit is reached.
-            mcp_config: Optional MCP (Model Context Protocol) execution configuration for
-                prompts that use external tools. Enables tool-calling workflows. Default: None
-            candidate_generator: Optional custom function to generate candidate prompts.
-                Overrides default meta-reasoning generator. Should return list[ChatPrompt].
-            candidate_generator_kwargs: Optional kwargs to pass to candidate_generator.
 
         Returns:
             OptimizationResult: Contains the best prompt found, final score, optimization
@@ -309,18 +290,36 @@ class MetaPromptOptimizer(BaseOptimizer):
             print(f"Best prompt: {result.best_prompt}")
             ```
         """
-        # Use base class validation and setup methods
-        self._validate_optimization_inputs(prompt, dataset, metric)
-        self.agent_class = self._setup_agent_class(prompt, agent_class)
+        self._validate_optimization_inputs(
+            prompt, dataset, metric, support_content_parts=True
+        )
+
+        if agent is None:
+            agent = LiteLLMAgent(project_name=project_name)
+
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            optimizable_prompts = {prompt.name: prompt}
+            is_single_prompt_optimization = True
+        else:
+            optimizable_prompts = prompt
+            is_single_prompt_optimization = False
 
         # Set project name from parameter
         self.project_name = project_name
 
+        dataset_name = getattr(dataset, "name", dataset.__class__.__name__)
+        dataset_id = getattr(dataset, "id", None)
+
         # Update experiment_config with validation_dataset if provided
         if validation_dataset is not None:
             experiment_config = experiment_config or {}
-            experiment_config["validation_dataset"] = validation_dataset.name
-            experiment_config["validation_dataset_id"] = validation_dataset.id
+            experiment_config["validation_dataset"] = getattr(
+                validation_dataset, "name", validation_dataset.__class__.__name__
+            )
+            experiment_config["validation_dataset_id"] = getattr(
+                validation_dataset, "id", None
+            )
 
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -332,8 +331,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization = None
         try:
             optimization = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=getattr(metric, "__name__", str(metric)),
+                dataset_name=dataset_name,
+                objective_name=metric.__name__,
                 metadata=self._build_optimization_metadata(),
                 name=self.name,
                 optimization_id=optimization_id,
@@ -350,40 +349,38 @@ class MetaPromptOptimizer(BaseOptimizer):
         reporting.display_header(
             algorithm=self.__class__.__name__,
             optimization_id=optimization.id if optimization is not None else None,
-            dataset_id=dataset.id,
+            dataset_id=dataset_id,
             verbose=self.verbose,
         )
         reporting.display_configuration(
-            messages=prompt.get_messages(),
+            messages=optimizable_prompts,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "max_trials": max_trials,
                 "prompts_per_round": self.prompts_per_round,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
-                "validation_dataset": validation_dataset.name
+                "validation_dataset": getattr(validation_dataset, "name", None)
                 if validation_dataset is not None
                 else None,
             },
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
         )
 
         try:
             optimization_id = optimization.id if optimization is not None else None
             result = self._optimize_prompt(
                 optimization_id=optimization_id,
-                prompt=prompt,
+                prompts=optimizable_prompts,
                 dataset=dataset,
                 metric=metric,
+                agent=agent,
                 validation_dataset=validation_dataset,
                 experiment_config=experiment_config,
                 max_trials=max_trials,
                 n_samples=n_samples,
                 auto_continue=auto_continue,
-                mcp_config=mcp_config,
-                candidate_generator=candidate_generator,
-                candidate_generator_kwargs=candidate_generator_kwargs,
+                is_single_prompt_optimization=is_single_prompt_optimization,
             )
             if optimization:
                 self._update_optimization(optimization, status="completed")
@@ -396,118 +393,107 @@ class MetaPromptOptimizer(BaseOptimizer):
                 logger.debug("Optimization marked as cancelled")
             raise e
 
-    # FIXME: To be removed once MCP is fully supported
-    def optimize_mcp(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: Dataset,
-        metric: Callable,
-        *,
-        tool_name: str,
-        second_pass: MCPSecondPassCoordinator,
-        experiment_config: dict | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
-        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
-        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
-        allow_tool_use_on_second_pass: bool = False,
-        **kwargs: Any,
-    ) -> OptimizationResult:
-        panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
-
-        if prompt.tools is None or not prompt.tools:
-            raise ValueError("Prompt must include tools for MCP optimization")
-
-        fallback_args_fn = fallback_arguments or extract_tool_arguments
-
-        if fallback_invoker is None:
-            function_map = prompt.function_map or {}
-            fallback_invoker = function_map.get(tool_name)
-
-        mcp_config = MCPExecutionConfig(
-            coordinator=second_pass,
-            tool_name=tool_name,
-            fallback_arguments=fallback_args_fn,
-            fallback_invoker=fallback_invoker,
-            allow_tool_use_on_second_pass=allow_tool_use_on_second_pass,
-        )
-
-        tool_segment_id = f"tool:{tool_name}"
-        segments = extract_prompt_segments(prompt)
-        if tool_segment_id not in {segment.segment_id for segment in segments}:
-            raise ValueError(f"Tool '{tool_name}' not present in prompt tools")
-
-        return self._optimize_prompt(
-            optimization_id=None,
-            prompt=prompt,
-            dataset=dataset,
-            validation_dataset=None,
-            metric=metric,
-            experiment_config=experiment_config,
-            max_trials=10,
-            n_samples=n_samples,
-            auto_continue=auto_continue,
-            mcp_config=mcp_config,
-            candidate_generator=self._generate_mcp_candidate_prompts,
-            candidate_generator_kwargs={
-                "tool_segment_id": tool_segment_id,
-                "tool_name": tool_name,
-                "panel_style": panel_style,
-            },
-            tool_panel_style=panel_style,
-        )
-
     def _optimize_prompt(
         self,
         optimization_id: str | None,
-        prompt: chat_prompt.ChatPrompt,
+        prompts: dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
+        agent: OptimizableAgent,
         validation_dataset: Dataset | None,
-        metric: Callable,
+        metric: MetricFunction,
         experiment_config: dict | None,
         max_trials: int,
         n_samples: int | None,
         auto_continue: bool,
-        mcp_config: MCPExecutionConfig | None = None,
-        candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
-        candidate_generator_kwargs: dict[str, Any] | None = None,
-        tool_panel_style: str = "bright_magenta",
+        is_single_prompt_optimization: bool = False,
+        _tool_panel_style: str = "bright_magenta",
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset
-        self.prompt = prompt
         self._reset_counters()  # Reset counters for run
-        initial_prompt = prompt
+        initial_prompts = prompts
+        is_bundle = True
+        dataset_id = getattr(dataset, "id", None)
 
         # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )
 
-        current_prompt = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             if validation_dataset is not None:
                 experiment_config = experiment_config or {}
-                experiment_config["validation_dataset"] = validation_dataset.name
-                experiment_config["validation_dataset_id"] = validation_dataset.id
+                experiment_config["validation_dataset"] = getattr(
+                    validation_dataset, "name", validation_dataset.__class__.__name__
+                )
+                experiment_config["validation_dataset_id"] = getattr(
+                    validation_dataset, "id", None
+                )
 
-            initial_score = self._evaluate_prompt(
-                prompt,
-                optimization_id=optimization_id,
-                dataset=evaluation_dataset,
+            initial_score = self.evaluate_prompt(
+                prompt=prompts,
+                agent=agent,
+                dataset=dataset,
                 metric=metric,
                 n_samples=n_samples,
-                experiment_config=experiment_config,
-                use_full_dataset=n_samples is None,
+                n_threads=self.n_threads,
                 verbose=self.verbose,
-                mcp_config=mcp_config,
+                experiment_config=self._prepare_experiment_config(
+                    prompt=prompts,
+                    dataset=dataset,
+                    metric=metric,
+                    agent=agent,
+                    experiment_config=experiment_config,
+                    is_single_prompt_optimization=is_single_prompt_optimization,
+                ),
             )
+
             best_score = initial_score
-            best_prompt = current_prompt
+            best_prompts = initial_prompts
             rounds: list[OptimizationRound] = []
 
             baseline_reporter.set_score(initial_score)
+
+        if self._should_skip_optimization(initial_score):
+            logger.info(
+                "Baseline score %.4f >= %.4f; skipping meta-prompt optimization.",
+                initial_score,
+                self.perfect_score,
+            )
+            early_result_prompt, early_initial_prompt = self._select_result_prompts(
+                best_prompts=best_prompts,
+                initial_prompts=initial_prompts,
+                is_single_prompt_optimization=is_single_prompt_optimization,
+            )
+
+            reporting.display_result(
+                initial_score=initial_score,
+                best_score=initial_score,
+                prompt=early_result_prompt,
+                verbose=self.verbose,
+            )
+
+            return self._build_early_result(
+                optimizer_name=self.__class__.__name__,
+                prompt=early_result_prompt,
+                initial_prompt=early_initial_prompt,
+                score=initial_score,
+                metric_name=metric.__name__,
+                details={
+                    "rounds": [],
+                    "total_rounds": 0,
+                    "metric_name": metric.__name__,
+                    "stopped_early": True,
+                    "stop_reason": "baseline_score_met_threshold",
+                    "stop_reason_details": {"best_score": initial_score},
+                    "perfect_score": self.perfect_score,
+                    "skip_perfect_score": self.skip_perfect_score,
+                },
+                llm_calls=self.llm_call_counter,
+                llm_calls_tools=self.llm_calls_tools_counter,
+                dataset_id=dataset_id,
+                optimization_id=optimization_id,
+            )
 
         reporting.display_optimization_start_message(verbose=self.verbose)
 
@@ -542,127 +528,139 @@ class MetaPromptOptimizer(BaseOptimizer):
                         for i, pattern in enumerate(new_patterns[:3], 1):
                             logger.debug(f"  Pattern {i}: {pattern[:100]}...")
 
-                # Calculate how many prompts to generate this round
                 prompts_this_round = min(
                     self.prompts_per_round, max_trials - trials_used
                 )
 
-                # Create a set of candidate prompts
-                is_synthesis_round = (
-                    round_num >= self.synthesis_start_round
-                    and (round_num - self.synthesis_start_round)
-                    % self.synthesis_round_interval
-                    == 0
-                )
-
-                if is_synthesis_round and not candidate_generator:
-                    # Synthesis round: combine top performers into comprehensive prompts
-                    logger.info("Combining top performers into comprehensive prompts")
-
-                    generator = self._generate_synthesis_prompts
-                    # Synthesis doesn't use patterns
-                    generator_kwargs = {}
-
-                    # Synthesis creates a fixed, small number of prompts
-                    prompts_this_round = min(
-                        self.synthesis_prompts_per_round, max_trials - trials_used
-                    )
-                else:
-                    # Regular Round
-                    generator = candidate_generator or self._generate_candidate_prompts
-                    generator_kwargs = dict(candidate_generator_kwargs or {})
-
-                    # Add patterns to generator kwargs for injection
-                    if self.hall_of_fame:
-                        patterns_to_inject = (
-                            self.hall_of_fame.get_patterns_for_injection(n=3)
-                        )
-                        if patterns_to_inject:
-                            generator_kwargs["winning_patterns"] = patterns_to_inject
-                            logger.debug(
-                                f"Injecting {len(patterns_to_inject)} patterns into generation"
-                            )
-
                 try:
-                    candidate_prompts = generator(
-                        project_name=self.project_name,
-                        current_prompt=best_prompt,
-                        best_score=best_score,
-                        round_num=round_num,
-                        previous_rounds=rounds,
-                        metric=metric,
-                        optimization_id=optimization_id,
-                        **generator_kwargs,
-                    )
-                    # Limit to prompts_this_round
-                    candidate_prompts = candidate_prompts[:prompts_this_round]
-                except Exception as e:
-                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
-                        raise
-                    round_reporter.failed_to_generate(prompts_this_round, str(e))
-
-                    # If synthesis fails, fall back to regular generation
-                    if is_synthesis_round:
-                        logger.warning(
-                            "Synthesis failed, falling back to regular candidate generation"
+                    if is_single_prompt_optimization:
+                        single_candidates = candidate_ops.generate_candidate_prompts(
+                            optimizer=self,
+                            current_prompt=list(best_prompts.values())[0],
+                            best_score=best_score,
+                            round_num=round_num,
+                            previous_rounds=rounds,
+                            metric=metric,
+                            optimization_id=optimization_id,
+                            project_name=self.project_name,
+                            build_history_context_fn=self._build_history_context,
+                            get_task_context_fn=self._get_task_context,
+                            winning_patterns=(
+                                self.hall_of_fame.get_patterns_for_injection()
+                                if self.hall_of_fame
+                                else None
+                            ),
                         )
-                        try:
-                            generator = self._generate_candidate_prompts
-                            generator_kwargs = {}
-                            prompts_this_round = self.prompts_per_round
-                            candidate_prompts = generator(
-                                project_name=self.project_name,
-                                current_prompt=best_prompt,
+                        prompt_key = next(iter(best_prompts.keys()))
+                        candidate_prompts = [
+                            {prompt_key: prompt}
+                            for prompt in single_candidates[:prompts_this_round]
+                        ]
+                    else:
+                        bundle_candidates = (
+                            candidate_ops.generate_agent_bundle_candidates(
+                                optimizer=self,
+                                current_prompts=best_prompts,
                                 best_score=best_score,
                                 round_num=round_num,
                                 previous_rounds=rounds,
                                 metric=metric,
                                 optimization_id=optimization_id,
-                                **generator_kwargs,
+                                project_name=self.project_name,
+                                build_history_context_fn=self._build_history_context,
+                                get_task_context_fn=self._get_task_context,
                             )
-                            candidate_prompts = candidate_prompts[:prompts_this_round]
-                        except Exception as fallback_e:
-                            # If fallback also fails, break to prevent infinite loop
-                            round_reporter.failed_to_generate(
-                                prompts_this_round, str(fallback_e)
+                        )
+                        # Extract prompts from bundle candidates and limit to prompts_this_round
+                        candidate_prompts = [
+                            bundle.prompts
+                            for bundle in bundle_candidates[:prompts_this_round]
+                        ]
+
+                    synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+                    if (
+                        is_single_prompt_optimization
+                        and self.synthesis_prompts_per_round > 0
+                        and round_num >= self.synthesis_start_round
+                        and self.synthesis_round_interval > 0
+                        and (round_num - self.synthesis_start_round)
+                        % self.synthesis_round_interval
+                        == 0
+                    ):
+                        try:
+                            synthesis_prompts = (
+                                candidate_ops.generate_synthesis_prompts(
+                                    optimizer=self,
+                                    current_prompt=list(best_prompts.values())[0],
+                                    best_score=best_score,
+                                    previous_rounds=rounds,
+                                    metric=metric,
+                                    get_task_context_fn=self._get_task_context,
+                                    optimization_id=optimization_id,
+                                    project_name=self.project_name,
+                                )
                             )
-                            trials_used += prompts_this_round
-                            break
-                    else:
-                        # Regular generation failed - break to prevent infinite loop
-                        trials_used += prompts_this_round
-                        break
+                            prompt_key = next(iter(best_prompts.keys()))
+                            synthesis_candidates = [
+                                {prompt_key: prompt} for prompt in synthesis_prompts
+                            ]
+                        except Exception as synth_exc:
+                            if isinstance(
+                                synth_exc,
+                                (BadRequestError, StructuredOutputParsingError),
+                            ):
+                                raise
+                            logger.warning(
+                                "Synthesis prompt generation failed: %s", synth_exc
+                            )
+
+                    if synthesis_candidates:
+                        candidate_prompts = synthesis_candidates + candidate_prompts
+                        candidate_prompts = candidate_prompts[:prompts_this_round]
+
+                except Exception as e:
+                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                        raise
+                    round_reporter.failed_to_generate(prompts_this_round, str(e))
+                    # Regular generation failed - break to prevent infinite loop
+                    trials_used += prompts_this_round
+                    break
 
                 # Step 2. Score each candidate prompt
-                prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
-                for candidate_count, prompt in enumerate(candidate_prompts):
+                prompt_scores: list[tuple[Any, float]] = []
+                current_round_best_score = (
+                    best_score  # Track best score within this round
+                )
+                for candidate_count, prompts in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
-                        verbose=self.verbose
+                        verbose=self.verbose,
+                        selection_summary=reporting_utils.summarize_selection_policy(
+                            prompts
+                        ),
                     ) as eval_report:
-                        eval_report.set_generated_prompts(candidate_count, prompt)
+                        eval_report.set_generated_prompts(candidate_count, prompts)
 
-                        candidate_prompt = prompt.copy()
+                        prompt_score = self.evaluate_prompt(
+                            prompt=prompts,
+                            agent=agent,
+                            dataset=evaluation_dataset,
+                            metric=metric,
+                            n_samples=n_samples,
+                            n_threads=self.n_threads,
+                            verbose=self.verbose,
+                        )
 
-                        try:
-                            prompt_score = self._evaluate_prompt(
-                                prompt=candidate_prompt,
-                                optimization_id=optimization_id,
-                                dataset=evaluation_dataset,
-                                metric=metric,
-                                n_samples=n_samples,
-                                use_full_dataset=False,
-                                experiment_config=experiment_config,
-                                verbose=self.verbose,
-                                mcp_config=mcp_config,
-                            )
+                        # Compare against the best score seen so far in this round
+                        eval_report.set_final_score(
+                            current_round_best_score, prompt_score
+                        )
+                        trials_used += 1
 
-                            eval_report.set_final_score(best_score, prompt_score)
-                            trials_used += 1
-                        except Exception:
-                            logger.warning("Failed evaluating agent; continuing...")
-                            prompt_score = 0
+                        # Update the round's best score if this candidate is better
+                        if prompt_score > current_round_best_score:
+                            current_round_best_score = prompt_score
 
-                    prompt_scores.append((prompt, prompt_score))
+                    prompt_scores.append((prompts, prompt_score))
 
                 # Step 3. Identify potential improvements
                 if not prompt_scores:
@@ -673,17 +671,22 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 prompt_scores.sort(key=lambda x: x[1], reverse=True)
                 best_candidate_this_round, best_cand_score_avg = prompt_scores[0]
-                improvement = self._calculate_improvement(
+                improvement = result_ops.calculate_improvement(
                     best_cand_score_avg, best_score
                 )
                 round_reporter.round_end(round_num, best_cand_score_avg, best_score)
 
+                # Cast to ChatPrompt for use in round_data and hall of fame
+                best_candidate_chat = cast(
+                    chat_prompt.ChatPrompt, best_candidate_this_round
+                )
+
                 # Add best candidate to hall of fame if qualified
-                if self.hall_of_fame and best_cand_score_avg > 0:
+                if self.hall_of_fame and best_cand_score_avg > 0 and not is_bundle:
                     from .ops.halloffame_ops import HallOfFameEntry
 
                     entry = HallOfFameEntry(
-                        prompt_messages=best_candidate_this_round.get_messages(),
+                        prompt_messages=best_candidate_chat.get_messages(),
                         score=best_cand_score_avg,
                         trial_number=trials_used,
                         improvement_over_baseline=(
@@ -701,9 +704,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 round_data = self._create_round_data(
                     round_num=round_num,
-                    current_best_prompt=best_prompt,
-                    current_best_score=best_score,
-                    best_prompt_overall=best_prompt,
+                    current_best_prompt=best_candidate_chat,
+                    current_best_score=best_cand_score_avg,
+                    best_prompt_overall=best_prompts,
                     evaluated_candidates=prompt_scores,
                     previous_best_score=previous_best_score,
                     improvement_this_round=improvement,
@@ -711,107 +714,91 @@ class MetaPromptOptimizer(BaseOptimizer):
                 rounds.append(round_data)
                 self._add_to_history(round_data)
 
-                if improvement > 0:
+                if best_cand_score_avg > best_score:
                     best_score = best_cand_score_avg
-                    best_prompt = best_candidate_this_round
+                    best_prompts = best_candidate_this_round
 
                 # Increment counters
                 round_num += 1
 
-        if tool_panel_style and getattr(best_prompt, "tools", None):
-            description = (
-                best_prompt.tools[0].get("function", {}).get("description", "")
-                if best_prompt.tools
-                else ""
-            )
-            if description.strip():
-                reporting.display_tool_description(
-                    description.strip(),
-                    "Final tool description",
-                    tool_panel_style,
-                )
-
-        reporting.display_result(
-            initial_score,
-            best_score,
-            best_prompt.get_messages() if best_prompt is not None else [],
-            verbose=self.verbose,
-            tools=getattr(best_prompt, "tools", None) if best_prompt else None,
+        # Prepare result prompts based on single vs multi-prompt mode
+        result_prompt, result_initial_prompt = self._select_result_prompts(
+            best_prompts=best_prompts,
+            initial_prompts=initial_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
         )
 
-        return self._create_result(
-            metric,
-            initial_prompt=(
-                initial_prompt.get_messages() if initial_prompt is not None else []
-            ),
-            best_prompt=best_prompt.get_messages() if best_prompt is not None else [],
+        reporting.display_result(
+            initial_score=initial_score,
+            best_score=best_score,
+            prompt=result_prompt,
+            verbose=self.verbose,
+        )
+
+        trials_requested = max_trials
+        trials_completed = trials_used
+        stopped_early = (
+            trials_requested is not None and trials_completed < trials_requested
+        )
+        stop_reason = "max_trials" if not stopped_early else None
+        stop_reason_details = {"best_score": best_score}
+        if stopped_early:
+            stop_reason_details["best_score"] = best_score
+
+        return result_ops.create_result(
+            optimizer_class_name=self.__class__.__name__,
+            metric=metric,
+            prompt=result_prompt,
+            initial_prompt=result_initial_prompt,
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
-            dataset_id=dataset.id,
+            trials_requested=trials_requested,
+            trials_completed=trials_completed,
+            dataset_id=dataset_id,
             optimization_id=optimization_id,
-            best_tools=getattr(best_prompt, "tools", None) if best_prompt else None,
+            llm_call_counter=self.llm_call_counter,
+            llm_calls_tools=self.llm_calls_tools_counter,
+            model=self.model,
+            temperature=self.model_parameters.get("temperature"),
+            stopped_early=stopped_early,
+            stop_reason=stop_reason,
+            stop_reason_details=stop_reason_details,
         )
-
-    def _calculate_improvement(
-        self, current_score: float, previous_score: float
-    ) -> float:
-        """Calculate the improvement percentage between scores (delegates to ops)."""
-        return result_ops.calculate_improvement(current_score, previous_score)
 
     def _create_round_data(
         self,
         round_num: int,
-        current_best_prompt: chat_prompt.ChatPrompt,
+        current_best_prompt: Any,
         current_best_score: float,
-        best_prompt_overall: chat_prompt.ChatPrompt,
-        evaluated_candidates: list[tuple[chat_prompt.ChatPrompt, float]],
+        best_prompt_overall: Any,
+        evaluated_candidates: list[tuple[Any, float]],
         previous_best_score: float,
         improvement_this_round: float,
     ) -> OptimizationRound:
         """Create an OptimizationRound object with the current round's data (delegates to ops)."""
+        # For bundles, use a representative ChatPrompt to keep validation happy.
+        current_prompt_repr = (
+            next(iter(current_best_prompt.values()))
+            if isinstance(current_best_prompt, dict) and current_best_prompt
+            else current_best_prompt
+        )
+        best_prompt_repr = (
+            next(iter(best_prompt_overall.values()))
+            if isinstance(best_prompt_overall, dict) and best_prompt_overall
+            else best_prompt_overall
+        )
         return result_ops.create_round_data(
             round_num=round_num,
-            current_best_prompt=current_best_prompt,
+            current_best_prompt=current_prompt_repr,
             current_best_score=current_best_score,
-            best_prompt_overall=best_prompt_overall,
+            best_prompt_overall=best_prompt_repr,
             evaluated_candidates=evaluated_candidates,
             previous_best_score=previous_best_score,
             improvement_this_round=improvement_this_round,
         )
 
-    def _create_result(
-        self,
-        metric: Callable,
-        initial_prompt: list[dict[str, str]],
-        best_prompt: list[dict[str, str]],
-        best_score: float,
-        initial_score: float,
-        rounds: list[OptimizationRound],
-        dataset_id: str | None,
-        optimization_id: str | None,
-        best_tools: list[dict[str, Any]] | None,
-    ) -> OptimizationResult:
-        """Create the final OptimizationResult object (delegates to ops)."""
-        return result_ops.create_result(
-            optimizer_class_name=self.__class__.__name__,
-            metric=metric,
-            initial_prompt=initial_prompt,
-            best_prompt=best_prompt,
-            best_score=best_score,
-            initial_score=initial_score,
-            rounds=rounds,
-            dataset_id=dataset_id,
-            optimization_id=optimization_id,
-            best_tools=best_tools,
-            llm_call_counter=self.llm_call_counter,
-            tool_call_counter=self.tool_call_counter,
-            model=self.model,
-            model_parameters=self.model_parameters,
-            extract_tool_prompts_fn=self._extract_tool_prompts,
-        )
-
-    def _get_task_context(self, metric: Callable) -> tuple[str, int]:
+    def _get_task_context(self, metric: MetricFunction) -> tuple[str, int]:
         """Get task-specific context from the dataset and metric (delegates to ops)."""
         return context_ops.get_task_context(
             dataset=self.dataset,
@@ -821,83 +808,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             max_tokens=self.max_context_tokens,
             model=self.model,
             extract_metric_understanding=self.extract_metric_understanding,
-        )
-
-    def _generate_candidate_prompts(
-        self,
-        current_prompt: chat_prompt.ChatPrompt,
-        best_score: float,
-        round_num: int,
-        previous_rounds: list[OptimizationRound],
-        metric: Callable,
-        optimization_id: str | None = None,
-        project_name: str | None = None,
-        winning_patterns: list[str] | None = None,
-    ) -> list[chat_prompt.ChatPrompt]:
-        """Generate candidate prompts using meta-prompting (delegates to ops)."""
-        return candidate_ops.generate_candidate_prompts(
-            optimizer=self,
-            current_prompt=current_prompt,
-            best_score=best_score,
-            round_num=round_num,
-            previous_rounds=previous_rounds,
-            metric=metric,
-            build_history_context_fn=self._build_history_context,
-            get_task_context_fn=self._get_task_context,
-            optimization_id=optimization_id,
-            project_name=project_name,
-            winning_patterns=winning_patterns,
-        )
-
-    def _generate_mcp_candidate_prompts(
-        self,
-        current_prompt: chat_prompt.ChatPrompt,
-        best_score: float,
-        round_num: int,
-        previous_rounds: list[OptimizationRound],
-        metric: Callable,
-        tool_segment_id: str,
-        tool_name: str,
-        optimization_id: str | None = None,
-        project_name: str | None = None,
-        panel_style: str = "bright_magenta",
-    ) -> list[chat_prompt.ChatPrompt]:
-        """Generate MCP tool description candidate prompts (delegates to ops)."""
-        return candidate_ops.generate_mcp_candidate_prompts(
-            optimizer=self,
-            current_prompt=current_prompt,
-            best_score=best_score,
-            round_num=round_num,
-            previous_rounds=previous_rounds,
-            metric=metric,
-            tool_segment_id=tool_segment_id,
-            tool_name=tool_name,
-            build_history_context_fn=self._build_history_context,
-            optimization_id=optimization_id,
-            project_name=project_name,
-            panel_style=panel_style,
-        )
-
-    def _generate_synthesis_prompts(
-        self,
-        current_prompt: chat_prompt.ChatPrompt,
-        best_score: float,
-        round_num: int,
-        previous_rounds: list[OptimizationRound],
-        metric: Callable,
-        optimization_id: str | None = None,
-        project_name: str | None = None,
-    ) -> list[chat_prompt.ChatPrompt]:
-        """Generate synthesis prompts that combine top performers."""
-        return candidate_ops.generate_synthesis_prompts(
-            optimizer=self,
-            current_prompt=current_prompt,
-            best_score=best_score,
-            previous_rounds=previous_rounds,
-            metric=metric,
-            get_task_context_fn=self._get_task_context,
-            optimization_id=optimization_id,
-            project_name=project_name,
         )
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
@@ -913,4 +823,4 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
 
-__all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
+__all__ = ["MetaPromptOptimizer"]

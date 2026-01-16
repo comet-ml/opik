@@ -5,86 +5,118 @@ This module contains functions for generating and sanitizing candidate prompts.
 """
 
 import ast
+import copy
+from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable
 import logging
 import json
 import random
 
-from ....api_objects import chat_prompt
+from pydantic import BaseModel, Field
+
+from ....api_objects import chat_prompt, types
+from ....api_objects.types import MetricFunction
 from .... import _llm_calls
 from ....base_optimizer import OptimizationRound
-from ....utils.prompt_segments import (
-    extract_prompt_segments,
-    apply_segment_updates,
-)
-from ..prompts import (
-    build_reasoning_system_prompt,
-    build_candidate_generation_user_prompt,
-    build_mcp_tool_description_user_prompt,
-)
+from .. import prompts as meta_prompts
 from .. import reporting
+from .... import reporting_utils
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 
 logger = logging.getLogger(__name__)
 
 
-def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
-    """
-    Synchronize tool descriptions in the system message.
+def _build_metadata_for_call(
+    optimizer: Any,
+    call_type: str,
+    optimization_id: str | None = None,
+    project_name: str | None = None,
+) -> dict[str, Any]:
+    """Build LiteLLM metadata payloads for trace attribution."""
+    metadata_for_call: dict[str, Any] = {
+        "optimizer_name": optimizer.__class__.__name__,
+        "opik_call_type": call_type,
+    }
+    opik_metadata: dict[str, Any] = {}
+    if optimization_id:
+        opik_metadata["optimization_id"] = optimization_id
+    if project_name:
+        opik_metadata["project_name"] = project_name
+    if opik_metadata:
+        metadata_for_call["opik"] = opik_metadata
+    return metadata_for_call
 
-    Updates the system message to reflect changes in tool descriptions.
-    """
-    from ....mcp_utils.mcp import PROMPT_TOOL_HEADER, PROMPT_TOOL_FOOTER
 
-    if not prompt.tools:
-        return
+class AgentPromptUpdate(BaseModel):
+    """Represents an update to a single agent's prompt."""
 
-    system_text = prompt.system or ""
-    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
-        return
-
-    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
-    end = system_text.index(PROMPT_TOOL_FOOTER)
-
-    before_block = system_text[: start - len(PROMPT_TOOL_HEADER)]
-    middle_block = system_text[start:end]
-    after_block = system_text[end + len(PROMPT_TOOL_FOOTER) :]
-
-    import re
-
-    for tool in prompt.tools:
-        tool_name = tool.get("function", {}).get("name", "")
-        if not tool_name:
-            continue
-
-        description_text = tool.get("function", {}).get("description", "")
-
-        # Update tool list in the before block (e.g., "- tool-name: description")
-        tool_list_pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
-        before_block = re.sub(
-            tool_list_pattern,
-            lambda match: f"{match.group(1)}{description_text}",
-            before_block,
-        )
-
-        # Update description in the middle block (just the description text)
-        # The middle block may contain just the description or have other formatting
-        middle_block = middle_block.strip()
-        if middle_block:
-            middle_block = f"\n{description_text}\n"
-        else:
-            middle_block = description_text
-
-    new_system = (
-        before_block
-        + PROMPT_TOOL_HEADER
-        + middle_block
-        + PROMPT_TOOL_FOOTER
-        + after_block
+    name: str = Field(..., description="The name of the agent to update")
+    messages: list[types.Message] = Field(
+        ..., description="The updated messages for this agent"
     )
-    prompt.system = new_system
+    improvement_focus: str | None = Field(
+        None, description="What aspect of the agent's performance is being improved"
+    )
+    reasoning: str | None = Field(
+        None, description="Explanation of why these changes were made"
+    )
+
+
+class AgentBundleCandidateResponse(BaseModel):
+    """Response model for agent bundle candidate generation."""
+
+    agents: list[AgentPromptUpdate] = Field(
+        ..., description="List of agent prompt updates"
+    )
+    bundle_improvement_focus: str | None = Field(
+        None, description="Overall focus for this bundle of improvements"
+    )
+
+
+class AgentBundleCandidatesResponse(BaseModel):
+    """Response model for multiple agent bundle candidates."""
+
+    candidates: list[AgentBundleCandidateResponse] = Field(
+        ..., description="List of candidate bundles"
+    )
+
+
+@dataclass
+class AgentMetadata:
+    """Metadata for a single agent's prompt optimization."""
+
+    improvement_focus: str | None = None
+    """What aspect of the agent's performance is being targeted for improvement"""
+
+    reasoning: str | None = None
+    """Explanation of why the prompt changes were made"""
+
+
+@dataclass
+class AgentBundleCandidate:
+    """Represents a single candidate bundle of agent prompts with metadata."""
+
+    prompts: dict[str, chat_prompt.ChatPrompt]
+    """Dictionary mapping agent names to their updated ChatPrompt objects"""
+
+    metadata: dict[str, AgentMetadata]
+    """Dictionary mapping agent names to their improvement metadata"""
+
+    def get_agent_names(self) -> list[str]:
+        """Get all agent names in this bundle."""
+        return list(self.prompts.keys())
+
+    def get_agent_reasoning(self, agent_name: str) -> str | None:
+        """Get the reasoning for a specific agent's prompt changes."""
+        agent_meta = self.metadata.get(agent_name)
+        return agent_meta.reasoning if agent_meta else None
+
+    def get_agent_improvement_focus(self, agent_name: str) -> str | None:
+        """Get the improvement focus for a specific agent."""
+        agent_meta = self.metadata.get(agent_name)
+        return agent_meta.improvement_focus if agent_meta else None
 
 
 def sanitize_generated_prompts(
@@ -129,8 +161,10 @@ def sanitize_generated_prompts(
         "scoring function",
     ]
 
+    sanitized = copy.deepcopy(prompt_json)
+
     rejected_count = 0
-    for prompt_item in prompt_json.get("prompts", []):
+    for prompt_item in sanitized.get("prompts", []):
         if "prompt" in prompt_item and isinstance(prompt_item["prompt"], list):
             has_leakage = False
 
@@ -158,9 +192,9 @@ def sanitize_generated_prompts(
                 rejected_count += 1
 
     # Filter out rejected prompts
-    original_count = len(prompt_json.get("prompts", []))
-    prompt_json["prompts"] = [
-        p for p in prompt_json["prompts"] if not p.get("_rejected", False)
+    original_count = len(sanitized.get("prompts", []))
+    sanitized["prompts"] = [
+        p for p in sanitized["prompts"] if not p.get("_rejected", False)
     ]
 
     if rejected_count > 0:
@@ -169,7 +203,22 @@ def sanitize_generated_prompts(
             f"due to data leakage"
         )
 
-    return prompt_json
+    return sanitized
+
+
+def _format_agent_prompts_for_prompt(
+    agent_prompts: dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """
+    Render named chat prompts into a string block for the meta-prompt.
+    """
+    blocks: list[str] = []
+    for agent_name, prompt in agent_prompts.items():
+        messages = prompt.get_messages()
+        blocks.append(
+            f"Agent name: {agent_name}\nMessages:\n{json.dumps(messages, indent=2)}"
+        )
+    return "\n\n".join(blocks)
 
 
 def generate_candidate_prompts(
@@ -178,7 +227,7 @@ def generate_candidate_prompts(
     best_score: float,
     round_num: int,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -205,7 +254,9 @@ def generate_candidate_prompts(
         List of candidate prompts
     """
     with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round, verbose=optimizer.verbose
+        optimizer.prompts_per_round,
+        verbose=optimizer.verbose,
+        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
         logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
@@ -249,7 +300,12 @@ def generate_candidate_prompts(
                 "Task context and metric-specific instructions disabled for reasoning prompt."
             )
 
-        user_prompt = build_candidate_generation_user_prompt(
+        # Get templates from optimizer (with potential overrides)
+        candidate_gen_template = optimizer.get_prompt("candidate_generation")
+        reasoning_template = optimizer.get_prompt("reasoning_system")
+
+        user_prompt = meta_prompts.build_candidate_generation_user_prompt(
+            template=candidate_gen_template,
             current_prompt_messages=str(current_prompt.get_messages()),
             best_score=best_score,
             history_context=history_context,
@@ -258,152 +314,163 @@ def generate_candidate_prompts(
             metric_focus_instruction=metric_focus_instruction,
             prompts_per_round=optimizer.prompts_per_round,
             pattern_guidance=pattern_guidance,
+            mode="single",
+            agent_blocks=None,
         )
 
         try:
             # Prepare metadata for optimization algorithm call
-            metadata_for_call: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call["project_name"] = project_name
-                metadata_for_call["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call:
-                metadata_for_call["opik"]["optimization_id"] = optimization_id
-            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call["opik_call_type"] = "optimization_algorithm"
+            metadata_for_call = _build_metadata_for_call(
+                optimizer=optimizer,
+                call_type="optimization_algorithm",
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
 
             content = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_reasoning_system_prompt(
-                            optimizer.allow_user_prompt_optimization
+                        "content": meta_prompts.build_reasoning_system_prompt(
+                            template=reasoning_template,
+                            allow_user_prompt_optimization=optimizer.allow_user_prompt_optimization,
+                            mode="single",
                         ),
                     },
                     {"role": "user", "content": user_prompt},
                 ],
                 model=optimizer.model,
                 model_parameters=optimizer.model_parameters,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                project_name=project_name,
             )
-            logger.debug(f"Raw response from reasoning model: {content}")
+            contents = content if isinstance(content, list) else [content]
+            logger.debug("Raw response from reasoning model: %s", contents)
 
-            # Robust JSON Parsing and Validation
-            json_result = None
-            try:
-                # Try direct JSON parsing
-                json_result = json.loads(content)
-            except json.JSONDecodeError:
-                import re
-
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if json_match:
-                    try:
-                        json_result = json.loads(json_match.group())
-                    except json.JSONDecodeError as e:
-                        raise ValueError(
-                            f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
-                        )
-                else:
-                    raise ValueError(
-                        f"No JSON object found in response via regex. - received: {content}"
-                    )
-
-            # Validate the parsed JSON structure
-            if isinstance(json_result, list):
-                # Check if it's a wrapped format: [{"prompts": [...]}]
-                if (
-                    len(json_result) == 1
-                    and isinstance(json_result[0], dict)
-                    and "prompts" in json_result[0]
-                ):
-                    json_result = json_result[0]
-                # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
-                elif all(
-                    isinstance(item, dict) and "prompt" in item for item in json_result
-                ):
-                    logger.debug(
-                        "Received unwrapped prompt list, wrapping in 'prompts' key"
-                    )
-                    json_result = {"prompts": json_result}
-
-            if not isinstance(json_result, dict) or "prompts" not in json_result:
-                logger.debug(f"Parsed JSON content: {json_result}")
-                raise ValueError(
-                    f"Parsed JSON is not a dictionary or missing 'prompts' key. - received: {json_result}"
-                )
-
-            if not isinstance(json_result["prompts"], list):
-                logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                raise ValueError(
-                    f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}"
-                )
-
-            # Sanitize generated prompts to remove data leakage
-            metric_name = getattr(metric, "__name__", str(metric))
-            json_result = sanitize_generated_prompts(json_result, metric_name)
-
-            # Extract and log valid prompts
             valid_prompts: list[chat_prompt.ChatPrompt] = []
-            for item in json_result["prompts"]:
-                if (
-                    isinstance(item, dict)
-                    and "prompt" in item
-                    and isinstance(item["prompt"], list)
-                ):
-                    # Extract system and user prompts from generated messages
-                    system_content = None
-                    user_content = None
+            metric_name = metric.__name__
 
-                    for msg in item["prompt"]:
-                        if msg.get("role") == "system":
-                            system_content = msg.get("content", "")
-                        elif (
-                            msg.get("role") == "user"
-                            and optimizer.allow_user_prompt_optimization
-                        ):
-                            # Only extract user content if optimization is allowed
-                            user_content = msg.get("content", "")
+            for content_item in contents:
+                # Robust JSON Parsing and Validation
+                json_result = None
+                try:
+                    # Try direct JSON parsing
+                    json_result = json.loads(content_item)
+                except json.JSONDecodeError:
+                    import re
 
-                    # Always fall back to original user prompt if not extracted
-                    # This happens when: 1) No user message in generated prompt, or
-                    # 2) allow_user_prompt_optimization is False
-                    if user_content is None:
-                        if current_prompt.user:
-                            user_content = current_prompt.user
-                        else:
-                            if current_prompt.messages is not None:
-                                user_content = current_prompt.messages[-1]["content"]
-                            else:
-                                raise Exception(
-                                    "User content not found in chat-prompt!"
-                                )
-
-                    # Use system from generated prompt, or empty string if not provided
-                    if system_content is None:
-                        system_content = ""
-
-                    valid_prompts.append(
-                        chat_prompt.ChatPrompt(
-                            system=system_content,
-                            user=user_content,
-                            tools=current_prompt.tools,
-                            function_map=current_prompt.function_map,
-                            model=current_prompt.model,
-                            model_parameters=current_prompt.model_kwargs,
+                    json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
+                    if json_match:
+                        try:
+                            json_result = json.loads(json_match.group())
+                        except json.JSONDecodeError as e:
+                            raise ValueError(
+                                f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
+                            )
+                    else:
+                        raise ValueError(
+                            f"No JSON object found in response via regex. - received: {content_item}"
                         )
+
+                # Validate the parsed JSON structure
+                if isinstance(json_result, list):
+                    # Check if it's a wrapped format: [{"prompts": [...]}]
+                    if (
+                        len(json_result) == 1
+                        and isinstance(json_result[0], dict)
+                        and "prompts" in json_result[0]
+                    ):
+                        json_result = json_result[0]
+                    # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
+                    elif all(
+                        isinstance(item, dict) and "prompt" in item
+                        for item in json_result
+                    ):
+                        logger.debug(
+                            "Received unwrapped prompt list, wrapping in 'prompts' key"
+                        )
+                        json_result = {"prompts": json_result}
+
+                if not isinstance(json_result, dict) or "prompts" not in json_result:
+                    logger.debug(f"Parsed JSON content: {json_result}")
+                    raise ValueError(
+                        f"Parsed JSON is not a dictionary or missing 'prompts' key. - received: {json_result}"
                     )
 
-                    # Log details
-                    focus = item.get("improvement_focus", "N/A")
-                    reasoning = item.get("reasoning", "N/A")
-                    logger.debug(f"Generated prompt: {item['prompt']}")
-                    logger.debug(f"  Improvement focus: {focus}")
-                    logger.debug(f"  Reasoning: {reasoning}")
-                else:
-                    logger.warning(
-                        f"Skipping invalid prompt item structure in JSON response: {item}"
+                if not isinstance(json_result["prompts"], list):
+                    logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
+                    raise ValueError(
+                        f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}"
                     )
+
+                # Sanitize generated prompts to remove data leakage
+                json_result = sanitize_generated_prompts(json_result, metric_name)
+
+                # Extract and log valid prompts
+                for item in json_result["prompts"]:
+                    if (
+                        isinstance(item, dict)
+                        and "prompt" in item
+                        and isinstance(item["prompt"], list)
+                    ):
+                        # Extract system and user prompts from generated messages
+                        system_content = None
+                        user_content = None
+
+                        for msg in item["prompt"]:
+                            if msg.get("role") == "system":
+                                system_content = msg.get("content", "")
+                            elif (
+                                msg.get("role") == "user"
+                                and optimizer.allow_user_prompt_optimization
+                            ):
+                                # Only extract user content if optimization is allowed
+                                user_content = msg.get("content", "")
+
+                        # Always fall back to original user prompt if not extracted
+                        if user_content is None:
+                            if current_prompt.user:
+                                user_content = current_prompt.user
+                            else:
+                                if current_prompt.messages is not None:
+                                    user_content = current_prompt.messages[-1][
+                                        "content"
+                                    ]
+                                else:
+                                    raise Exception(
+                                        "User content not found in chat-prompt!"
+                                    )
+
+                        # Use system from generated prompt, or empty string if not provided
+                        if system_content is None:
+                            system_content = ""
+
+                        valid_prompts.append(
+                            chat_prompt.ChatPrompt(
+                                name=current_prompt.name,
+                                system=system_content,
+                                user=user_content,
+                                tools=current_prompt.tools,
+                                function_map=current_prompt.function_map,
+                                model=current_prompt.model,
+                                model_parameters=current_prompt.model_kwargs,
+                            )
+                        )
+
+                        # Log details
+                        focus = item.get("improvement_focus", "N/A")
+                        reasoning = item.get("reasoning", "N/A")
+                        logger.debug(f"Generated prompt: {item['prompt']}")
+                        logger.debug(f"  Improvement focus: {focus}")
+                        logger.debug(f"  Reasoning: {reasoning}")
+                    else:
+                        logger.warning(
+                            f"Skipping invalid prompt item structure in JSON response: {item}"
+                        )
 
             if not valid_prompts:
                 raise ValueError(
@@ -422,140 +489,196 @@ def generate_candidate_prompts(
             )
 
 
-def generate_mcp_candidate_prompts(
+def generate_agent_bundle_candidates(
     optimizer: Any,
-    current_prompt: chat_prompt.ChatPrompt,
+    current_prompts: dict[str, chat_prompt.ChatPrompt],
     best_score: float,
     round_num: int,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
-    tool_segment_id: str,
-    tool_name: str,
+    metric: MetricFunction,
     build_history_context_fn: Callable,
+    get_task_context_fn: Callable,
     optimization_id: str | None = None,
     project_name: str | None = None,
-    panel_style: str = "bright_magenta",
-) -> list[chat_prompt.ChatPrompt]:
+    winning_patterns: list[str] | None = None,
+) -> list[AgentBundleCandidate]:
     """
-    Generate MCP tool description candidate prompts.
-
-    Args:
-        optimizer: Reference to the optimizer instance
-        current_prompt: Current best prompt
-        best_score: Current best score
-        round_num: Current round number
-        previous_rounds: List of previous optimization rounds
-        metric: Metric function
-        tool_segment_id: ID of the tool segment to optimize
-        tool_name: Name of the tool
-        build_history_context_fn: Function to build history context
-        optimization_id: Optional optimization ID
-        project_name: Optional project name
-        panel_style: Display panel style
+    Generate updated prompts for multiple named agents in a single meta-prompt pass.
 
     Returns:
-        List of candidate prompts with updated tool descriptions
+        List of AgentBundleCandidate objects, each containing updated prompts
+        and strongly-typed metadata for all agents in the bundle.
     """
-    segments = {
-        segment.segment_id: segment
-        for segment in extract_prompt_segments(current_prompt)
-    }
-    if tool_segment_id not in segments:
-        raise ValueError(f"Tool segment '{tool_segment_id}' not found in prompt")
-
-    target_segment = segments[tool_segment_id]
-    current_description = target_segment.content
-    tool_metadata = target_segment.metadata.get("raw_tool", {})
-
-    history_context = build_history_context_fn(previous_rounds)
-
-    instruction = build_mcp_tool_description_user_prompt(
-        tool_name=tool_name,
-        current_description=current_description,
-        tool_metadata_json=json.dumps(tool_metadata, indent=2),
-        best_score=best_score,
-        history_context=history_context,
-        prompts_per_round=optimizer.prompts_per_round,
-    )
-
     with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round, verbose=optimizer.verbose
+        optimizer.prompts_per_round,
+        verbose=optimizer.verbose,
+        selection_summary=reporting_utils.summarize_selection_policy(current_prompts),
     ) as candidate_generation_report:
-        try:
-            # Prepare metadata for optimization algorithm call
-            metadata_for_call_tools: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call_tools["project_name"] = project_name
-                metadata_for_call_tools["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call_tools:
-                metadata_for_call_tools["opik"]["optimization_id"] = optimization_id
-            metadata_for_call_tools["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
+        logger.debug(f"\nGenerating agent bundle prompts for round {round_num + 1}")
+        logger.debug("Generating from agents: %s", list(current_prompts.keys()))
+        logger.debug(f"Current best score: {best_score:.4f}")
 
-            content = _llm_calls.call_model(
+        pattern_guidance = ""
+        if winning_patterns and random.random() < optimizer.pattern_injection_rate:
+            pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
+            pattern_guidance += (
+                "The following patterns have been successful in high-scoring prompts:\n"
+            )
+            for i, pattern in enumerate(winning_patterns, 1):
+                pattern_guidance += f"{i}. {pattern}\n"
+            pattern_guidance += "\nAdapt these patterns per agent where appropriate."
+            logger.info(f"Injecting {len(winning_patterns)} patterns into generation")
+
+        history_context = build_history_context_fn(previous_rounds)
+        task_context_str = ""
+        analysis_instruction = ""
+        metric_focus_instruction = ""
+
+        if optimizer.enable_context:
+            task_context_str, _ = get_task_context_fn(metric=metric)
+            analysis_instruction = "Analyze the examples/feedback (if any), metric description, and score history."
+            metric_focus_instruction = "Focus on improving evaluation scores while keeping each agent's role distinct."
+        else:
+            analysis_instruction = (
+                "Analyze score history and each agent's role before proposing changes."
+            )
+            metric_focus_instruction = "Generate effective, role-appropriate updates."
+
+        agent_blocks = _format_agent_prompts_for_prompt(current_prompts)
+
+        # Get templates from optimizer (with potential overrides)
+        candidate_gen_template = optimizer.get_prompt("candidate_generation")
+        reasoning_template = optimizer.get_prompt("reasoning_system")
+
+        user_prompt = meta_prompts.build_candidate_generation_user_prompt(
+            template=candidate_gen_template,
+            current_prompt_messages="",  # unused in bundle mode
+            best_score=best_score,
+            history_context=history_context,
+            task_context_str=task_context_str,
+            analysis_instruction=analysis_instruction,
+            metric_focus_instruction=metric_focus_instruction,
+            prompts_per_round=optimizer.prompts_per_round,
+            pattern_guidance=pattern_guidance,
+            mode="bundle",
+            agent_blocks=agent_blocks,
+        )
+
+        try:
+            metadata_for_call = _build_metadata_for_call(
+                optimizer=optimizer,
+                call_type="optimization_algorithm",
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
+
+            response = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_reasoning_system_prompt(
-                            optimizer.allow_user_prompt_optimization
+                        "content": meta_prompts.build_reasoning_system_prompt(
+                            template=reasoning_template,
+                            allow_user_prompt_optimization=optimizer.allow_user_prompt_optimization,
+                            mode="bundle",
                         ),
                     },
-                    {"role": "user", "content": instruction},
+                    {"role": "user", "content": user_prompt},
                 ],
                 model=optimizer.model,
                 model_parameters=optimizer.model_parameters,
-                metadata=metadata_for_call_tools,
+                metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                project_name=project_name,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
+                response_model=AgentBundleCandidatesResponse,
             )
 
-            try:
-                json_result = json.loads(content)
-            except json.JSONDecodeError:
-                import re
+            responses = response if isinstance(response, list) else [response]
 
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if not json_match:
-                    raise ValueError("No JSON object found in reasoning output")
-                json_result = json.loads(json_match.group())
-
-            prompts_payload = json_result.get("prompts")
-            if not isinstance(prompts_payload, list):
-                raise ValueError("Reasoning output missing 'prompts' list")
-
-            candidate_generation_report.set_generated_prompts()
-
-            candidates: list[chat_prompt.ChatPrompt] = []
-            for item in prompts_payload:
-                if not isinstance(item, dict):
-                    continue
-                description = item.get("tool_description")
-                if not isinstance(description, str) or not description.strip():
-                    continue
-
-                updated_prompt = apply_segment_updates(
-                    current_prompt,
-                    {tool_segment_id: description.strip()},
+            candidates: list[AgentBundleCandidate] = []
+            for response_item in responses:
+                # Log summary of candidates
+                logger.debug(
+                    "Bundle LLM response: %d candidate bundles",
+                    len(response_item.candidates),
                 )
-                _sync_tool_description_in_system(updated_prompt)
-                if (
-                    description.strip()
-                    and description.strip() != current_description.strip()
-                ):
-                    reporting.display_tool_description(
-                        description.strip(),
-                        f"Round {round_num + 1} tool description",
-                        panel_style,
+                for idx, cand in enumerate(response_item.candidates, start=1):
+                    agents = [a.name for a in cand.agents]
+                    focus = cand.bundle_improvement_focus
+                    logger.debug(
+                        "  Candidate %d: agents=%s focus=%s",
+                        idx,
+                        agents,
+                        (focus[:120] + "...")
+                        if isinstance(focus, str) and len(focus) > 120
+                        else focus,
                     )
-                candidates.append(updated_prompt)
+
+                for candidate_response in response_item.candidates:
+                    updated_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+                    agent_metadata: dict[str, AgentMetadata] = {}
+
+                    for agent_update in candidate_response.agents:
+                        name = agent_update.name
+
+                        if name not in current_prompts:
+                            logger.warning(
+                                "Received update for unknown agent '%s'; skipping.",
+                                name,
+                            )
+                            continue
+
+                        try:
+                            # Convert Pydantic Message objects to dicts for ChatPrompt
+                            messages_dict = [
+                                msg.model_dump() for msg in agent_update.messages
+                            ]
+                            updated_prompt = chat_prompt.ChatPrompt(
+                                name=current_prompts[name].name or name,
+                                messages=messages_dict,
+                                tools=current_prompts[name].tools,
+                                function_map=current_prompts[name].function_map,
+                                model=current_prompts[name].model,
+                                model_parameters=current_prompts[name].model_kwargs,
+                            )
+                            updated_prompts[name] = updated_prompt
+                            agent_metadata[name] = AgentMetadata(
+                                improvement_focus=agent_update.improvement_focus,
+                                reasoning=agent_update.reasoning,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Failed to build ChatPrompt for agent '%s': %s",
+                                name,
+                                exc,
+                            )
+
+                    # Preserve any agents that were not returned to avoid losing prompts
+                    for name, prompt in current_prompts.items():
+                        if name not in updated_prompts:
+                            updated_prompts[name] = prompt
+
+                    if updated_prompts:
+                        candidates.append(
+                            AgentBundleCandidate(
+                                prompts=updated_prompts, metadata=agent_metadata
+                            )
+                        )
 
             if not candidates:
-                raise ValueError(
-                    "Reasoning output did not produce valid tool descriptions"
-                )
+                raise ValueError("No valid agent prompts returned from response.")
 
+            candidate_generation_report.set_generated_prompts()
             return candidates
-        except Exception as exc:
-            raise ValueError(f"Error generating MCP prompt candidates: {exc}")
+
+        except Exception as e:
+            if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                raise
+            raise ValueError(
+                f"Unexpected error during agent bundle prompt generation: {e}"
+            )
 
 
 def generate_synthesis_prompts(
@@ -563,7 +686,7 @@ def generate_synthesis_prompts(
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
     project_name: str | None = None,
@@ -587,13 +710,12 @@ def generate_synthesis_prompts(
     Returns:
         List of comprehensive synthesis prompts
     """
-    from ..prompts import build_synthesis_prompt
-
     num_synthesis_prompts = getattr(optimizer, "synthesis_prompts_per_round", 2)
 
     with reporting.display_candidate_generation_report(
         num_synthesis_prompts,
         verbose=optimizer.verbose,  # Synthesis generates a small number of prompts
+        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         # Get top performers from Hall of Fame
         top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
@@ -672,27 +794,31 @@ def generate_synthesis_prompts(
         if optimizer.enable_context:
             task_context_str, _ = get_task_context_fn(metric=metric)  # Unpack tuple
 
+        # Get templates from optimizer (with potential overrides)
+        synthesis_template = optimizer.get_prompt("synthesis")
+        reasoning_template = optimizer.get_prompt("reasoning_system")
+
         # Build synthesis prompt
-        synthesis_user_prompt = build_synthesis_prompt(
+        synthesis_user_prompt = meta_prompts.build_synthesis_prompt(
+            template=synthesis_template,
             top_prompts_with_scores=top_prompts_with_scores,
             task_context_str=task_context_str,
             best_score=best_score,
             num_prompts=num_synthesis_prompts,
         )
-        synthesis_system_prompt = build_reasoning_system_prompt(
-            optimizer.allow_user_prompt_optimization
+        synthesis_system_prompt = meta_prompts.build_reasoning_system_prompt(
+            template=reasoning_template,
+            allow_user_prompt_optimization=optimizer.allow_user_prompt_optimization,
         )
 
         try:
             # Prepare metadata for synthesis call
-            metadata_for_call: dict[str, Any] = {}
-            if project_name:
-                metadata_for_call["project_name"] = project_name
-                metadata_for_call["opik"] = {"project_name": project_name}
-            if optimization_id and "opik" in metadata_for_call:
-                metadata_for_call["opik"]["optimization_id"] = optimization_id
-            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
-            metadata_for_call["opik_call_type"] = "optimization_algorithm_synthesis"
+            metadata_for_call = _build_metadata_for_call(
+                optimizer=optimizer,
+                call_type="optimization_algorithm_synthesis",
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
 
             content = _llm_calls.call_model(
                 messages=[
@@ -703,88 +829,99 @@ def generate_synthesis_prompts(
                 model_parameters=optimizer.model_parameters,
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
+                project_name=project_name,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
             )
 
-            # Parse JSON response
-            json_result = None
-            try:
-                json_result = json.loads(content)
-            except json.JSONDecodeError:
-                import re
-
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if json_match:
-                    try:
-                        json_result = json.loads(json_match.group())
-                    except json.JSONDecodeError as e:
-                        raise ValueError(
-                            f"Could not parse synthesis JSON: {e} - received: {json_match.group()}"
-                        )
-                else:
-                    raise ValueError(
-                        f"No JSON object found in synthesis response: {content}"
-                    )
-
-            # Validate structure - handle both wrapped and unwrapped formats
-            if isinstance(json_result, list):
-                # Check if it's a wrapped format: [{"prompts": [...]}]
-                if (
-                    len(json_result) == 1
-                    and isinstance(json_result[0], dict)
-                    and "prompts" in json_result[0]
-                ):
-                    json_result = json_result[0]
-                # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
-                elif all(
-                    isinstance(item, dict) and "prompt" in item for item in json_result
-                ):
-                    json_result = {"prompts": json_result}
-
-            if not isinstance(json_result, dict) or "prompts" not in json_result:
-                raise ValueError(
-                    f"Invalid synthesis JSON structure - received: {json_result}"
-                )
-
-            if not isinstance(json_result["prompts"], list):
-                raise ValueError(
-                    "'prompts' key does not contain a list in synthesis response"
-                )
-
-            # Extract synthesis prompts (expecting 1-2)
+            contents = content if isinstance(content, list) else [content]
             valid_prompts: list[chat_prompt.ChatPrompt] = []
-            for item in json_result["prompts"]:
-                if (
-                    isinstance(item, dict)
-                    and "prompt" in item
-                    and isinstance(item["prompt"], list)
-                ):
-                    # Get user text from current prompt
-                    if current_prompt.user:
-                        user_text = current_prompt.user
-                    else:
-                        if current_prompt.messages is not None:
-                            user_text = current_prompt.messages[-1]["content"]
-                        else:
-                            raise Exception("User content not found in chat-prompt!")
 
-                    valid_prompts.append(
-                        chat_prompt.ChatPrompt(
-                            system=item["prompt"][0]["content"],
-                            user=user_text,
-                            tools=current_prompt.tools,
-                            function_map=current_prompt.function_map,
-                            model=current_prompt.model,
-                            model_parameters=current_prompt.model_kwargs,
+            for content_item in contents:
+                # Parse JSON response
+                json_result = None
+                try:
+                    json_result = json.loads(content_item)
+                except json.JSONDecodeError:
+                    import re
+
+                    json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
+                    if json_match:
+                        try:
+                            json_result = json.loads(json_match.group())
+                        except json.JSONDecodeError as e:
+                            raise ValueError(
+                                f"Could not parse synthesis JSON: {e} - received: {json_match.group()}"
+                            )
+                    else:
+                        raise ValueError(
+                            f"No JSON object found in synthesis response: {content_item}"
                         )
+
+                # Validate structure - handle both wrapped and unwrapped formats
+                if isinstance(json_result, list):
+                    # Check if it's a wrapped format: [{"prompts": [...]}]
+                    if (
+                        len(json_result) == 1
+                        and isinstance(json_result[0], dict)
+                        and "prompts" in json_result[0]
+                    ):
+                        json_result = json_result[0]
+                    # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
+                    elif all(
+                        isinstance(item, dict) and "prompt" in item
+                        for item in json_result
+                    ):
+                        json_result = {"prompts": json_result}
+
+                if not isinstance(json_result, dict) or "prompts" not in json_result:
+                    raise ValueError(
+                        f"Invalid synthesis JSON structure - received: {json_result}"
                     )
 
-                    # Log synthesis details
-                    focus = item.get("improvement_focus", "N/A")
-                    reasoning = item.get("reasoning", "N/A")
-                    logger.info("Generated synthesis prompt:")
-                    logger.info(f"  Improvement focus: {focus}")
-                    logger.info(f"  Reasoning: {reasoning}")
-                    logger.debug(f"  Full prompt: {item['prompt']}")
+                if not isinstance(json_result["prompts"], list):
+                    raise ValueError(
+                        "'prompts' key does not contain a list in synthesis response"
+                    )
+
+                # Extract synthesis prompts (expecting 1-2)
+                for item in json_result["prompts"]:
+                    if (
+                        isinstance(item, dict)
+                        and "prompt" in item
+                        and isinstance(item["prompt"], list)
+                    ):
+                        # Get user text from current prompt
+                        if current_prompt.user:
+                            user_text = current_prompt.user
+                        else:
+                            if current_prompt.messages is not None:
+                                user_text = current_prompt.messages[-1]["content"]
+                            else:
+                                raise Exception(
+                                    "User content not found in chat-prompt!"
+                                )
+
+                        valid_prompts.append(
+                            chat_prompt.ChatPrompt(
+                                name=current_prompt.name,
+                                system=item["prompt"][0]["content"],
+                                user=user_text,
+                                tools=current_prompt.tools,
+                                function_map=current_prompt.function_map,
+                                model=current_prompt.model,
+                                model_parameters=current_prompt.model_kwargs,
+                            )
+                        )
+
+                        # Log synthesis details
+                        focus = item.get("improvement_focus", "N/A")
+                        reasoning = item.get("reasoning", "N/A")
+                        logger.info("Generated synthesis prompt:")
+                        logger.info(f"  Improvement focus: {focus}")
+                        logger.info(f"  Reasoning: {reasoning}")
+                        logger.debug(f"  Full prompt: {item['prompt']}")
 
             if not valid_prompts:
                 raise ValueError("No valid synthesis prompts generated")

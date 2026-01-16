@@ -4,7 +4,6 @@ Context building operations for the Meta-Prompt Optimizer.
 This module contains functions for building task context and history context.
 """
 
-from collections.abc import Callable
 from typing import Any
 import logging
 import random
@@ -12,7 +11,8 @@ import re
 
 import opik
 from ....base_optimizer import OptimizationRound
-from ..prompts import START_DELIM, END_DELIM
+from ....api_objects.types import MetricFunction
+from .. import prompts as meta_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def count_tokens(text: str, model: str = "gpt-4") -> int:
 
 def get_task_context(
     dataset: opik.Dataset | None,
-    metric: Callable,
+    metric: MetricFunction,
     num_examples: int = 3,
     columns: list[str] | None = None,
     max_tokens: int = 2000,
@@ -131,16 +131,19 @@ def get_task_context(
     while current_num_examples > 0:
         # Build context string
         context = "Task Context: "
-        context += f"Available input variables (use {START_DELIM}variable_name{END_DELIM} syntax): "
+        context += f"Available input variables (use {meta_prompts.START_DELIM}variable_name{meta_prompts.END_DELIM} syntax): "
         context += ", ".join(
-            [f"{START_DELIM}{field}{END_DELIM}" for field in input_fields]
+            [
+                f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}"
+                for field in input_fields
+            ]
         )
         context += "\n\n"
 
         # Conditionally extract and add metric information
         if extract_metric_understanding:
             # Extract metric information
-            metric_name = getattr(metric, "__name__", str(metric))
+            metric_name = metric.__name__
             metric_doc = getattr(metric, "__doc__", None)
             metric_direction = getattr(metric, "direction", None)
 
@@ -184,7 +187,7 @@ def get_task_context(
                 # Truncate long values
                 if len(value_str) > max_value_length:
                     value_str = value_str[:max_value_length] + "..."
-                context += f"{START_DELIM}{key}{END_DELIM}: {value_str}\n"
+                context += f"{meta_prompts.START_DELIM}{key}{meta_prompts.END_DELIM}: {value_str}\n"
             context += "```\n\n"
 
         # Count tokens

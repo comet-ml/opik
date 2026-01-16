@@ -1,0 +1,391 @@
+"""
+ARC-AGI task-level HRPO entry point.
+
+Usage overview
+--------------
+This script wires together the dataset loader, evaluation harness, metric
+registry, and Hierarchical Reflective Optimizer (HRPO) for a *single* ARC task:
+
+* Dataset control happens via ``ARC_AGI2_TASK_ID`` (single task) or the standard
+  pagination controls (``DATASET_START``/``DATASET_COUNT``).
+* Prompts live in ``scripts/arc_agi/prompts`` and are loaded via
+  :func:`load_prompts` at import time.
+* Scoring is defined in :mod:`scripts.arc_agi.utils.metrics`; the constants
+  exported from that module ensure the multi-metric objective and evaluation
+  config remain aligned (pass@k, likeness weights, etc.).
+* Each run writes a JSONL summary under ``arc_agi/runs/<task_id>.jsonl`` for
+  downstream aggregation (scores, metrics, best code, llm_calls).
+"""
+
+from __future__ import annotations
+
+import os
+import traceback
+from typing import Any
+
+from opik.evaluation.metrics import score_result
+from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer
+from opik_optimizer.datasets import arc_agi2
+
+# Local imports with fallback for script execution
+try:  # pragma: no cover - package context
+    from .utils.code_evaluator import EvaluationConfig, evaluate_arc_response
+    from .utils.image_agent import ArcAgiImageAgent
+    from .utils.logging_utils import CONSOLE, debug_print
+    from .utils.metrics import (
+        DEFAULT_METRIC_SEQUENCE,
+        DEFAULT_PASS_AT_K,
+        LABEL_IOU_REWARD_WEIGHT,
+        LIKENESS_REWARD_WEIGHT,
+        FOREGROUND_REWARD_WEIGHT,
+        normalized_weights,
+        build_multi_metric_objective,
+    )
+    from .utils.prompt_loader import load_hrpo_prompt_overrides, load_prompts
+    from .utils.visualization import print_task_preview
+    from .utils.run_summaries import persist_run_summary
+except ImportError:  # pragma: no cover - script context
+    import sys
+    from pathlib import Path
+
+    SCRIPT_ROOT = Path(__file__).resolve().parents[2]
+    if str(SCRIPT_ROOT) not in sys.path:
+        sys.path.append(str(SCRIPT_ROOT))
+
+    from scripts.arc_agi.utils.code_evaluator import (  # type: ignore
+        EvaluationConfig,
+        evaluate_arc_response,
+    )
+    from scripts.arc_agi.utils.image_agent import ArcAgiImageAgent  # type: ignore
+    from scripts.arc_agi.utils.logging_utils import CONSOLE, debug_print  # type: ignore
+    from scripts.arc_agi.utils.metrics import (  # type: ignore
+        DEFAULT_METRIC_SEQUENCE,
+        DEFAULT_PASS_AT_K,
+        LABEL_IOU_REWARD_WEIGHT,
+        LIKENESS_REWARD_WEIGHT,
+        FOREGROUND_REWARD_WEIGHT,
+        normalized_weights,
+        build_multi_metric_objective,
+    )
+    from scripts.arc_agi.utils.prompt_loader import (  # type: ignore
+        load_hrpo_prompt_overrides,
+        load_prompts,
+    )
+    from scripts.arc_agi.utils.visualization import print_task_preview  # type: ignore
+    from scripts.arc_agi.utils.run_summaries import persist_run_summary  # type: ignore
+
+SYSTEM_PROMPT, USER_PROMPT = load_prompts()
+HRPO_PROMPT_OVERRIDES = load_hrpo_prompt_overrides()
+
+DATASET_SPLIT = "train"
+DATASET_COUNT = 1
+DATASET_START = 0
+TEST_MODE = False
+ARC_AGI2_TASK_ID = os.getenv("ARC_AGI2_TASK_ID")
+PROJECT_NAME = "ARC-AGI-2 HRPO"
+
+EVAL_MODEL = "openai/gpt-5.2"
+REASONING_MODEL = "openai/gpt-5.2"
+EVAL_TEMPERATURE = 1.0
+REASONING_TEMPERATURE = 1.0
+HRPO_MAX_TRIALS = 15
+HRPO_THREADS = 8
+SEED = 42
+DEBUG_LOG = True
+N_SAMPLES_PER_TRIAL = 6
+EVAL_COMPLETIONS_PER_CALL = 6
+EVAL_SELECTION_POLICY = os.getenv("ARC_AGI2_SELECTION_POLICY", "concat")
+SANDBOX_TIMEOUT_S = 5.0
+RAISE_SCORING_ERRORS = False
+COMPOSITE_METRIC_NAME = "arc_agi2_multi"
+INCLUDE_IMAGES = os.getenv("ARC_AGI2_INCLUDE_IMAGES", "0") not in {
+    "",
+    "0",
+    "false",
+    "False",
+}
+INCLUDE_IMAGES_HRPO_EVAL = os.getenv("ARC_AGI2_INCLUDE_IMAGES_EVAL", "0") not in {
+    "",
+    "0",
+    "false",
+    "False",
+}
+METRIC_WEIGHTS = dict(
+    zip(
+        DEFAULT_METRIC_SEQUENCE,
+        normalized_weights(DEFAULT_METRIC_SEQUENCE),
+    )
+)
+
+EVAL_CONTEXT = EvaluationConfig(
+    pass_at_k=EVAL_COMPLETIONS_PER_CALL,
+    likeness_weight_train=LIKENESS_REWARD_WEIGHT,
+    likeness_weight_test=LIKENESS_REWARD_WEIGHT,
+    label_iou_weight=LABEL_IOU_REWARD_WEIGHT,
+    foreground_weight_test=FOREGROUND_REWARD_WEIGHT,
+    sandbox_timeout_s=SANDBOX_TIMEOUT_S,
+    debug_log=DEBUG_LOG,
+)
+
+
+def _handle_scoring_exception(
+    metric_name: str, exc: Exception
+) -> score_result.ScoreResult:
+    """Surface scoring errors without bringing down HRPO."""
+    tb = traceback.format_exc()
+    message = f"Scoring error: {type(exc).__name__}: {exc}"
+    debug_print(message, DEBUG_LOG)
+    debug_print(tb, DEBUG_LOG)
+    if RAISE_SCORING_ERRORS:
+        raise exc
+    return score_result.ScoreResult(
+        name=metric_name,
+        value=0.0,
+        scoring_failed=True,
+        reason=message,
+        metadata={"exception": str(exc), "traceback": tb},
+    )
+
+
+def _evaluation_fn(dataset_item: dict[str, Any], llm_output: str) -> dict[str, Any]:
+    """Delegate to the shared ARC evaluator."""
+    return evaluate_arc_response(dataset_item, llm_output, EVAL_CONTEXT)
+
+
+def build_prompt() -> ChatPrompt:
+    """Return the baseline prompt used for both baseline eval and HRPO trials."""
+    return ChatPrompt(
+        name="arc-agi2-hrpo-baseline",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": USER_PROMPT},
+        ],
+        model=EVAL_MODEL,
+        model_parameters={
+            "temperature": EVAL_TEMPERATURE,
+            "n": EVAL_COMPLETIONS_PER_CALL,
+            "selection_policy": EVAL_SELECTION_POLICY,
+        },
+    )
+
+
+def _maybe_log_baseline_reason(baseline_eval: Any) -> None:
+    """Dump the aggregated baseline reason text to help debugging."""
+    if not DEBUG_LOG or not getattr(baseline_eval, "test_results", None):
+        return
+    first_sr = (
+        baseline_eval.test_results[0].score_results[0]
+        if baseline_eval.test_results[0].score_results
+        else None
+    )
+    if first_sr:
+        debug_print(
+            f"Baseline composite metric reason: {first_sr.reason or '<none>'}",
+            True,
+        )
+
+
+def _print_run_summary(
+    *, context: str, score: float, trials: int | str, llm_calls: int | None
+) -> None:
+    """Emit a concise Rich line summarizing the completed run."""
+    calls_display = llm_calls if llm_calls is not None else "unknown"
+    CONSOLE.print(
+        f"{context} | score={score:.3f} | trials={trials} | llm_calls={calls_display}"
+    )
+
+
+def main() -> None:
+    """Run baseline evaluation followed by HRPO if improvement is needed."""
+
+    composite_metric = build_multi_metric_objective(
+        DEFAULT_METRIC_SEQUENCE,
+        _evaluation_fn,
+        _handle_scoring_exception,
+        objective_name=COMPOSITE_METRIC_NAME,
+    )
+
+    dataset = arc_agi2(
+        split=DATASET_SPLIT,
+        count=DATASET_COUNT,
+        start=DATASET_START,
+        test_mode=TEST_MODE,
+        seed=SEED,
+        prefer_presets=False,
+        filter_by={"task_id": ARC_AGI2_TASK_ID} if ARC_AGI2_TASK_ID else None,
+    )
+
+    items = dataset.get_items(1)
+    if not items:
+        if ARC_AGI2_TASK_ID:
+            raise RuntimeError(
+                f"Task id '{ARC_AGI2_TASK_ID}' was not found in this dataset slice."
+            )
+        raise RuntimeError("Dataset returned no items")
+    first_item = items[0]
+
+    if DEBUG_LOG:
+        debug_print(f"Sample task id: {first_item.get('task_id')}", True)
+        print_task_preview(
+            first_item.get("training_examples") or [],
+            first_item.get("test_inputs") or [],
+        )
+        if DATASET_COUNT == 1 or len(items) == 1:
+            debug_print(
+                "Single-task dataset detected; hierarchical analysis will report a single batch (expected).",
+                True,
+            )
+
+    prompt = build_prompt()
+    CONSOLE.print(
+        f"[info] ARC-AGI pass@k={EVAL_CONTEXT.pass_at_k} policy={EVAL_SELECTION_POLICY}"
+    )
+
+    optimizer = HierarchicalReflectiveOptimizer(
+        model=EVAL_MODEL,
+        model_parameters={"temperature": EVAL_TEMPERATURE},
+        reasoning_model=REASONING_MODEL,
+        reasoning_model_parameters={"temperature": REASONING_TEMPERATURE},
+        n_threads=HRPO_THREADS,
+        prompt_overrides=HRPO_PROMPT_OVERRIDES,
+    )
+
+    # Baseline stays text-only; HRPO evaluation can optionally use images
+    # (off by default to avoid extra cost).
+    baseline_agent = None
+    hrpo_agent = (
+        ArcAgiImageAgent(
+            project_name=PROJECT_NAME,
+            include_images=INCLUDE_IMAGES and INCLUDE_IMAGES_HRPO_EVAL,
+            debug_log=DEBUG_LOG,
+        )
+        if (INCLUDE_IMAGES and INCLUDE_IMAGES_HRPO_EVAL)
+        else None
+    )
+
+    optimizer.project_name = PROJECT_NAME
+    baseline_eval = optimizer.evaluate_prompt(
+        prompt=prompt,
+        dataset=dataset,
+        metric=composite_metric,
+        agent=baseline_agent,
+        n_samples=N_SAMPLES_PER_TRIAL,
+        return_evaluation_result=True,
+        verbose=1,
+    )
+    baseline_score = getattr(baseline_eval, "score", None)
+
+    def _composite_from_results() -> float:
+        if not getattr(baseline_eval, "test_results", None):
+            return 0.0
+        per_item_scores: list[float] = []
+        for test in baseline_eval.test_results:
+            score_results = getattr(test, "score_results", []) or []
+            score_map = {
+                getattr(sr, "name", ""): getattr(sr, "value", 0.0)
+                for sr in score_results
+            }
+            # Prefer the composite metric directly if it is present.
+            if COMPOSITE_METRIC_NAME in score_map:
+                per_item_scores.append(score_map[COMPOSITE_METRIC_NAME])
+                continue
+            if not score_map:
+                continue
+            composite = sum(
+                score_map.get(metric_name, 0.0) * METRIC_WEIGHTS[metric_name]
+                for metric_name in DEFAULT_METRIC_SEQUENCE
+            )
+            per_item_scores.append(composite)
+        return sum(per_item_scores) / len(per_item_scores) if per_item_scores else 0.0
+
+    if baseline_score is None:
+        baseline_score = _composite_from_results()
+
+    _maybe_log_baseline_reason(baseline_eval)
+
+    if optimizer.skip_perfect_score and baseline_score >= optimizer.perfect_score:
+        _print_run_summary(
+            context="ARC-AGI run summary (baseline perfect)",
+            score=baseline_score,
+            trials=0,
+            llm_calls=getattr(optimizer, "llm_call_counter", None),
+        )
+        persist_run_summary(
+            task_id=first_item.get("task_id"),
+            composite_name=COMPOSITE_METRIC_NAME,
+            baseline_score=baseline_score,
+            baseline_eval=baseline_eval,
+            final_score=baseline_score,
+            trials_used=0,
+            llm_calls=getattr(optimizer, "llm_call_counter", None),
+            model=EVAL_MODEL,
+            reasoning_model=REASONING_MODEL,
+            pass_at_k=DEFAULT_PASS_AT_K,
+            n_samples=N_SAMPLES_PER_TRIAL,
+            include_images=INCLUDE_IMAGES,
+            include_images_hrpo_eval=INCLUDE_IMAGES_HRPO_EVAL,
+            final_cost=getattr(baseline_eval, "cost", None),
+        )
+        return
+    persist_run_summary(
+        task_id=first_item.get("task_id"),
+        composite_name=COMPOSITE_METRIC_NAME,
+        baseline_score=baseline_score,
+        baseline_eval=baseline_eval,
+        final_score=baseline_score,
+        trials_used=0,
+        llm_calls=getattr(optimizer, "llm_call_counter", None),
+        model=EVAL_MODEL,
+        reasoning_model=REASONING_MODEL,
+        pass_at_k=DEFAULT_PASS_AT_K,
+        n_samples=N_SAMPLES_PER_TRIAL,
+        include_images=INCLUDE_IMAGES,
+        include_images_hrpo_eval=INCLUDE_IMAGES_HRPO_EVAL,
+        final_cost=getattr(baseline_eval, "cost", None),
+    )
+
+    result = optimizer.optimize_prompt(
+        prompt=prompt,
+        dataset=dataset,
+        metric=composite_metric,
+        n_samples=N_SAMPLES_PER_TRIAL,
+        max_trials=HRPO_MAX_TRIALS,
+        project_name=PROJECT_NAME,
+        agent=hrpo_agent,
+    )
+
+    trials_used = len(result.history) if getattr(result, "history", None) else "unknown"
+    llm_calls = result.llm_calls or getattr(optimizer, "llm_call_counter", None)
+    _print_run_summary(
+        context="ARC-AGI-2 HRPO complete",
+        score=result.score,
+        trials=trials_used,
+        llm_calls=llm_calls,
+    )
+    prompt_result = result.prompt
+    if isinstance(prompt_result, dict):
+        prompt_name = next(iter(prompt_result.values())).name
+    else:
+        prompt_name = prompt_result.name
+    CONSOLE.print(f"Best prompt name: {prompt_name}")
+
+    persist_run_summary(
+        task_id=first_item.get("task_id"),
+        composite_name=COMPOSITE_METRIC_NAME,
+        baseline_score=baseline_score,
+        baseline_eval=baseline_eval,
+        final_score=result.score,
+        trials_used=trials_used,
+        llm_calls=llm_calls,
+        model=EVAL_MODEL,
+        reasoning_model=REASONING_MODEL,
+        pass_at_k=DEFAULT_PASS_AT_K,
+        n_samples=N_SAMPLES_PER_TRIAL,
+        include_images=INCLUDE_IMAGES,
+        include_images_hrpo_eval=INCLUDE_IMAGES_HRPO_EVAL,
+        final_cost=getattr(result, "llm_cost_total", None),
+    )
+
+
+if __name__ == "__main__":
+    main()

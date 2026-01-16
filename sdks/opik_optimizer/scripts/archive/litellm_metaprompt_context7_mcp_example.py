@@ -165,7 +165,7 @@ meta_optimizer = MetaPromptOptimizer(
     n_threads=1,
     model_parameters={"temperature": 0.2},
 )
-meta_result = meta_optimizer.optimize_mcp(
+meta_result = meta_optimizer.optimize_mcp(  # type: ignore[attr-defined]
     prompt=prompt,
     dataset=dataset,
     metric=context7_metric,

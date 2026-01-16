@@ -26,7 +26,7 @@ class InlineExecutor:
         return self
 
     def __exit__(
-        self, exc_type: Any, exc: Any, tb: Any
+        self, exc_type: Any, exc: Any, _tb: Any
     ) -> None:  # pragma: no cover - trivial
         return None
 

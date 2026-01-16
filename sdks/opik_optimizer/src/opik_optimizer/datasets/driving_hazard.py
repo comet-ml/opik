@@ -8,11 +8,9 @@ content format (OpenAI style).
 Dataset: https://huggingface.co/datasets/DHPR/Driving-Hazard-Prediction-and-Reasoning
 """
 
-from io import BytesIO
-import base64
+from typing import Any
 
 import opik
-from typing import Any
 from PIL import Image
 
 from opik_optimizer.utils.dataset_utils import (
@@ -20,7 +18,11 @@ from opik_optimizer.utils.dataset_utils import (
     default_dataset_name,
     resolve_test_mode_count,
     warn_deprecated_dataset,
+    filter_by_fingerprint,
+    record_matches_filter_by,
+    FilterBy,
 )
+from opik_optimizer.utils.image_utils import encode_image_to_base64_uri
 
 
 def driving_hazard(
@@ -31,6 +33,7 @@ def driving_hazard(
     test_mode: bool = False,
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """
     Load samples from the DHPR (Driving-Hazard-Prediction-and-Reasoning) dataset.
@@ -71,6 +74,7 @@ def driving_hazard(
     elif normalized_split == "test" and count == 100:
         preset_name = "driving_hazard_test"
 
+    explicit_dataset_name = dataset_name is not None
     target_name = (
         dataset_name
         or preset_name
@@ -81,6 +85,9 @@ def driving_hazard(
             count=count,
         )
     )
+    if not explicit_dataset_name:
+        if filter_by:
+            target_name = f"{target_name}_filtered_{filter_by_fingerprint(filter_by)}"
 
     return _load_dhpr_dataset(
         dataset_name=target_name,
@@ -89,6 +96,7 @@ def driving_hazard(
         split=normalized_split,
         max_image_size=max_image_size,
         image_quality=image_quality,
+        filter_by=filter_by,
     )
 
 
@@ -96,6 +104,8 @@ def driving_hazard_50(
     test_mode: bool = False,
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
+    *,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Legacy helper for 50 training samples."""
     warn_deprecated_dataset("driving_hazard_50", "driving_hazard(count=50)")
@@ -106,6 +116,7 @@ def driving_hazard_50(
         test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
+        filter_by=filter_by,
     )
 
 
@@ -113,6 +124,8 @@ def driving_hazard_100(
     test_mode: bool = False,
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
+    *,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Legacy helper for 100 training samples."""
     warn_deprecated_dataset("driving_hazard_100", "driving_hazard(count=100)")
@@ -123,6 +136,7 @@ def driving_hazard_100(
         test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
+        filter_by=filter_by,
     )
 
 
@@ -130,6 +144,8 @@ def driving_hazard_test_split(
     test_mode: bool = False,
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
+    *,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """Legacy helper for 100 test samples."""
     warn_deprecated_dataset(
@@ -142,6 +158,7 @@ def driving_hazard_test_split(
         test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
+        filter_by=filter_by,
     )
 
 
@@ -153,6 +170,7 @@ def _load_dhpr_dataset(
     split: str = "train",
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """
     Internal function to load DHPR dataset with multimodal support.
@@ -189,91 +207,55 @@ def _load_dhpr_dataset(
             f"We recommend deleting the dataset and re-creating it."
         )
 
-    # Load from HuggingFace and process
-    if len(items) == 0:
-        import datasets as ds
+    # Load from HuggingFace and process (len(items) == 0 at this point)
+    import datasets as ds
 
-        # Load DHPR dataset from HuggingFace
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
+    # Load DHPR dataset from HuggingFace
+    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)  # type: ignore[arg-type]
+    ds.disable_progress_bar()
 
-        try:
-            hf_dataset = ds.load_dataset(
-                "DHPR/Driving-Hazard-Prediction-and-Reasoning",
-                streaming=True,
-                download_config=download_config,
-                trust_remote_code=True,  # May be needed for custom dataset scripts
-            )
-        except Exception as e:
-            # Fallback: try without streaming if streaming fails
-            ds.enable_progress_bar()
-            raise ValueError(
-                f"Failed to load DHPR dataset: {e}. "
-                f"Make sure you have internet connection and the dataset is accessible."
-            )
-
-        # Process items
-        data: list[dict[str, Any]] = []
-
-        for i, item in enumerate(hf_dataset[split]):
-            if i >= actual_nb_items:
-                break
-
-            processed_item = _process_dhpr_item(
-                item=item,
-                max_image_size=max_image_size,
-                image_quality=image_quality,
-            )
-            data.append(processed_item)
-
+    try:
+        hf_dataset = ds.load_dataset(
+            "DHPR/Driving-Hazard-Prediction-and-Reasoning",
+            streaming=True,
+            download_config=download_config,
+            trust_remote_code=True,  # May be needed for custom dataset scripts
+        )
+    except Exception as e:
+        # Fallback: try without streaming if streaming fails
         ds.enable_progress_bar()
+        raise ValueError(
+            f"Failed to load DHPR dataset: {e}. "
+            f"Make sure you have internet connection and the dataset is accessible."
+        )
 
-        # Insert into Opik dataset
-        dataset.insert(data)
+    # Process items
+    data: list[dict[str, Any]] = []
+    for item in hf_dataset[split]:  # type: ignore[arg-type]
+        if filter_by and not record_matches_filter_by(item, filter_by):
+            continue
+        processed_item = _process_dhpr_item(
+            item=item,
+            max_image_size=max_image_size,
+            image_quality=image_quality,
+        )
+        data.append(processed_item)
+        if len(data) >= actual_nb_items:
+            break
 
-        return dataset
+    ds.enable_progress_bar()
 
+    if len(data) < actual_nb_items:
+        filter_note = f" after filter_by={filter_by}" if filter_by else ""
+        raise ValueError(
+            f"Driving Hazard dataset{filter_note} yielded {len(data)} items; "
+            f"expected {actual_nb_items}. Adjust count or filter_by to avoid emptying the split."
+        )
 
-def _encode_pil_to_base64_uri(
-    image: Image.Image, format: str = "PNG", quality: int = 85
-) -> str:
-    """
-    Encode a PIL Image to a base64 data URI.
+    # Insert into Opik dataset
+    dataset.insert(data)
 
-    Args:
-        image: PIL Image object
-        format: Image format (PNG, JPEG, etc.)
-        quality: JPEG quality (1-100), ignored for PNG
-
-    Returns:
-        Base64 data URI string (e.g., "data:image/png;base64,iVBORw...")
-
-    Example:
-        >>> from PIL import Image
-        >>> img = Image.open("photo.jpg")
-        >>> data_uri = encode_pil_to_base64_uri(img)
-        >>> data_uri[:30]
-        'data:image/png;base64,iVBORw0'
-    """
-    buffer = BytesIO()
-
-    # Save with appropriate parameters
-    save_kwargs: dict[str, Any] = {"format": format}
-    if format.upper() == "JPEG":
-        save_kwargs["quality"] = quality
-        save_kwargs["optimize"] = True
-
-    image.save(buffer, **save_kwargs)
-
-    # Encode to base64
-    encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-    # Determine MIME type
-    mime_type = f"image/{format.lower()}"
-    if format.upper() == "JPEG":
-        mime_type = "image/jpeg"
-
-    return f"data:{mime_type};base64,{encoded}"
+    return dataset
 
 
 def _process_dhpr_item(
@@ -296,18 +278,20 @@ def _process_dhpr_item(
     question_id = item.get("question_id")
     question = item.get("question")
     hazard = item.get("hazard")
-    pil_image: Image.Image = item.get("image")
+    pil_image: Image.Image = item.get("image")  # type: ignore[assignment]
 
     # Resize if needed
     if max_image_size:
         pil_image.thumbnail(max_image_size, Image.Resampling.LANCZOS)
 
     # Encode to base64 data URI
-    image_base64 = _encode_pil_to_base64_uri(
-        image=pil_image,
-        format="JPEG",
-        quality=image_quality,
+    image_base64 = encode_image_to_base64_uri(
+        pil_image, image_format="JPEG", quality=image_quality
     )
+    if image_base64 is None:
+        raise ValueError(
+            "Failed to encode image to base64 - image may be missing or corrupted."
+        )
 
     # Return processed item
     # The optimizer will use:
