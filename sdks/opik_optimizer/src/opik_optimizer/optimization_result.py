@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import Any, cast
+from collections.abc import Iterator
 import datetime
 from dataclasses import dataclass, field
+from contextlib import contextmanager
 
 import pydantic
 import rich.box
@@ -188,6 +190,9 @@ class OptimizationHistoryState:
         self.entries: list[dict[str, Any]] = []
         self._best_so_far: float | None = None
         self._open_rounds: dict[Any, dict[str, Any]] = {}
+        self._default_dataset_split: str | None = None
+        self._current_selection_meta: dict[str, Any] | None = None
+        self._current_pareto_front: list[dict[str, Any]] | None = None
 
     @staticmethod
     def _coerce_float(value: Any) -> float | None:
@@ -195,6 +200,13 @@ class OptimizationHistoryState:
             return float(value)
         except Exception:
             return None
+
+    def _next_candidate_id(self, prefix: str | None = None) -> str:
+        """Generate a simple incremental candidate ID, optionally with a prefix."""
+        base = len(self.entries)
+        suffix = sum(len(e.get("trials") or []) for e in self.entries)
+        stem = prefix or "cand"
+        return f"{stem}_{base}_{suffix}"
 
     def _normalize_candidates(
         self, candidates: list[dict[str, Any]] | list[OptimizerCandidate] | None
@@ -305,6 +317,28 @@ class OptimizationHistoryState:
         self._open_rounds[idx] = entry
         return idx
 
+    def set_default_dataset_split(self, dataset_split: str | None) -> None:
+        """Set a default dataset split for subsequent trials/rounds."""
+        self._default_dataset_split = dataset_split
+
+    def set_selection_meta(self, selection_meta: dict[str, Any] | None) -> None:
+        """Set selection metadata for the current round; consumed on end_round."""
+        self._current_selection_meta = selection_meta
+
+    def set_pareto_front(self, pareto_front: list[dict[str, Any]] | None) -> None:
+        """Set pareto front for the current round; consumed on end_round."""
+        self._current_pareto_front = pareto_front
+
+    @contextmanager
+    def with_dataset_split(self, dataset_split: str | None) -> Iterator[None]:
+        """Temporarily set the default dataset split within the context."""
+        previous = self._default_dataset_split
+        self.set_default_dataset_split(dataset_split)
+        try:
+            yield
+        finally:
+            self.set_default_dataset_split(previous)
+
     def record_trial(
         self,
         round_handle: Any,
@@ -319,6 +353,7 @@ class OptimizationHistoryState:
         candidates: list[dict[str, Any]] | None = None,
         timestamp: str | None = None,
         stop_reason: str | None = None,
+        candidate_id_prefix: str | None = None,
     ) -> dict[str, Any]:
         entry = self._open_rounds.setdefault(
             round_handle,
@@ -335,16 +370,24 @@ class OptimizationHistoryState:
             if isinstance(candidate, OptimizerCandidate)
             else candidate
         )
+        dataset_split_val = dataset_split or self._default_dataset_split
         trial_payload: dict[str, Any] = {
             "trial_index": int(trial_index) if isinstance(trial_index, int) else None,
             "score": score_val,
             "candidate": candidate_payload,
             "metrics": metrics,
             "dataset": dataset,
-            "dataset_split": dataset_split,
+            "dataset_split": dataset_split_val,
             "extra": extras,
             "timestamp": timestamp or _now_iso(),
         }
+        if trial_payload["trial_index"] is None:
+            # Auto-assign a trial index if one wasn't provided.
+            trial_payload["trial_index"] = sum(
+                len(e.get("trials") or []) for e in self.entries
+            ) + len(entry.get("trials") or [])
+        if isinstance(candidate_payload, dict) and candidate_payload.get("id") is None:
+            candidate_payload["id"] = self._next_candidate_id(candidate_id_prefix)
         entry.setdefault("trials", []).append(trial_payload)
         if score_val is not None:
             self._best_so_far = (
@@ -388,6 +431,7 @@ class OptimizationHistoryState:
                 "extra": {},
             },
         )
+        dataset_split_val = dataset_split or self._default_dataset_split
         if candidates:
             normalized_candidates = self._normalize_candidates(candidates) or []
             entry.setdefault("candidates", []).extend(normalized_candidates)
@@ -412,18 +456,32 @@ class OptimizationHistoryState:
             entry["best_so_far"] = self._best_so_far
         if extras:
             entry["extra"] = {**(entry.get("extra") or {}), **extras}
-        if dataset_split is not None:
-            entry["dataset_split"] = dataset_split
+        if dataset_split_val is not None:
+            entry["dataset_split"] = dataset_split_val
+
         # FIXME: Move to pareto_front utils
-        if pareto_front is not None:
+        pareto_payload = pareto_front
+        if pareto_payload is None:
+            pareto_payload = self._current_pareto_front
+        if pareto_payload is not None:
             entry.setdefault("extra", {})
-            entry["extra"]["pareto_front"] = pareto_front
-        if selection_meta is not None:
+            entry["extra"]["pareto_front"] = pareto_payload
+        selection_meta_payload = (
+            selection_meta
+            if selection_meta is not None
+            else self._current_selection_meta
+        )
+        if selection_meta_payload is not None:
             entry.setdefault("extra", {})
-            entry["extra"]["selection_meta"] = selection_meta
+            entry["extra"]["selection_meta"] = selection_meta_payload
+        if stop_reason is None and entry.get("stop_reason") is not None:
+            stop_reason = entry.get("stop_reason")
         entry["stop_reason"] = stop_reason
         entry["timestamp"] = timestamp or entry.get("timestamp") or _now_iso()
         self._merge_round(entry)
+        # Reset round-scoped selection meta once consumed
+        self._current_selection_meta = None
+        self._current_pareto_front = None
         return entry
 
     def finalize_stop(self, stop_reason: str | None = None) -> None:
@@ -436,6 +494,8 @@ class OptimizationHistoryState:
         self.entries.clear()
         self._best_so_far = None
         self._open_rounds.clear()
+        self._default_dataset_split = None
+        self._current_selection_meta = None
 
     def _stamp_stop_reason(self, stop_reason: str | None) -> None:
         if not self.entries or stop_reason is None:

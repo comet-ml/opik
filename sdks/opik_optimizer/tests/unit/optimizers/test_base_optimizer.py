@@ -1211,8 +1211,9 @@ class TestCleanup:
 class TestOptimizerInitialization:
     """Tests for optimizer initialization."""
 
-    def test_default_values(self) -> None:
+    def test_default_values(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Should set default values correctly."""
+        monkeypatch.delenv("OPIK_PROJECT_NAME", raising=False)
         optimizer = ConcreteOptimizer(model="gpt-4")
 
         assert optimizer.model == "gpt-4"

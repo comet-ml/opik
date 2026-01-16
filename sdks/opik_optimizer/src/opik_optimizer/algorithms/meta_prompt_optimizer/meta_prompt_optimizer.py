@@ -274,6 +274,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         self.auto_continue = auto_continue
         self.dataset = dataset
+        self.set_default_dataset_split(
+            "validation" if context.validation_dataset is not None else "train"
+        )
         best_prompts = prompts
         is_bundle = not is_single_prompt_optimization
 
@@ -486,8 +489,21 @@ class MetaPromptOptimizer(BaseOptimizer):
                 trial_index=context.trials_completed,
                 stop_reason=context.finish_reason if context.should_stop else None,
             )
+            self.set_selection_meta(
+                {
+                    "selection_policy": self.selection_strategy,
+                    "score_used": best_cand_score_avg,
+                    "candidate_count": len(prompt_scores),
+                }
+            )
             # Record each evaluated candidate as trials
             for cand_prompt, cand_score in prompt_scores:
+                self.record_candidate_entry(
+                    prompt_or_payload=cand_prompt,
+                    score=cand_score,
+                    id=f"round{round_num}_cand",
+                    metrics={"selection_score": cand_score},
+                )
                 self.finish_candidate(
                     cand_prompt,
                     score=cand_score,
@@ -510,11 +526,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 candidates=round_data.candidates
                 if hasattr(round_data, "candidates")
                 else None,
-                selection_meta={
-                    "selection_policy": self.selection_strategy,
-                    "score_used": best_cand_score_avg,
-                    "candidate_count": len(prompt_scores),
-                },
             )
             rounds.append(round_data)
 

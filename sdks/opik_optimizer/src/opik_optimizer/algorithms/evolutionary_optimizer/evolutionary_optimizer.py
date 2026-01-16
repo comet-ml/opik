@@ -19,9 +19,6 @@ from opik_optimizer.base_optimizer import (
 )
 from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
-from ...optimization_result import (
-    build_candidate_entry,
-)
 
 from . import helpers, reporting
 from . import prompts as evo_prompts
@@ -658,19 +655,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
                 )
 
+        self.set_default_dataset_split(context.dataset_split or "train")
         round_handle = self.begin_round(improvement=0.0)
         generation_idx = 0
+        self.record_candidate_entry(
+            prompt_or_payload=best_prompts_overall,
+            score=best_primary_score_overall,
+            id="gen0_ind0",
+        )
         self.finish_candidate(
             best_prompts_overall,
             score=best_primary_score_overall,
             trial_index=context.trials_completed,
-            candidates=[
-                build_candidate_entry(
-                    prompt_or_payload=best_prompts_overall,
-                    score=best_primary_score_overall,
-                    id="gen0_ind0",
-                )
-            ],
             round_handle=round_handle,
         )
         selection_meta = None
@@ -692,6 +688,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "selection_policy": getattr(self, "selection_policy", "tournament"),
                 "pareto_front": pareto_front,
             }
+            # Stash pareto/selection meta on the state so we don't re-pass args.
+            self.set_pareto_front(pareto_front)
+            self.set_selection_meta(selection_meta)
 
         self.finish_round(
             round_handle,
@@ -700,8 +699,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             dataset_split=context.dataset_split
             if hasattr(context, "dataset_split")
             else None,
-            pareto_front=pareto_front,
-            selection_meta=selection_meta,
             stop_reason=context.finish_reason,
             extras={
                 "stopped": context.should_stop,
@@ -819,7 +816,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                                 "primary": ind.fitness.values[0],
                                 "length": ind.fitness.values[1],
                             }
-                        entry = build_candidate_entry(
+                        entry = self.record_candidate_entry(
                             prompt_or_payload=candidate_prompts,
                             score=primary_score,
                             id=f"gen{generation_idx}_ind{idx}",
@@ -831,7 +828,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             score=primary_score,
                             trial_index=context.trials_completed,
                             metrics=metrics,
-                            candidates=[entry],
                             round_handle=round_handle,
                         )
 

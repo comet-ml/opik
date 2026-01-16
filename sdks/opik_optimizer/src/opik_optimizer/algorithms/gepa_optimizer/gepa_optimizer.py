@@ -4,7 +4,6 @@ from typing import Any, cast
 from opik import Dataset
 
 from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
-from ...optimization_result import build_candidate_entry
 from ...utils.reporting import (
     convert_tqdm_to_rich,
     suppress_opik_logs,
@@ -367,6 +366,10 @@ class GepaOptimizer(BaseOptimizer):
 
         rescored: list[float] = []
         self._history_builder.clear()
+        default_split = (
+            "validation" if self._validation_dataset is not None else "train"
+        )
+        self.set_default_dataset_split(default_split)
 
         # Wrap rescoring to prevent OPIK messages and experiment link displays
         with suppress_opik_logs():
@@ -403,13 +406,8 @@ class GepaOptimizer(BaseOptimizer):
                         for k, v in candidate.items()
                         if not k.startswith("_") and k not in ("source", "id")
                     }
-                    round_handle = self.begin_round(
-                        dataset="validation"
-                        if self._validation_dataset is not None
-                        else "train",
-                        candidate_id=candidate_id,
-                    )
-                    candidate_entry = build_candidate_entry(
+                    round_handle = self.begin_round(candidate_id=candidate_id)
+                    candidate_entry = self.record_candidate_entry(
                         prompt_or_payload=prompt_variants,
                         score=score,
                         id=candidate_id,
@@ -431,25 +429,20 @@ class GepaOptimizer(BaseOptimizer):
                             "components": components,
                             "candidate_id": candidate_id,
                         },
-                        candidates=[candidate_entry],
                         round_handle=round_handle,
-                        dataset_split="validation"
-                        if self._validation_dataset is not None
-                        else "train",
+                    )
+                    self.set_selection_meta(
+                        {
+                            "selection_policy": candidate_selection_strategy,
+                            "opik_rescored_scores": rescored,
+                            "gepa_scores": filtered_val_scores,
+                        }
                     )
                     self.finish_round(
                         round_handle,
                         stop_reason=context.finish_reason
                         if context.should_stop
                         else None,
-                        dataset_split="validation"
-                        if self._validation_dataset is not None
-                        else "train",
-                        selection_meta={
-                            "selection_policy": candidate_selection_strategy,
-                            "opik_rescored_scores": rescored,
-                            "gepa_scores": filtered_val_scores,
-                        },
                     )
 
         if rescored:

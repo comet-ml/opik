@@ -22,7 +22,6 @@ from ...agents import OptimizableAgent
 from ... import task_evaluator
 from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
-from ...optimization_result import build_candidate_entry
 from . import types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
@@ -703,30 +702,27 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 pruner=pruner_info,
                 study_direction=study.direction.name if study.direction else None,
             )
+            self.record_candidate_entry(
+                prompt_or_payload=prompt_cand_display,
+                score=score_val,
+                id=f"trial{trial.number}",
+                extra={
+                    "parameters": trial.user_attrs.get("parameters", {}),
+                    "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
+                    "model": trial.user_attrs.get("model", {}),
+                    "stage": trial.user_attrs.get("stage"),
+                    "type": trial.user_attrs.get("type"),
+                },
+            )
             self.finish_candidate(
-                build_candidate_entry(
-                    prompt_or_payload=prompt_cand_display,
-                    score=score_val,
-                    extra={
-                        "parameters": trial.user_attrs.get("parameters", {}),
-                        "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
-                        "model": trial.user_attrs.get("model", {}),
-                        "stage": trial.user_attrs.get("stage"),
-                        "type": trial.user_attrs.get("type"),
-                    },
-                ),
+                prompt_cand_display,
                 score=score_val,
                 trial_index=trial.number,
-                extras=None,
                 round_handle=round_handle,
                 timestamp=timestamp,
             )
-            self.finish_round(
-                round_handle,
-                stop_reason=getattr(self._context, "finish_reason", None)
-                if self._context is not None
-                else None,
-                selection_meta={
+            self.set_selection_meta(
+                {
                     "sampler": sampler_info,
                     "pruner": pruner_info,
                     "study_direction": study.direction.name
@@ -735,7 +731,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "stage": trial.user_attrs.get("stage")
                     if trial is not None
                     else None,
-                },
+                }
+            )
+            self.finish_round(
+                round_handle,
+                stop_reason=getattr(self._context, "finish_reason", None)
+                if self._context is not None
+                else None,
             )
 
         best_trial = study.best_trial
@@ -776,6 +778,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         context: OptimizationContext,
     ) -> AlgorithmResult:
         optimizable_prompts = context.prompts
+        self.set_default_dataset_split(
+            "validation" if context.validation_dataset is not None else "train"
+        )
         dataset = context.dataset
         validation_dataset = context.validation_dataset
         metric = context.metric

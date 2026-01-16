@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.base_optimizer import AlgorithmResult
 
 if TYPE_CHECKING:
     pass
@@ -33,14 +34,14 @@ class SimpleOptimizer(BaseOptimizer):
         self._trials_completed = 0
         self._rounds_completed = 0
 
-    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
+    def run_optimization(self, context: OptimizationContext):
         """Run optimization with early stopping support."""
         # Initialize tracking
         self._trials_completed = 0
         self._rounds_completed = 0
 
         best_score = context.baseline_score or 0.0
-        best_prompt = list(context.prompts.values())[0]
+        best_prompt = context.prompts
 
         # Simulate multiple rounds of optimization
         for round_num in range(5):
@@ -79,20 +80,19 @@ class SimpleOptimizer(BaseOptimizer):
         if context.finish_reason is None:
             context.finish_reason = "completed"
 
-        return OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=best_prompt,
-            score=best_score,
-            metric_name=context.metric.__name__,
-            initial_prompt=list(context.initial_prompts.values())[0],
-            initial_score=context.baseline_score,
-            details={
+        return AlgorithmResult(
+            best_prompts=best_prompt,
+            best_score=best_score,
+            history=[],
+            metadata={
                 "trials_completed": self._trials_completed,
                 "rounds_completed": self._rounds_completed,
                 "stopped_early": self.stopped_early,
                 "finish_reason": context.finish_reason,
+                "initial_prompt": context.initial_prompts,
+                "initial_score": context.baseline_score,
+                "metric_name": context.metric.__name__,
             },
-            history=[],
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:

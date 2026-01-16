@@ -270,6 +270,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             Tuple of (improved_prompts_dict, improved_score, improved_experiment_result)
         """
 
+        # TODO: Refactor to use BaseOptimizer.evaluate() so trial accounting and
+        # early-stop logic are centralized instead of manually maintained here.
+        def _record_trial(
+            score: float, prompts: dict[str, chat_prompt.ChatPrompt]
+        ) -> None:
+            coerced_score = self._coerce_score(score)
+            context.trials_completed += 1
+            if (
+                context.current_best_score is None
+                or coerced_score > context.current_best_score
+            ):
+                context.current_best_score = coerced_score
+                context.current_best_prompt = prompts
+            self._should_stop_context(context)
+
         # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
@@ -334,14 +349,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 if fallback_scores
                 else best_score
             )
+            _record_trial(fallback_score, best_prompts)
+            self.record_candidate_entry(
+                prompt_or_payload=best_prompts,
+                score=fallback_score,
+                id=f"trial{context.trials_completed}_fallback",
+            )
             self.finish_candidate(
                 best_prompts,
                 score=fallback_score,
                 trial_index=context.trials_completed,
                 round_handle=None,
-                dataset_split="validation"
-                if evaluation_dataset == validation_dataset
-                else "train",
             )
             return best_prompts, fallback_score, fallback_result
 
@@ -358,14 +376,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         best_score_local = sum(
             [x.score_results[0].value for x in best_result.test_results]
         ) / len(best_result.test_results)
+        _record_trial(best_score_local, best_prompt_bundle)
+        self.record_candidate_entry(
+            prompt_or_payload=best_prompt_bundle,
+            score=best_score_local,
+            id=f"trial{context.trials_completed}_best0",
+        )
         self.finish_candidate(
             best_prompt_bundle,
             score=best_score_local,
             trial_index=context.trials_completed,
             round_handle=None,
-            dataset_split="validation"
-            if evaluation_dataset == validation_dataset
-            else "train",
         )
 
         # Evaluate remaining candidates and keep the best-scoring bundle.
@@ -388,14 +409,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     for x in improved_experiment_result.test_results
                 ]
             ) / len(improved_experiment_result.test_results)
+            _record_trial(improved_score, improved_chat_prompts)
+            self.record_candidate_entry(
+                prompt_or_payload=improved_chat_prompts,
+                score=improved_score,
+                id=f"trial{context.trials_completed}_cand{idx}",
+            )
             self.finish_candidate(
                 improved_chat_prompts,
                 score=improved_score,
                 trial_index=context.trials_completed,
                 round_handle=None,
-                dataset_split="validation"
-                if evaluation_dataset == validation_dataset
-                else "train",
             )
 
             if improved_score > best_score_local:
@@ -436,6 +460,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         context: OptimizationContext,
     ) -> AlgorithmResult:
         optimizable_prompts = context.prompts
+        self.set_default_dataset_split(
+            "validation" if context.validation_dataset is not None else "train"
+        )
         dataset = context.dataset
         validation_dataset = context.validation_dataset
         metric = context.metric
@@ -533,6 +560,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             break
 
                         # Generate and evaluate improvement (this is 1 trial)
+                        trials_before_attempt = context.trials_completed
                         (
                             improved_chat_prompts,
                             improved_score,
@@ -552,6 +580,26 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             max_attempts=max_attempts,
                             context=context,
                         )
+                        if context.trials_completed == trials_before_attempt:
+                            # Guard against trial counters not being updated by mocks.
+                            # We treat this attempt as one completed trial to keep
+                            # max_trials enforcement and history alignment consistent.
+                            # This avoids infinite loops when test doubles bypass the
+                            # normal BaseOptimizer.evaluate() accounting path.
+                            coerced_score = (
+                                self._coerce_score(improved_score)
+                                if improved_score is not None
+                                else None
+                            )
+                            context.trials_completed += 1
+                            if coerced_score is not None and (
+                                context.current_best_score is None
+                                or coerced_score > context.current_best_score
+                            ):
+                                context.current_best_score = coerced_score
+                                if improved_chat_prompts is not None:
+                                    context.current_best_prompt = improved_chat_prompts
+                            self._should_stop_context(context)
 
                     # Check for perfect score early stop
                     if (
@@ -632,8 +680,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
 
             round_handle = self.begin_round(improvement=iteration_improvement)
+            history_candidate = {name: prompt for name, prompt in best_prompts.items()}
             self.finish_candidate(
-                best_prompts,
+                history_candidate,
                 score=best_score,
                 trial_index=context.trials_completed,
                 extras={
@@ -647,7 +696,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             self.finish_round(
                 round_handle=round_handle,
                 best_score=best_score,
-                best_candidate=best_prompts,
+                best_candidate=history_candidate,
                 stop_reason=context.finish_reason if context.should_stop else None,
                 extras={"improvement": iteration_improvement},
             )
@@ -665,10 +714,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             previous_iteration_score = best_score
 
         # finish_reason, stopped_early, stop_reason are handled by base class
+        history_entries = self.get_history_entries()
+        for entry in history_entries:
+            entry.setdefault("trials_completed", context.trials_completed)
         return AlgorithmResult(
             best_prompts=best_prompts,
             best_score=best_score,
-            history=self.get_history_entries(),
+            history=history_entries,
             metadata={
                 # Algorithm-specific fields only (framework fields handled by base)
                 "n_threads": self.n_threads,

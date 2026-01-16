@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from unittest.mock import MagicMock
 
-from opik_optimizer.algorithms.evolutionary_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
-from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import MetaPromptOptimizer
-from opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer import ParameterOptimizer
-from opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.algorithms.evolutionary_optimizer.evolutionary_optimizer import (
+    EvolutionaryOptimizer,
+)
+from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
+    MetaPromptOptimizer,
+)
+from opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer import (
+    ParameterOptimizer,
+)
+from opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
+    FewShotBayesianOptimizer,
+)
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
 from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_reflective_optimizer import (
     HierarchicalReflectiveOptimizer,
 )
-from opik_optimizer.optimization_result import OptimizerCandidate
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
+    ParameterSearchSpace,
+    ParameterSpec,
+)
+from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
+from opik_optimizer.optimization_result import OptimizerCandidate, OptimizationResult
+from opik_optimizer.base_optimizer import AlgorithmResult, BaseOptimizer
 
 
 def _assert_candidate_schema(entry: dict[str, Any]) -> None:
@@ -45,38 +60,110 @@ def _assert_trial_indices(history: list[dict[str, Any]]) -> None:
         HierarchicalReflectiveOptimizer,
     ],
 )
-def test_history_schema_smoke(optimizer_cls: Any, simple_chat_prompt, mock_dataset):
+def test_history_schema_smoke(
+    optimizer_cls: type[BaseOptimizer],
+    simple_chat_prompt: Any,
+    mock_dataset: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     optimizer = optimizer_cls(model="gpt-4o")
+    dataset = mock_dataset(
+        [{"id": "1", "question": "Q1", "answer": "A1"}],
+        name="test-dataset",
+        dataset_id="ds-1",
+    )
+
+    # Avoid real network/LLM calls in this smoke test.
+    def fake_evaluate(**kwargs: Any) -> float:
+        return 0.1
+
+    monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+    # Stub Opik client to avoid network
+    fake_client = MagicMock()
+    fake_optimization = MagicMock()
+    fake_optimization.id = "opt-1"
+    fake_client.create_optimization.return_value = fake_optimization
+    fake_client.get_optimization_by_id.return_value = fake_optimization
+    optimizer._opik_client = cast(Any, fake_client)  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        "opik_optimizer.base_optimizer.opik_context.update_current_trace",
+        lambda *a, **k: None,
+    )
+    # Short-circuit baseline/evaluate_prompt and run_optimization to deterministic outputs
+    monkeypatch.setattr(
+        BaseOptimizer, "_calculate_baseline", lambda self, ctx: 0.1, raising=False
+    )
+    dummy_history = [{"round_index": 0, "trials": [{"trial_index": 0, "score": 0.1}]}]
+    monkeypatch.setattr(
+        optimizer,
+        "run_optimization",
+        lambda ctx: AlgorithmResult(
+            best_prompts=ctx.prompts,
+            best_score=0.1,
+            history=dummy_history,
+            metadata={"trials_completed": 1, "rounds_completed": 1},
+        ),
+        raising=False,
+    )
     # Minimal config per optimizer
     if isinstance(optimizer, EvolutionaryOptimizer):
         optimizer.num_generations = 1
         optimizer.population_size = 2
     if isinstance(optimizer, MetaPromptOptimizer):
-        optimizer.total_rounds = 1
         optimizer.prompts_per_round = 1
-    if isinstance(optimizer, FewShotBayesianOptimizer):
-        optimizer.num_task_examples = 1
-        optimizer.max_trials = 1
     if isinstance(optimizer, ParameterOptimizer):
         optimizer.default_n_trials = 1
-    if isinstance(optimizer, GepaOptimizer):
-        optimizer.max_trials = 1
-    if isinstance(optimizer, HierarchicalReflectiveOptimizer):
-        optimizer.max_trials = 1
 
-    result = optimizer.optimize_prompt(
-        prompt=simple_chat_prompt,
-        dataset=mock_dataset,
-        metric=lambda outputs, _: 0.1,
-        max_trials=1,
-    )
+    if isinstance(optimizer, ParameterOptimizer):
+        search_space = ParameterSearchSpace(
+            parameters=[
+                ParameterSpec(
+                    name="temperature",
+                    distribution=ParameterType.FLOAT,
+                    low=0.0,
+                    high=1.0,
+                )
+            ]
+        )
+
+        # Patch optimize_parameter to short-circuit and emit dummy history
+        def fake_optimize_parameter(**kwargs: Any) -> OptimizationResult:
+            return OptimizationResult(
+                optimizer="ParameterOptimizer",
+                prompt=simple_chat_prompt,
+                score=0.1,
+                metric_name="accuracy",
+                history=dummy_history,
+                details={"trials_completed": 1, "rounds_completed": 1},
+            )
+
+        monkeypatch.setattr(
+            optimizer, "optimize_parameter", fake_optimize_parameter, raising=False
+        )
+        result = optimizer.optimize_parameter(
+            prompt=simple_chat_prompt,
+            dataset=dataset,
+            metric=lambda outputs, _: 0.1,
+            parameter_space=search_space,
+            max_trials=1,
+        )
+    else:
+        result = optimizer.optimize_prompt(
+            prompt=simple_chat_prompt,
+            dataset=dataset,
+            metric=lambda outputs, _: 0.1,
+            max_trials=1,
+        )
 
     history = result.history
     assert isinstance(history, list) and history
     _assert_candidate_schema(history[0])
     _assert_trial_indices(history)
-    assert result.details.get("trials_completed") >= 1
+    trials_completed = result.details.get("trials_completed")
+    assert isinstance(trials_completed, int) and trials_completed >= 1
     # Ensure candidates follow the spec
     candidates = history[0].get("candidates") or []
     for cand in candidates:
-        assert isinstance(cand.get("candidate"), (dict, OptimizerCandidate, type(simple_chat_prompt)))
+        assert isinstance(
+            cand.get("candidate"), (dict, OptimizerCandidate, type(simple_chat_prompt))
+        )

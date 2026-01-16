@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, cast, overload, Literal
+from collections.abc import Iterator
 import copy
 import inspect
 import logging
@@ -11,6 +12,7 @@ import math
 import importlib.metadata
 from dataclasses import dataclass, field
 
+from contextlib import contextmanager
 
 import litellm
 from opik.rest_api.core import ApiError
@@ -30,6 +32,7 @@ from .constants import (
 from .optimization_result import (
     OptimizationHistoryState,
     OptimizationResult,
+    build_candidate_entry,
 )
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
@@ -206,6 +209,7 @@ class BaseOptimizer(ABC):
         self._trials_completed: int = 0
         self._rounds_completed: int = 0
         self._reporter: Any | None = None
+        self._last_candidate_entry: dict[str, Any] | None = None
 
         # Current optimization context (set during optimize_prompt, used by evaluate())
         self.__context: OptimizationContext | None = None
@@ -1637,6 +1641,70 @@ class BaseOptimizer(ABC):
             # Fallback for legacy builders
             return None
 
+    def set_default_dataset_split(self, dataset_split: str | None) -> None:
+        """Set a default dataset split for subsequent trials/rounds."""
+        try:
+            self._history_builder.set_default_dataset_split(dataset_split)
+        except AttributeError:
+            return
+
+    @contextmanager
+    def with_dataset_split(self, dataset_split: str | None) -> Iterator[None]:
+        """
+        Temporarily set the default dataset split for history logging.
+        Restores the previous split on exit.
+        """
+        try:
+            ctx = self._history_builder.with_dataset_split(dataset_split)
+        except AttributeError:
+            # Manual fallback
+            previous = getattr(self._history_builder, "_default_dataset_split", None)
+            self.set_default_dataset_split(dataset_split)
+            try:
+                yield
+            finally:
+                self.set_default_dataset_split(previous)
+            return
+
+        with ctx:
+            yield
+
+    def set_selection_meta(self, selection_meta: dict[str, Any] | None) -> None:
+        """Set selection metadata for the current round."""
+        try:
+            self._history_builder.set_selection_meta(selection_meta)
+        except AttributeError:
+            return
+
+    def set_pareto_front(self, pareto_front: list[dict[str, Any]] | None) -> None:
+        """Set pareto front for the current round."""
+        try:
+            self._history_builder.set_pareto_front(pareto_front)
+        except AttributeError:
+            return
+
+    def record_candidate_entry(
+        self,
+        prompt_or_payload: Any,
+        *,
+        score: float | None = None,
+        id: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        notes: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Normalize and cache a candidate entry for reuse in trial/round logging."""
+        entry = build_candidate_entry(
+            prompt_or_payload=prompt_or_payload,
+            score=score,
+            id=id,
+            metrics=metrics,
+            notes=notes,
+            extra=extra,
+        )
+        self._last_candidate_entry = entry
+        return entry
+
     def start_candidate(self, candidate: Any, round_handle: Any) -> Any:
         """Optional pre-hook for candidate; returns the candidate as the handle."""
         return candidate
@@ -1665,6 +1733,9 @@ class BaseOptimizer(ABC):
             stop_reason = None
             if self.__context is not None and self.__context.should_stop:
                 stop_reason = getattr(self.__context, "finish_reason", None)
+            candidate_list = candidates
+            if candidate_list is None and self._last_candidate_entry is not None:
+                candidate_list = [self._last_candidate_entry]
             self._history_builder.record_trial(
                 round_handle=round_handle,
                 score=score,
@@ -1674,7 +1745,7 @@ class BaseOptimizer(ABC):
                 dataset=dataset,
                 dataset_split=dataset_split,
                 extras=extras,
-                candidates=candidates,
+                candidates=candidate_list,
                 timestamp=timestamp,
                 stop_reason=stop_reason,
             )

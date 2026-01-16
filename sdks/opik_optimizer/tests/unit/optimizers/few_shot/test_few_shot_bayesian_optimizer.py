@@ -7,7 +7,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik import Dataset
-from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer, OptimizationResult
+from opik_optimizer import (
+    AlgorithmResult,
+    ChatPrompt,
+    FewShotBayesianOptimizer,
+    OptimizationResult,
+)
 
 
 def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
@@ -76,20 +81,17 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         def mock_run_optimization(context):
             prompts = context.prompts
             original_prompts = context.initial_prompts
-            is_single = context.is_single_prompt_optimization
-            best_prompt = list(prompts.values())[0] if is_single else prompts
-            initial_prompt = (
-                list(original_prompts.values())[0] if is_single else original_prompts
-            )
-            return OptimizationResult(
-                optimizer="FewShotBayesianOptimizer",
-                prompt=best_prompt,
-                score=0.85,
-                metric_name="test_metric",
-                initial_prompt=initial_prompt,
-                initial_score=0.5,
-                details={},
+            best_prompt = prompts
+            initial_prompt = original_prompts
+            return AlgorithmResult(
+                best_prompts=best_prompt,
+                best_score=0.85,
                 history=[],
+                metadata={
+                    "initial_prompt": initial_prompt,
+                    "initial_score": 0.5,
+                    "metric_name": "test_metric",
+                },
             )
 
         monkeypatch.setattr(optimizer, "run_optimization", mock_run_optimization)
@@ -144,19 +146,19 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             prompts_arg = context.prompts
             original_prompts = context.initial_prompts
             is_single = context.is_single_prompt_optimization
-            best_prompt = list(prompts_arg.values())[0] if is_single else prompts_arg
+            best_prompt = prompts_arg if not is_single else list(prompts_arg.values())[0]
             initial_prompt = (
-                list(original_prompts.values())[0] if is_single else original_prompts
+                original_prompts if not is_single else list(original_prompts.values())[0]
             )
-            return OptimizationResult(
-                optimizer="FewShotBayesianOptimizer",
-                prompt=best_prompt,
-                score=0.85,
-                metric_name="test_metric",
-                initial_prompt=initial_prompt,
-                initial_score=0.5,
-                details={},
+            return AlgorithmResult(
+                best_prompts=best_prompt,
+                best_score=0.85,
                 history=[],
+                metadata={
+                    "initial_prompt": initial_prompt,
+                    "initial_score": 0.5,
+                    "metric_name": "test_metric",
+                },
             )
 
         monkeypatch.setattr(optimizer, "run_optimization", mock_run_optimization)
