@@ -169,8 +169,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.markPendingJobAsProcessing(workspaceId, jobId, DatasetExportStatus.PROCESSING,
-                            userName);
+                    int updated = dao.markPendingJobAsProcessing(workspaceId, jobId, userName);
                     verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.PROCESSING, workspaceId, dao);
                     return null;
                 });
@@ -208,8 +207,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
             return Mono.fromCallable(() -> {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(DatasetExportJobDAO.class);
-                    int updated = dao.updateToFailed(workspaceId, jobId, DatasetExportStatus.FAILED, errorMessage,
-                            userName);
+                    int updated = dao.updateToFailed(workspaceId, jobId, errorMessage, userName);
                     verifyJobUpdatedToStatus(updated, jobId, DatasetExportStatus.FAILED, workspaceId, dao);
                     return null;
                 });

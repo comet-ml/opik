@@ -100,6 +100,13 @@ public class DatasetExportConfig implements StreamConfiguration {
     @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
     private Duration cleanupLockWaitTime = Duration.seconds(1);
 
+    /**
+     * Batch size for cleanup job operations (number of jobs to process per batch).
+     * Default: 100
+     */
+    @JsonProperty
+    @Min(10) @Max(1000) private int cleanupBatchSize = 100;
+
     // lazy codec creation to ensure it picks up the configured JsonUtils mapper
     @Override
     @JsonIgnore

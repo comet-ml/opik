@@ -58,13 +58,12 @@ public interface DatasetExportJobDAO {
      *
      * @param workspaceId The workspace ID for security
      * @param id The job ID to update
-     * @param status The new status (should be PROCESSING)
      * @param lastUpdatedBy The user who updated the job
      * @return The number of rows updated (0 if job not found or doesn't belong to workspace or not in PENDING state)
      */
     @SqlUpdate("""
             UPDATE dataset_export_jobs
-            SET status = :status,
+            SET status = 'PROCESSING',
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id
                 AND workspace_id = :workspaceId
@@ -72,7 +71,6 @@ public interface DatasetExportJobDAO {
             """)
     int markPendingJobAsProcessing(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
-            @Bind("status") DatasetExportStatus status,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     /**
@@ -115,14 +113,13 @@ public interface DatasetExportJobDAO {
      *
      * @param workspaceId The workspace ID for security
      * @param id The job ID to update
-     * @param status The new status (typically FAILED)
      * @param errorMessage The error message describing the failure
      * @param lastUpdatedBy The user who updated the job
      * @return The number of rows updated (0 if job not found or doesn't belong to workspace or invalid state transition)
      */
     @SqlUpdate("""
             UPDATE dataset_export_jobs
-            SET status = :status,
+            SET status = 'FAILED',
                 error_message = :errorMessage,
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id
@@ -131,7 +128,6 @@ public interface DatasetExportJobDAO {
             """)
     int updateToFailed(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
-            @Bind("status") DatasetExportStatus status,
             @Bind("errorMessage") String errorMessage,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 

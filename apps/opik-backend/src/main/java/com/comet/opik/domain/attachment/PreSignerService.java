@@ -75,8 +75,6 @@ class PreSignerServiceImpl implements PreSignerService {
 
     @Override
     public String presignDownloadUrl(@NonNull String key, @NonNull Duration expiresIn) {
-        log.debug("Generating presigned download URL for key: '{}', expires in: {}", key, expiresIn);
-
         // Create a request to get an object
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(s3Config.getS3BucketName())
