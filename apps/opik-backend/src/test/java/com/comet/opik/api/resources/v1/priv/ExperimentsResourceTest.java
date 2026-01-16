@@ -1280,6 +1280,348 @@ class ExperimentsResourceTest {
         }
 
         @Test
+        @DisplayName("when filtering by experiment_ids, then return only matching experiments")
+        void findByExperimentIds() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create 5 experiments
+            var allExperiments = IntStream.range(0, 5)
+                    .mapToObj(i -> generateExperiment())
+                    .toList();
+            allExperiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+            // Select 2 experiments to filter by
+            var experimentIdsToFilter = Set.of(allExperiments.get(1).id(), allExperiments.get(3).id());
+            var unexpectedExperiments = allExperiments.stream()
+                    .filter(e -> !experimentIdsToFilter.contains(e.id()))
+                    .toList();
+
+            // Build experiment_ids query param as comma-separated UUIDs
+            var experimentIdsParam = JsonUtils.writeValueAsString(experimentIdsToFilter);
+
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                assertThat(actualPage.page()).isEqualTo(1);
+                assertThat(actualPage.total()).isEqualTo(2);
+                assertThat(actualPage.content()).hasSize(2);
+
+                // Verify the returned experiments match the requested IDs
+                var actualIds = actualPage.content().stream()
+                        .map(Experiment::id)
+                        .collect(Collectors.toSet());
+                assertThat(actualIds).isEqualTo(experimentIdsToFilter);
+
+                // Verify unexpected experiments are not in the response
+                var unexpectedIds = unexpectedExperiments.stream()
+                        .map(Experiment::id)
+                        .collect(Collectors.toSet());
+                assertThat(actualIds).doesNotContainAnyElementsOf(unexpectedIds);
+            }
+        }
+
+        @Test
+        @DisplayName("when filtering by feedback_scores, then return only experiments with matching scores")
+        void findByFeedbackScoresFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create experiments with feedback scores
+            var scoreName = "test_score_" + UUID.randomUUID().toString().substring(0, 8);
+            var experimentScores = List.of(
+                    new BigDecimal("0.8"),
+                    new BigDecimal("0.5"),
+                    new BigDecimal("0.3"));
+
+            var experiments = new ArrayList<Experiment>();
+            var traces = new ArrayList<Trace>();
+            var experimentItems = new ArrayList<ExperimentItem>();
+            var scores = new ArrayList<FeedbackScoreBatchItem>();
+
+            for (int i = 0; i < experimentScores.size(); i++) {
+                var experiment = generateExperiment();
+                var trace = podamFactory.manufacturePojo(Trace.class);
+
+                experiments.add(experiment);
+                traces.add(trace);
+
+                createAndAssert(experiment, apiKey, workspaceName);
+
+                experimentItems.add(podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .traceId(trace.id())
+                        .build());
+
+                scores.add(FeedbackScoreBatchItem.builder()
+                        .id(trace.id())
+                        .projectName(trace.projectName())
+                        .name(scoreName)
+                        .value(experimentScores.get(i))
+                        .source(ScoreSource.SDK)
+                        .build());
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            createAndAssert(new ExperimentItemsBatch(Set.copyOf(experimentItems)), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            // Test different filter operators
+            var filterTestCases = List.of(
+                    new FilterTestCase(Operator.GREATER_THAN, "0.7", experiments.get(0).id(), 1),
+                    new FilterTestCase(Operator.EQUAL, "0.5", experiments.get(1).id(), 1),
+                    new FilterTestCase(Operator.LESS_THAN, "0.4", experiments.get(2).id(), 1),
+                    new FilterTestCase(Operator.GREATER_THAN_EQUAL, "0.5", null, 2),
+                    new FilterTestCase(Operator.LESS_THAN_EQUAL, "0.5", null, 2));
+
+            for (var testCase : filterTestCases) {
+                var filters = List.of(ExperimentFilter.builder()
+                        .field(ExperimentField.FEEDBACK_SCORES)
+                        .operator(testCase.operator)
+                        .key(scoreName)
+                        .value(testCase.filterValue)
+                        .build());
+
+                try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                        null, null, filters)) {
+
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                    assertThat(actualPage.total()).isEqualTo(testCase.expectedCount);
+                    assertThat(actualPage.content()).hasSize(testCase.expectedCount);
+
+                    if (testCase.expectedExperimentId != null) {
+                        assertThat(actualPage.content().getFirst().id()).isEqualTo(testCase.expectedExperimentId);
+                    }
+                }
+            }
+        }
+
+        private record FilterTestCase(Operator operator, String filterValue, UUID expectedExperimentId,
+                int expectedCount) {
+        }
+
+        @ParameterizedTest
+        @MethodSource("feedbackScoresEmptyOperators")
+        @DisplayName("when filtering by feedback_scores with IS_EMPTY/IS_NOT_EMPTY, then return correct experiments")
+        void findByFeedbackScoresEmptyFilter(Operator operator, boolean expectExperimentWithScores) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create 2 experiments
+            var experimentWithScores = generateExperiment();
+            var experimentWithoutScores = generateExperiment();
+
+            createAndAssert(experimentWithScores, apiKey, workspaceName);
+            createAndAssert(experimentWithoutScores, apiKey, workspaceName);
+
+            // Create traces
+            var traceWithScores = podamFactory.manufacturePojo(Trace.class);
+            var traceWithoutScores = podamFactory.manufacturePojo(Trace.class);
+
+            traceResourceClient.batchCreateTraces(List.of(traceWithScores, traceWithoutScores), apiKey, workspaceName);
+
+            // Create experiment items
+            var experimentItemWithScores = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentWithScores.id())
+                    .traceId(traceWithScores.id())
+                    .build();
+            var experimentItemWithoutScores = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentWithoutScores.id())
+                    .traceId(traceWithoutScores.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItemWithScores, experimentItemWithoutScores)),
+                    apiKey, workspaceName);
+
+            // Create feedback score only for one trace
+            var scoreName = "empty_test_score_" + UUID.randomUUID().toString().substring(0, 8);
+            var score = FeedbackScoreBatchItem.builder()
+                    .id(traceWithScores.id())
+                    .projectName(traceWithScores.projectName())
+                    .name(scoreName)
+                    .value(new BigDecimal("0.9"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            createScoreAndAssert(FeedbackScoreBatch.builder()
+                    .scores(List.of(score))
+                    .build(), apiKey, workspaceName);
+
+            // Filter by feedback_scores with IS_EMPTY or IS_NOT_EMPTY
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.FEEDBACK_SCORES)
+                    .operator(operator)
+                    .key(scoreName)
+                    .value("")
+                    .build());
+
+            try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                    null, null, filters)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                assertThat(actualPage.total()).isEqualTo(1);
+                assertThat(actualPage.content()).hasSize(1);
+
+                var expectedExperimentId = expectExperimentWithScores
+                        ? experimentWithScores.id()
+                        : experimentWithoutScores.id();
+                assertThat(actualPage.content().getFirst().id()).isEqualTo(expectedExperimentId);
+            }
+        }
+
+        private Stream<Arguments> feedbackScoresEmptyOperators() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_NOT_EMPTY, true),
+                    Arguments.of(Operator.IS_EMPTY, false));
+        }
+
+        @Test
+        @DisplayName("when filtering by experiment_scores, then return only experiments with matching scores")
+        void findByExperimentScoresFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create experiments with experiment_scores
+            var scoreName = "exp_score_" + UUID.randomUUID().toString().substring(0, 8);
+            var experimentScores = List.of(
+                    new BigDecimal("0.85"),
+                    new BigDecimal("0.60"),
+                    new BigDecimal("0.35"));
+
+            var experiments = new ArrayList<Experiment>();
+
+            for (int i = 0; i < experimentScores.size(); i++) {
+                var experimentScore = ExperimentScore.builder()
+                        .name(scoreName)
+                        .value(experimentScores.get(i))
+                        .build();
+
+                var experiment = generateExperiment().toBuilder()
+                        .experimentScores(List.of(experimentScore))
+                        .build();
+
+                experiments.add(experiment);
+                createAndAssert(experiment, apiKey, workspaceName);
+            }
+
+            // Test different filter operators
+            var filterTestCases = List.of(
+                    new FilterTestCase(Operator.GREATER_THAN, "0.75", experiments.get(0).id(), 1),
+                    new FilterTestCase(Operator.EQUAL, "0.60", experiments.get(1).id(), 1),
+                    new FilterTestCase(Operator.LESS_THAN, "0.40", experiments.get(2).id(), 1),
+                    new FilterTestCase(Operator.GREATER_THAN_EQUAL, "0.60", null, 2),
+                    new FilterTestCase(Operator.LESS_THAN_EQUAL, "0.60", null, 2));
+
+            for (var testCase : filterTestCases) {
+                var filters = List.of(ExperimentFilter.builder()
+                        .field(ExperimentField.EXPERIMENT_SCORES)
+                        .operator(testCase.operator)
+                        .key(scoreName)
+                        .value(testCase.filterValue)
+                        .build());
+
+                try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                        null, null, filters)) {
+
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                    assertThat(actualPage.total()).isEqualTo(testCase.expectedCount);
+                    assertThat(actualPage.content()).hasSize(testCase.expectedCount);
+
+                    if (testCase.expectedExperimentId != null) {
+                        assertThat(actualPage.content().getFirst().id()).isEqualTo(testCase.expectedExperimentId);
+                    }
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("experimentScoresEmptyOperators")
+        @DisplayName("when filtering by experiment_scores with IS_EMPTY/IS_NOT_EMPTY, then return correct experiments")
+        void findByExperimentScoresEmptyFilter(Operator operator, boolean expectExperimentWithScores) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create experiment with experiment_scores
+            var scoreName = "empty_exp_score_" + UUID.randomUUID().toString().substring(0, 8);
+            var experimentScoreWithScore = ExperimentScore.builder()
+                    .name(scoreName)
+                    .value(new BigDecimal("0.95"))
+                    .build();
+
+            var experimentWithScores = generateExperiment().toBuilder()
+                    .experimentScores(List.of(experimentScoreWithScore))
+                    .build();
+
+            createAndAssert(experimentWithScores, apiKey, workspaceName);
+
+            // Create experiment without experiment_scores
+            var experimentWithoutScores = generateExperiment().toBuilder()
+                    .experimentScores(null)
+                    .build();
+
+            createAndAssert(experimentWithoutScores, apiKey, workspaceName);
+
+            // Filter by experiment_scores with IS_EMPTY or IS_NOT_EMPTY
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.EXPERIMENT_SCORES)
+                    .operator(operator)
+                    .key(scoreName)
+                    .value("")
+                    .build());
+
+            try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                    null, null, filters)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                assertThat(actualPage.total()).isEqualTo(1);
+                assertThat(actualPage.content()).hasSize(1);
+
+                var expectedExperimentId = expectExperimentWithScores
+                        ? experimentWithScores.id()
+                        : experimentWithoutScores.id();
+                assertThat(actualPage.content().getFirst().id()).isEqualTo(expectedExperimentId);
+            }
+        }
+
+        private Stream<Arguments> experimentScoresEmptyOperators() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_NOT_EMPTY, true),
+                    Arguments.of(Operator.IS_EMPTY, false));
+        }
+
+        @Test
         void findAll() {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();

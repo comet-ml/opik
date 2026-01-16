@@ -935,11 +935,7 @@ class SpanDAO {
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
-                 AND (
-                    id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
-                        OR
-                    id NOT IN (SELECT entity_id FROM fsc)
-                 )
+                 AND id NOT IN (SELECT entity_id FROM fsc)
                 <endif>
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
