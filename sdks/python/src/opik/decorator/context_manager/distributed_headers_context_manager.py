@@ -60,7 +60,6 @@ def distributed_headers(
 
         # collect error info
         end_arguments.error_info = error_info_collector.collect(exception)
-        end_arguments.output = None
         raise
     finally:
         # save root span data at the end of the context manager
