@@ -14,12 +14,12 @@ import optuna.pruners
 
 from opik import Dataset, opik_context
 
-from ... import base_optimizer, _llm_calls, helpers
+from ... import base_optimizer, _llm_calls
 from ...base_optimizer import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
-from ... import task_evaluator
+from ... import task_evaluator, helpers as parent_helpers
 from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from . import helpers, types
@@ -323,7 +323,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         return new_prompts, str(response_content.template)
 
-
     def _build_columnar_search_space(
         self, dataset_items: list[dict[str, Any]]
     ) -> ColumnarSearchSpace:
@@ -512,7 +511,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             rng = self._make_rng("optimization_eval_ids", n_samples)
             eval_dataset_item_ids = rng.sample(eval_dataset_item_ids, n_samples)
 
-        configuration_updates = helpers.drop_none(
+        configuration_updates = parent_helpers.drop_none(
             {
                 "n_trials": n_trials,
                 "n_samples": n_samples,

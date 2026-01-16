@@ -1,7 +1,6 @@
 import logging
 from typing import Any, cast
 
-from opik import Dataset
 
 from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
 from ...utils.reporting import (
@@ -17,7 +16,6 @@ from ...utils.prompt_library import PromptOverrides
 from . import helpers, reporting as gepa_reporting
 from . import prompts as gepa_prompts
 from .adapter import OpikGEPAAdapter
-from .types import OpikDataInst
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +108,6 @@ class GepaOptimizer(BaseOptimizer):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
 
     # ------------------------------------------------------------------
     # Base optimizer overrides

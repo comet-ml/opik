@@ -122,7 +122,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "verbose": self.verbose,
         }
 
-
     def _hierarchical_root_cause_analysis(
         self, evaluation_result: EvaluationResult
     ) -> HierarchicalRootCauseAnalysis:

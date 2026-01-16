@@ -17,7 +17,5 @@ def calculate_improvement(current_score: float, previous_score: float) -> float:
         Improvement percentage (0 if previous_score <= 0)
     """
     return (
-        (current_score - previous_score) / previous_score
-        if previous_score > 0
-        else 0
+        (current_score - previous_score) / previous_score if previous_score > 0 else 0
     )
