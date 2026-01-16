@@ -7,6 +7,8 @@ import React, {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
+import isNumber from "lodash/isNumber";
 
 import {
   Form,
@@ -17,6 +19,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Description } from "@/components/ui/description";
+import { Input } from "@/components/ui/input";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ExperimentWidgetDataSection from "@/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection";
@@ -42,12 +45,17 @@ import {
 import {
   useDashboardStore,
   selectUpdatePreviewWidget,
+  selectConfig,
 } from "@/store/DashboardStore";
 import {
   ExperimentsFeedbackScoresWidgetSchema,
   ExperimentsFeedbackScoresWidgetFormData,
 } from "./schema";
 import WidgetEditorBaseLayout from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetEditorBaseLayout";
+import {
+  MAX_MAX_EXPERIMENTS,
+  MIN_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 
 const CHART_TYPE_OPTIONS = [
   { value: CHART_TYPE.line, label: "Line chart" },
@@ -61,20 +69,26 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
       (state) => state.previewWidget!,
     ) as DashboardWidget & ExperimentsFeedbackScoresWidgetType;
     const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
+    const globalConfig = useDashboardStore(selectConfig);
 
     const { config } = widgetData;
 
-    const dataSource =
-      config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+    const overrideDefaults = config.overrideDefaults || false;
 
-    const filters = useMemo(() => config.filters || [], [config.filters]);
+    const widgetDataSource =
+      config.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
 
-    const groups = useMemo(() => config.groups || [], [config.groups]);
+    const widgetFilters = useMemo(() => config.filters || [], [config.filters]);
 
-    const experimentIds = useMemo(
+    const widgetGroups = useMemo(() => config.groups || [], [config.groups]);
+
+    const widgetExperimentIds = useMemo(
       () => config.experimentIds || [],
       [config.experimentIds],
     );
+
+    const widgetMaxExperimentsCount =
+      config.maxExperimentsCount ?? MAX_MAX_EXPERIMENTS;
 
     const chartType = config.chartType || CHART_TYPE.line;
 
@@ -83,19 +97,28 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
       [config.feedbackScores],
     );
 
-    const overrideDefaults = config.overrideDefaults || false;
+    const computedExperimentIds = useMemo(() => {
+      if (overrideDefaults) {
+        return widgetExperimentIds;
+      }
+      return globalConfig?.experimentIds || [];
+    }, [overrideDefaults, widgetExperimentIds, globalConfig?.experimentIds]);
 
     const form = useForm<ExperimentsFeedbackScoresWidgetFormData>({
       resolver: zodResolver(ExperimentsFeedbackScoresWidgetSchema),
       mode: "onTouched",
       defaultValues: {
-        dataSource,
-        filters,
-        groups,
-        experimentIds,
+        dataSource: widgetDataSource,
+        filters: widgetFilters,
+        groups: widgetGroups,
+        experimentIds: widgetExperimentIds,
         chartType,
         feedbackScores,
         overrideDefaults,
+        maxExperimentsCount:
+          widgetMaxExperimentsCount !== undefined
+            ? String(widgetMaxExperimentsCount)
+            : undefined,
       },
     });
 
@@ -173,6 +196,19 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
       });
     };
 
+    const handleMaxExperimentsCountChange = (value: string) => {
+      form.setValue("maxExperimentsCount", value, {
+        shouldValidate: true,
+      });
+      const numValue = isEmpty(value) ? undefined : parseInt(value, 10);
+      updatePreviewWidget({
+        config: {
+          ...config,
+          maxExperimentsCount: isNumber(numValue) ? numValue : undefined,
+        },
+      });
+    };
+
     return (
       <Form {...form}>
         <WidgetEditorBaseLayout>
@@ -195,7 +231,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
                           handleFeedbackScoresChange(value);
                         }}
                         scoreSource={ScoreSource.EXPERIMENTS}
-                        entityIds={experimentIds}
+                        entityIds={computedExperimentIds}
                         multiselect={true}
                         showSelectAll={true}
                         placeholder="All metrics"
@@ -283,20 +319,20 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
                           className="w-fit justify-start"
                         >
                           <ToggleGroupItem
-                            value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
-                            aria-label="Manual selection"
-                            className="gap-1.5"
-                          >
-                            <ListChecks className="size-3.5" />
-                            <span>Manual selection</span>
-                          </ToggleGroupItem>
-                          <ToggleGroupItem
                             value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
                             aria-label="Filter experiments"
                             className="gap-1.5"
                           >
                             <Filter className="size-3.5" />
                             <span>Filter experiments</span>
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                            value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
+                            aria-label="Manual selection"
+                            className="gap-1.5"
+                          >
+                            <ListChecks className="size-3.5" />
+                            <span>Manual selection</span>
                           </ToggleGroupItem>
                         </ToggleGroup>
                       </FormControl>
@@ -307,15 +343,53 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
 
                 {form.watch("dataSource") ===
                   EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP && (
-                  <ExperimentWidgetDataSection
-                    control={form.control}
-                    filtersFieldName="filters"
-                    groupsFieldName="groups"
-                    filters={filters}
-                    groups={groups}
-                    onFiltersChange={handleFiltersChange}
-                    onGroupsChange={handleGroupsChange}
-                  />
+                  <>
+                    <ExperimentWidgetDataSection
+                      control={form.control}
+                      filtersFieldName="filters"
+                      groupsFieldName="groups"
+                      filters={widgetFilters}
+                      groups={widgetGroups}
+                      onFiltersChange={handleFiltersChange}
+                      onGroupsChange={handleGroupsChange}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="maxExperimentsCount"
+                      render={({ field, formState }) => {
+                        const validationErrors = get(formState.errors, [
+                          "maxExperimentsCount",
+                        ]);
+                        return (
+                          <FormItem>
+                            <FormLabel>Max experiments to load</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={MIN_MAX_EXPERIMENTS}
+                                max={MAX_MAX_EXPERIMENTS}
+                                value={field.value ?? ""}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  handleMaxExperimentsCountChange(value);
+                                }}
+                                className={cn({
+                                  "border-destructive": Boolean(
+                                    validationErrors?.message,
+                                  ),
+                                })}
+                              />
+                            </FormControl>
+                            <Description>
+                              Limit how many experiments are loaded (max $
+                              {MAX_MAX_EXPERIMENTS}).
+                            </Description>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
+                    />
+                  </>
                 )}
 
                 {form.watch("dataSource") ===

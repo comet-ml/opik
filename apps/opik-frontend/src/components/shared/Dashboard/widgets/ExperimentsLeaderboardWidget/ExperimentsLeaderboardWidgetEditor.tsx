@@ -54,15 +54,17 @@ import {
   parseMetadataKeys,
   formatConfigColumnName,
   PREDEFINED_COLUMNS,
-  DEFAULT_MAX_ROWS,
-  MIN_MAX_ROWS,
-  MAX_MAX_ROWS,
   getExperimentListParams,
 } from "./helpers";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
 import { COLUMN_METADATA_ID, COLUMN_TYPE } from "@/types/shared";
+import {
+  MIN_MAX_EXPERIMENTS,
+  MAX_MAX_EXPERIMENTS,
+  DEFAULT_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 
 const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
   (_, ref) => {
@@ -75,19 +77,38 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
     const { config } = widgetData;
 
-    const dataSource =
-      config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
-
-    const filters = config.filters || [];
     const overrideDefaults = config.overrideDefaults || false;
     const selectedColumns = config.selectedColumns || [];
 
-    const experimentIds = useMemo(() => {
+    const widgetDataSource =
+      config.dataSource ?? EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
+
+    const widgetFilters = useMemo(() => config.filters || [], [config.filters]);
+
+    const widgetExperimentIds = useMemo(
+      () => config.experimentIds || [],
+      [config.experimentIds],
+    );
+
+    const computedDataSource =
+      (overrideDefaults
+        ? widgetDataSource
+        : globalConfig?.experimentDataSource) ??
+      EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
+
+    const computedFilters = useMemo(() => {
       if (overrideDefaults) {
-        return config.experimentIds || [];
+        return widgetFilters;
+      }
+      return globalConfig?.experimentFilters || [];
+    }, [overrideDefaults, widgetFilters, globalConfig?.experimentFilters]);
+
+    const computedExperimentIds = useMemo(() => {
+      if (overrideDefaults) {
+        return widgetExperimentIds;
       }
       return globalConfig?.experimentIds || [];
-    }, [globalConfig?.experimentIds, config.experimentIds, overrideDefaults]);
+    }, [overrideDefaults, widgetExperimentIds, globalConfig?.experimentIds]);
 
     const enableRanking = config.enableRanking ?? true;
     const rankingMetric = config.rankingMetric;
@@ -104,15 +125,15 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
       [config.metadataColumnsOrder],
     );
 
-    const maxRows = config.maxRows || DEFAULT_MAX_ROWS;
+    const maxRows = config.maxRows || DEFAULT_MAX_EXPERIMENTS;
 
     const form = useForm<ExperimentsLeaderboardWidgetFormData>({
       resolver: zodResolver(ExperimentsLeaderboardWidgetSchema),
       mode: "onTouched",
       defaultValues: {
-        dataSource,
-        filters,
-        experimentIds: config.experimentIds || [],
+        dataSource: widgetDataSource,
+        filters: widgetFilters,
+        experimentIds: widgetExperimentIds,
         selectedColumns,
         overrideDefaults,
         enableRanking,
@@ -136,16 +157,16 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
     const { dynamicScoresColumns } = useExperimentsFeedbackScores({
       experimentIds:
-        dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
-          ? experimentIds
+        computedDataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+          ? computedExperimentIds
           : undefined,
       refetchInterval: 0,
     });
 
     const experimentListParams = getExperimentListParams({
-      dataSource,
-      experimentIds,
-      filters,
+      dataSource: computedDataSource,
+      experimentIds: computedExperimentIds,
+      filters: computedFilters,
     });
 
     const { data: experimentsData } = useExperimentsList(
@@ -349,20 +370,20 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                           className="w-fit justify-start"
                         >
                           <ToggleGroupItem
-                            value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
-                            aria-label="Manual selection"
-                            className="gap-1.5"
-                          >
-                            <ListChecks className="size-3.5" />
-                            <span>Manual selection</span>
-                          </ToggleGroupItem>
-                          <ToggleGroupItem
                             value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
                             aria-label="Filter experiments"
                             className="gap-1.5"
                           >
                             <Filter className="size-3.5" />
                             <span>Filter experiments</span>
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                            value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
+                            aria-label="Manual selection"
+                            className="gap-1.5"
+                          >
+                            <ListChecks className="size-3.5" />
+                            <span>Manual selection</span>
                           </ToggleGroupItem>
                         </ToggleGroup>
                       </FormControl>
@@ -377,7 +398,7 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                     <ExperimentWidgetDataSection
                       control={form.control}
                       filtersFieldName="filters"
-                      filters={filters}
+                      filters={widgetFilters}
                       onFiltersChange={handleFiltersChange}
                     />
                     <FormField
@@ -393,8 +414,8 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                             <FormControl>
                               <Input
                                 type="number"
-                                min={MIN_MAX_ROWS}
-                                max={MAX_MAX_ROWS}
+                                min={MIN_MAX_EXPERIMENTS}
+                                max={MAX_MAX_EXPERIMENTS}
                                 value={field.value ?? ""}
                                 onChange={(e) => {
                                   const value = e.target.value;
@@ -408,8 +429,8 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                               />
                             </FormControl>
                             <Description>
-                              Number of experiments to display ({MIN_MAX_ROWS}-
-                              {MAX_MAX_ROWS})
+                              Limit how many experiments are loaded (max $
+                              {MAX_MAX_EXPERIMENTS}).
                             </Description>
                             <FormMessage />
                           </FormItem>
