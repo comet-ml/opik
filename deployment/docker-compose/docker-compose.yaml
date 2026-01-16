@@ -245,6 +245,10 @@ services:
       OPTSTUDIO_MAX_CONCURRENT_JOBS: ${OPTSTUDIO_MAX_CONCURRENT_JOBS:-5}
       # Optimization Studio log level (DEBUG, INFO, WARNING, ERROR) - default INFO
       OPTSTUDIO_LOG_LEVEL: ${OPTSTUDIO_LOG_LEVEL:-INFO}
+      # Default max output tokens for optimizer LLM calls (default: 8192)
+      OPTSTUDIO_LLM_MAX_TOKENS: ${OPTSTUDIO_LLM_MAX_TOKENS:-8192}
+      # TTL for failed RQ jobs in Redis in seconds (default: 86400 = 1 day)
+      RQ_WORKER_TTL_FAILURE: ${RQ_WORKER_TTL_FAILURE:-86400}
       # Opik SDK Configuration
       OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://backend:8080}
     healthcheck:
