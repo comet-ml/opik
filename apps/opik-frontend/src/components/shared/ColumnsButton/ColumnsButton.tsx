@@ -149,13 +149,20 @@ const ColumnsButton = <TColumnData,>({
             if (section.columns.length === 0) return null;
             const isFirst = index === 0;
             const hasTitle = section.title && section.title.trim().length > 0;
+            // Generate a stable key: use title if available, otherwise use column IDs
+            // Sort column IDs for stability regardless of order
+            const sectionKey =
+              hasTitle && section.title
+                ? section.title
+                : section.columns
+                    .map((col) => col.id)
+                    .sort()
+                    .join("-");
 
             return (
-              <React.Fragment key={`fragment-${section.title || index}`}>
+              <React.Fragment key={`fragment-${sectionKey}`}>
                 {!(isFirst && filteredColumns.length === 0) && (
-                  <DropdownMenuSeparator
-                    key={`separator-${section.title || index}`}
-                  />
+                  <DropdownMenuSeparator key={`separator-${sectionKey}`} />
                 )}
                 {hasTitle && (
                   <DropdownMenuLabel key={`label-${section.title}`}>
@@ -163,7 +170,7 @@ const ColumnsButton = <TColumnData,>({
                   </DropdownMenuLabel>
                 )}
                 <SortableMenuSection
-                  key={`sortable-section-${section.title || index}`}
+                  key={`sortable-section-${sectionKey}`}
                   columns={section.columns}
                   selectedColumns={selectedColumns}
                   onSelectionChange={onSelectionChange}
