@@ -10478,7 +10478,7 @@ components:
             \ with the given experimentName"
           format: uuid
         items:
-          maxItems: 250
+          maxItems: 1000
           minItems: 1
           type: array
           items:
@@ -10764,7 +10764,7 @@ components:
             \ with the given experimentName"
           format: uuid
         items:
-          maxItems: 250
+          maxItems: 1000
           minItems: 1
           type: array
           items:
