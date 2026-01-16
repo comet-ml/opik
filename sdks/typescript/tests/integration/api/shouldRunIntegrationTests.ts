@@ -15,8 +15,6 @@
 export function shouldRunIntegrationTests(): boolean {
   const apiKey = process.env.OPIK_API_KEY;
   const urlOverride = process.env.OPIK_URL_OVERRIDE;
-  console.log("apiKey", apiKey);
-  console.log("urlOverride", urlOverride);
 
   // Check if we're running against a local instance
   // Use regex to match localhost or 127.0.0.1 as a hostname
