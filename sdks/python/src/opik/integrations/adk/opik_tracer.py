@@ -71,6 +71,54 @@ class OpikTracer:
 
         patchers.patch_adk(self._opik_client)
 
+    def _has_response_content(self, llm_response: models.LlmResponse) -> bool:
+        """
+        Check if the LlmResponse contains actual content (text or function calls).
+
+        Arguments:
+            llm_response: The LLM response to check.
+
+        Returns:
+            True if the response contains text content or function calls, False otherwise.
+        """
+        try:
+            # Check the LlmResponse object directly for content structure
+            if llm_response.content is not None and llm_response.content.parts:
+                for part in llm_response.content.parts:
+                    # Check for text content
+                    if part.text is not None and len(part.text.strip()) > 0:
+                        return True
+                    # Check for function call content (tool calls)
+                    if part.function_call is not None:
+                        return True
+            return False
+        except Exception as e:
+            LOGGER.debug(
+                f"Error checking LlmResponse.content.parts for TTFT: {e}",
+                exc_info=True,
+            )
+            return False
+
+    def _safe_ttft_tracking(
+        self, span_id: Optional[str], pop: bool = False
+    ) -> Optional[Tuple[float, Optional[float]]]:
+        """
+        Safely retrieve time-to-first-token tracking data for a span.
+
+        Arguments:
+            span_id: The span ID to look up in tracking.
+            pop: If True, remove the entry after fetching. If False, keep it.
+
+        Returns:
+            Tuple of (request_start_time, first_token_time) if span_id exists in tracking,
+            None otherwise.
+        """
+        if span_id is None or span_id not in self._ttft_tracking:
+            return None
+        if pop:
+            return self._ttft_tracking.pop(span_id)
+        return self._ttft_tracking[span_id]
+
     def flush(self) -> None:
         self._opik_client.flush()
 
@@ -238,34 +286,13 @@ class OpikTracer:
             # Track time-to-first-token: detect first token arrival
             # We check for first token on EVERY callback (including partial chunks)
             # to catch the first moment content appears
-            if span_id in self._ttft_tracking:
-                request_start_time, first_token_time = self._ttft_tracking[span_id]
+            ttft_data = self._safe_ttft_tracking(span_id, pop=False)
+            if ttft_data is not None and span_id is not None:
+                request_start_time, first_token_time = ttft_data
                 if first_token_time is None:
                     # Check if this response contains actual content (first token)
                     # Content can be text or function calls (tool calls)
-                    has_content = False
-                    try:
-                        # Check the LlmResponse object directly for content structure
-                        if (
-                            llm_response.content is not None
-                            and llm_response.content.parts
-                        ):
-                            for part in llm_response.content.parts:
-                                # Check for text content
-                                if part.text is not None and len(part.text.strip()) > 0:
-                                    has_content = True
-                                    break
-                                # Check for function call content (tool calls)
-                                if part.function_call is not None:
-                                    has_content = True
-                                    break
-                    except Exception as e:
-                        LOGGER.debug(
-                            f"Error checking LlmResponse.content.parts for TTFT: {e}",
-                            exc_info=True,
-                        )
-
-                    if has_content:
+                    if self._has_response_content(llm_response):
                         # First token detected - record the time
                         first_token_time = time.time()
                         self._ttft_tracking[span_id] = (
@@ -295,8 +322,9 @@ class OpikTracer:
 
             # Calculate time-to-first-token and add to metadata
             metadata_update = {}
-            if span_id in self._ttft_tracking:
-                request_start_time, first_token_time = self._ttft_tracking.pop(span_id)
+            ttft_data = self._safe_ttft_tracking(span_id, pop=True)
+            if ttft_data is not None:
+                request_start_time, first_token_time = ttft_data
                 if first_token_time is not None:
                     time_to_first_token = first_token_time - request_start_time
                     metadata_update["time_to_first_token"] = time_to_first_token
