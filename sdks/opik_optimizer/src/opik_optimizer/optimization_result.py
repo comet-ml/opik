@@ -25,6 +25,12 @@ from .api_objects import chat_prompt
 from .constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
 
 
+def _now_iso() -> str:
+    return (
+        datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+    )
+
+
 def _format_float(value: Any, digits: int = 6) -> str:
     """Format float values with specified precision."""
     if isinstance(value, float):
@@ -62,24 +68,34 @@ def _format_prompt_for_plaintext(
             else:
                 snippet = "[multimodal content]"
             parts.append(f"  {role}: {snippet}")
-        return "\n".join(parts)
+    return "\n".join(parts)
 
 
-DETAILS_SCHEMA_VERSION = "1"
+@dataclass
+class OptimizerCandidate:
+    """
+    Canonical candidate payload used across trials/rounds.
 
+    Encapsulates a prompt (or bundle of prompts) plus optional metadata such as
+    score, metrics, notes, tools, and extra fields for lineage/selection data.
+    """
 
-def _resolve_rounds_ran(details: dict[str, Any]) -> int:
-    """Resolve a reasonable rounds-completed count from optimizer details."""
-    rounds = details.get("rounds")
-    if isinstance(rounds, list):
-        return len(rounds)
-    iterations_completed = details.get("iterations_completed")
-    if isinstance(iterations_completed, int):
-        return iterations_completed
-    total_rounds = details.get("total_rounds")
-    if isinstance(total_rounds, int):
-        return total_rounds
-    return 0
+    candidate: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt] | Any
+    id: str | None = None
+    score: float | None = None
+    metrics: dict[str, Any] | None = None
+    notes: str | None = None
+    extra: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "candidate": self.candidate,
+            "score": self.score,
+            "metrics": self.metrics,
+            "notes": self.notes,
+            "extra": self.extra,
+        }
 
 
 @dataclass
@@ -96,17 +112,17 @@ class OptimizationTrial:
 
     trial_index: int | None
     score: float | None
-    prompt: Any
+    candidate: Any
     metrics: dict[str, Any] | None = None
     dataset: str | None = None
     extras: dict[str, Any] | None = None
-    timestamp: str | None = None
+    timestamp: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "trial_index": self.trial_index,
             "score": self.score,
-            "prompt": self.prompt,
+            "candidate": self.candidate,
             "metrics": self.metrics,
             "dataset": self.dataset,
             "extra": self.extras,
@@ -126,7 +142,7 @@ class OptimizationRound:
     - candidates/generated_prompts: optional candidate metadata for display.
     - stop_reason/extras/timestamp: control/context metadata.
 
-    Optimizers are encouraged to emit rounds through OptimizationHistoryBuilder
+    Optimizers are encouraged to emit rounds through OptimizationHistoryState
     so that per-round aggregation and best_so_far bookkeeping are consistent.
     """
 
@@ -138,7 +154,7 @@ class OptimizationRound:
     generated_prompts: list[dict[str, Any]] | None = None
     stop_reason: str | None = None
     extras: dict[str, Any] | None = None
-    timestamp: str | None = None
+    timestamp: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -154,36 +170,21 @@ class OptimizationRound:
         }
 
 
-class OptimizationHistoryBuilder:
+class OptimizationHistoryState:
     """
-    Stateful builder for optimization history entries.
+    Stateful history manager with explicit start/record/end lifecycle.
 
     Captures running best scores and timestamps so optimizers can append
-    consistent history without post-hoc normalization. The builder is the
-    single ingestion point for history: optimizers append dicts or structured
-    OptimizationRound/OptimizationTrial instances, and the builder handles
-    merging entries for the same round_index, coercing floats, and stamping
-    timestamps/best_so_far. BaseOptimizer later consumes builder entries
-    directly when constructing the final OptimizationResult.
-
-    TODO(opik_optimizer/#history-state): extend to richer state management
-    (fingerprints, streaming state, resumability) once consumers are ready.
+    consistent history without post-hoc normalization. It merges entries for
+    the same round_index, coerces floats, and stamps timestamps/best_so_far.
+    BaseOptimizer later consumes entries directly when constructing the final
+    OptimizationResult.
     """
 
-    def __init__(
-        self, schema_version: str = OPTIMIZATION_RESULT_SCHEMA_VERSION
-    ) -> None:
-        self.schema_version = schema_version
+    def __init__(self) -> None:
         self.entries: list[dict[str, Any]] = []
         self._best_so_far: float | None = None
-
-    @staticmethod
-    def _now_iso() -> str:
-        return (
-            datetime.datetime.now(datetime.timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
+        self._open_rounds: dict[Any, dict[str, Any]] = {}
 
     @staticmethod
     def _coerce_float(value: Any) -> float | None:
@@ -193,24 +194,28 @@ class OptimizationHistoryBuilder:
             return None
 
     def _normalize_candidates(
-        self, candidates: list[dict[str, Any]] | None
+        self, candidates: list[dict[str, Any]] | list[OptimizerCandidate] | None
     ) -> list[dict[str, Any]] | None:
         if not candidates:
             return None
 
         normalized: list[dict[str, Any]] = []
         for candidate in candidates:
+            if isinstance(candidate, OptimizerCandidate):
+                normalized.append(candidate.to_dict())
+                continue
             if not isinstance(candidate, dict):
-                normalized.append({"prompt": candidate})
+                normalized.append({"candidate": candidate})
                 continue
 
             payload = dict(candidate)
             candidate_id = payload.pop("id", None)
             prompt_payload = payload.pop("prompt", payload.pop("prompts", None))
+            if prompt_payload is None and "candidate" in payload:
+                prompt_payload = payload.pop("candidate")
             score = payload.pop("score", None)
             metrics = payload.pop("metrics", None)
             notes = payload.pop("notes", payload.pop("reason", None))
-            tools = payload.pop("tools", None)
             extra = payload.pop("extra", None)
 
             if payload:
@@ -219,11 +224,10 @@ class OptimizationHistoryBuilder:
             normalized.append(
                 {
                     "id": candidate_id,
-                    "prompt": prompt_payload,
+                    "candidate": prompt_payload,
                     "score": score,
                     "metrics": metrics,
                     "notes": notes,
-                    "tools": tools,
                     "extra": extra,
                 }
             )
@@ -281,149 +285,145 @@ class OptimizationHistoryBuilder:
         # No existing round, append new
         self.entries.append(entry)
 
-    def append(
+    def start_round(
         self,
-        *,
-        round_index: int,
-        trial_index: int | None,
-        score: float | None,
-        best_score: float | None,
-        best_prompt: Any | None = None,
-        candidates: list[dict[str, Any]] | None = None,
-        trials: list[dict[str, Any]] | None = None,
-        improvement: float | None = None,
+        round_index: int | None = None,
         extras: dict[str, Any] | None = None,
-        stop_reason: str | None = None,
-        best_so_far: float | None = None,
         timestamp: str | None = None,
-    ) -> None:
-        best_score_val = self._coerce_float(best_score)
-        score_val = self._coerce_float(score) if score is not None else best_score_val
-
-        if best_so_far is not None:
-            self._best_so_far = self._coerce_float(best_so_far)
-        elif best_score_val is not None:
-            self._best_so_far = (
-                best_score_val
-                if self._best_so_far is None
-                else max(self._best_so_far, best_score_val)
-            )
-
+    ) -> Any:
+        idx = int(round_index) if round_index is not None else len(self.entries)
         entry: dict[str, Any] = {
-            "round_index": int(round_index),
-            "trial_index": int(trial_index) if isinstance(trial_index, int) else None,
-            "score": score_val,
-            "best_score": best_score_val if best_score_val is not None else score_val,
-            "best_so_far": self._best_so_far,
-            "best_prompt": best_prompt,
-            "candidates": self._normalize_candidates(candidates),
-            "trials": trials,
-            "improvement": improvement,
-            "timestamp": timestamp or self._now_iso(),
-            "stop_reason": stop_reason,
-            "stopped": stop_reason not in (None, "completed"),
-            "extra": extras,
+            "round_index": idx,
+            "trials": [],
+            "candidates": [],
+            "extra": extras or {},
+            "timestamp": timestamp or _now_iso(),
         }
-        self._merge_round(entry)
+        self._open_rounds[idx] = entry
+        return idx
 
-    def append_trial(
+    def record_trial(
         self,
+        round_handle: Any,
         *,
-        round_index: int,
-        trial_index: int | None,
         score: float | None,
-        prompt: Any | None = None,
+        candidate: Any | None = None,
+        trial_index: int | None = None,
         metrics: dict[str, Any] | None = None,
         dataset: str | None = None,
-        trial_extras: dict[str, Any] | None = None,
-        round_extras: dict[str, Any] | None = None,
-        stop_reason: str | None = None,
+        dataset_split: str | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
         timestamp: str | None = None,
+        stop_reason: str | None = None,
     ) -> dict[str, Any]:
-        """
-        Convenience helper to record a single trial into history.
-
-        Returns the normalized entry dict that was appended.
-        """
-        trial_payload = OptimizationTrial(
-            trial_index=trial_index,
-            score=score,
-            prompt=prompt,
-            metrics=metrics,
-            dataset=dataset,
-            extras=trial_extras,
-            timestamp=timestamp or self._now_iso(),
-        ).to_dict()
-
-        entry = {
-            "round_index": round_index,
-            "trial_index": trial_index,
-            "trials": [trial_payload],
-            "score": score,
-            "best_score": score,
-            "best_prompt": prompt,
-            "extra": round_extras,
-            "timestamp": trial_payload.get("timestamp"),
-            "stop_reason": stop_reason,
+        entry = self._open_rounds.setdefault(
+            round_handle,
+            {
+                "round_index": round_handle,
+                "trials": [],
+                "candidates": [],
+                "extra": {},
+            },
+        )
+        score_val = self._coerce_float(score) if score is not None else None
+        candidate_payload: Any = (
+            candidate.to_dict()
+            if isinstance(candidate, OptimizerCandidate)
+            else candidate
+        )
+        trial_payload: dict[str, Any] = {
+            "trial_index": int(trial_index) if isinstance(trial_index, int) else None,
+            "score": score_val,
+            "candidate": candidate_payload,
+            "metrics": metrics,
+            "dataset": dataset,
+            "dataset_split": dataset_split,
+            "extra": extras,
+            "timestamp": timestamp or _now_iso(),
         }
-        self.append_entry(entry)
+        entry.setdefault("trials", []).append(trial_payload)
+        if score_val is not None:
+            self._best_so_far = (
+                score_val
+                if self._best_so_far is None
+                else max(self._best_so_far, score_val)
+            )
+            entry["best_so_far"] = self._best_so_far
+        if candidates:
+            normalized_candidates = self._normalize_candidates(candidates) or []
+            entry.setdefault("candidates", []).extend(normalized_candidates)
+        if stop_reason is not None:
+            entry["stop_reason"] = stop_reason
+            entry["stopped"] = stop_reason not in (None, "completed")
+        else:
+            entry.setdefault("stop_reason", None)
+            entry.setdefault("stopped", False)
+        return trial_payload
+
+    def end_round(
+        self,
+        round_handle: Any,
+        *,
+        best_score: float | None = None,
+        best_candidate: Any | None = None,
+        best_prompt: Any | None = None,
+        stop_reason: str | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        timestamp: str | None = None,
+        pareto_front: list[dict[str, Any]] | None = None,
+        selection_meta: dict[str, Any] | None = None,
+        dataset_split: str | None = None,
+    ) -> dict[str, Any]:
+        entry = self._open_rounds.pop(
+            round_handle,
+            {
+                "round_index": round_handle,
+                "trials": [],
+                "candidates": [],
+                "extra": {},
+            },
+        )
+        if candidates:
+            normalized_candidates = self._normalize_candidates(candidates) or []
+            entry.setdefault("candidates", []).extend(normalized_candidates)
+        if best_score is not None and entry.get("best_score") is None:
+            best_score_val = self._coerce_float(best_score)
+            entry["best_score"] = best_score_val
+            if best_score_val is not None:
+                self._best_so_far = (
+                    best_score_val
+                    if self._best_so_far is None
+                    else max(self._best_so_far, best_score_val)
+                )
+        if best_candidate is not None:
+            entry["best_candidate"] = (
+                best_candidate.to_dict()
+                if isinstance(best_candidate, OptimizerCandidate)
+                else best_candidate
+            )
+        if best_prompt is not None:
+            entry["best_prompt"] = best_prompt
+        if self._best_so_far is not None:
+            entry["best_so_far"] = self._best_so_far
+        if extras:
+            entry["extra"] = {**(entry.get("extra") or {}), **extras}
+        if dataset_split is not None:
+            entry["dataset_split"] = dataset_split
+        if pareto_front is not None:
+            entry.setdefault("extra", {})
+            entry["extra"]["pareto_front"] = pareto_front
+        if selection_meta is not None:
+            entry.setdefault("extra", {})
+            entry["extra"]["selection_meta"] = selection_meta
+        entry["stop_reason"] = stop_reason
+        entry["timestamp"] = timestamp or entry.get("timestamp") or _now_iso()
+        self._merge_round(entry)
         return entry
 
-    def append_entry(self, entry: Any) -> None:
-        """
-        Append an existing entry (dict or structured round/trial), normalizing
-        to the builder schema without performing post-hoc history fixes.
-        """
-        if isinstance(entry, OptimizationRound):
-            payload = entry.to_dict()
-        elif isinstance(entry, OptimizationTrial):
-            payload = entry.to_dict()
-        elif isinstance(entry, dict):
-            payload = dict(entry)
-        else:
-            return
-
-        extra = payload.get("extra") or {}
-        dataset_split = payload.pop("dataset_split", None)
-        if dataset_split is not None:
-            extra = {**extra, "dataset_split": dataset_split}
-
-        generated = payload.get("generated_prompts")
-        candidates = payload.get("candidates") or generated
-        trials_payload = payload.get("trials")
-        if trials_payload:
-            normalized_trials: list[dict[str, Any]] = []
-            for trial in trials_payload:
-                if isinstance(trial, OptimizationTrial):
-                    normalized_trials.append(trial.to_dict())
-                elif isinstance(trial, dict):
-                    normalized_trials.append(
-                        {
-                            "trial_index": trial.get("trial_index"),
-                            "score": self._coerce_float(trial.get("score")),
-                            "prompt": trial.get("prompt"),
-                            "metrics": trial.get("metrics"),
-                            "dataset": trial.get("dataset"),
-                            "extra": trial.get("extra") or trial.get("extras"),
-                            "timestamp": trial.get("timestamp"),
-                        }
-                    )
-            trials_payload = normalized_trials or None
-
-        self.append(
-            round_index=int(payload.get("round_index", len(self.entries))),
-            trial_index=payload.get("trial_index"),
-            score=payload.get("current_score") or payload.get("score"),
-            best_score=payload.get("best_score") or payload.get("current_score"),
-            best_so_far=payload.get("best_so_far"),
-            best_prompt=payload.get("best_prompt") or payload.get("current_prompt"),
-            candidates=candidates if isinstance(candidates, list) else None,
-            trials=trials_payload if isinstance(trials_payload, list) else None,
-            improvement=payload.get("improvement"),
-            extras=extra if extra else None,
-            stop_reason=payload.get("stop_reason"),
-            timestamp=payload.get("timestamp"),
-        )
+    def finalize_stop(self, stop_reason: str | None = None) -> None:
+        self._stamp_stop_reason(stop_reason)
 
     def get_entries(self) -> list[dict[str, Any]]:
         return list(self.entries)
@@ -431,6 +431,43 @@ class OptimizationHistoryBuilder:
     def clear(self) -> None:
         self.entries.clear()
         self._best_so_far = None
+        self._open_rounds.clear()
+
+    def _stamp_stop_reason(self, stop_reason: str | None) -> None:
+        if not self.entries or stop_reason is None:
+            return
+        last = self.entries[-1]
+        last["stop_reason"] = stop_reason
+        last["stopped"] = stop_reason not in (None, "completed")
+
+
+def build_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Normalize a candidate payload for trials/rounds.
+
+    Args:
+        prompt_or_payload: ChatPrompt, dict of ChatPrompts, or other payload.
+        score: Optional score to attach.
+        id: Optional stable identifier.
+        metrics: Optional metric dict.
+        notes: Optional free-text notes.
+        extra: Optional extra metadata (lineage, params, components, etc.).
+    """
+    return OptimizerCandidate(
+        candidate=prompt_or_payload,
+        id=id,
+        score=score,
+        metrics=metrics,
+        notes=notes,
+        extra=extra,
+    ).to_dict()
 
 
 class OptimizationResult(pydantic.BaseModel):
@@ -439,7 +476,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     The framework wraps AlgorithmResult into this model, adding metadata such as
     initial scores, model parameters, counters, and IDs. History is assumed to be
-    pre-normalized by OptimizationHistoryBuilder; OptimizationResult does not
+    pre-normalized by OptimizationHistoryState; OptimizationResult does not
     perform post-hoc reshaping beyond stamping schema versions.
     """
 
@@ -469,23 +506,11 @@ class OptimizationResult(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     def model_post_init(self, _context: Any) -> None:
-        # Minimal normalization: ensure schema version markers are present.
         self.details = dict(self.details)
-        self.details.setdefault("schema_version", DETAILS_SCHEMA_VERSION)
-        self.details["history_version"] = self.schema_version
-        # Maintain backward-compatible counters when not provided.
-        if "trials_completed" not in self.details:
-            rounds_field = self.details.get("rounds")
-            if isinstance(rounds_field, list):
-                self.details["trials_completed"] = len(rounds_field)
-                self.details.setdefault("rounds_completed", len(rounds_field))
-            elif isinstance(self.details.get("trials_used"), int):
-                self.details["trials_completed"] = self.details["trials_used"]
-        if "rounds_completed" not in self.details:
-            if isinstance(self.details.get("iterations_completed"), int):
-                self.details["rounds_completed"] = self.details["iterations_completed"]
-            elif isinstance(self.details.get("trials_completed"), int):
-                self.details["rounds_completed"] = self.details["trials_completed"]
+        self.details.setdefault("schema_version", OPTIMIZATION_RESULT_SCHEMA_VERSION)
+        # Fill counters from current history if not provided explicitly.
+        self.details.setdefault("trials_completed", len(self.history))
+        self.details.setdefault("rounds_completed", len(self.history))
         # Populate stop_reason_details if stop_reason is provided.
         if (
             self.details.get("stop_reason") is not None
@@ -559,7 +584,11 @@ class OptimizationResult(pydantic.BaseModel):
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
-        rounds_ran = _resolve_rounds_ran(self.details)
+        rounds_ran = (
+            self.details.get("rounds_completed")
+            if isinstance(self.details.get("rounds_completed"), int)
+            else len(self.history)
+        )
         trials_completed = self.details.get("trials_completed")
         initial_score = self.initial_score
         initial_score_str = (
@@ -692,7 +721,11 @@ class OptimizationResult(pydantic.BaseModel):
     def __rich__(self) -> rich.panel.Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()
-        rounds_ran = _resolve_rounds_ran(self.details)
+        rounds_ran = (
+            self.details.get("rounds_completed")
+            if isinstance(self.details.get("rounds_completed"), int)
+            else len(self.history)
+        )
         trials_completed = self.details.get("trials_completed")
         initial_score = self.initial_score
         initial_score_str = (

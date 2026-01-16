@@ -1,23 +1,18 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import Any, Final, Literal, TYPE_CHECKING
-from collections.abc import Callable
+from typing import Any, Final, TYPE_CHECKING
 
 import ast
-import inspect
 import base64
 import json
 import logging
 import os
 import random
 import urllib.parse
-from types import TracebackType
 
 
 import opik
 import opik.config
-from opik.api_objects.opik_client import Opik
-from opik.api_objects.optimization import Optimization
 
 
 if TYPE_CHECKING:

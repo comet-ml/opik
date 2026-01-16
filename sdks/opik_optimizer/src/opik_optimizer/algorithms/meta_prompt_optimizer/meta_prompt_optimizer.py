@@ -131,6 +131,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.enable_context = enable_context
         self.num_task_examples = num_task_examples
         self.task_context_columns = task_context_columns
+        self.selection_strategy = "best_by_metric"
 
         # Calculate token budget for task context data stuffing (dataset examples only)
         # This is ONLY used for adaptive fitting logic in get_task_context()
@@ -162,25 +163,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
 
-        # Initialize progress tracking (used by get_progress_state for display)
+        # Initialize progress tracking
         self._current_round = 0
         self._total_rounds = 0
         self._current_candidate = 0
         self._total_candidates_in_round = 0
-
-    def get_progress_state(self) -> dict[str, Any]:
-        """Return current optimization progress for display.
-
-        Extends base implementation with candidate info specific to MetaPromptOptimizer.
-        """
-        state = super().get_progress_state()
-        state.update(
-            {
-                "candidate": self._current_candidate + 1,  # 1-based for display
-                "total_candidates": self._total_candidates_in_round,
-            }
-        )
-        return state
 
     def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
         """
@@ -487,8 +474,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         f"trial={context.trials_completed}"
                     )
 
-            # Pass full candidate (dict for multi-prompt, or single prompt)
-            # _create_round_data handles both cases internally
+            round_handle = self.begin_round()
             round_data = self._create_round_data(
                 round_num=round_num,
                 current_best_prompt=best_candidate_this_round,
@@ -500,8 +486,37 @@ class MetaPromptOptimizer(BaseOptimizer):
                 trial_index=context.trials_completed,
                 stop_reason=context.finish_reason if context.should_stop else None,
             )
+            # Record each evaluated candidate as trials
+            for cand_prompt, cand_score in prompt_scores:
+                self.finish_candidate(
+                    cand_prompt,
+                    score=cand_score,
+                    trial_index=context.trials_completed,
+                    round_handle=round_handle,
+                    extras={"round_num": round_num},
+                )
+            # Flush round metadata/candidates
+            self.finish_round(
+                round_handle=round_handle,
+                best_score=best_cand_score_avg,
+                best_candidate=best_candidate_this_round,
+                stop_reason=context.finish_reason if context.should_stop else None,
+                extras={
+                    "improvement": improvement,
+                    "best_so_far": self._context.current_best_score
+                    if self._context is not None
+                    else None,
+                },
+                candidates=round_data.candidates
+                if hasattr(round_data, "candidates")
+                else None,
+                selection_meta={
+                    "selection_policy": self.selection_strategy,
+                    "score_used": best_cand_score_avg,
+                    "candidate_count": len(prompt_scores),
+                },
+            )
             rounds.append(round_data)
-            self._history_builder.append_entry(round_data)
 
             if best_cand_score_avg > best_score:
                 best_score = best_cand_score_avg

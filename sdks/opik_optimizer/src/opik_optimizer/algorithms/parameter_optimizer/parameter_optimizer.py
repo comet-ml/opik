@@ -14,7 +14,7 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer, OptimizationContext
-from ...optimization_result import OptimizationResult
+from ...optimization_result import OptimizationResult, build_candidate_entry
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -343,7 +343,7 @@ class ParameterOptimizer(BaseOptimizer):
                 },
                 history=[],
                 llm_calls=self.llm_call_counter,
-                llm_calls_tools=self.llm_calls_tools_counter,
+                llm_calls_tools=self.llm_call_tools_counter,
                 optimization_id=self.current_optimization_id,
                 dataset_id=dataset.id,
             )
@@ -351,18 +351,30 @@ class ParameterOptimizer(BaseOptimizer):
         # Use first prompt for model info in history
         first_prompt = list(base_prompts.values())[0]
         self._history_builder.clear()
-        history: list[dict[str, Any]] = [
-            {
-                "iteration": 0,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+        baseline_round = self.begin_round(stage="baseline", type="baseline")
+        self.finish_candidate(
+            base_prompts if not is_single_prompt_optimization else first_prompt,
+            score=baseline_score,
+            extras={
                 "parameters": {},
-                "score": baseline_score,
                 "model_kwargs": copy.deepcopy(first_prompt.model_kwargs or {}),
                 "model": first_prompt.model,
                 "type": "baseline",
                 "stage": "baseline",
-            }
-        ]
+            },
+            round_handle=baseline_round,
+        )
+        self.finish_round(
+            baseline_round,
+            best_score=baseline_score,
+            best_candidate=base_prompts
+            if not is_single_prompt_optimization
+            else first_prompt,
+            extras={
+                "type": "baseline",
+                "stage": "baseline",
+            },
+        )
 
         try:
             optuna.logging.disable_default_handler()
@@ -491,27 +503,6 @@ class ParameterOptimizer(BaseOptimizer):
                 show_progress_bar=False,
             )
 
-        for trial in study.trials:
-            if trial.state != TrialState.COMPLETE or trial.value is None:
-                continue
-            timestamp = (
-                trial.datetime_complete
-                or trial.datetime_start
-                or datetime.now(timezone.utc)
-            )
-            history.append(
-                {
-                    "round_index": trial.number,
-                    "trial_index": trial.number,
-                    "timestamp": timestamp.isoformat(),
-                    "parameters": trial.user_attrs.get("parameters", {}),
-                    "score": float(trial.value),
-                    "model_kwargs": trial.user_attrs.get("model_kwargs"),
-                    "model": trial.user_attrs.get("model"),
-                    "stage": trial.user_attrs.get("stage", "global"),
-                }
-            )
-
         best_score = baseline_score
         best_parameters: dict[str, Any] = {}
         best_model_kwargs: dict[str, Any] = {
@@ -610,6 +601,7 @@ class ParameterOptimizer(BaseOptimizer):
         else:
             local_trials = 0
 
+        stage_counts: dict[str, int] = {}
         for trial in study.trials:
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
@@ -618,40 +610,39 @@ class ParameterOptimizer(BaseOptimizer):
                 or trial.datetime_start
                 or datetime.now(timezone.utc)
             )
-            if not any(
-                entry.get("round_index") == trial.number
-                or entry.get("iteration") == trial.number + 1
-                for entry in history
-            ):
-                trial_entry = self._history_builder.append_trial(
-                    round_index=trial.number,
-                    trial_index=trial.number,
+            stage = trial.user_attrs.get("stage", current_stage)
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+            round_handle = self.begin_round(
+                stage=stage,
+                type=trial.user_attrs.get("type"),
+                stage_count=stage_counts[stage],
+                local_search_scale=trial.user_attrs.get("local_search_scale"),
+                local_trials=trial.user_attrs.get("local_trials"),
+                global_trials=trial.user_attrs.get("global_trials"),
+            )
+            self.finish_candidate(
+                build_candidate_entry(
+                    prompt_or_payload=trial.user_attrs.get("model_kwargs"),
                     score=float(trial.value) if trial.value is not None else None,
-                    prompt=trial.user_attrs.get("model_kwargs"),
-                    timestamp=timestamp.isoformat(),
-                    trial_extras={
+                    extra={
                         "parameters": trial.user_attrs.get("parameters", {}),
                         "model": trial.user_attrs.get("model"),
-                        "stage": trial.user_attrs.get("stage", current_stage),
+                        "stage": stage,
+                        "type": trial.user_attrs.get("type"),
                     },
-                )
-                history.append(trial_entry)
-
-        for entry in history:
-            # Entries already normalized by append_trial; ensure merged into builder
-            self._history_builder.append_entry(entry)
-
-        rounds_summary = [
-            {
-                "round_index": trial.number,
-                "trial_index": trial.number,
-                "parameters": trial.user_attrs.get("parameters", {}),
-                "score": float(trial.value) if trial.value is not None else None,
-                "model": trial.user_attrs.get("model"),
-                "stage": trial.user_attrs.get("stage"),
-            }
-            for trial in completed_trials
-        ]
+                ),
+                score=float(trial.value) if trial.value is not None else None,
+                trial_index=trial.number,
+                extras=None,
+                round_handle=round_handle,
+                timestamp=timestamp.isoformat(),
+            )
+            self.finish_round(
+                round_handle=round_handle,
+                stop_reason=getattr(self._context, "finish_reason", None)
+                if self._context is not None
+                else None,
+            )
 
         try:
             importance = optuna_importance.get_param_importances(study)
@@ -695,16 +686,17 @@ class ParameterOptimizer(BaseOptimizer):
             if count == 3:
                 logger.warning("Unable to update optimization status; continuing...")
 
+        history_entries = self.get_history_entries()
+
         details = {
             "initial_score": baseline_score,
             "optimized_parameters": best_parameters,
             "optimized_model_kwargs": best_model_kwargs,
             "optimized_model": best_model,
-            "trials": history,
+            "trials": history_entries,
             "parameter_space": expanded_parameter_space.model_dump(by_alias=True),
             "n_trials": total_trials,
             "model": best_model,
-            "rounds": rounds_summary,
             "baseline_parameters": base_model_kwargs,
             "local_trials": local_trials,
             "global_trials": global_trials,
@@ -713,10 +705,14 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_importance": importance,
             "parameter_precision": 6,
             "trials_requested": total_trials,
-            "trials_completed": len(history),
-            "rounds_completed": len(rounds_summary),
-            "stopped_early": len(history) < total_trials,
+            "trials_completed": len(history_entries),
+            "rounds_completed": len(history_entries),
+            "stopped_early": len(history_entries) < total_trials,
             "stop_reason": None,
+            "selection_meta": {
+                "sampler": sampler.__class__.__name__ if sampler else None,
+                "pruner": type(study.pruner).__name__ if study.pruner else None,
+            },
         }
 
         # Prepare result prompt based on single vs multi-prompt optimization
@@ -736,7 +732,7 @@ class ParameterOptimizer(BaseOptimizer):
             details=details,
             history=self.get_history_entries(),
             llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
+            llm_calls_tools=self.llm_call_tools_counter,
             optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
         )

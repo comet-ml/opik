@@ -14,6 +14,7 @@ from ... import helpers, task_evaluator
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
+from ...optimization_result import build_candidate_entry
 from ...utils.candidate_selection import select_candidate
 
 if TYPE_CHECKING:
@@ -234,7 +235,17 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 outputs.append({"output": raw_output})
                 scores.append(score)
                 self._record_adapter_metric_call()
-                self._optimizer._record_trial(self._context, prompt_variants, score)
+                self._optimizer.finish_candidate(
+                    build_candidate_entry(
+                        prompt_or_payload=prompt_variants,
+                        score=score,
+                        metrics={"adapter_metric": score},
+                    ),
+                    score=score,
+                    trial_index=self._context.trials_completed,
+                    metrics={"adapter_metric": score},
+                    round_handle=getattr(self._context, "rounds_completed", None),
+                )
                 if self._context.should_stop:
                     break
 
@@ -344,7 +355,23 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             outputs.append({"output": output_text})
             scores.append(score_value)
             self._record_adapter_metric_call()
-            self._optimizer._record_trial(self._context, prompt_variants, score_value)
+            # Log via optimizer state hooks with normalized candidate
+            candidate_entry = build_candidate_entry(
+                prompt_or_payload=prompt_variants,
+                score=score_value,
+                id=candidate.get("id"),
+                metrics={self._metric_name: score_value, "opik_score": score_value},
+                extra={"output": output_text, "candidate": candidate},
+            )
+            self._optimizer.finish_candidate(
+                candidate_entry,
+                score=score_value,
+                trial_index=self._context.trials_completed,
+                metrics=candidate_entry.get("metrics"),
+                extras=candidate_entry.get("extra"),
+                candidates=[candidate_entry],
+                round_handle=getattr(self._context, "rounds_completed", None),
+            )
             if self._context.should_stop:
                 break
 

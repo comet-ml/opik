@@ -28,6 +28,7 @@ class InlineExecutor:
     def __exit__(
         self, exc_type: Any, exc: Any, _tb: Any
     ) -> None:  # pragma: no cover - trivial
+        _ = exc_type
         return None
 
     def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:

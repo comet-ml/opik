@@ -595,6 +595,7 @@ class TestReporterLifecycle:
                 self.datetime_start = datetime.now(timezone.utc)
                 self.datetime_complete = self.datetime_start
                 self.state = TrialState.COMPLETE
+                self.pruner = None
 
             def set_user_attr(self, key: str, value: Any) -> None:
                 self.user_attrs[key] = value
@@ -608,6 +609,7 @@ class TestReporterLifecycle:
         class FakeStudy:
             def __init__(self) -> None:
                 self.trials: list[FakeTrial] = []
+                self.pruner = MagicMock()
 
             def optimize(
                 self,

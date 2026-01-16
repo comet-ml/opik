@@ -6,7 +6,6 @@ This module contains functions for calculating improvements and creating result 
 
 from typing import Any, cast
 from collections.abc import Sequence
-import copy
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
@@ -14,6 +13,7 @@ from ....base_optimizer import AlgorithmResult
 from ....optimization_result import (
     OptimizationRound,
     OptimizationTrial,
+    build_candidate_entry,
 )
 
 
@@ -56,45 +56,31 @@ def create_round_data(
     candidates: list[dict[str, Any]] = []
     for prompt, score in evaluated_candidates:
         improvement_vs_prev = calculate_improvement(score, previous_best_score)
-        tool_entries: list[Any] = []
-        if getattr(prompt, "tools", None):
-            tool_entries = copy.deepcopy(list(prompt.tools or []))
-
-        prompt_payload: Any
-        if isinstance(prompt, dict):
-            prompt_payload = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-        else:
-            prompt_payload = prompt
-
-        candidate_entry = {
-            "prompt": prompt_payload,
-            "tools": tool_entries,
-            "score": score,
-            "improvement": improvement_vs_prev,
-        }
+        prompt_payload: Any = (
+            cast(dict[str, chat_prompt.ChatPrompt], prompt)
+            if isinstance(prompt, dict)
+            else prompt
+        )
+        candidate_entry = build_candidate_entry(
+            prompt_or_payload=prompt_payload,
+            score=score,
+            notes=None,
+            extra={"improvement": improvement_vs_prev},
+        )
         generated_prompts_log.append(candidate_entry)
-        candidates.append(
-            {
-                "id": str(hash(str(prompt_payload))),
-                "score": score,
-                "prompt": prompt_payload,
-            }
-        )
-
-    trials: list[OptimizationTrial] = []
-    for cand in candidates:
-        trials.append(
-            OptimizationTrial(
-                trial_index=trial_index,
-                score=cand.get("score"),
-                prompt=cand.get("prompt"),
-                extras={"improvement": cand.get("improvement")},
-            )
-        )
+        candidates.append(candidate_entry)
 
     return OptimizationRound(
         round_index=round_num,
-        trials=trials,
+        trials=[
+            OptimizationTrial(
+                trial_index=trial_index,
+                score=cand.get("score"),
+                candidate=cand.get("candidate"),
+                extras={"improvement": cand.get("extra", {}).get("improvement")},
+            )
+            for cand in candidates
+        ],
         best_score=current_best_score,
         best_prompt=best_prompt_overall,
         candidates=candidates,

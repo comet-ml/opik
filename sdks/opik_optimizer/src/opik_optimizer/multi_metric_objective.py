@@ -11,6 +11,7 @@ MetricLike: TypeAlias = MetricCallable | base_metric.BaseMetric
 ReasonBuilder: TypeAlias = Callable[[list[ScoreResult], list[float], float], str | None]
 
 
+# FIXME: Refactor and move to Metrics?
 class MultiMetricObjective:
     """Combine multiple metrics into a single weighted composite score."""
 

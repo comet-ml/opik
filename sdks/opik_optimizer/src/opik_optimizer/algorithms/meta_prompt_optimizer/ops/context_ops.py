@@ -322,7 +322,7 @@ def build_history_context(
 
             # Show top prompts per round
             for p in sorted_generated[:top_prompts_per_round]:
-                prompt_data = p.get("prompt", "N/A")
+                prompt_data = p.get("candidate") or p.get("prompt", "N/A")
                 score = p.get("score", float("nan"))
                 context += f"- Score {score:.4f}:\n"
 
@@ -345,7 +345,7 @@ def build_history_context(
                         context += json.dumps(prompt_data, indent=2)
                         context += "\n\n"
                 else:
-                    # It's already a string, just show it
+                    # It's already a string/dict, just show it
                     context += f"{prompt_data}\n\n"
 
     return context

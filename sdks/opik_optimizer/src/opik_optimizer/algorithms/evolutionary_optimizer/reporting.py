@@ -19,6 +19,7 @@ PANEL_WIDTH = 70
 console = get_console()
 
 
+# FIXME: Move to new reporting utils module.
 def display_tool_description(description: str, title: str, style: str) -> None:
     panel = Panel(
         Text(description),

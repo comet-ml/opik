@@ -741,21 +741,19 @@ def generate_synthesis_prompts(
                 )
                 if sorted_generated:
                     best = sorted_generated[0]
-                    prompt_text = best.get("prompt", "")
+                    prompt_payload = best.get("candidate") or best.get("prompt", "")
                     score = best.get("score", 0.0)
-                    reasoning = best.get("reasoning", "")
+                    reasoning = best.get("notes") or best.get("reasoning", "")
                     # Try to parse as messages
+                    messages: list[Any] | None = None
                     try:
-                        if isinstance(prompt_text, list):
-                            messages = prompt_text
-                        elif isinstance(prompt_text, str) and prompt_text:
+                        if isinstance(prompt_payload, list):
+                            messages = prompt_payload
+                        elif isinstance(prompt_payload, str) and prompt_payload:
                             try:
-                                messages = json.loads(prompt_text)
+                                messages = json.loads(prompt_payload)
                             except json.JSONDecodeError:
-                                messages = ast.literal_eval(prompt_text)
-                        else:
-                            continue
-
+                                messages = ast.literal_eval(prompt_payload)
                         if isinstance(messages, list):
                             top_prompts_with_scores.append((messages, score, reasoning))
                     except Exception:

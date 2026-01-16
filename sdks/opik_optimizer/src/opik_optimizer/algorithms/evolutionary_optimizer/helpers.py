@@ -4,6 +4,7 @@ import copy
 import rapidfuzz
 
 
+# FIXME: Refactor and move to prompts.py and prompt library.
 def get_task_description_for_llm(prompt: chat_prompt.ChatPrompt) -> str:
     """Generates a concise task description for LLM prompts that need context."""
     description = "Task: Given a list of AI messages with placeholder values, generate an effective prompt. "

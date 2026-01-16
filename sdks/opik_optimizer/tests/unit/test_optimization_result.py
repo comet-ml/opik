@@ -131,20 +131,20 @@ class TestOptimizationResultInitialization:
         assert result.optimization_id == "opt-123"
         assert result.initial_score == 0.60
         assert result.llm_cost_total == 5.50
-        assert result.details.get("schema_version") == "1"
-        assert result.details.get("trials_completed") == 3
-        assert result.details.get("rounds_completed") == 3
+        assert result.details.get("schema_version") == "v1"
+        assert result.details.get("trials_completed") == 1
+        assert result.details.get("rounds_completed") == 1
         assert result.details.get("stop_reason_details") is None
 
-    def test_details_schema_maps_iterations(self) -> None:
+    def test_details_counters_default_from_history(self) -> None:
         result = OptimizationResult(
             prompt=ChatPrompt(system="Test", user="Query"),
             score=0.5,
             metric_name="accuracy",
             details={"iterations_completed": 3, "trials_used": 4},
         )
-        assert result.details.get("rounds_completed") == 3
-        assert result.details.get("trials_completed") == 4
+        assert result.details.get("rounds_completed") == 0
+        assert result.details.get("trials_completed") == 0
 
     def test_stop_reason_details_are_populated(self) -> None:
         result = OptimizationResult(
@@ -320,7 +320,7 @@ class TestOptimizationResultStr:
             prompt=ChatPrompt(system="Test", user="Query"),
             score=0.85,
             metric_name="accuracy",
-            details={"rounds": [1, 2, 3]},
+            details={"trials_completed": 3, "rounds_completed": 3},
         )
         output = str(result)
         assert "Trials Completed: 3" in output

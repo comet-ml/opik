@@ -4,7 +4,7 @@ from typing import Any, cast
 from opik import Dataset
 
 from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
-from ...optimization_result import OptimizationRound, OptimizationTrial
+from ...optimization_result import build_candidate_entry
 from ...reporting_utils import (
     convert_tqdm_to_rich,
     suppress_opik_logs,
@@ -366,7 +366,6 @@ class GepaOptimizer(BaseOptimizer):
         ]
 
         rescored: list[float] = []
-        candidate_rows: list[dict[str, Any]] = []
         self._history_builder.clear()
 
         # Wrap rescoring to prevent OPIK messages and experiment link displays
@@ -398,78 +397,59 @@ class GepaOptimizer(BaseOptimizer):
                         score = 0.0
 
                     rescored.append(score)
-                    # Get a summary text for display (backward compatible)
-                    candidate_summary_text = self._get_candidate_summary_text(
-                        candidate, optimizable_prompts
-                    )
-                    candidate_rows.append(
-                        {
-                            "round_index": idx,
-                            "trial_index": context.trials_completed,
-                            "system_prompt": candidate_summary_text,
-                            "gepa_score": filtered_val_scores[idx],
-                            "opik_score": score,
-                            "source": self.__class__.__name__,
-                            "components": {
-                                k: v
-                                for k, v in candidate.items()
-                                if not k.startswith("_") and k not in ("source", "id")
-                            },
-                        }
-                    )
                     candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
                     components = {
                         k: v
                         for k, v in candidate.items()
                         if not k.startswith("_") and k not in ("source", "id")
                     }
-                    self._history_builder.append_entry(
-                        OptimizationRound(
-                            round_index=idx,
-                            trials=[
-                                OptimizationTrial(
-                                    trial_index=context.trials_completed,
-                                    score=score,
-                                    prompt=prompt_variants,
-                                    metrics={
-                                        f"gepa_{metric.__name__}": filtered_val_scores[
-                                            idx
-                                        ],
-                                        metric.__name__: score,
-                                    },
-                                    extras={
-                                        "components": components,
-                                        "candidate_id": candidate_id,
-                                    },
-                                )
-                            ],
-                            candidates=[
-                                {
-                                    "id": candidate_id,
-                                    "prompt": prompt_variants,
-                                    "score": score,
-                                    "metrics": {
-                                        f"gepa_{metric.__name__}": filtered_val_scores[
-                                            idx
-                                        ],
-                                        metric.__name__: score,
-                                    },
-                                    "extra": {
-                                        "components": components,
-                                        "source": candidate.get("source"),
-                                    },
-                                }
-                            ],
-                            extras={
-                                "dataset": "validation"
-                                if self._validation_dataset is not None
-                                else "train",
-                                "candidate_id": candidate_id,
-                            },
-                            stop_reason=context.finish_reason
-                            if context.should_stop
-                            else None,
-                        )
+                    round_handle = self.begin_round(
+                        dataset="validation"
+                        if self._validation_dataset is not None
+                        else "train",
+                        candidate_id=candidate_id,
+                    )
+                    candidate_entry = build_candidate_entry(
+                        prompt_or_payload=prompt_variants,
+                        score=score,
+                        id=candidate_id,
+                        metrics={
+                            f"gepa_{metric.__name__}": filtered_val_scores[idx],
+                            metric.__name__: score,
+                        },
+                        extra={
+                            "components": components,
+                            "source": candidate.get("source"),
+                        },
+                    )
+                    self.finish_candidate(
+                        prompt_variants,
+                        score=score,
+                        trial_index=context.trials_completed,
+                        metrics=candidate_entry.get("metrics"),
+                        extras={
+                            "components": components,
+                            "candidate_id": candidate_id,
+                        },
+                        candidates=[candidate_entry],
+                        round_handle=round_handle,
+                        dataset_split="validation"
+                        if self._validation_dataset is not None
+                        else "train",
+                    )
+                    self.finish_round(
+                        round_handle,
+                        stop_reason=context.finish_reason
+                        if context.should_stop
+                        else None,
+                        dataset_split="validation"
+                        if self._validation_dataset is not None
+                        else "train",
+                        selection_meta={
+                            "selection_policy": candidate_selection_strategy,
+                            "opik_rescored_scores": rescored,
+                            "gepa_scores": filtered_val_scores,
+                        },
                     )
 
         if rescored:
@@ -523,6 +503,16 @@ class GepaOptimizer(BaseOptimizer):
                 {
                     "selected": True,
                     "selection_metric": "opik_score",
+                    "selection_meta": {
+                        "opik_score": rescored[best_idx] if rescored else None,
+                        "gepa_score": (
+                            filtered_val_scores[best_idx]
+                            if filtered_val_scores
+                            and 0 <= best_idx < len(filtered_val_scores)
+                            else None
+                        ),
+                        "selection_policy": candidate_selection_strategy,
+                    },
                 }
             )
             extra["acquisition"] = {
@@ -542,14 +532,6 @@ class GepaOptimizer(BaseOptimizer):
         best_matches_seed = best_candidate == seed_candidate
 
         if logger.isEnabledFor(logging.DEBUG):
-            for idx, row in enumerate(candidate_rows):
-                logger.debug(
-                    "candidate=%s source=%s gepa=%s opik=%s",
-                    idx,
-                    row.get("source"),
-                    row.get("gepa_score"),
-                    row.get("opik_score"),
-                )
             logger.debug(
                 "selected candidate idx=%s opik=%.4f",
                 best_idx,
@@ -566,10 +548,8 @@ class GepaOptimizer(BaseOptimizer):
             "parents": getattr(gepa_result, "parents", None),
             "val_scores": filtered_val_scores,
             "opik_rescored_scores": rescored,
-            "candidate_summary": candidate_rows,
-            "best_candidate_iteration": (
-                candidate_rows[best_idx]["iteration"] if candidate_rows else 0
-            ),
+            "candidate_summary": [],
+            "best_candidate_iteration": 0,
             "selected_candidate_index": best_idx if filtered_candidates else None,
             "selected_candidate_gepa_score": (
                 filtered_val_scores[best_idx]

@@ -17,9 +17,11 @@ from opik_optimizer.base_optimizer import (
     BaseOptimizer,
     OptimizationContext,
 )
-from opik_optimizer.optimization_result import OptimizationRound, OptimizationTrial
 from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
+from ...optimization_result import (
+    build_candidate_entry,
+)
 
 from . import helpers, reporting
 from . import prompts as evo_prompts
@@ -72,6 +74,28 @@ class EvolutionaryOptimizer(BaseOptimizer):
             Dict: {"prompt_key": "new_template"} to override specific prompts.
             Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    DEFAULT_POPULATION_SIZE = 30
+    DEFAULT_NUM_GENERATIONS = 15
+    DEFAULT_MUTATION_RATE = 0.2
+    DEFAULT_CROSSOVER_RATE = 0.8
+    DEFAULT_TOURNAMENT_SIZE = 4
+    DEFAULT_NUM_THREADS = 12
+    DEFAULT_HALL_OF_FAME_SIZE = 10
+    DEFAULT_ELITISM_SIZE = 3
+    DEFAULT_MIN_MUTATION_RATE = 0.1
+    DEFAULT_MAX_MUTATION_RATE = 0.4
+    DEFAULT_ADAPTIVE_MUTATION = True
+    DEFAULT_RESTART_THRESHOLD = 0.01
+    DEFAULT_RESTART_GENERATIONS = 3
+    DEFAULT_EARLY_STOPPING_GENERATIONS = 5
+    DEFAULT_ENABLE_MOO = True
+    DEFAULT_ENABLE_LLM_CROSSOVER = True
+    DEFAULT_SEED = 42
+    DEFAULT_OUTPUT_STYLE_GUIDANCE = (
+        "Produce clear, effective, and high-quality responses suitable for the task."
+    )
+    DEFAULT_MOO_WEIGHTS = (1.0, -1.0)  # (Maximize Score, Minimize Length)
 
     # Prompt templates for this optimizer
     # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
@@ -144,28 +168,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             else:
                 context.finish_reason = "completed"
 
-    DEFAULT_POPULATION_SIZE = 30
-    DEFAULT_NUM_GENERATIONS = 15
-    DEFAULT_MUTATION_RATE = 0.2
-    DEFAULT_CROSSOVER_RATE = 0.8
-    DEFAULT_TOURNAMENT_SIZE = 4
-    DEFAULT_NUM_THREADS = 12
-    DEFAULT_HALL_OF_FAME_SIZE = 10
-    DEFAULT_ELITISM_SIZE = 3
-    DEFAULT_MIN_MUTATION_RATE = 0.1
-    DEFAULT_MAX_MUTATION_RATE = 0.4
-    DEFAULT_ADAPTIVE_MUTATION = True
-    DEFAULT_RESTART_THRESHOLD = 0.01
-    DEFAULT_RESTART_GENERATIONS = 3
-    DEFAULT_EARLY_STOPPING_GENERATIONS = 5
-    DEFAULT_ENABLE_MOO = True
-    DEFAULT_ENABLE_LLM_CROSSOVER = True
-    DEFAULT_SEED = 42
-    DEFAULT_OUTPUT_STYLE_GUIDANCE = (
-        "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    DEFAULT_MOO_WEIGHTS = (1.0, -1.0)  # (Maximize Score, Minimize Length)
-
     def __init__(
         self,
         model: str = "gpt-4o",
@@ -218,6 +220,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
         self.seed = seed
+        self.selection_policy = "tournament"
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
@@ -258,6 +261,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 del creator.Individual
             creator.create("Individual", dict, fitness=fitness_attr)
 
+        # TODO: Use log on get metadata instead.
         logger.debug(
             f"Initialized EvolutionaryOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
             f"LLM_Crossover: {self.enable_llm_crossover}, Seed: {self.seed}, "
@@ -267,6 +271,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
+        # FIXME: Should we not use get_metadata or get_config instead?
         return {
             "population_size": self.population_size,
             "num_generations": self.num_generations,
@@ -653,31 +658,57 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
                 )
 
-            initial_round = OptimizationRound(
-                round_index=0,
-                trials=[
-                    OptimizationTrial(
-                        trial_index=context.trials_completed,
-                        score=best_primary_score_overall,
-                        prompt=best_prompts_overall,
-                    )
-                ],
-                best_score=best_primary_score_overall,
-                best_prompt=best_prompts_overall,
-                candidates=[
+        round_handle = self.begin_round(improvement=0.0)
+        generation_idx = 0
+        self.finish_candidate(
+            best_prompts_overall,
+            score=best_primary_score_overall,
+            trial_index=context.trials_completed,
+            candidates=[
+                build_candidate_entry(
+                    prompt_or_payload=best_prompts_overall,
+                    score=best_primary_score_overall,
+                    id="gen0_ind0",
+                )
+            ],
+            round_handle=round_handle,
+        )
+        selection_meta = None
+        pareto_front = None
+        if self.enable_moo:
+            pareto_front = (
+                [
                     {
-                        "id": "gen0_ind0",
-                        "score": best_primary_score_overall,
-                        "prompt": best_prompts_overall,
+                        "score": ind.fitness.values[0],
+                        "length": ind.fitness.values[1],
+                        "id": f"gen{generation_idx}_hof{idx}",
                     }
-                ],
-                extras={
-                    "stopped": context.should_stop,
-                    "stop_reason": context.finish_reason,
-                    "improvement": 0.0,
-                },
+                    for idx, ind in enumerate(hof)
+                ]
+                if hof
+                else []
             )
-            self._history_builder.append_entry(initial_round)
+            selection_meta = {
+                "selection_policy": getattr(self, "selection_policy", "tournament"),
+                "pareto_front": pareto_front,
+            }
+
+        self.finish_round(
+            round_handle,
+            best_score=best_primary_score_overall,
+            best_prompt=best_prompts_overall,
+            dataset_split=context.dataset_split
+            if hasattr(context, "dataset_split")
+            else None,
+            pareto_front=pareto_front,
+            selection_meta=selection_meta,
+            stop_reason=context.finish_reason,
+            extras={
+                "stopped": context.should_stop,
+                "stop_reason": context.finish_reason,
+                "improvement": 0.0,
+            },
+        )
 
         generation_idx = 0
         with reporting.start_evolutionary_algo(verbose=self.verbose) as evo_reporter:
@@ -695,6 +726,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         break
 
                     evo_reporter.start_gen(generation_idx, self.num_generations)
+                    round_handle = self.begin_round()
 
                     curr_best_score = self._population_best_score(deap_population)
 
@@ -781,58 +813,54 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             continue
                         candidate_prompts = self._individual_to_prompts(ind)
                         primary_score = ind.fitness.values[0]
-                        entry: dict[str, Any] = {
-                            "id": f"gen{generation_idx}_ind{idx}",
-                            "score": primary_score,
-                            "prompt": candidate_prompts,
-                        }
                         metrics: dict[str, Any] | None = None
                         if self.enable_moo and len(ind.fitness.values) > 1:
                             metrics = {
                                 "primary": ind.fitness.values[0],
                                 "length": ind.fitness.values[1],
                             }
-                            entry["metrics"] = metrics
-                        candidate_entries.append(entry)
-                        self._history_builder.append_trial(
-                            round_index=generation_idx,
-                            trial_index=context.trials_completed,
+                        entry = build_candidate_entry(
+                            prompt_or_payload=candidate_prompts,
                             score=primary_score,
-                            prompt=candidate_prompts,
+                            id=f"gen{generation_idx}_ind{idx}",
                             metrics=metrics,
                         )
-
-                    self._history_builder.append_entry(
-                        OptimizationRound(
-                            round_index=generation_idx,
-                            best_score=best_primary_score_overall,
-                            best_prompt=best_prompts_overall,
-                            candidates=candidate_entries,
-                            extras={
-                                "pareto_front": [
-                                    {
-                                        "primary": ind.fitness.values[0],
-                                        "length": ind.fitness.values[1],
-                                    }
-                                    for ind in hof
-                                ]
-                                if self.enable_moo and hof
-                                else None,
-                                "stopped": context.should_stop,
-                                "stop_reason": context.finish_reason,
-                                "improvement": (
-                                    (best_primary_score_overall - initial_primary_score)
-                                    / abs(initial_primary_score)
-                                    if initial_primary_score
-                                    and initial_primary_score != 0
-                                    else (
-                                        1.0 if best_primary_score_overall > 0 else 0.0
-                                    )
-                                ),
-                                "best_so_far": best_primary_score_overall,
-                            },
-                            stop_reason=context.finish_reason,
+                        candidate_entries.append(entry)
+                        self.finish_candidate(
+                            candidate_prompts,
+                            score=primary_score,
+                            trial_index=context.trials_completed,
+                            metrics=metrics,
+                            candidates=[entry],
+                            round_handle=round_handle,
                         )
+
+                    self.finish_round(
+                        round_handle=round_handle,
+                        best_score=best_primary_score_overall,
+                        best_candidate=best_prompts_overall,
+                        stop_reason=context.finish_reason,
+                        candidates=candidate_entries,
+                        extras={
+                            "pareto_front": [
+                                {
+                                    "primary": ind.fitness.values[0],
+                                    "length": ind.fitness.values[1],
+                                }
+                                for ind in hof
+                            ]
+                            if self.enable_moo and hof
+                            else None,
+                            "stopped": context.should_stop,
+                            "stop_reason": context.finish_reason,
+                            "improvement": (
+                                (best_primary_score_overall - initial_primary_score)
+                                / abs(initial_primary_score)
+                                if initial_primary_score and initial_primary_score != 0
+                                else (1.0 if best_primary_score_overall > 0 else 0.0)
+                            ),
+                            "best_so_far": best_primary_score_overall,
+                        },
                     )
             finally:
                 if context.finish_reason == "max_trials":

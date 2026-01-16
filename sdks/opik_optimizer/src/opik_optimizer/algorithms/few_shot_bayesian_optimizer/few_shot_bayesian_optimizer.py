@@ -18,10 +18,10 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...base_optimizer import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...optimization_result import OptimizationRound, OptimizationTrial
 from ...agents import OptimizableAgent
 from ... import _throttle, task_evaluator
 from ...utils.prompt_library import PromptOverrides
+from ...optimization_result import build_candidate_entry
 from . import types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
@@ -690,12 +690,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             score_val = (
                 trial.value
             )  # This can be None if trial failed to produce a score
-            duration_val = None
-            if trial.datetime_complete and trial.datetime_start:
-                duration_val = (
-                    trial.datetime_complete - trial.datetime_start
-                ).total_seconds()
-
             timestamp = (
                 trial.datetime_start.isoformat()
                 if trial.datetime_start
@@ -703,24 +697,42 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             sampler_info = type(study.sampler).__name__ if study.sampler else None
             pruner_info = type(study.pruner).__name__ if study.pruner else None
-            self._history_builder.append_trial(
-                round_index=trial.number,
-                trial_index=trial.number,
-                score=score_val,
-                prompt=prompt_cand_display,
-                timestamp=timestamp,
-                trial_extras={
-                    "parameters_used": {
-                        "optuna_params": trial.user_attrs.get("config", {}),
-                        "example_indices": trial.user_attrs.get("example_indices", []),
+            round_handle = self.begin_round(
+                sampler=sampler_info,
+                pruner=pruner_info,
+                study_direction=study.direction.name if study.direction else None,
+            )
+            self.finish_candidate(
+                build_candidate_entry(
+                    prompt_or_payload=prompt_cand_display,
+                    score=score_val,
+                    extra={
+                        "parameters": trial.user_attrs.get("parameters", {}),
+                        "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
+                        "model": trial.user_attrs.get("model", {}),
+                        "stage": trial.user_attrs.get("stage"),
+                        "type": trial.user_attrs.get("type"),
                     },
-                    "duration_seconds": duration_val,
-                },
-                round_extras={
+                ),
+                score=score_val,
+                trial_index=trial.number,
+                extras=None,
+                round_handle=round_handle,
+                timestamp=timestamp,
+            )
+            self.finish_round(
+                round_handle,
+                stop_reason=getattr(self._context, "finish_reason", None)
+                if self._context is not None
+                else None,
+                selection_meta={
                     "sampler": sampler_info,
                     "pruner": pruner_info,
                     "study_direction": study.direction.name
                     if study.direction
+                    else None,
+                    "stage": trial.user_attrs.get("stage")
+                    if trial is not None
                     else None,
                 },
             )

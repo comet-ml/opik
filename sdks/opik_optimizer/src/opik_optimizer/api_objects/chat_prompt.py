@@ -33,6 +33,7 @@ class ChatPrompt:
             a content containing {input-dataset-field}
     """
 
+    # FIXME: Move to constants.py
     DISPLAY_TRUNCATION_LENGTH = 500
 
     def __init__(

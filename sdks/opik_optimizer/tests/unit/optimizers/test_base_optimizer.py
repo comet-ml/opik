@@ -828,16 +828,12 @@ def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:
     optimizer.evaluate({"main": simple_chat_prompt})
     assert context.should_stop is True
     assert context.finish_reason == "perfect_score"
-    from opik_optimizer.optimization_result import OptimizationHistoryBuilder
+    from opik_optimizer.optimization_result import OptimizationHistoryState
 
-    builder = OptimizationHistoryBuilder()
-    builder.append(
-        round_index=0,
-        trial_index=0,
-        score=0.9,
-        best_score=0.9,
-        best_prompt=None,
-    )
+    builder = OptimizationHistoryState()
+    handle = builder.start_round(round_index=0)
+    builder.record_trial(round_handle=handle, score=0.9, trial_index=0)
+    builder.end_round(round_handle=handle, best_score=0.9)
     entries = builder.get_entries()
     assert entries[0]["best_so_far"] == 0.9
 
@@ -1143,40 +1139,45 @@ class TestHistoryManagement:
 
         assert optimizer.get_history_entries() == []
 
-    def test_add_to_history(self, simple_chat_prompt) -> None:
-        """_add_to_history should add round data."""
+    def test_round_lifecycle_adds_round_data(self, simple_chat_prompt) -> None:
+        """start/record/end round should add round data via the history state."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        round_data = {
-            "round_index": 1,
-            "current_prompt": simple_chat_prompt,
-            "current_score": 0.5,
-            "generated_prompts": [],
-            "best_prompt": simple_chat_prompt,
-            "best_score": 0.5,
-            "improvement": 0.0,
-        }
-
-        optimizer._add_to_history(round_data)
+        handle = optimizer.begin_round()
+        optimizer.finish_candidate(
+            simple_chat_prompt,
+            score=0.5,
+            trial_index=1,
+            round_handle=handle,
+        )
+        optimizer.finish_round(
+            round_handle=handle,
+            best_score=0.5,
+            best_candidate=simple_chat_prompt,
+            extras={"improvement": 0.0},
+        )
 
         history = optimizer.get_history_entries()
         assert len(history) == 1
-        assert history[0]["round_index"] == 1
+        assert history[0]["round_index"] == 0
 
     def test_cleanup_clears_history(self, simple_chat_prompt) -> None:
         """cleanup should clear the history."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        round_data = {
-            "round_index": 1,
-            "current_prompt": simple_chat_prompt,
-            "current_score": 0.5,
-            "generated_prompts": [],
-            "best_prompt": simple_chat_prompt,
-            "best_score": 0.5,
-            "improvement": 0.0,
-        }
-        optimizer._add_to_history(round_data)
+        handle = optimizer.begin_round()
+        optimizer.finish_candidate(
+            simple_chat_prompt,
+            score=0.5,
+            trial_index=1,
+            round_handle=handle,
+        )
+        optimizer.finish_round(
+            round_handle=handle,
+            best_score=0.5,
+            best_candidate=simple_chat_prompt,
+            extras={"improvement": 0.0},
+        )
 
         optimizer.cleanup()
 

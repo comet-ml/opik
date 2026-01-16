@@ -9,7 +9,6 @@ from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResul
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
-from ...optimization_result import OptimizationRound, OptimizationTrial
 from ...utils.prompt_library import PromptOverrides
 
 from .hierarchical_root_cause_analyzer import HierarchicalRootCauseAnalyzer
@@ -335,7 +334,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 if fallback_scores
                 else best_score
             )
-            fallback_score = self._record_trial(context, best_prompts, fallback_score)
+            self.finish_candidate(
+                best_prompts,
+                score=fallback_score,
+                trial_index=context.trials_completed,
+                round_handle=None,
+                dataset_split="validation"
+                if evaluation_dataset == validation_dataset
+                else "train",
+            )
             return best_prompts, fallback_score, fallback_result
 
         best_prompt_bundle = improved_chat_prompts_candidates[0]
@@ -351,8 +358,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         best_score_local = sum(
             [x.score_results[0].value for x in best_result.test_results]
         ) / len(best_result.test_results)
-        best_score_local = self._record_trial(
-            context, best_prompt_bundle, best_score_local
+        self.finish_candidate(
+            best_prompt_bundle,
+            score=best_score_local,
+            trial_index=context.trials_completed,
+            round_handle=None,
+            dataset_split="validation"
+            if evaluation_dataset == validation_dataset
+            else "train",
         )
 
         # Evaluate remaining candidates and keep the best-scoring bundle.
@@ -375,8 +388,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     for x in improved_experiment_result.test_results
                 ]
             ) / len(improved_experiment_result.test_results)
-            improved_score = self._record_trial(
-                context, improved_chat_prompts, improved_score
+            self.finish_candidate(
+                improved_chat_prompts,
+                score=improved_score,
+                trial_index=context.trials_completed,
+                round_handle=None,
+                dataset_split="validation"
+                if evaluation_dataset == validation_dataset
+                else "train",
             )
 
             if improved_score > best_score_local:
@@ -612,28 +631,25 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
-            self._history_builder.append_entry(
-                OptimizationRound(
-                    round_index=iteration - 1,
-                    trials=[
-                        OptimizationTrial(
-                            trial_index=context.trials_completed,
-                            score=best_score,
-                            prompt=best_prompts,
-                            extras={
-                                "failure_modes": [
-                                    fm.name
-                                    for fm in hierarchical_analysis.unified_failure_modes
-                                ],
-                                "trials_completed": context.trials_completed,
-                            },
-                        )
+            round_handle = self.begin_round(improvement=iteration_improvement)
+            self.finish_candidate(
+                best_prompts,
+                score=best_score,
+                trial_index=context.trials_completed,
+                extras={
+                    "failure_modes": [
+                        fm.name for fm in hierarchical_analysis.unified_failure_modes
                     ],
-                    best_score=best_score,
-                    best_prompt=best_prompts,
-                    stop_reason=context.finish_reason if context.should_stop else None,
-                    extras={"improvement": iteration_improvement},
-                )
+                    "trials_completed": context.trials_completed,
+                },
+                round_handle=round_handle,
+            )
+            self.finish_round(
+                round_handle=round_handle,
+                best_score=best_score,
+                best_candidate=best_prompts,
+                stop_reason=context.finish_reason if context.should_stop else None,
+                extras={"improvement": iteration_improvement},
             )
 
             # Stop if improvement is below convergence threshold

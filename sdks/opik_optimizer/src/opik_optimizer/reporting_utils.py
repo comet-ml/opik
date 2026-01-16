@@ -21,6 +21,7 @@ PANEL_WIDTH = 70
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+# FIXME: Refactor and move to utils.py for this entire module.
 def suppress_experiment_reporting(func: F) -> F:
     """Decorator to suppress opik experiment result/link display."""
 

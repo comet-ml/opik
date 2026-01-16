@@ -26,7 +26,10 @@ from .constants import (
     resolve_project_name,
     normalize_eval_threads,
 )
-from .optimization_result import OptimizationHistoryBuilder, OptimizationResult
+from .optimization_result import (
+    OptimizationHistoryState,
+    OptimizationResult,
+)
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 
@@ -98,6 +101,7 @@ class OptimizationContext:
     current_best_prompt: dict[str, chat_prompt.ChatPrompt] | None = (
         None  # Best prompt seen so far
     )
+    dataset_split: str | None = None  # train/validation when applicable
 
 
 @dataclass
@@ -114,7 +118,7 @@ class AlgorithmResult:
     - best_prompts: dict of prompt name -> ChatPrompt (even for single prompt).
     - best_score: primary objective score for the best prompts.
     - history: list of normalized round/trial dicts (or OptimizationRound/Trial)
-      appended via OptimizationHistoryBuilder; this is treated as authoritative.
+      appended via OptimizationHistoryState; this is treated as authoritative.
     - metadata: algorithm-specific fields only (do not duplicate framework fields
       such as model, initial_score, finish_reason).
 
@@ -130,12 +134,7 @@ class AlgorithmResult:
     def __post_init__(self) -> None:
         if not isinstance(self.history, list):
             raise TypeError("AlgorithmResult.history must be a list of history entries")
-        if self.history:
-            # Normalize through the shared builder to keep a single schema source.
-            builder = OptimizationHistoryBuilder()
-            for entry in self.history:
-                builder.append_entry(entry)
-            self.history = builder.get_entries()
+        self.history = list(self.history)
 
 
 class BaseOptimizer(ABC):
@@ -187,9 +186,14 @@ class BaseOptimizer(ABC):
         self.name = name
         self.skip_perfect_score = skip_perfect_score
         self.perfect_score = perfect_score
-        self._history_builder = OptimizationHistoryBuilder()
         self.experiment_config = None
-        # Counters for usage/cost; tool_call_counter kept for backward compat
+        self._opik_client = None  # Lazy initialization
+        self.current_optimization_id: str | None = None  # Track current optimization
+        self.project_name: str = resolve_project_name()
+        self.n_threads: int = normalize_eval_threads(None)  # Safe default thread count
+
+        # Counters, history and counters for usage.
+        self._history_builder: OptimizationHistoryState = OptimizationHistoryState()
         self.llm_call_counter = 0
         self.llm_call_tools_counter = 0
         self.llm_cost_total: float = 0.0
@@ -198,13 +202,6 @@ class BaseOptimizer(ABC):
             "completion_tokens": 0,
             "total_tokens": 0,
         }
-        self._opik_client = None  # Lazy initialization
-        self.current_optimization_id: str | None = None  # Track current optimization
-        self.project_name: str = resolve_project_name()
-        self.n_threads: int = normalize_eval_threads(None)  # Safe default thread count
-
-        # Optimization progress tracking
-        # These are updated by the base class and can be read by get_metadata
         self._trials_completed: int = 0
         self._rounds_completed: int = 0
         self._reporter: Any | None = None
@@ -307,6 +304,9 @@ class BaseOptimizer(ABC):
 
     def _add_llm_usage(self, usage: dict[str, Any] | None) -> None:
         """Accumulate token usage across optimizer calls."""
+        # TODO: Should we not use get_metadata or get_config instead
+        # to get the token usage? Or we can centralize in the OptimizationResult along
+        # with the counters and functions for incrementing?
         if not usage:
             return
         self.llm_token_usage_total["prompt_tokens"] += int(
@@ -356,6 +356,7 @@ class BaseOptimizer(ABC):
 
     def _attach_agent_owner(self, agent: Any) -> None:
         """Attach this optimizer to the agent so it can push counters/cost."""
+        # TODO: Refactor _attach_agent_owner to keep this inside _llm_calls.py?
         try:
             setattr(agent, "_optimizer_owner", self)
         except Exception:
@@ -374,6 +375,7 @@ class BaseOptimizer(ABC):
         Returns:
             Tuple of (normalized_prompts_dict, is_single_prompt_optimization)
         """
+        # TODO: Remove this method in favour of auto-detection.
         if isinstance(prompt, chat_prompt.ChatPrompt):
             return {prompt.name: prompt}, True
         return prompt, False
@@ -457,10 +459,12 @@ class BaseOptimizer(ABC):
         max_trials: int = 10,
         **extra_params: Any,
     ) -> OptimizationContext:
+        # Normalize prompt input
         optimizable_prompts, is_single_prompt_optimization = (
             self._normalize_prompt_input(prompt)
         )
 
+        # Validate optimization inputs
         self._validate_optimization_inputs(
             optimizable_prompts, dataset, metric, support_content_parts=True
         )
@@ -473,15 +477,19 @@ class BaseOptimizer(ABC):
             )
             n_samples = None
 
+        # Resolve project name
         project_name = resolve_project_name(project_name)
+        self.project_name = project_name
 
+        # Create agent if not provided
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
         self._attach_agent_owner(agent)
 
-        self.project_name = project_name
+        # Reset counters
         self._reset_counters()
 
+        # Get existing optimization if provided
         if optimization_id:
             opik_optimization = self.opik_client.get_optimization_by_id(optimization_id)
             self.current_optimization_id = opik_optimization.id
@@ -491,10 +499,12 @@ class BaseOptimizer(ABC):
                 dataset, metric, optimization_id
             )
 
+        # Select evaluation dataset
         evaluation_dataset = self._select_evaluation_dataset(
             dataset, validation_dataset
         )
 
+        # Add validation dataset to experiment config if provided
         if validation_dataset is not None:
             experiment_config = experiment_config or {}
             experiment_config["validation_dataset"] = getattr(
@@ -504,8 +514,10 @@ class BaseOptimizer(ABC):
                 validation_dataset, "id", None
             )
 
+        # Create initial prompts
         initial_prompts = {name: p.copy() for name, p in optimizable_prompts.items()}
 
+        # Return optimization context
         return OptimizationContext(
             prompts=optimizable_prompts,
             initial_prompts=initial_prompts,
@@ -606,18 +618,7 @@ class BaseOptimizer(ABC):
             n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
             verbose=0,
         )
-        score = self._record_trial(context, prompts, score)
-        return score
-
-    def _record_trial(
-        self,
-        context: OptimizationContext,
-        prompts: dict[str, chat_prompt.ChatPrompt],
-        score: float,
-    ) -> float:
-        """
-        Increment trial counters, update best prompt/score, and apply stop checks.
-        """
+        # Record trial and update counters
         coerced_score = self._coerce_score(score)
         context.trials_completed += 1
         if (
@@ -633,31 +634,6 @@ class BaseOptimizer(ABC):
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
         return coerced_score
-
-    def get_progress_state(self) -> dict[str, Any]:
-        """
-        Return current optimization progress state for display.
-
-        The base implementation returns common progress info including:
-        - trials_completed: From context (atomic evaluations)
-        - best_score: From context
-        - iteration (round): Current round (1-based), from _current_round attribute
-        - total_rounds: Total rounds, from _total_rounds attribute
-
-        Optimizers should set self._current_round and self._total_rounds
-        during optimization. Override only if you need additional fields
-        (e.g., MetaPromptOptimizer adds candidate info).
-
-        Returns:
-            Dict with progress state for display.
-        """
-        context = self._context
-        return {
-            "trials_completed": context.trials_completed,
-            "best_score": context.current_best_score,
-            "round": getattr(self, "_current_round", 0) + 1,  # 1-based for display
-            "total_rounds": getattr(self, "_total_rounds", "?"),
-        }
 
     def get_evaluation_display_info(self) -> dict[str, Any]:
         """
@@ -684,6 +660,7 @@ class BaseOptimizer(ABC):
             and context.evaluation_dataset is context.validation_dataset
         )
         dataset_type = "validation" if is_validation else "training"
+        context.dataset_split = dataset_type
 
         return {
             "dataset_name": dataset_name,
@@ -697,73 +674,36 @@ class BaseOptimizer(ABC):
         prompts: dict[str, chat_prompt.ChatPrompt],
         score: float,
     ) -> None:
-        """
-        Display progress after each evaluation.
-
-        Uses get_progress_state() to get optimizer-specific state and
-        get_evaluation_display_info() to get additional display context.
-        Optimizers can override these methods to customize their display.
-
-        Args:
-            context: The optimization context.
-            prompts: The prompts that were evaluated.
-            score: The score achieved.
-        """
+        """Display progress after each evaluation."""
         if self.verbose < 1:
             return
 
-        state = self.get_progress_state()
-        display_info = self.get_evaluation_display_info()
-        best_score = state.get("best_score") or 0.0
-        score_is_finite = math.isfinite(score)
-        best_is_finite = math.isfinite(best_score) if best_score is not None else True
+        coerced_score = self._coerce_score(score)
+        best_score = context.current_best_score
 
-        # Build progress prefix based on optimizer state
-        prefix_parts = []
-        if "round" in state:
-            total = state.get("total_rounds", "?")
-            prefix_parts.append(f"Round {state['round']}/{total}")
-        if "candidate" in state:
-            total = state.get("total_candidates", "?")
-            prefix_parts.append(f"Candidate {state['candidate']}/{total}")
-
-        prefix = (
-            " - ".join(prefix_parts)
-            if prefix_parts
-            else f"Trial {context.trials_completed}"
-        )
-
-        # Display score with comparison to best
-        if not score_is_finite or not best_is_finite:
+        prefix = f"Trial {context.trials_completed}"
+        if not math.isfinite(coerced_score) or (
+            best_score is not None and not math.isfinite(best_score)
+        ):
             style = "yellow"
-            score_text = f"{score}" if score_is_finite else "non-finite score"
-        elif best_score == 0 and score > 0:
+        elif best_score is None or coerced_score >= best_score:
             style = "green"
-            score_text = f"{score:.4f}"
-        elif best_score == 0 and score == 0:
-            style = "dim yellow"
-            score_text = f"{score:.4f}"
-        elif score > best_score:
-            perc_change = (score - best_score) / best_score if best_score != 0 else 0
-            style = "green"
-            score_text = f"{score:.4f} ({perc_change:+.2%})"
-        elif score < best_score:
-            perc_change = (score - best_score) / best_score if best_score != 0 else 0
-            style = "red"
-            score_text = f"{score:.4f} ({perc_change:+.2%})"
         else:
-            style = "dim"
-            score_text = f"{score:.4f}"
+            style = "red"
 
         reporting_utils.display_evaluation_progress(
             prefix=prefix,
-            score_text=score_text,
+            score_text=(
+                f"{coerced_score:.4f}"
+                if math.isfinite(coerced_score)
+                else "non-finite score"
+            ),
             style=style,
             prompts=prompts,
             verbose=self.verbose,
-            dataset_name=display_info.get("dataset_name"),
-            dataset_type=display_info.get("dataset_type"),
-            evaluation_settings=display_info.get("evaluation_settings"),
+            dataset_name=None,
+            dataset_type=None,
+            evaluation_settings=None,
         )
 
     def post_optimization(
@@ -820,6 +760,9 @@ class BaseOptimizer(ABC):
         """Return the result prompt(s) and initial prompt(s) for output."""
         best_prompts = kwargs["best_prompts"]
         initial_prompts = kwargs["initial_prompts"]
+        # TODO: I think we can auto-detect this by checking if
+        # best_prompts is a single prompt or a dictionary. and remove this parameter.
+        # is_single_prompt_optimization is not really needed anymore.
         is_single_prompt_optimization = kwargs["is_single_prompt_optimization"]
         if is_single_prompt_optimization:
             return list(best_prompts.values())[0], list(initial_prompts.values())[0]
@@ -837,6 +780,7 @@ class BaseOptimizer(ABC):
             initial_score=score,
             details=kwargs["details"],
             history=kwargs.get("history", []) or [],
+            # TODO: Bean counter should be moved to OptimizationResult.counters.? to simplify.
             llm_calls=kwargs.get("llm_calls"),
             llm_calls_tools=kwargs.get("llm_calls_tools"),
             llm_cost_total=kwargs.get("llm_cost_total"),
@@ -868,6 +812,7 @@ class BaseOptimizer(ABC):
         result_prompt, initial_prompt = self._select_result_prompts(
             best_prompts=algorithm_result.best_prompts,
             initial_prompts=context.initial_prompts,
+            # TODO: Remove this parameter in favour of auto-detection.
             is_single_prompt_optimization=context.is_single_prompt_optimization,
         )
 
@@ -897,11 +842,14 @@ class BaseOptimizer(ABC):
         details.update(algorithm_result.metadata)
 
         if algorithm_result.history:
-            # Normalize anything the optimizer provided through a fresh builder
-            temp_builder = OptimizationHistoryBuilder()
+            history_entries: list[dict[str, Any]] = []
             for entry in algorithm_result.history:
-                temp_builder.append_entry(entry)
-            history_entries = temp_builder.get_entries()
+                if hasattr(entry, "to_dict"):
+                    history_entries.append(entry.to_dict())
+                elif isinstance(entry, dict):
+                    history_entries.append(entry)
+            if not history_entries:
+                history_entries = self._history_builder.get_entries()
         else:
             history_entries = self._history_builder.get_entries()
 
@@ -997,14 +945,17 @@ class BaseOptimizer(ABC):
                     "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
                 )
         else:
+            # FIXME: PossibleUnreachable code?
             raise ValueError(
                 "Prompt must be a ChatPrompt object or a dictionary of ChatPrompt objects"
             )
 
         if not isinstance(dataset, Dataset):
+            # FIXME: PossibleUnreachable code?
             raise ValueError("Dataset must be a Dataset object")
 
         if not callable(metric):
+            # FIXME: PossibleUnreachable code?
             raise ValueError(
                 "Metric must be a callable function that takes `dataset_item` and `llm_output` as arguments, "
                 "and optionally `task_span` for metrics that need access to span information."
@@ -1083,6 +1034,8 @@ class BaseOptimizer(ABC):
 
     # ------------------------------------------------------------------
     # Experiment metadata helpers
+    # FIXME: Refactor, move to helpers.py or utils.py away from base optimizer
+    # These are metadata helpers for annotation of calls, could go into a separate module.
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -1174,10 +1127,12 @@ class BaseOptimizer(ABC):
         agent_config["optimizer"] = self.__class__.__name__
         return helpers.drop_none(agent_config)
 
+    # FIXME: Should we not use get_metadata or get_config instead
     def get_optimizer_metadata(self) -> dict[str, Any]:
         """Override in subclasses to expose optimizer-specific parameters."""
         return {}
 
+    # FIXME: Should we not use get_metadata or get_config instead
     def _build_optimizer_metadata(self) -> dict[str, Any]:
         metadata = {
             "name": self.__class__.__name__,
@@ -1562,6 +1517,8 @@ class BaseOptimizer(ABC):
 
         # Check for early stop if baseline meets threshold
         if self._should_skip_optimization(baseline_score):
+            context.finish_reason = "perfect_score"
+            context.should_stop = True
             logger.info(
                 "Baseline score %.4f >= %.4f; skipping optimization.",
                 baseline_score,
@@ -1619,7 +1576,7 @@ class BaseOptimizer(ABC):
                 details=early_stop_details,
                 history=[],
                 llm_calls=self.llm_call_counter,
-                llm_calls_tools=self.llm_calls_tools_counter,
+                llm_calls_tools=self.llm_call_tools_counter,
                 dataset_id=context.dataset.id,
                 optimization_id=context.optimization_id,
             )
@@ -1670,15 +1627,87 @@ class BaseOptimizer(ABC):
         """
         return self._history_builder.get_entries()
 
-    def _add_to_history(self, round_data: dict[str, Any]) -> None:
-        """
-        Add a round to the optimization history.
+    # --- History hook wrappers (candidate-first) ---
+    def begin_round(self, **extras: Any) -> Any:
+        """Start a history round and return its handle."""
+        try:
+            return self._history_builder.start_round(extras=extras or None)
+        except AttributeError:
+            # Fallback for legacy builders
+            return None
 
-        Prefer recording via OptimizationHistoryBuilder in new code; this helper
-        keeps a shared codepath for existing callers.
-        """
-        if isinstance(round_data, dict):
-            self._history_builder.append_entry(round_data)
+    def start_candidate(self, candidate: Any, round_handle: Any) -> Any:
+        """Optional pre-hook for candidate; returns the candidate as the handle."""
+        return candidate
+
+    def finish_candidate(
+        self,
+        candidate_handle: Any,
+        *,
+        score: float | None,
+        metrics: dict[str, Any] | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        dataset: str | None = None,
+        dataset_split: str | None = None,
+        trial_index: int | None = None,
+        timestamp: str | None = None,
+        round_handle: Any | None = None,
+    ) -> None:
+        """Record a candidate trial in history."""
+        if hasattr(self._history_builder, "record_trial"):
+            if trial_index is None and self.__context is not None:
+                try:
+                    trial_index = self.__context.trials_completed
+                except Exception:
+                    trial_index = None
+            stop_reason = None
+            if self.__context is not None and self.__context.should_stop:
+                stop_reason = getattr(self.__context, "finish_reason", None)
+            self._history_builder.record_trial(
+                round_handle=round_handle,
+                score=score,
+                candidate=candidate_handle,
+                trial_index=trial_index,
+                metrics=metrics,
+                dataset=dataset,
+                dataset_split=dataset_split,
+                extras=extras,
+                candidates=candidates,
+                timestamp=timestamp,
+                stop_reason=stop_reason,
+            )
+
+    def finish_round(
+        self,
+        round_handle: Any,
+        *,
+        best_score: float | None = None,
+        best_candidate: Any | None = None,
+        best_prompt: Any | None = None,
+        stop_reason: str | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        timestamp: str | None = None,
+        dataset_split: str | None = None,
+        pareto_front: list[dict[str, Any]] | None = None,
+        selection_meta: dict[str, Any] | None = None,
+    ) -> None:
+        """Finalize a history round."""
+        if hasattr(self._history_builder, "end_round"):
+            self._history_builder.end_round(
+                round_handle=round_handle,
+                best_score=best_score,
+                best_candidate=best_candidate,
+                best_prompt=best_prompt,
+                stop_reason=stop_reason,
+                extras=extras,
+                candidates=candidates,
+                timestamp=timestamp,
+                dataset_split=dataset_split,
+                pareto_front=pareto_front,
+                selection_meta=selection_meta,
+            )
 
     def _update_optimization(
         self, optimization: optimization.Optimization, status: str
