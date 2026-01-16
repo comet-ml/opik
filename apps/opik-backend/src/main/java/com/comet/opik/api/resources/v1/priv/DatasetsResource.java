@@ -37,7 +37,6 @@ import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -110,7 +109,6 @@ public class DatasetsResource {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
     private final @NonNull SortingFactoryDatasets sortingFactory;
-    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull CsvDatasetExportService csvExportService;
@@ -667,16 +665,6 @@ public class DatasetsResource {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
-        var metadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
-                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
-            sortingFields = List.of();
-        }
-
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
@@ -694,13 +682,6 @@ public class DatasetsResource {
                 datasetItemSearchCriteria, page, size, workspaceId);
 
         var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
-                .map(it -> {
-                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (metadata.cannotUseDynamicSorting()) {
-                        return it.toBuilder().sortableBy(List.of()).build();
-                    }
-                    return it;
-                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
