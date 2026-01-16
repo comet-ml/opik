@@ -73,19 +73,19 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      if (
+      // If column explicitly sets sortable to false, respect that
+      // Otherwise, check if backend supports sorting
+      const shouldEnableSorting =
+        column.sortable !== false &&
         Boolean(sortableColumns?.length) &&
-        isColumnSortable(column.id, sortableColumns)
-      ) {
-        retVal.push(
-          mapColumnDataFields({
-            ...column,
-            sortable: true,
-          }),
-        );
-      } else {
-        retVal.push(mapColumnDataFields(column));
-      }
+        isColumnSortable(column.id, sortableColumns);
+
+      retVal.push(
+        mapColumnDataFields({
+          ...column,
+          sortable: shouldEnableSorting,
+        }),
+      );
     }
   });
 
