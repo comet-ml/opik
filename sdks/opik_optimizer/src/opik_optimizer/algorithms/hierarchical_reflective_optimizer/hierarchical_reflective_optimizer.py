@@ -597,20 +597,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             # max_trials enforcement and history alignment consistent.
                             # This avoids infinite loops when test doubles bypass the
                             # normal BaseOptimizer.evaluate() accounting path.
-                            coerced_score = (
-                                self._coerce_score(improved_score)
+                            score_for_accounting = (
+                                improved_score
                                 if improved_score is not None
-                                else None
+                                else best_score
                             )
-                            context.trials_completed += 1
-                            if coerced_score is not None and (
-                                context.current_best_score is None
-                                or coerced_score > context.current_best_score
-                            ):
-                                context.current_best_score = coerced_score
-                                if improved_chat_prompts is not None:
-                                    context.current_best_prompt = improved_chat_prompts
-                            self._should_stop_context(context)
+                            self._record_trial_score(
+                                context,
+                                score_for_accounting,
+                                improved_chat_prompts or best_prompts,
+                            )
 
                     # Check for perfect score early stop
                     if (
