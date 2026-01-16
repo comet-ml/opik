@@ -79,9 +79,7 @@ def display_trial_start(
     if verbose < 1:
         return
 
-    console.print(
-        Text(f"│ - Starting optimization round {trial_number + 1} of {total_trials}")
-    )
+    console.print(Text(f"│ - Starting trial {trial_number + 1} of {total_trials}"))
     if selection_summary:
         console.print(
             Text(f"│   Evaluation settings: {selection_summary}", style="dim")
