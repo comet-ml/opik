@@ -14,7 +14,7 @@ from ...utils import (
     unique_ordered_by_key,
 )
 from ...utils.prompt_library import PromptOverrides
-from . import reporting as gepa_reporting
+from . import helpers, reporting as gepa_reporting
 from . import prompts as gepa_prompts
 from .adapter import OpikGEPAAdapter
 from .types import OpikDataInst
@@ -111,43 +111,6 @@ class GepaOptimizer(BaseOptimizer):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _build_data_insts(
-        self,
-        dataset_items: list[dict[str, Any]],
-        input_key: str,
-        output_key: str,
-    ) -> list[OpikDataInst]:
-        data_insts: list[OpikDataInst] = []
-        for item in dataset_items:
-            additional_context: dict[str, str] = {}
-            metadata = item.get("metadata") or {}
-            if isinstance(metadata, dict):
-                context_value = metadata.get("context")
-                if isinstance(context_value, str):
-                    additional_context["context"] = context_value
-            if "context" in item and isinstance(item["context"], str):
-                additional_context.setdefault("context", item["context"])
-
-            data_insts.append(
-                OpikDataInst(
-                    input_text=str(item.get(input_key, "")),
-                    answer=str(item.get(output_key, "")),
-                    additional_context=additional_context,
-                    opik_item=item,
-                )
-            )
-        return data_insts
-
-    def _infer_dataset_keys(self, dataset: Dataset) -> tuple[str, str]:
-        items = dataset.get_items(1)
-        if not items:
-            return "text", "label"
-        sample = items[0]
-        output_candidates = ["label", "answer", "output", "expected_output"]
-        output_key = next((k for k in output_candidates if k in sample), "label")
-        excluded = {output_key, "id", "metadata"}
-        input_key = next((k for k in sample.keys() if k not in excluded), "text")
-        return input_key, output_key
 
     # ------------------------------------------------------------------
     # Base optimizer overrides
@@ -252,7 +215,7 @@ class GepaOptimizer(BaseOptimizer):
                     content = " ".join(text_parts)
                 seed_candidate[component_key] = str(content)
 
-        input_key, output_key = self._infer_dataset_keys(dataset)
+        input_key, output_key = helpers.infer_dataset_keys(dataset)
 
         train_items = dataset.get_items()
         if n_samples and 0 < n_samples < len(train_items):
@@ -286,8 +249,8 @@ class GepaOptimizer(BaseOptimizer):
                 budget_limited_trials,
             )
 
-        train_insts = self._build_data_insts(train_items, input_key, output_key)
-        val_insts = self._build_data_insts(val_items, input_key, output_key)
+        train_insts = helpers.build_data_insts(train_items, input_key, output_key)
+        val_insts = helpers.build_data_insts(val_items, input_key, output_key)
 
         self._adapter_metric_calls = 0
 

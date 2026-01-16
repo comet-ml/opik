@@ -122,15 +122,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "verbose": self.verbose,
         }
 
-    def _calculate_improvement(
-        self, current_score: float, previous_score: float
-    ) -> float:
-        """Calculate the improvement percentage between scores."""
-        return (
-            (current_score - previous_score) / previous_score
-            if previous_score > 0
-            else 0
-        )
 
     def _hierarchical_root_cause_analysis(
         self, evaluation_result: EvaluationResult
@@ -670,7 +661,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     and best_score is not None
                     and improved_score > best_score
                 ):
-                    improvement = self._calculate_improvement(
+                    improvement = helpers.calculate_improvement(
                         improved_score, best_score
                     )
                     logger.info(
@@ -690,7 +681,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
             # Check for convergence after iteration
             iteration_improvement = (
-                self._calculate_improvement(best_score, previous_iteration_score)
+                helpers.calculate_improvement(best_score, previous_iteration_score)
                 if best_score is not None and previous_iteration_score is not None
                 else 0.0
             )

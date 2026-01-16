@@ -22,7 +22,7 @@ from ...agents import OptimizableAgent
 from ... import task_evaluator
 from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
-from . import types
+from . import helpers, types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
 from collections.abc import Callable
@@ -323,16 +323,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         return new_prompts, str(response_content.template)
 
-    def _stringify_column_value(self, value: Any) -> str | None:
-        """Convert a dataset value to a string suitable for column grouping."""
-        if value is None:
-            return self._MISSING_VALUE_SENTINEL
-        if isinstance(value, (list, dict)):
-            return None
-        text = str(value)
-        if len(text) > self._MAX_COLUMN_VALUE_LENGTH:
-            return None
-        return text
 
     def _build_columnar_search_space(
         self, dataset_items: list[dict[str, Any]]
@@ -357,7 +347,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 if key not in item:
                     skip_column = True
                     break
-                str_value = self._stringify_column_value(item.get(key))
+                str_value = helpers.stringify_column_value(item.get(key))
                 if str_value is None:
                     skip_column = True
                     break
@@ -382,7 +372,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             combo_parts: list[str] = []
             skip_example = False
             for column in candidate_columns:
-                str_value = self._stringify_column_value(item.get(column))
+                str_value = helpers.stringify_column_value(item.get(column))
                 if str_value is None:
                     skip_example = True
                     break
