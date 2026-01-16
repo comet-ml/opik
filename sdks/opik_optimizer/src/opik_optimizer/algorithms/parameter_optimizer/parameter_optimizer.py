@@ -14,15 +14,17 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer, OptimizationContext
-from ...optimization_result import OptimizationResult, build_candidate_entry
+from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ... import reporting_utils
-from .parameter_search_space import ParameterSearchSpace
-from .search_space_types import ParameterType
-from .sensitivity_analysis import compute_sensitivity_from_trials
+from .types import ParameterType
+from .ops import sensitivity_analysis
+from .ops.search_ops import ParameterSearchSpace
+from . import prompts as param_prompts
 from . import reporting
+from . import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,8 @@ class ParameterOptimizer(BaseOptimizer):
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
     """
+
+    DEFAULT_PROMPTS: dict[str, str] = param_prompts.DEFAULT_PROMPTS
 
     def __init__(
         self,
@@ -177,6 +181,7 @@ class ParameterOptimizer(BaseOptimizer):
         # Set project name
         self.project_name = project_name
         self._reset_counters()
+        self.set_default_dataset_split("validation" if validation_dataset else "train")
 
         # Create agent if not provided
         if agent is None:
@@ -220,29 +225,18 @@ class ParameterOptimizer(BaseOptimizer):
         local_search_scale_override = local_search_scale
 
         # Set model defaults and build base model kwargs
-        # Parameter optimization evaluates a single candidate per trial, so drop n.
-        base_model_kwargs = copy.deepcopy(self.model_parameters or {})
-        base_model_kwargs.pop("n", None)
+        base_model_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
 
         # Build base prompts dict with model defaults
-        base_prompts: dict[str, chat_prompt.ChatPrompt] = {}
-        for name, p in prompts.items():
-            base_p = p.copy()
-            base_p.model = self.model
-            merged_kwargs = {
-                **base_model_kwargs,
-                **copy.deepcopy(p.model_kwargs or {}),
-            }
-            # Keep per-trial evaluation single-choice until multi-candidate selection is added.
-            merged_kwargs.pop("n", None)
-            base_p.model_kwargs = merged_kwargs
-            base_prompts[name] = base_p
+        base_prompts = helpers.build_base_prompts(
+            prompts, self.model, base_model_kwargs
+        )
 
         # Create optimization run using base class helper
         optimization = self._create_optimization_run(dataset, metric, optimization_id)
 
         # Display header with optimization link
-        reporting.display_header(
+        reporting_utils.display_header(
             algorithm=self.__class__.__name__,
             optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
@@ -255,7 +249,7 @@ class ParameterOptimizer(BaseOptimizer):
             if is_single_prompt_optimization
             else base_prompts
         )
-        reporting.display_configuration(
+        reporting_utils.display_configuration(
             messages=display_prompt,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
@@ -298,7 +292,7 @@ class ParameterOptimizer(BaseOptimizer):
                 if is_single_prompt_optimization
                 else base_prompts
             )
-            reporting.display_result(
+            reporting_utils.display_result(
                 initial_score=baseline_score,
                 best_score=baseline_score,
                 prompt=display_prompt,
@@ -352,6 +346,20 @@ class ParameterOptimizer(BaseOptimizer):
         first_prompt = list(base_prompts.values())[0]
         self._history_builder.clear()
         baseline_round = self.begin_round(stage="baseline", type="baseline")
+        self.record_candidate_entry(
+            prompt_or_payload=base_prompts
+            if not is_single_prompt_optimization
+            else first_prompt,
+            score=baseline_score,
+            id="baseline",
+            extra={
+                "parameters": {},
+                "model_kwargs": copy.deepcopy(first_prompt.model_kwargs or {}),
+                "model": first_prompt.model,
+                "type": "baseline",
+                "stage": "baseline",
+            },
+        )
         self.finish_candidate(
             base_prompts if not is_single_prompt_optimization else first_prompt,
             score=baseline_score,
@@ -387,19 +395,12 @@ class ParameterOptimizer(BaseOptimizer):
         sampler = sampler or optuna.samplers.TPESampler(seed=self.seed)
         study = optuna.create_study(direction="maximize", sampler=sampler)
 
-        total_trials = self.default_n_trials if max_trials is None else max_trials
-        if total_trials < 0:
-            total_trials = 0
-
-        if local_trials_override is not None:
-            local_trials = min(max(int(local_trials_override), 0), total_trials)
-        else:
-            local_trials = int(total_trials * self.local_search_ratio)
-
-        global_trials = total_trials - local_trials
-        if total_trials > 0 and global_trials <= 0:
-            global_trials = 1
-            local_trials = max(0, total_trials - global_trials)
+        total_trials, local_trials, global_trials = helpers.calculate_trial_counts(
+            max_trials=max_trials,
+            default_n_trials=self.default_n_trials,
+            local_search_ratio=self.local_search_ratio,
+            local_trials_override=local_trials_override,
+        )
 
         current_space = expanded_parameter_space
         current_stage = "global"
@@ -620,17 +621,19 @@ class ParameterOptimizer(BaseOptimizer):
                 local_trials=trial.user_attrs.get("local_trials"),
                 global_trials=trial.user_attrs.get("global_trials"),
             )
+            self.record_candidate_entry(
+                prompt_or_payload=trial.user_attrs.get("model_kwargs"),
+                score=float(trial.value) if trial.value is not None else None,
+                id=f"trial{trial.number}",
+                extra={
+                    "parameters": trial.user_attrs.get("parameters", {}),
+                    "model": trial.user_attrs.get("model"),
+                    "stage": stage,
+                    "type": trial.user_attrs.get("type"),
+                },
+            )
             self.finish_candidate(
-                build_candidate_entry(
-                    prompt_or_payload=trial.user_attrs.get("model_kwargs"),
-                    score=float(trial.value) if trial.value is not None else None,
-                    extra={
-                        "parameters": trial.user_attrs.get("parameters", {}),
-                        "model": trial.user_attrs.get("model"),
-                        "stage": stage,
-                        "type": trial.user_attrs.get("type"),
-                    },
-                ),
+                trial.user_attrs.get("model_kwargs"),
                 score=float(trial.value) if trial.value is not None else None,
                 trial_index=trial.number,
                 extras=None,
@@ -653,7 +656,7 @@ class ParameterOptimizer(BaseOptimizer):
             importance = {}
 
         if not importance or all(value == 0 for value in importance.values()):
-            importance = compute_sensitivity_from_trials(
+            importance = sensitivity_analysis(
                 completed_trials, expanded_parameter_space.parameters
             )
 
@@ -662,7 +665,7 @@ class ParameterOptimizer(BaseOptimizer):
             if is_single_prompt_optimization
             else best_tuned_prompts
         )
-        reporting.display_result(
+        reporting_utils.display_result(
             initial_score=baseline_score,
             best_score=best_score,
             prompt=display_prompt,

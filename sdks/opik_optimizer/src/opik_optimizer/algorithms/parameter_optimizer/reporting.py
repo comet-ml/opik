@@ -8,9 +8,6 @@ from rich.text import Text
 
 from ...reporting_utils import (  # noqa: F401
     convert_tqdm_to_rich,
-    display_configuration,
-    display_header,
-    display_result,
     get_console,
     suppress_opik_logs,
 )

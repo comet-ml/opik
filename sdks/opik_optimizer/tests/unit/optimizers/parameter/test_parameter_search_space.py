@@ -1,13 +1,11 @@
 import pytest
 
 import opik_optimizer
-from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
+    ParameterSpec,
 )
-from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import ParameterSpec
-from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
-    ParameterType,
-)
+from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
 
 
 def test_parameter_space_from_dict() -> None:

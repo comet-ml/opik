@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from optuna.trial import Trial
 
-    from .parameter_spec import ParameterSpec
+    from .search_ops import ParameterSpec
 
 
-def compute_sensitivity_from_trials(
+def sensitivity_analysis(
     trials: list[Trial], specs: list[ParameterSpec]
 ) -> dict[str, float]:
     """

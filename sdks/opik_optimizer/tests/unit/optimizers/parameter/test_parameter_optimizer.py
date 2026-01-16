@@ -11,13 +11,11 @@ from optuna.trial import TrialState
 
 from opik import Dataset
 from opik_optimizer import ChatPrompt, ParameterOptimizer
-from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
+    ParameterSpec,
 )
-from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import ParameterSpec
-from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
-    ParameterType,
-)
+from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
 
 
 def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:

@@ -7,7 +7,6 @@ from enum import Enum
 from typing import Literal
 
 
-# FIXME: Rename file to types.py
 class ParameterType(str, Enum):
     """Supported parameter distribution types."""
 
