@@ -299,6 +299,7 @@ redis:
           \ ${BASEDIR}/lib/redisbloom.so ${REDISBLOOM_ARGS}\n"
 
 altinity-clickhouse-operator:
+  enabled: true
   metrics:
     enabled: false
   serviceMonitor:
