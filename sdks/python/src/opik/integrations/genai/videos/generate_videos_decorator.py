@@ -67,18 +67,22 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
-        input_data, new_metadata = dict_utils.split_dict_by_keys(
+        input_data, _ = dict_utils.split_dict_by_keys(
             kwargs, keys=VIDEO_GENERATE_KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
 
-        # Add config to metadata if present
+        # Add config to both input and metadata
         config = kwargs.get("config")
         if config is not None:
+            if hasattr(config, "model_dump"):
+                input_data["config"] = config.model_dump(mode="json", exclude_none=True)
+            elif isinstance(config, dict):
+                input_data["config"] = {
+                    k: v for k, v in config.items() if v is not None
+                }
             metadata["config"] = config
 
-        metadata = dict_utils.deepmerge(metadata, new_metadata)
-
-        model = kwargs.get("model", None)
+        model = input_data.get("model", None)
 
         return arguments_helpers.StartSpanParameters(
             name=name,
