@@ -334,6 +334,7 @@ datasetExport:
   itemBatchSize: 100
   cleanupTimeout: 5m
   cleanupLockWaitTime: 1s
+  cleanupBatchSize: 100
 
 # LLM providers client configuration
 llmProviderClient:
