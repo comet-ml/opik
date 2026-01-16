@@ -16,6 +16,21 @@ import SortableMenuSection from "./SortableMenuSection";
 import { ColumnData } from "@/types/shared";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
+/**
+ * Computes the list of column IDs that should be selected when "Select all" is checked.
+ * Excludes columns specified in excludeFromSelectAll.
+ *
+ * @param allColumnsIds - All available column IDs
+ * @param excludeFromSelectAll - Column IDs to exclude from select all
+ * @returns Filtered list of column IDs for select all functionality
+ */
+export function computeSelectAllColumnsIds(
+  allColumnsIds: string[],
+  excludeFromSelectAll: string[],
+): string[] {
+  return allColumnsIds.filter((id) => !excludeFromSelectAll.includes(id));
+}
+
 type ColumnsButtonShared<TColumnData> = {
   columns: ColumnData<TColumnData>[];
   order: string[];
@@ -30,6 +45,7 @@ export type ColumnsButtonProps<TColumnData> = {
   selectedColumns: string[];
   onSelectionChange: (selectedColumns: string[]) => void;
   sections?: ColumnsButtonExtraSection<TColumnData>[];
+  excludeFromSelectAll?: string[]; // Column IDs to exclude when selecting all (but include when deselecting all)
 } & ColumnsButtonShared<TColumnData>;
 
 const ColumnsButton = <TColumnData,>({
@@ -39,6 +55,7 @@ const ColumnsButton = <TColumnData,>({
   order,
   onOrderChange,
   sections,
+  excludeFromSelectAll = [],
 }: ColumnsButtonProps<TColumnData>) => {
   const [search, setSearch] = useState("");
 
@@ -51,12 +68,34 @@ const ColumnsButton = <TColumnData,>({
     [columns, sections],
   );
 
+  // Columns to select when "Select all" is checked (excludes metadata items)
+  const selectAllColumnsIds = useMemo(
+    () => computeSelectAllColumnsIds(allColumnsIds, excludeFromSelectAll),
+    [allColumnsIds, excludeFromSelectAll],
+  );
+
   const allColumnsSelected = useMemo(() => {
-    return selectedColumns.length === allColumnsIds.length;
-  }, [selectedColumns, allColumnsIds]);
+    // Check if all non-excluded columns are selected
+    return (
+      selectAllColumnsIds.length > 0 &&
+      selectAllColumnsIds.every((id) => selectedColumns.includes(id))
+    );
+  }, [selectedColumns, selectAllColumnsIds]);
 
   const toggleColumns = (value: boolean) => {
-    onSelectionChange(value ? allColumnsIds : []);
+    if (value) {
+      // Selecting all: select all non-metadata columns + preserve any already-selected metadata items
+      const currentlySelectedMetadataItems = selectedColumns.filter((id) =>
+        excludeFromSelectAll.includes(id),
+      );
+      onSelectionChange([
+        ...selectAllColumnsIds,
+        ...currentlySelectedMetadataItems,
+      ]);
+    } else {
+      // Deselecting all: clear everything including metadata items
+      onSelectionChange([]);
+    }
   };
 
   const filteredColumns = useMemo(() => {
@@ -109,17 +148,22 @@ const ColumnsButton = <TColumnData,>({
           filteredSections.map((section, index) => {
             if (section.columns.length === 0) return null;
             const isFirst = index === 0;
+            const hasTitle = section.title && section.title.trim().length > 0;
 
             return (
-              <React.Fragment key={`fragment-${section.title}`}>
+              <React.Fragment key={`fragment-${section.title || index}`}>
                 {!(isFirst && filteredColumns.length === 0) && (
-                  <DropdownMenuSeparator key={`separator-${section.title}`} />
+                  <DropdownMenuSeparator
+                    key={`separator-${section.title || index}`}
+                  />
                 )}
-                <DropdownMenuLabel key={`label-${section.title}`}>
-                  {section.title}
-                </DropdownMenuLabel>
+                {hasTitle && (
+                  <DropdownMenuLabel key={`label-${section.title}`}>
+                    {section.title}
+                  </DropdownMenuLabel>
+                )}
                 <SortableMenuSection
-                  key={`sortable-section-${section.title}`}
+                  key={`sortable-section-${section.title || index}`}
                   columns={section.columns}
                   selectedColumns={selectedColumns}
                   onSelectionChange={onSelectionChange}
