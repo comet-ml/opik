@@ -5,25 +5,20 @@ This module contains functions for calculating improvements and creating result 
 """
 
 from typing import Any, cast
+from collections.abc import Sequence
 import copy
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
-from ....optimization_result import OptimizationResult
-from ....base_optimizer import OptimizationRound
+from ....base_optimizer import AlgorithmResult
+from ....optimization_result import (
+    OptimizationRound,
+    OptimizationTrial,
+)
 
 
 def calculate_improvement(current_score: float, previous_score: float) -> float:
-    """
-    Calculate the improvement percentage between scores.
-
-    Args:
-        current_score: Current score
-        previous_score: Previous score
-
-    Returns:
-        Improvement percentage
-    """
+    """Calculate the improvement percentage between scores."""
     return (
         (current_score - previous_score) / previous_score if previous_score > 0 else 0
     )
@@ -37,9 +32,12 @@ def create_round_data(
     evaluated_candidates: list[tuple[Any, float]],
     previous_best_score: float,
     improvement_this_round: float,
+    trial_index: int | None = None,
+    best_so_far: float | None = None,
+    stop_reason: str | None = None,
 ) -> OptimizationRound:
     """
-    Create an OptimizationRound object with the current round's data.
+    Create a normalized round entry using structured models.
 
     Args:
         round_num: Round number (0-indexed)
@@ -51,52 +49,58 @@ def create_round_data(
         improvement_this_round: Improvement in this round
 
     Returns:
-        OptimizationRound object
+        OptimizationRound representing the round entry
     """
     # For bundle prompts (dict), keep a representative prompt for logging/validation.
-    current_prompt_repr = (
-        next(iter(current_best_prompt.values()))
-        if isinstance(current_best_prompt, dict) and current_best_prompt
-        else current_best_prompt
-    )
-    best_prompt_repr = (
-        next(iter(best_prompt_overall.values()))
-        if isinstance(best_prompt_overall, dict) and best_prompt_overall
-        else best_prompt_overall
-    )
-
     generated_prompts_log: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
     for prompt, score in evaluated_candidates:
         improvement_vs_prev = calculate_improvement(score, previous_best_score)
         tool_entries: list[Any] = []
         if getattr(prompt, "tools", None):
             tool_entries = copy.deepcopy(list(prompt.tools or []))
 
+        prompt_payload: Any
         if isinstance(prompt, dict):
-            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-            prompt_payload: Any = {
-                name: p.get_messages() for name, p in prompt_dict.items()
-            }
+            prompt_payload = cast(dict[str, chat_prompt.ChatPrompt], prompt)
         else:
-            prompt_payload = prompt.get_messages()
+            prompt_payload = prompt
 
-        generated_prompts_log.append(
+        candidate_entry = {
+            "prompt": prompt_payload,
+            "tools": tool_entries,
+            "score": score,
+            "improvement": improvement_vs_prev,
+        }
+        generated_prompts_log.append(candidate_entry)
+        candidates.append(
             {
-                "prompt": prompt_payload,
-                "tools": tool_entries,
+                "id": str(hash(str(prompt_payload))),
                 "score": score,
-                "improvement": improvement_vs_prev,
+                "prompt": prompt_payload,
             }
         )
 
+    trials: list[OptimizationTrial] = []
+    for cand in candidates:
+        trials.append(
+            OptimizationTrial(
+                trial_index=trial_index,
+                score=cand.get("score"),
+                prompt=cand.get("prompt"),
+                extras={"improvement": cand.get("improvement")},
+            )
+        )
+
     return OptimizationRound(
-        round_number=round_num + 1,
-        current_prompt=current_prompt_repr,
-        current_score=current_best_score,
-        generated_prompts=generated_prompts_log,
-        best_prompt=best_prompt_repr,
+        round_index=round_num,
+        trials=trials,
         best_score=current_best_score,
-        improvement=improvement_this_round,
+        best_prompt=best_prompt_overall,
+        candidates=candidates,
+        generated_prompts=generated_prompts_log,
+        stop_reason=stop_reason,
+        extras={"improvement": improvement_this_round, "best_so_far": best_so_far},
     )
 
 
@@ -107,7 +111,7 @@ def create_result(
     initial_prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     best_score: float,
     initial_score: float,
-    rounds: list[OptimizationRound],
+    rounds: Sequence[OptimizationRound | dict[str, Any]],
     trials_requested: int | None,
     trials_completed: int | None,
     dataset_id: str | None,
@@ -119,26 +123,9 @@ def create_result(
     stopped_early: bool | None = None,
     stop_reason: str | None = None,
     stop_reason_details: dict[str, Any] | None = None,
-) -> OptimizationResult:
+) -> AlgorithmResult:
     """
-    Create the final OptimizationResult object.
-
-    Args:
-        optimizer_class_name: Name of the optimizer class
-        metric: Metric function
-        initial_prompt: Initial prompt messages
-        best_prompt: Best prompt messages
-        best_score: Best score achieved
-        initial_score: Initial score
-        rounds: List of optimization rounds
-        dataset_id: Optional dataset ID
-        optimization_id: Optional optimization ID
-        best_tools: Optional list of tools
-        llm_call_counter: Count of LLM calls
-        llm_calls_tools: Count of tool calls
-
-    Returns:
-        OptimizationResult object
+    Build an AlgorithmResult for meta-prompt flows (legacy helper).
     """
     details = {
         "rounds": rounds,
@@ -152,18 +139,25 @@ def create_result(
         "stopped_early": stopped_early,
         "stop_reason": stop_reason,
         "stop_reason_details": stop_reason_details,
+        "optimizer": optimizer_class_name,
+        "dataset_id": dataset_id,
+        "optimization_id": optimization_id,
+        "llm_calls": llm_call_counter,
+        "llm_calls_tools": llm_calls_tools,
     }
 
-    return OptimizationResult(
-        optimizer=optimizer_class_name,
-        prompt=prompt,
-        score=best_score,
-        initial_prompt=initial_prompt,
-        initial_score=initial_score,
-        metric_name=metric.__name__,
-        details=details,
-        llm_calls=llm_call_counter,
-        llm_calls_tools=llm_calls_tools,
-        dataset_id=dataset_id,
-        optimization_id=optimization_id,
+    best_prompts = prompt if isinstance(prompt, dict) else {"prompt": prompt}
+
+    normalized_history: list[dict[str, Any]] = []
+    for entry in rounds:
+        if isinstance(entry, OptimizationRound):
+            normalized_history.append(entry.to_dict())
+        elif isinstance(entry, dict):
+            normalized_history.append(entry)
+
+    return AlgorithmResult(
+        best_prompts=best_prompts,
+        best_score=best_score,
+        history=normalized_history,
+        metadata=details,
     )

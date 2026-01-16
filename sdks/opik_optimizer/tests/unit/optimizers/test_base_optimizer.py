@@ -22,8 +22,8 @@ import pytest
 
 from opik_optimizer.base_optimizer import (
     BaseOptimizer,
-    OptimizationRound,
     OptimizationContext,
+    AlgorithmResult,
 )
 from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
@@ -828,6 +828,18 @@ def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:
     optimizer.evaluate({"main": simple_chat_prompt})
     assert context.should_stop is True
     assert context.finish_reason == "perfect_score"
+    from opik_optimizer.optimization_result import OptimizationHistoryBuilder
+
+    builder = OptimizationHistoryBuilder()
+    builder.append(
+        round_index=0,
+        trial_index=0,
+        score=0.9,
+        best_score=0.9,
+        best_prompt=None,
+    )
+    entries = builder.get_entries()
+    assert entries[0]["best_so_far"] == 0.9
 
 
 def test_evaluate_sets_finish_reason_on_max_trials(simple_chat_prompt) -> None:
@@ -1129,46 +1141,46 @@ class TestHistoryManagement:
         """History should start empty."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        assert optimizer.get_history() == []
+        assert optimizer.get_history_entries() == []
 
     def test_add_to_history(self, simple_chat_prompt) -> None:
         """_add_to_history should add round data."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        round_data = OptimizationRound(
-            round_number=1,
-            current_prompt=simple_chat_prompt,
-            current_score=0.5,
-            generated_prompts=[],
-            best_prompt=simple_chat_prompt,
-            best_score=0.5,
-            improvement=0.0,
-        )
+        round_data = {
+            "round_index": 1,
+            "current_prompt": simple_chat_prompt,
+            "current_score": 0.5,
+            "generated_prompts": [],
+            "best_prompt": simple_chat_prompt,
+            "best_score": 0.5,
+            "improvement": 0.0,
+        }
 
         optimizer._add_to_history(round_data)
 
-        history = optimizer.get_history()
+        history = optimizer.get_history_entries()
         assert len(history) == 1
-        assert history[0].round_number == 1
+        assert history[0]["round_index"] == 1
 
     def test_cleanup_clears_history(self, simple_chat_prompt) -> None:
         """cleanup should clear the history."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        round_data = OptimizationRound(
-            round_number=1,
-            current_prompt=simple_chat_prompt,
-            current_score=0.5,
-            generated_prompts=[],
-            best_prompt=simple_chat_prompt,
-            best_score=0.5,
-            improvement=0.0,
-        )
+        round_data = {
+            "round_index": 1,
+            "current_prompt": simple_chat_prompt,
+            "current_score": 0.5,
+            "generated_prompts": [],
+            "best_prompt": simple_chat_prompt,
+            "best_score": 0.5,
+            "improvement": 0.0,
+        }
         optimizer._add_to_history(round_data)
 
         optimizer.cleanup()
 
-        assert optimizer.get_history() == []
+        assert optimizer.get_history_entries() == []
 
 
 class TestCleanup:
@@ -1974,7 +1986,6 @@ class TestDefaultOptimizePrompt:
         """Should call _run_optimization when baseline doesn't meet threshold."""
         mock_opik_client()
         from opik import Dataset
-        from opik_optimizer.optimization_result import OptimizationResult
 
         mock_ds = MagicMock(spec=Dataset)
         mock_ds.name = "test-dataset"
@@ -1986,11 +1997,11 @@ class TestDefaultOptimizePrompt:
         class DefaultOptimizer(BaseOptimizer):
             def run_optimization(self, context: OptimizationContext):
                 run_optimization_called.append(True)
-                return OptimizationResult(
-                    optimizer="DefaultOptimizer",
-                    prompt=list(context.prompts.values())[0],
-                    score=0.8,
-                    metric_name="test_metric",
+                return AlgorithmResult(
+                    best_prompts={"prompt": list(context.prompts.values())[0]},
+                    best_score=0.8,
+                    history=[],
+                    metadata={},
                 )
 
             def get_config(self, context: OptimizationContext):

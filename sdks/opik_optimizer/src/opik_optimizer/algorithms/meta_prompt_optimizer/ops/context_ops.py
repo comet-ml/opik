@@ -5,13 +5,14 @@ This module contains functions for building task context and history context.
 """
 
 from typing import Any
+from collections.abc import Sequence
 import logging
 import random
 import re
 
 import opik
-from ....base_optimizer import OptimizationRound
 from ....api_objects.types import MetricFunction
+from ....optimization_result import OptimizationRound
 from .. import prompts as meta_prompts
 
 logger = logging.getLogger(__name__)
@@ -229,7 +230,7 @@ def get_task_context(
 
 
 def build_history_context(
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
     hall_of_fame: Any | None = None,
     pretty_mode: bool = True,
     top_prompts_per_round: int = DEFAULT_TOP_PROMPTS_PER_RECENT_ROUND,
@@ -285,7 +286,9 @@ def build_history_context(
         context += "\n" + "=" * 80 + "\n"
 
     # Also show recent rounds for temporal context (last 3 rounds)
-    if previous_rounds:
+    rounds_list = list(previous_rounds)
+
+    if rounds_list:
         context += "\nRecent Rounds - What We Just Tried:\n"
         context += "=" * 80 + "\n"
         context += (
@@ -297,13 +300,22 @@ def build_history_context(
         context += (
             "- DO NOT generate similar variations of recent low-scoring prompts\n\n"
         )
-        for round_data in reversed(previous_rounds[-3:]):
-            context += f"\nRound {round_data.round_number}:\n"
-            context += f"Best score this round: {round_data.best_score:.4f}\n"
+        for round_data in reversed(rounds_list[-3:]):
+            if not isinstance(round_data, dict):
+                try:
+                    round_data = round_data.to_dict()  # type: ignore[attr-defined]
+                except Exception:
+                    continue
+
+            round_index = round_data.get("round_index", 0)
+            best_score = round_data.get("best_score", float("nan"))
+            context += f"\nRound {round_index + 1}:\n"
+            context += f"Best score this round: {best_score:.4f}\n"
             context += "Top prompts generated:\n"
 
+            generated = round_data.get("generated_prompts") or []
             sorted_generated = sorted(
-                round_data.generated_prompts,
+                generated,
                 key=lambda p: p.get("score", -float("inf")),
                 reverse=True,
             )

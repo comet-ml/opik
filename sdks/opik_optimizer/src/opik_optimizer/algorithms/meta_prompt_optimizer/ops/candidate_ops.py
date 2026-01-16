@@ -8,6 +8,7 @@ import ast
 import copy
 from dataclasses import dataclass
 from typing import Any
+from collections.abc import Sequence
 from collections.abc import Callable
 import logging
 import json
@@ -18,7 +19,7 @@ from pydantic import BaseModel, Field
 from ....api_objects import chat_prompt, types
 from ....api_objects.types import MetricFunction
 from .... import _llm_calls
-from ....base_optimizer import OptimizationRound
+from ....optimization_result import OptimizationRound
 from .. import prompts as meta_prompts
 from .. import reporting
 from .... import reporting_utils
@@ -26,27 +27,6 @@ from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 
 logger = logging.getLogger(__name__)
-
-
-def _build_metadata_for_call(
-    optimizer: Any,
-    call_type: str,
-    optimization_id: str | None = None,
-    project_name: str | None = None,
-) -> dict[str, Any]:
-    """Build LiteLLM metadata payloads for trace attribution."""
-    metadata_for_call: dict[str, Any] = {
-        "optimizer_name": optimizer.__class__.__name__,
-        "opik_call_type": call_type,
-    }
-    opik_metadata: dict[str, Any] = {}
-    if optimization_id:
-        opik_metadata["optimization_id"] = optimization_id
-    if project_name:
-        opik_metadata["project_name"] = project_name
-    if opik_metadata:
-        metadata_for_call["opik"] = opik_metadata
-    return metadata_for_call
 
 
 class AgentPromptUpdate(BaseModel):
@@ -226,7 +206,7 @@ def generate_candidate_prompts(
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
     round_num: int,
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
     metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
@@ -320,11 +300,8 @@ def generate_candidate_prompts(
 
         try:
             # Prepare metadata for optimization algorithm call
-            metadata_for_call = _build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm",
-                optimization_id=optimization_id,
-                project_name=project_name,
+            metadata_for_call = _llm_calls.build_llm_call_metadata(
+                optimizer, "optimization_algorithm"
             )
 
             content = _llm_calls.call_model(
@@ -494,7 +471,7 @@ def generate_agent_bundle_candidates(
     current_prompts: dict[str, chat_prompt.ChatPrompt],
     best_score: float,
     round_num: int,
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
     metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
@@ -565,11 +542,8 @@ def generate_agent_bundle_candidates(
         )
 
         try:
-            metadata_for_call = _build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm",
-                optimization_id=optimization_id,
-                project_name=project_name,
+            metadata_for_call = _llm_calls.build_llm_call_metadata(
+                optimizer, "optimization_algorithm"
             )
 
             response = _llm_calls.call_model(
@@ -685,7 +659,7 @@ def generate_synthesis_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
     metric: MetricFunction,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -711,6 +685,7 @@ def generate_synthesis_prompts(
         List of comprehensive synthesis prompts
     """
     num_synthesis_prompts = getattr(optimizer, "synthesis_prompts_per_round", 2)
+    previous_rounds_list = list(previous_rounds)
 
     with reporting.display_candidate_generation_report(
         num_synthesis_prompts,
@@ -752,9 +727,15 @@ def generate_synthesis_prompts(
         if not top_prompts_with_scores:
             logger.warning("Hall of Fame empty - using recent rounds for synthesis")
             # Collect best prompts from recent rounds
-            for round_data in reversed(previous_rounds[-5:]):
+            for round_data in reversed(previous_rounds_list[-5:]):
+                if not isinstance(round_data, dict):
+                    try:
+                        round_data = round_data.to_dict()  # type: ignore[attr-defined]
+                    except Exception:
+                        continue
+                generated = round_data.get("generated_prompts", [])
                 sorted_generated = sorted(
-                    round_data.generated_prompts,
+                    generated,
                     key=lambda p: p.get("score", -float("inf")),
                     reverse=True,
                 )
@@ -813,11 +794,8 @@ def generate_synthesis_prompts(
 
         try:
             # Prepare metadata for synthesis call
-            metadata_for_call = _build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm_synthesis",
-                optimization_id=optimization_id,
-                project_name=project_name,
+            metadata_for_call = _llm_calls.build_llm_call_metadata(
+                optimizer, "optimization_algorithm_synthesis"
             )
 
             content = _llm_calls.call_model(

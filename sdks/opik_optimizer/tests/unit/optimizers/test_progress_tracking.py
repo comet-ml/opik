@@ -14,7 +14,11 @@ from typing import Any
 
 from opik import Dataset
 
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
+from opik_optimizer.base_optimizer import (
+    BaseOptimizer,
+    OptimizationContext,
+    AlgorithmResult,
+)
 from opik_optimizer.api_objects.chat_prompt import ChatPrompt
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.algorithms.meta_prompt_optimizer import MetaPromptOptimizer
@@ -28,7 +32,7 @@ class ConcreteOptimizer(BaseOptimizer):
         super().__init__(**kwargs)
         self.num_rounds = num_rounds
 
-    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
+    def run_optimization(self, context: OptimizationContext):
         prompts = context.prompts
 
         # Initialize progress tracking (as real optimizers do)
@@ -44,12 +48,11 @@ class ConcreteOptimizer(BaseOptimizer):
                 break
 
         context.finish_reason = "completed"
-        return OptimizationResult(
-            prompt=list(prompts.values())[0],
-            score=context.current_best_score or 0.0,
-            metric_name=context.metric.__name__,
+        return AlgorithmResult(
+            best_prompts=prompts,
+            best_score=context.current_best_score or 0.0,
             history=[],
-            details={"test": True},
+            metadata={"test": True},
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
@@ -106,9 +109,7 @@ class TestProgressTrackingDuringOptimization:
         captured_total_rounds = []
 
         class RoundTrackingOptimizer(ConcreteOptimizer):
-            def run_optimization(
-                self, context: OptimizationContext
-            ) -> OptimizationResult:
+            def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
                 prompts = context.prompts
 
                 # Initialize progress tracking
@@ -126,12 +127,11 @@ class TestProgressTrackingDuringOptimization:
                         break
 
                 context.finish_reason = "completed"
-                return OptimizationResult(
-                    prompt=list(prompts.values())[0],
-                    score=context.current_best_score or 0.0,
-                    metric_name=context.metric.__name__,
+                return AlgorithmResult(
+                    best_prompts=prompts,
+                    best_score=context.current_best_score or 0.0,
                     history=[],
-                    details={"test": True},
+                    metadata={"test": True},
                 )
 
         optimizer = RoundTrackingOptimizer(verbose=0)

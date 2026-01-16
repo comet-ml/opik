@@ -2,7 +2,7 @@
 
 import contextlib
 from collections.abc import Callable
-from typing import Any
+from typing import Any, no_type_check
 from unittest.mock import MagicMock
 
 from datetime import datetime, timezone
@@ -573,11 +573,11 @@ class TestReporterLifecycle:
         orig_set = optimizer._set_reporter
         orig_clear = optimizer._clear_reporter
 
-        def tracking_set(reporter):
+        def tracking_set(reporter: Any) -> None:
             events.append("set")
             orig_set(reporter)
 
-        def tracking_clear():
+        def tracking_clear() -> None:
             events.append("clear")
             orig_clear()
 
@@ -588,7 +588,7 @@ class TestReporterLifecycle:
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
         class FakeTrial:
-            def __init__(self, number: int):
+            def __init__(self, number: int) -> None:
                 self.number = number
                 self.value: float | None = None
                 self.user_attrs: dict[str, Any] = {}
@@ -604,6 +604,7 @@ class TestReporterLifecycle:
             ) -> float:
                 return (low + high) / 2
 
+        @no_type_check
         class FakeStudy:
             def __init__(self) -> None:
                 self.trials: list[FakeTrial] = []
@@ -621,9 +622,12 @@ class TestReporterLifecycle:
                 trial.value = objective(trial)
                 self.trials.append(trial)
 
+        def make_study(direction: str, sampler: Any) -> FakeStudy:
+            return FakeStudy()
+
         monkeypatch.setattr(
             "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.optuna.create_study",
-            lambda direction, sampler: FakeStudy(),
+            make_study,
         )
 
         @contextlib.contextmanager

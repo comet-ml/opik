@@ -9,6 +9,7 @@ from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResul
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
+from ...optimization_result import OptimizationRound, OptimizationTrial
 from ...utils.prompt_library import PromptOverrides
 
 from .hierarchical_root_cause_analyzer import HierarchicalRootCauseAnalyzer
@@ -245,6 +246,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None,
         attempt: int,
         max_attempts: int,
+        context: OptimizationContext,
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], float, EvaluationResult]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
@@ -333,6 +335,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 if fallback_scores
                 else best_score
             )
+            fallback_score = self._record_trial(context, best_prompts, fallback_score)
             return best_prompts, fallback_score, fallback_result
 
         best_prompt_bundle = improved_chat_prompts_candidates[0]
@@ -348,6 +351,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         best_score_local = sum(
             [x.score_results[0].value for x in best_result.test_results]
         ) / len(best_result.test_results)
+        best_score_local = self._record_trial(
+            context, best_prompt_bundle, best_score_local
+        )
 
         # Evaluate remaining candidates and keep the best-scoring bundle.
         for idx, improved_chat_prompts in enumerate(
@@ -369,6 +375,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     for x in improved_experiment_result.test_results
                 ]
             ) / len(improved_experiment_result.test_results)
+            improved_score = self._record_trial(
+                context, improved_chat_prompts, improved_score
+            )
 
             if improved_score > best_score_local:
                 best_score_local = improved_score
@@ -423,6 +432,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         iteration = 0
         previous_iteration_score: float = initial_score
+        self._history_builder.clear()
 
         while context.trials_completed < max_trials:
             # Check should_stop flag at start of each iteration
@@ -521,42 +531,45 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             n_samples=n_samples,
                             attempt=attempt,
                             max_attempts=max_attempts,
+                            context=context,
                         )
-                        # Increment context.trials_completed (single source of truth)
-                        context.trials_completed += 1
 
-                        # Check for perfect score early stop
-                        if (
-                            self.skip_perfect_score
-                            and improved_score >= self.perfect_score
-                        ):
-                            context.should_stop = True
-                            context.finish_reason = "perfect_score"
-                            break
+                    # Check for perfect score early stop
+                    if (
+                        self.skip_perfect_score
+                        and improved_score is not None
+                        and improved_score >= self.perfect_score
+                    ):
+                        context.should_stop = True
+                        context.finish_reason = "perfect_score"
+                        break
 
-                        # Check if we got improvement
-                        if improved_score > best_score:
-                            reporting.display_iteration_improvement(
-                                improvement=(improved_score - best_score) / best_score
+                    # Check if we got improvement
+                    if (
+                        best_score is not None
+                        and improved_score is not None
+                        and improved_score > best_score
+                    ):
+                        reporting.display_iteration_improvement(
+                            improvement=(
+                                (improved_score - best_score) / best_score
                                 if best_score > 0
-                                else 0,
-                                current_score=improved_score,
-                                best_score=best_score,
-                                verbose=self.verbose,
-                            )
-                            break
+                                else 0
+                            ),
+                            current_score=float(improved_score),
+                            best_score=float(best_score),
+                            verbose=self.verbose,
+                        )
+                        break
 
-                        # No improvement - should we retry?
-                        if (
-                            attempt < max_attempts
-                            and context.trials_completed < max_trials
-                        ):
-                            reporting.display_retry_attempt(
-                                attempt=attempt,
-                                max_attempts=max_attempts,
-                                failure_mode_name=root_cause.name,
-                                verbose=self.verbose,
-                            )
+                    # No improvement - should we retry?
+                    if attempt < max_attempts and context.trials_completed < max_trials:
+                        reporting.display_retry_attempt(
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            failure_mode_name=root_cause.name,
+                            verbose=self.verbose,
+                        )
 
                 # Break out of failure mode loop if flag is set
                 if self._should_stop_optimization or context.should_stop:
@@ -566,6 +579,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 if (
                     improved_score is not None
                     and improved_chat_prompts is not None
+                    and best_score is not None
                     and improved_score > best_score
                 ):
                     improvement = self._calculate_improvement(
@@ -587,13 +601,39 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     )
 
             # Check for convergence after iteration
-            iteration_improvement = self._calculate_improvement(
-                best_score, previous_iteration_score
+            iteration_improvement = (
+                self._calculate_improvement(best_score, previous_iteration_score)
+                if best_score is not None and previous_iteration_score is not None
+                else 0.0
             )
 
             logger.info(
-                f"Iteration {iteration} complete. Score: {best_score:.4f}, "
+                f"Round {iteration} complete. Score: {best_score:.4f}, "
                 f"Improvement: {iteration_improvement:.2%}"
+            )
+
+            self._history_builder.append_entry(
+                OptimizationRound(
+                    round_index=iteration - 1,
+                    trials=[
+                        OptimizationTrial(
+                            trial_index=context.trials_completed,
+                            score=best_score,
+                            prompt=best_prompts,
+                            extras={
+                                "failure_modes": [
+                                    fm.name
+                                    for fm in hierarchical_analysis.unified_failure_modes
+                                ],
+                                "trials_completed": context.trials_completed,
+                            },
+                        )
+                    ],
+                    best_score=best_score,
+                    best_prompt=best_prompts,
+                    stop_reason=context.finish_reason if context.should_stop else None,
+                    extras={"improvement": iteration_improvement},
+                )
             )
 
             # Stop if improvement is below convergence threshold
@@ -612,7 +652,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         return AlgorithmResult(
             best_prompts=best_prompts,
             best_score=best_score,
-            history=[],  # HierarchicalReflective doesn't track per-round history
+            history=self.get_history_entries(),
             metadata={
                 # Algorithm-specific fields only (framework fields handled by base)
                 "n_threads": self.n_threads,

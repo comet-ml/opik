@@ -18,6 +18,7 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...base_optimizer import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
+from ...optimization_result import OptimizationRound, OptimizationTrial
 from ...agents import OptimizableAgent
 from ... import _throttle, task_evaluator
 from ...utils.prompt_library import PromptOverrides
@@ -676,50 +677,53 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_objective, n_trials=n_trials, show_progress_bar=False
         )
 
-        optuna_history_processed = []
+        self._history_builder.clear()
         for trial in study.trials:
-            if trial.state == optuna.trial.TrialState.COMPLETE:
-                trial_config = trial.user_attrs.get("config", {})
-                prompt_cand_display = trial_config.get(
-                    "message_list"
-                )  # Default to None
-
-                score_val = (
-                    trial.value
-                )  # This can be None if trial failed to produce a score
-                duration_val = None
-                if trial.datetime_complete and trial.datetime_start:
-                    duration_val = (
-                        trial.datetime_complete - trial.datetime_start
-                    ).total_seconds()
-
-                iter_detail = {
-                    "iteration": trial.number + 1,
-                    "timestamp": (
-                        trial.datetime_start.isoformat()
-                        if trial.datetime_start
-                        else datetime.now().isoformat()
-                    ),
-                    "prompt_candidate": prompt_cand_display,
-                    "parameters_used": {
-                        "optuna_params": trial.user_attrs.get("config", {}),
-                        "example_indices": trial.user_attrs.get(
-                            "example_indices", []
-                        ),  # Default to empty list
-                    },
-                    "scores": [
-                        {
-                            "metric_name": metric.__name__,
-                            "score": score_val,  # Can be None
-                        }
-                    ],
-                    "duration_seconds": duration_val,
-                }
-                optuna_history_processed.append(iter_detail)
-            else:
+            if trial.state != optuna.trial.TrialState.COMPLETE:
                 logger.warning(
                     f"Skipping trial {trial.number} from history due to state: {trial.state}. Value: {trial.value}"
                 )
+                continue
+
+            trial_config = trial.user_attrs.get("config", {})
+            prompt_cand_display = trial_config.get("message_list")  # Default to None
+            score_val = (
+                trial.value
+            )  # This can be None if trial failed to produce a score
+            duration_val = None
+            if trial.datetime_complete and trial.datetime_start:
+                duration_val = (
+                    trial.datetime_complete - trial.datetime_start
+                ).total_seconds()
+
+            timestamp = (
+                trial.datetime_start.isoformat()
+                if trial.datetime_start
+                else datetime.now().isoformat()
+            )
+            sampler_info = type(study.sampler).__name__ if study.sampler else None
+            pruner_info = type(study.pruner).__name__ if study.pruner else None
+            self._history_builder.append_trial(
+                round_index=trial.number,
+                trial_index=trial.number,
+                score=score_val,
+                prompt=prompt_cand_display,
+                timestamp=timestamp,
+                trial_extras={
+                    "parameters_used": {
+                        "optuna_params": trial.user_attrs.get("config", {}),
+                        "example_indices": trial.user_attrs.get("example_indices", []),
+                    },
+                    "duration_seconds": duration_val,
+                },
+                round_extras={
+                    "sampler": sampler_info,
+                    "pruner": pruner_info,
+                    "study_direction": study.direction.name
+                    if study.direction
+                    else None,
+                },
+            )
 
         best_trial = study.best_trial
         best_score = best_trial.value
@@ -745,7 +749,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return AlgorithmResult(
             best_prompts=best_prompts,
             best_score=best_score,
-            history=optuna_history_processed,
+            history=self.get_history_entries(),
             metadata={
                 # Algorithm-specific fields only (framework fields handled by base)
                 "prompt_parameter": best_trial.user_attrs.get("config", {}),

@@ -5,13 +5,14 @@ from opik import Dataset
 from ...base_optimizer import (
     AlgorithmResult,
     BaseOptimizer,
-    OptimizationRound,
     OptimizationContext,
 )
 from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ... import _throttle
+from ...optimization_result import OptimizationRound
+from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
@@ -292,7 +293,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Use baseline score from context (computed by base class)
         initial_score = cast(float, context.baseline_score)
         best_score = initial_score
-        rounds: list[OptimizationRound] = []
+        rounds: list[OptimizationRound | dict[str, Any]] = []
+        self._history_builder.clear()
 
         # Calculate the maximum number of rounds
         self._total_rounds = max(1, max_trials // self.prompts_per_round + 1)
@@ -495,9 +497,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                 evaluated_candidates=prompt_scores,
                 previous_best_score=previous_best_score,
                 improvement_this_round=improvement,
+                trial_index=context.trials_completed,
+                stop_reason=context.finish_reason if context.should_stop else None,
             )
             rounds.append(round_data)
-            self._add_to_history(round_data)
+            self._history_builder.append_entry(round_data)
 
             if best_cand_score_avg > best_score:
                 best_score = best_cand_score_avg
@@ -509,15 +513,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         # finish_reason, stopped_early, stop_reason are handled by base class
         self._clear_reporter()
 
-        # Build history for result (convert OptimizationRound to dicts)
-        history = [
-            {
-                "round": r.round_number,
-                "best_score": r.best_score,
-                "improvement": r.improvement,
-            }
-            for r in rounds
-        ]
+        history = self.get_history_entries()
 
         return AlgorithmResult(
             best_prompts=best_prompts
@@ -543,27 +539,29 @@ class MetaPromptOptimizer(BaseOptimizer):
         evaluated_candidates: list[tuple[Any, float]],
         previous_best_score: float,
         improvement_this_round: float,
+        trial_index: int | None = None,
+        stop_reason: str | None = None,
     ) -> OptimizationRound:
-        """Create an OptimizationRound object with the current round's data (delegates to ops)."""
-        # For bundles, use a representative ChatPrompt to keep validation happy.
-        current_prompt_repr = (
-            next(iter(current_best_prompt.values()))
-            if isinstance(current_best_prompt, dict) and current_best_prompt
-            else current_best_prompt
-        )
-        best_prompt_repr = (
-            next(iter(best_prompt_overall.values()))
-            if isinstance(best_prompt_overall, dict) and best_prompt_overall
-            else best_prompt_overall
-        )
+        """Create a normalized round entry (delegates to ops)."""
         return result_ops.create_round_data(
             round_num=round_num,
-            current_best_prompt=current_prompt_repr,
+            current_best_prompt=current_best_prompt,
             current_best_score=current_best_score,
-            best_prompt_overall=best_prompt_repr,
+            best_prompt_overall=best_prompt_overall,
             evaluated_candidates=evaluated_candidates,
             previous_best_score=previous_best_score,
             improvement_this_round=improvement_this_round,
+            trial_index=trial_index,
+            best_so_far=self._context.current_best_score
+            if self._context is not None
+            else None,
+            stop_reason=stop_reason
+            if stop_reason is not None
+            else (
+                getattr(self._context, "finish_reason", None)
+                if self._context is not None
+                else None
+            ),
         )
 
     def _get_task_context(self, metric: MetricFunction) -> tuple[str, int]:
@@ -578,13 +576,15 @@ class MetaPromptOptimizer(BaseOptimizer):
             extract_metric_understanding=self.extract_metric_understanding,
         )
 
-    def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
+    def _build_history_context(
+        self, previous_rounds: Sequence[OptimizationRound | dict[str, Any]]
+    ) -> str:
         """Build context from Hall of Fame and previous optimization rounds."""
         top_prompts_to_show = max(
             self.prompts_per_round, self.synthesis_prompts_per_round
         )
         return context_ops.build_history_context(
-            previous_rounds,
+            list(previous_rounds),
             hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
             pretty_mode=self.prettymode_prompt_history,
             top_prompts_per_round=top_prompts_to_show,

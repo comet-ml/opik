@@ -15,9 +15,9 @@ from deap import creator as _creator
 from opik_optimizer.base_optimizer import (
     AlgorithmResult,
     BaseOptimizer,
-    OptimizationRound,
     OptimizationContext,
 )
+from opik_optimizer.optimization_result import OptimizationRound, OptimizationTrial
 from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 
@@ -490,7 +490,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._current_round = 0
         self._total_rounds = self.num_generations
 
-        self._history: list[OptimizationRound] = []
+        self._history_builder.clear()
         self._best_fitness_history = []
         self._generations_without_improvement = 0
         self._current_population = []
@@ -644,8 +644,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     current_best_on_front
                 )
 
-            # Use first prompt as representative for logging
-            representative_prompt = list(best_prompts_overall.values())[0]
             if self.enable_moo:
                 logger.info(
                     f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompts: {len(best_prompts_overall)}"
@@ -655,23 +653,31 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
                 )
 
-            # Simplified history logging for this transition
-            initial_round_data = OptimizationRound(
-                round_number=0,
-                current_prompt=representative_prompt,  # Representative best
-                current_score=best_primary_score_overall,
-                generated_prompts=[
+            initial_round = OptimizationRound(
+                round_index=0,
+                trials=[
+                    OptimizationTrial(
+                        trial_index=context.trials_completed,
+                        score=best_primary_score_overall,
+                        prompt=best_prompts_overall,
+                    )
+                ],
+                best_score=best_primary_score_overall,
+                best_prompt=best_prompts_overall,
+                candidates=[
                     {
-                        "prompt": representative_prompt,
+                        "id": "gen0_ind0",
                         "score": best_primary_score_overall,
-                        "trial_scores": [best_primary_score_overall],
+                        "prompt": best_prompts_overall,
                     }
                 ],
-                best_prompt=representative_prompt,
-                best_score=best_primary_score_overall,
-                improvement=0.0,
+                extras={
+                    "stopped": context.should_stop,
+                    "stop_reason": context.finish_reason,
+                    "improvement": 0.0,
+                },
             )
-            self._add_to_history(initial_round_data)
+            self._history_builder.append_entry(initial_round)
 
         generation_idx = 0
         with reporting.start_evolutionary_algo(verbose=self.verbose) as evo_reporter:
@@ -769,26 +775,65 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
 
                     # History logging for this transition
-                    representative_prompt = list(best_prompts_overall.values())[0]
-                    gen_round_data = OptimizationRound(
-                        round_number=generation_idx,
-                        current_prompt=representative_prompt,  # Representative best
-                        current_score=best_primary_score_overall,
-                        generated_prompts=[
-                            {"prompt": str(dict(ind)), "score": ind.fitness.values[0]}
-                            for ind in deap_population
-                            if ind.fitness.valid
-                        ],
-                        best_prompt=representative_prompt,
-                        best_score=best_primary_score_overall,
-                        improvement=(
-                            (best_primary_score_overall - initial_primary_score)
-                            / abs(initial_primary_score)
-                            if initial_primary_score and initial_primary_score != 0
-                            else (1.0 if best_primary_score_overall > 0 else 0.0)
-                        ),
+                    candidate_entries: list[dict[str, Any]] = []
+                    for idx, ind in enumerate(deap_population):
+                        if not ind.fitness.valid:
+                            continue
+                        candidate_prompts = self._individual_to_prompts(ind)
+                        primary_score = ind.fitness.values[0]
+                        entry: dict[str, Any] = {
+                            "id": f"gen{generation_idx}_ind{idx}",
+                            "score": primary_score,
+                            "prompt": candidate_prompts,
+                        }
+                        metrics: dict[str, Any] | None = None
+                        if self.enable_moo and len(ind.fitness.values) > 1:
+                            metrics = {
+                                "primary": ind.fitness.values[0],
+                                "length": ind.fitness.values[1],
+                            }
+                            entry["metrics"] = metrics
+                        candidate_entries.append(entry)
+                        self._history_builder.append_trial(
+                            round_index=generation_idx,
+                            trial_index=context.trials_completed,
+                            score=primary_score,
+                            prompt=candidate_prompts,
+                            metrics=metrics,
+                        )
+
+                    self._history_builder.append_entry(
+                        OptimizationRound(
+                            round_index=generation_idx,
+                            best_score=best_primary_score_overall,
+                            best_prompt=best_prompts_overall,
+                            candidates=candidate_entries,
+                            extras={
+                                "pareto_front": [
+                                    {
+                                        "primary": ind.fitness.values[0],
+                                        "length": ind.fitness.values[1],
+                                    }
+                                    for ind in hof
+                                ]
+                                if self.enable_moo and hof
+                                else None,
+                                "stopped": context.should_stop,
+                                "stop_reason": context.finish_reason,
+                                "improvement": (
+                                    (best_primary_score_overall - initial_primary_score)
+                                    / abs(initial_primary_score)
+                                    if initial_primary_score
+                                    and initial_primary_score != 0
+                                    else (
+                                        1.0 if best_primary_score_overall > 0 else 0.0
+                                    )
+                                ),
+                                "best_so_far": best_primary_score_overall,
+                            },
+                            stop_reason=context.finish_reason,
+                        )
                     )
-                    self._add_to_history(gen_round_data)
             finally:
                 if context.finish_reason == "max_trials":
                     reporting.display_message(
@@ -913,6 +958,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         return AlgorithmResult(
             best_prompts=final_best_prompts,
             best_score=final_primary_score,
-            history=[x.model_dump() for x in self.get_history()],
+            history=self.get_history_entries(),
             metadata=metadata,
         )

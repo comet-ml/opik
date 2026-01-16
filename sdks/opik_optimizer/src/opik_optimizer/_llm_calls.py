@@ -13,6 +13,10 @@ from opik.integrations.litellm import track_completion
 
 from . import _throttle
 from . import utils as _utils
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    pass
 
 
 def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
@@ -54,6 +58,35 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
         updated_metadata.pop("opik", None)
     updated_params["metadata"] = updated_metadata
     return updated_params
+
+
+def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
+    """
+    Build standardized metadata for LLM calls across optimizers.
+
+    Args:
+        optimizer: Optimizer instance (provides context/ids when available).
+        call_type: Logical call type label (e.g., "candidate_generation").
+
+    Returns:
+        Metadata dict suitable for LiteLLM/OpenAI calls.
+    """
+    metadata: dict[str, Any] = {
+        "optimizer_name": getattr(optimizer, "__class__", type("X", (), {})).__name__
+        if optimizer is not None
+        else "UnknownOptimizer",
+        "opik_call_type": call_type,
+    }
+    try:
+        ctx = getattr(optimizer, "_context", None)
+        if ctx and getattr(ctx, "optimization_id", None):
+            metadata["opik"] = {
+                "optimization_id": ctx.optimization_id,
+                "project_name": getattr(ctx, "project_name", None),
+            }
+    except Exception:
+        pass
+    return metadata
 
 
 logger = logging.getLogger(__name__)

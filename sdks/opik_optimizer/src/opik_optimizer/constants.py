@@ -3,11 +3,16 @@
 import os
 import re
 
-
+# Public API Defaults
 DEFAULT_PROJECT_NAME = "Optimization"
 DEFAULT_EVAL_THREADS = 12
+
+# Internal API Defaults
 MIN_EVAL_THREADS = 1
 MAX_EVAL_THREADS = 64
+
+# Schema and Types
+OPTIMIZATION_RESULT_SCHEMA_VERSION = "v1"
 
 
 def resolve_project_name(project_name: str | None = None) -> str:

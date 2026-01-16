@@ -14,10 +14,10 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer, OptimizationContext
+from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...optimization_result import OptimizationResult
 from ... import reporting_utils
 from .parameter_search_space import ParameterSearchSpace
 from .search_space_types import ParameterType
@@ -172,7 +172,7 @@ class ParameterOptimizer(BaseOptimizer):
                 when provided it must be a valid UUIDv7 string.
 
         Returns:
-            OptimizationResult: Structured result describing the best parameters found
+            AlgorithmResult with best prompts, score, history, and metadata.
         """
         # Set project name
         self.project_name = project_name
@@ -237,8 +237,6 @@ class ParameterOptimizer(BaseOptimizer):
             merged_kwargs.pop("n", None)
             base_p.model_kwargs = merged_kwargs
             base_prompts[name] = base_p
-
-        metric_name = metric.__name__
 
         # Create optimization run using base class helper
         optimization = self._create_optimization_run(dataset, metric, optimization_id)
@@ -352,6 +350,7 @@ class ParameterOptimizer(BaseOptimizer):
 
         # Use first prompt for model info in history
         first_prompt = list(base_prompts.values())[0]
+        self._history_builder.clear()
         history: list[dict[str, Any]] = [
             {
                 "iteration": 0,
@@ -502,7 +501,8 @@ class ParameterOptimizer(BaseOptimizer):
             )
             history.append(
                 {
-                    "iteration": trial.number + 1,
+                    "round_index": trial.number,
+                    "trial_index": trial.number,
                     "timestamp": timestamp.isoformat(),
                     "parameters": trial.user_attrs.get("parameters", {}),
                     "score": float(trial.value),
@@ -618,22 +618,33 @@ class ParameterOptimizer(BaseOptimizer):
                 or trial.datetime_start
                 or datetime.now(timezone.utc)
             )
-            if not any(entry["iteration"] == trial.number + 1 for entry in history):
-                history.append(
-                    {
-                        "iteration": trial.number + 1,
-                        "timestamp": timestamp.isoformat(),
+            if not any(
+                entry.get("round_index") == trial.number
+                or entry.get("iteration") == trial.number + 1
+                for entry in history
+            ):
+                trial_entry = self._history_builder.append_trial(
+                    round_index=trial.number,
+                    trial_index=trial.number,
+                    score=float(trial.value) if trial.value is not None else None,
+                    prompt=trial.user_attrs.get("model_kwargs"),
+                    timestamp=timestamp.isoformat(),
+                    trial_extras={
                         "parameters": trial.user_attrs.get("parameters", {}),
-                        "score": float(trial.value),
-                        "model_kwargs": trial.user_attrs.get("model_kwargs"),
                         "model": trial.user_attrs.get("model"),
                         "stage": trial.user_attrs.get("stage", current_stage),
-                    }
+                    },
                 )
+                history.append(trial_entry)
+
+        for entry in history:
+            # Entries already normalized by append_trial; ensure merged into builder
+            self._history_builder.append_entry(entry)
 
         rounds_summary = [
             {
-                "iteration": trial.number + 1,
+                "round_index": trial.number,
+                "trial_index": trial.number,
                 "parameters": trial.user_attrs.get("parameters", {}),
                 "score": float(trial.value) if trial.value is not None else None,
                 "model": trial.user_attrs.get("model"),
@@ -721,9 +732,9 @@ class ParameterOptimizer(BaseOptimizer):
             initial_prompt=initial_prompt_result,
             initial_score=baseline_score,
             score=best_score,
-            metric_name=metric_name,
+            metric_name=metric.__name__,
             details=details,
-            history=history,
+            history=self.get_history_entries(),
             llm_calls=self.llm_call_counter,
             llm_calls_tools=self.llm_calls_tools_counter,
             optimization_id=self.current_optimization_id,

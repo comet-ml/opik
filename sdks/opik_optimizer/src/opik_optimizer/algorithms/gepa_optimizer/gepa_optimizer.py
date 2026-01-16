@@ -4,6 +4,7 @@ from typing import Any, cast
 from opik import Dataset
 
 from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
+from ...optimization_result import OptimizationRound, OptimizationTrial
 from ...reporting_utils import (
     convert_tqdm_to_rich,
     suppress_opik_logs,
@@ -86,6 +87,7 @@ class GepaOptimizer(BaseOptimizer):
         self.n_threads = n_threads
         self._adapter_metric_calls = 0
         self._adapter = None  # Will be set during optimization
+        self._validation_dataset = None
 
         # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
         if model_parameters:
@@ -212,6 +214,7 @@ class GepaOptimizer(BaseOptimizer):
         dataset = context.dataset
         metric = context.metric
         validation_dataset = context.validation_dataset
+        self._validation_dataset = validation_dataset
         experiment_config = context.experiment_config
 
         reflection_minibatch_size = context.extra_params.get(
@@ -364,7 +367,7 @@ class GepaOptimizer(BaseOptimizer):
 
         rescored: list[float] = []
         candidate_rows: list[dict[str, Any]] = []
-        history: list[dict[str, Any]] = []
+        self._history_builder.clear()
 
         # Wrap rescoring to prevent OPIK messages and experiment link displays
         with suppress_opik_logs():
@@ -401,7 +404,8 @@ class GepaOptimizer(BaseOptimizer):
                     )
                     candidate_rows.append(
                         {
-                            "iteration": idx + 1,
+                            "round_index": idx,
+                            "trial_index": context.trials_completed,
                             "system_prompt": candidate_summary_text,
                             "gepa_score": filtered_val_scores[idx],
                             "opik_score": score,
@@ -413,19 +417,59 @@ class GepaOptimizer(BaseOptimizer):
                             },
                         }
                     )
-                    history.append(
-                        {
-                            "iteration": idx + 1,
-                            "prompt_candidate": candidate,
-                            "scores": [
-                                {
-                                    "metric_name": f"GEPA-{metric.__name__}",
-                                    "score": filtered_val_scores[idx],
-                                },
-                                {"metric_name": metric.__name__, "score": score},
+                    candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
+                    components = {
+                        k: v
+                        for k, v in candidate.items()
+                        if not k.startswith("_") and k not in ("source", "id")
+                    }
+                    self._history_builder.append_entry(
+                        OptimizationRound(
+                            round_index=idx,
+                            trials=[
+                                OptimizationTrial(
+                                    trial_index=context.trials_completed,
+                                    score=score,
+                                    prompt=prompt_variants,
+                                    metrics={
+                                        f"gepa_{metric.__name__}": filtered_val_scores[
+                                            idx
+                                        ],
+                                        metric.__name__: score,
+                                    },
+                                    extras={
+                                        "components": components,
+                                        "candidate_id": candidate_id,
+                                    },
+                                )
                             ],
-                            "metadata": {},
-                        }
+                            candidates=[
+                                {
+                                    "id": candidate_id,
+                                    "prompt": prompt_variants,
+                                    "score": score,
+                                    "metrics": {
+                                        f"gepa_{metric.__name__}": filtered_val_scores[
+                                            idx
+                                        ],
+                                        metric.__name__: score,
+                                    },
+                                    "extra": {
+                                        "components": components,
+                                        "source": candidate.get("source"),
+                                    },
+                                }
+                            ],
+                            extras={
+                                "dataset": "validation"
+                                if self._validation_dataset is not None
+                                else "train",
+                                "candidate_id": candidate_id,
+                            },
+                            stop_reason=context.finish_reason
+                            if context.should_stop
+                            else None,
+                        )
                     )
 
         if rescored:
@@ -468,6 +512,28 @@ class GepaOptimizer(BaseOptimizer):
         best_candidate = (
             filtered_candidates[best_idx] if filtered_candidates else seed_candidate
         )
+
+        history_entries = self.get_history_entries()
+        if history_entries:
+            # Mark selection metadata on the chosen candidate entry
+            chosen_idx = min(best_idx, len(history_entries) - 1)
+            chosen = history_entries[chosen_idx]
+            extra = chosen.get("extra") or {}
+            extra.update(
+                {
+                    "selected": True,
+                    "selection_metric": "opik_score",
+                }
+            )
+            extra["acquisition"] = {
+                "opik_score": rescored[best_idx] if rescored else None,
+                "gepa_score": (
+                    filtered_val_scores[best_idx]
+                    if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores)
+                    else None
+                ),
+            }
+            chosen["extra"] = extra
         final_prompts = self._rebuild_prompts_from_candidate(
             optimizable_prompts, best_candidate
         )
@@ -523,7 +589,7 @@ class GepaOptimizer(BaseOptimizer):
         return AlgorithmResult(
             best_prompts=final_prompts,
             best_score=best_score,
-            history=history,
+            history=self.get_history_entries(),
             metadata=metadata,
         )
 

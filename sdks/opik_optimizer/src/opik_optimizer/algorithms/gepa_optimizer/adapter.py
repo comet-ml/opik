@@ -118,7 +118,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         """Increment adapter metric counters while tolerating missing attributes."""
         try:
             self._optimizer._adapter_metric_calls += 1
-            self._context.trials_completed += 1
         except Exception:
             pass
 
@@ -234,9 +233,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
                 outputs.append({"output": raw_output})
                 scores.append(score)
-                if self._should_stop():
-                    break
                 self._record_adapter_metric_call()
+                self._optimizer._record_trial(self._context, prompt_variants, score)
+                if self._context.should_stop:
+                    break
 
                 if trajectories is not None:
                     trajectories.append(
@@ -343,9 +343,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             outputs.append({"output": output_text})
             scores.append(score_value)
-            if self._should_stop():
-                break
             self._record_adapter_metric_call()
+            self._optimizer._record_trial(self._context, prompt_variants, score_value)
+            if self._context.should_stop:
+                break
 
             if trajectories is not None:
                 trajectories.append(

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, cast, overload, Literal
 import copy
 import inspect
@@ -15,9 +17,8 @@ from opik.rest_api.core import ApiError
 from opik.api_objects import optimization
 from opik import Dataset, opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
-from pydantic import BaseModel
 
-from . import optimization_result, reporting_utils, task_evaluator, helpers
+from . import reporting_utils, task_evaluator, helpers
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
@@ -25,6 +26,7 @@ from .constants import (
     resolve_project_name,
     normalize_eval_threads,
 )
+from .optimization_result import OptimizationHistoryBuilder, OptimizationResult
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 
@@ -39,18 +41,6 @@ try:
     _OPTIMIZER_VERSION = importlib.metadata.version("opik_optimizer")
 except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev installs
     _OPTIMIZER_VERSION = "unknown"
-
-
-class OptimizationRound(BaseModel):
-    model_config = {"arbitrary_types_allowed": True}
-
-    round_number: int
-    current_prompt: "chat_prompt.ChatPrompt"
-    current_score: float
-    generated_prompts: Any
-    best_prompt: "chat_prompt.ChatPrompt"
-    best_score: float
-    improvement: float
 
 
 # Valid reasons for optimization to finish
@@ -69,21 +59,29 @@ class OptimizationContext:
     """
     Context object containing all state for an optimization run.
 
-    This is a pure data container that holds:
-    - Input configuration (prompts, dataset, metric, etc.)
-    - Runtime state (baseline_score, trials_completed, etc.)
-    - Control flags (should_stop, finish_reason)
+    The context travels through the entire lifecycle and is the single source of
+    truth for optimization-wide flags and counters:
+    - Input configuration: prompts, dataset(s), metric, agent, experiment config.
+    - Runtime state: baseline_score, current_best_score, trials_completed,
+      rounds_completed, in_progress span, etc.
+    - Control flags: should_stop, finish_reason, perfect_score, max_trials.
+
+    Optimizers should read/update the provided context instead of creating new
+    ad-hoc counters so that budgeting, stop checks, and reporting stay aligned.
+    BaseOptimizer enforces trial increments via evaluate(); callers should avoid
+    manual increments except in adapter edge cases that already delegate through
+    _should_stop_context.
     """
 
-    prompts: dict[str, "chat_prompt.ChatPrompt"]
-    initial_prompts: dict[str, "chat_prompt.ChatPrompt"]
+    prompts: dict[str, chat_prompt.ChatPrompt]
+    initial_prompts: dict[str, chat_prompt.ChatPrompt]
     is_single_prompt_optimization: bool
-    dataset: "Dataset"
-    evaluation_dataset: "Dataset"
-    validation_dataset: "Dataset | None"
-    metric: "MetricFunction"
-    agent: "OptimizableAgent"
-    optimization: "optimization.Optimization | None"
+    dataset: Dataset
+    evaluation_dataset: Dataset
+    validation_dataset: Dataset | None
+    metric: MetricFunction
+    agent: OptimizableAgent
+    optimization: optimization.Optimization | None
     optimization_id: str | None
     experiment_config: dict[str, Any] | None
     n_samples: int | None
@@ -97,7 +95,7 @@ class OptimizationContext:
     should_stop: bool = False  # Flag to signal optimization should stop
     finish_reason: FinishReason | None = None  # Why optimization ended
     current_best_score: float | None = None  # Best score seen so far
-    current_best_prompt: "dict[str, chat_prompt.ChatPrompt] | None" = (
+    current_best_prompt: dict[str, chat_prompt.ChatPrompt] | None = (
         None  # Best prompt seen so far
     )
 
@@ -107,19 +105,37 @@ class AlgorithmResult:
     """
     Simplified return type for optimizer algorithms.
 
-    Optimizers return this from run_optimization() instead of building
-    the full OptimizationResult themselves. The framework (BaseOptimizer)
-    converts this to OptimizationResult with common fields.
+    Optimizers return this from run_optimization() instead of building the full
+    OptimizationResult themselves. BaseOptimizer wraps AlgorithmResult into an
+    OptimizationResult by adding framework metadata (initial score, model info,
+    IDs, counters) and performing any final normalization.
 
-    This keeps optimizers focused on algorithm logic while the framework
-    handles result building, metadata, and common fields.
+    Contract:
+    - best_prompts: dict of prompt name -> ChatPrompt (even for single prompt).
+    - best_score: primary objective score for the best prompts.
+    - history: list of normalized round/trial dicts (or OptimizationRound/Trial)
+      appended via OptimizationHistoryBuilder; this is treated as authoritative.
+    - metadata: algorithm-specific fields only (do not duplicate framework fields
+      such as model, initial_score, finish_reason).
+
+    Keeping this lightweight helps optimizers focus on algorithm logic while the
+    framework handles user-facing output and wiring.
     """
 
-    best_prompts: "dict[str, chat_prompt.ChatPrompt]"
+    best_prompts: dict[str, chat_prompt.ChatPrompt]
     best_score: float
-    # TODO(opik_optimizer/#history-schema): replace loose dicts with structured entries.
     history: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.history, list):
+            raise TypeError("AlgorithmResult.history must be a list of history entries")
+        if self.history:
+            # Normalize through the shared builder to keep a single schema source.
+            builder = OptimizationHistoryBuilder()
+            for entry in self.history:
+                builder.append_entry(entry)
+            self.history = builder.get_entries()
 
 
 class BaseOptimizer(ABC):
@@ -171,7 +187,7 @@ class BaseOptimizer(ABC):
         self.name = name
         self.skip_perfect_score = skip_perfect_score
         self.perfect_score = perfect_score
-        self._history: list[OptimizationRound] = []
+        self._history_builder = OptimizationHistoryBuilder()
         self.experiment_config = None
         # Counters for usage/cost; tool_call_counter kept for backward compat
         self.llm_call_counter = 0
@@ -201,7 +217,7 @@ class BaseOptimizer(ABC):
         self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
 
     @property
-    def _context(self) -> "OptimizationContext":
+    def _context(self) -> OptimizationContext:
         """
         Access the current optimization context.
 
@@ -212,7 +228,7 @@ class BaseOptimizer(ABC):
         return self.__context  # type: ignore[return-value]
 
     @_context.setter
-    def _context(self, value: "OptimizationContext | None") -> None:
+    def _context(self, value: OptimizationContext | None) -> None:
         self.__context = value
 
     @property
@@ -240,7 +256,7 @@ class BaseOptimizer(ABC):
         threshold = self.perfect_score if perfect_score is None else perfect_score
         return baseline_score >= threshold
 
-    def _should_stop_context(self, context: "OptimizationContext") -> bool:
+    def _should_stop_context(self, context: OptimizationContext) -> bool:
         """
         Return True when the optimization should stop based on context flags/budget.
 
@@ -350,8 +366,8 @@ class BaseOptimizer(ABC):
 
     def _normalize_prompt_input(
         self,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
-    ) -> tuple[dict[str, "chat_prompt.ChatPrompt"], bool]:
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], bool]:
         """
         Normalize prompt input to dict format for internal processing.
 
@@ -367,10 +383,10 @@ class BaseOptimizer(ABC):
 
     def _create_optimization_run(
         self,
-        dataset: "Dataset",
-        metric: "MetricFunction",
+        dataset: Dataset,
+        metric: MetricFunction,
         optimization_id: str | None = None,
-    ) -> "optimization.Optimization | None":
+    ) -> optimization.Optimization | None:
         """
         Create an Opik optimization run with consistent error handling.
 
@@ -405,10 +421,10 @@ class BaseOptimizer(ABC):
 
     def _select_evaluation_dataset(
         self,
-        dataset: "Dataset",
-        validation_dataset: "Dataset | None",
+        dataset: Dataset,
+        validation_dataset: Dataset | None,
         warn_unsupported: bool = False,
-    ) -> "Dataset":
+    ) -> Dataset:
         """
         Select which dataset to use for evaluation.
 
@@ -432,18 +448,18 @@ class BaseOptimizer(ABC):
 
     def _setup_optimization(
         self,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
-        dataset: "Dataset",
-        metric: "MetricFunction",
-        agent: "OptimizableAgent | None" = None,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
         n_samples: int | None = None,
         experiment_config: dict[str, Any] | None = None,
-        validation_dataset: "Dataset | None" = None,
+        validation_dataset: Dataset | None = None,
         project_name: str | None = None,
         optimization_id: str | None = None,
         max_trials: int = 10,
         **extra_params: Any,
-    ) -> "OptimizationContext":
+    ) -> OptimizationContext:
         optimizable_prompts, is_single_prompt_optimization = (
             self._normalize_prompt_input(prompt)
         )
@@ -512,7 +528,7 @@ class BaseOptimizer(ABC):
             extra_params=extra_params,
         )
 
-    def _calculate_baseline(self, context: "OptimizationContext") -> float:
+    def _calculate_baseline(self, context: OptimizationContext) -> float:
         """
         Calculate and display the baseline score for the initial prompt.
 
@@ -552,7 +568,7 @@ class BaseOptimizer(ABC):
 
     def evaluate(
         self,
-        prompts: "dict[str, chat_prompt.ChatPrompt]",
+        prompts: dict[str, chat_prompt.ChatPrompt],
         experiment_config: dict[str, Any] | None = None,
     ) -> float:
         """
@@ -593,32 +609,42 @@ class BaseOptimizer(ABC):
             n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
             verbose=0,
         )
-        score = self._coerce_score(score)
+        score = self._record_trial(context, prompts, score)
+        return score
 
-        # Increment trial counter
+    def _record_trial(
+        self,
+        context: OptimizationContext,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        score: float,
+    ) -> float:
+        """
+        Increment trial counters, update best prompt/score, and apply stop checks.
+        """
+        coerced_score = self._coerce_score(score)
         context.trials_completed += 1
-
-        # Update best score/prompt if improved
-        if context.current_best_score is None or score > context.current_best_score:
-            context.current_best_score = score
+        if (
+            context.current_best_score is None
+            or coerced_score > context.current_best_score
+        ):
+            context.current_best_score = coerced_score
             context.current_best_prompt = prompts
 
         # Call display hook
-        self._on_evaluation(context, prompts, score)
+        self._on_evaluation(context, prompts, coerced_score)
 
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
-
-        return score
+        return coerced_score
 
     def get_progress_state(self) -> dict[str, Any]:
         """
         Return current optimization progress state for display.
 
         The base implementation returns common progress info including:
-        - trials_completed: From context
+        - trials_completed: From context (atomic evaluations)
         - best_score: From context
-        - round: Current round (1-based), from _current_round attribute
+        - iteration (round): Current round (1-based), from _current_round attribute
         - total_rounds: Total rounds, from _total_rounds attribute
 
         Optimizers should set self._current_round and self._total_rounds
@@ -670,8 +696,8 @@ class BaseOptimizer(ABC):
 
     def _on_evaluation(
         self,
-        context: "OptimizationContext",
-        prompts: "dict[str, chat_prompt.ChatPrompt]",
+        context: OptimizationContext,
+        prompts: dict[str, chat_prompt.ChatPrompt],
         score: float,
     ) -> None:
         """
@@ -745,9 +771,9 @@ class BaseOptimizer(ABC):
 
     def post_optimization(
         self,
-        context: "OptimizationContext",
-        result: "optimization_result.OptimizationResult",
-    ) -> "optimization_result.OptimizationResult":
+        context: OptimizationContext,
+        result: OptimizationResult,
+    ) -> OptimizationResult:
         """
         Hook called after optimization completes.
 
@@ -765,8 +791,8 @@ class BaseOptimizer(ABC):
 
     def run_optimization(
         self,
-        context: "OptimizationContext",
-    ) -> "AlgorithmResult | optimization_result.OptimizationResult":
+        context: OptimizationContext,
+    ) -> AlgorithmResult | OptimizationResult:
         """
         Run the optimization algorithm.
 
@@ -802,12 +828,10 @@ class BaseOptimizer(ABC):
             return list(best_prompts.values())[0], list(initial_prompts.values())[0]
         return best_prompts, initial_prompts
 
-    def _build_early_result(
-        self, **kwargs: Any
-    ) -> optimization_result.OptimizationResult:
+    def _build_early_result(self, **kwargs: Any) -> OptimizationResult:
         """Build a baseline-only OptimizationResult when skipping optimization."""
         score = kwargs["score"]
-        return optimization_result.OptimizationResult(
+        return OptimizationResult(
             optimizer=kwargs["optimizer_name"],
             prompt=kwargs["prompt"],
             score=score,
@@ -826,9 +850,9 @@ class BaseOptimizer(ABC):
 
     def _build_final_result(
         self,
-        algorithm_result: "AlgorithmResult",
-        context: "OptimizationContext",
-    ) -> optimization_result.OptimizationResult:
+        algorithm_result: AlgorithmResult,
+        context: OptimizationContext,
+    ) -> OptimizationResult:
         """
         Convert AlgorithmResult to OptimizationResult.
 
@@ -875,7 +899,16 @@ class BaseOptimizer(ABC):
         # Merge in algorithm-specific metadata (can override optimizer metadata)
         details.update(algorithm_result.metadata)
 
-        return optimization_result.OptimizationResult(
+        if algorithm_result.history:
+            # Normalize anything the optimizer provided through a fresh builder
+            temp_builder = OptimizationHistoryBuilder()
+            for entry in algorithm_result.history:
+                temp_builder.append_entry(entry)
+            history_entries = temp_builder.get_entries()
+        else:
+            history_entries = self._history_builder.get_entries()
+
+        return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=result_prompt,
             score=algorithm_result.best_score,
@@ -883,7 +916,7 @@ class BaseOptimizer(ABC):
             initial_prompt=initial_prompt,
             initial_score=context.baseline_score,
             details=details,
-            history=algorithm_result.history,
+            history=history_entries,
             llm_calls=self.llm_call_counter,
             llm_calls_tools=self.llm_calls_tools_counter,
             dataset_id=context.dataset.id,
@@ -899,7 +932,7 @@ class BaseOptimizer(ABC):
         self._reset_counters()
 
         # Clear history to free memory
-        self._history.clear()
+        self._history_builder.clear()
 
         # Clear Opik client if it exists
         if self._opik_client is not None:
@@ -936,8 +969,8 @@ class BaseOptimizer(ABC):
 
     def _validate_optimization_inputs(
         self,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
-        dataset: "Dataset",
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
         metric: MetricFunction,
         support_content_parts: bool = False,
     ) -> None:
@@ -981,7 +1014,7 @@ class BaseOptimizer(ABC):
             )
 
     def _setup_agent_class(
-        self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
+        self, prompt: chat_prompt.ChatPrompt, agent_class: Any = None
     ) -> Any:
         """Resolve the agent class used for prompt evaluations.
 
@@ -1072,7 +1105,7 @@ class BaseOptimizer(ABC):
         return result
 
     @staticmethod
-    def _serialize_tools(prompt: "chat_prompt.ChatPrompt") -> list[dict[str, Any]]:
+    def _serialize_tools(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
         tools_obj = getattr(prompt, "tools", None)
         if not isinstance(tools_obj, list):
             return []
@@ -1095,7 +1128,7 @@ class BaseOptimizer(ABC):
         return str(annotation)
 
     def _summarize_tool_signatures(
-        self, prompt: "chat_prompt.ChatPrompt"
+        self, prompt: chat_prompt.ChatPrompt
     ) -> list[dict[str, Any]]:
         signatures: list[dict[str, Any]] = []
         for name, func in getattr(prompt, "function_map", {}).items():
@@ -1136,7 +1169,7 @@ class BaseOptimizer(ABC):
             )
         return signatures
 
-    def _build_agent_config(self, prompt: "chat_prompt.ChatPrompt") -> dict[str, Any]:
+    def _build_agent_config(self, prompt: chat_prompt.ChatPrompt) -> dict[str, Any]:
         agent_config: dict[str, Any] = dict(prompt.to_dict())
         agent_config["project_name"] = getattr(prompt, "project_name", None)
         agent_config["model"] = getattr(prompt, "model", None) or self.model
@@ -1202,7 +1235,7 @@ class BaseOptimizer(ABC):
 
     def _prepare_experiment_config(
         self,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
@@ -1293,7 +1326,7 @@ class BaseOptimizer(ABC):
 
         return helpers.drop_none(base_config)
 
-    def get_config(self, context: "OptimizationContext") -> dict[str, Any]:
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
         """
         Return optimizer-specific configuration for display.
 
@@ -1308,7 +1341,7 @@ class BaseOptimizer(ABC):
         """
         return {}
 
-    def _finalize_finish_reason(self, context: "OptimizationContext") -> None:
+    def _finalize_finish_reason(self, context: OptimizationContext) -> None:
         """
         Set finish_reason if not already set by early stop conditions.
 
@@ -1331,8 +1364,8 @@ class BaseOptimizer(ABC):
 
     def _run_optimization(
         self,
-        context: "OptimizationContext",
-    ) -> optimization_result.OptimizationResult:
+        context: OptimizationContext,
+    ) -> OptimizationResult:
         """
         Execute the core optimization algorithm (deprecated, use run_optimization).
 
@@ -1343,7 +1376,7 @@ class BaseOptimizer(ABC):
             f"{self.__class__.__name__} must implement run_optimization()"
         )
 
-    def get_metadata(self, context: "OptimizationContext") -> dict[str, Any]:
+    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
         """
         Return optimizer-specific metadata for the optimization result.
 
@@ -1366,7 +1399,7 @@ class BaseOptimizer(ABC):
         """
         return {}
 
-    def pre_optimization(self, context: "OptimizationContext") -> None:
+    def pre_optimization(self, context: OptimizationContext) -> None:
         """
         Hook called before running the optimization algorithm.
 
@@ -1391,8 +1424,8 @@ class BaseOptimizer(ABC):
 
     def _display_configuration(
         self,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
-        context: "OptimizationContext",
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        context: OptimizationContext,
     ) -> None:
         """Display optimization configuration using optimizer-specific config."""
         reporting_utils.display_configuration(
@@ -1403,7 +1436,7 @@ class BaseOptimizer(ABC):
 
     def _display_baseline_evaluation(
         self,
-        context: "OptimizationContext",
+        context: OptimizationContext,
     ) -> Any:
         """
         Return baseline evaluation context manager for display.
@@ -1428,7 +1461,7 @@ class BaseOptimizer(ABC):
         self,
         initial_score: float,
         best_score: float,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
     ) -> None:
         """Display final optimization result."""
         reporting_utils.display_result(
@@ -1440,7 +1473,7 @@ class BaseOptimizer(ABC):
 
     def optimize_prompt(
         self,
-        prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
@@ -1453,7 +1486,7 @@ class BaseOptimizer(ABC):
         max_trials: int = 10,
         *args: Any,
         **kwargs: Any,
-    ) -> optimization_result.OptimizationResult:
+    ) -> OptimizationResult:
         """
         Optimize a prompt using the template method pattern.
 
@@ -1489,6 +1522,7 @@ class BaseOptimizer(ABC):
         # (allows reusing the same optimizer instance for multiple runs)
         self._trials_completed = 0
         self._rounds_completed = 0
+        self._history_builder.clear()
 
         context = self._setup_optimization(
             prompt=prompt,
@@ -1599,13 +1633,11 @@ class BaseOptimizer(ABC):
             # Finalize finish_reason if not set by optimizer
             self._finalize_finish_reason(context)
 
-            # Handle both new AlgorithmResult and legacy OptimizationResult
-            if isinstance(raw_result, AlgorithmResult):
-                # New API: convert AlgorithmResult to OptimizationResult
-                result = self._build_final_result(raw_result, context)
-            else:
-                # Legacy API: optimizer returned OptimizationResult directly
-                result = raw_result
+            if not isinstance(raw_result, AlgorithmResult):
+                raise TypeError(
+                    "run_optimization must return AlgorithmResult (legacy OptimizationResult is no longer supported)"
+                )
+            result = self._build_final_result(raw_result, context)
 
             # Display result
             result_prompt, _ = self._select_result_prompts(
@@ -1632,23 +1664,24 @@ class BaseOptimizer(ABC):
             self._finalize_optimization(context, status="cancelled")
             raise
 
-    def get_history(self) -> list[OptimizationRound]:
+    def get_history_entries(self) -> list[dict[str, Any]]:
         """
-        Get the optimization history.
+        Get normalized history entries captured by the builder.
 
-        Returns:
-            List[Dict[str, Any]]: List of optimization rounds with their details
+        Optimizers should emit history through the builder; this accessor returns
+        the normalized entries.
         """
-        return self._history
+        return self._history_builder.get_entries()
 
-    def _add_to_history(self, round_data: OptimizationRound) -> None:
+    def _add_to_history(self, round_data: dict[str, Any]) -> None:
         """
         Add a round to the optimization history.
 
-        Args:
-            round_data: Dictionary containing round details
+        Prefer recording via OptimizationHistoryBuilder in new code; this helper
+        keeps a shared codepath for existing callers.
         """
-        self._history.append(round_data)
+        if isinstance(round_data, dict):
+            self._history_builder.append_entry(round_data)
 
     def _update_optimization(
         self, optimization: optimization.Optimization, status: str
@@ -1687,7 +1720,7 @@ class BaseOptimizer(ABC):
 
     def _finalize_optimization(
         self,
-        context: "OptimizationContext",
+        context: OptimizationContext,
         status: str = "completed",
     ) -> None:
         if context.optimization is not None:
