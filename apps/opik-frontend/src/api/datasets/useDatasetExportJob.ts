@@ -21,14 +21,14 @@ const getDatasetExportJob = async (
 // Polling interval for checking job status (5 seconds)
 const POLLING_INTERVAL_MS = 5000;
 
+const isTerminalStatus = (status?: DATASET_EXPORT_STATUS) =>
+  status === DATASET_EXPORT_STATUS.COMPLETED ||
+  status === DATASET_EXPORT_STATUS.FAILED;
+
 export default function useDatasetExportJob(
   params: UseDatasetExportJobParams,
   options?: QueryConfig<DatasetExportJob>,
 ) {
-  const isTerminalStatus = (status?: DATASET_EXPORT_STATUS) =>
-    status === DATASET_EXPORT_STATUS.COMPLETED ||
-    status === DATASET_EXPORT_STATUS.FAILED;
-
   return useQuery({
     queryKey: ["dataset-export-job", params],
     queryFn: (context) => getDatasetExportJob(context, params),

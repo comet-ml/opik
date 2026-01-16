@@ -262,9 +262,14 @@ describe("DatasetExportPanel", () => {
       render(<DatasetExportPanel />, { wrapper });
 
       await waitFor(() => {
-        expect(mockMarkAsViewed).toHaveBeenCalledWith({
-          jobId: "failed-job-2",
-        });
+        expect(mockMarkAsViewed).toHaveBeenCalledWith(
+          {
+            jobId: "failed-job-2",
+          },
+          expect.objectContaining({
+            onSuccess: expect.any(Function),
+          }),
+        );
       });
     });
 

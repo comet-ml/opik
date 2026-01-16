@@ -19,5 +19,9 @@ const markExportJobViewed = async ({
 export default function useMarkExportJobViewedMutation() {
   return useMutation({
     mutationFn: markExportJobViewed,
+    onSuccess: () => {
+      // Mutation completed successfully
+      // The caller can handle refetching if needed
+    },
   });
 }
