@@ -107,18 +107,18 @@ describe("normalizeMetadataPaths", () => {
 });
 
 describe("buildDynamicMetadataColumns", () => {
-  it("should build columns with dot-prefixed labels", () => {
+  it("should build columns with metadata prefix stripped from labels", () => {
     const paths = ["metadata.time_to_first_token", "metadata.model_name"];
     const result = buildDynamicMetadataColumns(paths);
     expect(result).toEqual([
       {
         id: "metadata.time_to_first_token",
-        label: ".time_to_first_token",
+        label: "time_to_first_token",
         columnType: "string",
       },
       {
         id: "metadata.model_name",
-        label: ".model_name",
+        label: "model_name",
         columnType: "string",
       },
     ]);
@@ -128,8 +128,8 @@ describe("buildDynamicMetadataColumns", () => {
     const paths = ["custom.path", "another.field"];
     const result = buildDynamicMetadataColumns(paths);
     expect(result).toEqual([
-      { id: "custom.path", label: ".custom.path", columnType: "string" },
-      { id: "another.field", label: ".another.field", columnType: "string" },
+      { id: "custom.path", label: "custom.path", columnType: "string" },
+      { id: "another.field", label: "another.field", columnType: "string" },
     ]);
   });
 
@@ -142,8 +142,8 @@ describe("buildDynamicMetadataColumns", () => {
     const paths = ["metadata.items", "metadata.tags"];
     const result = buildDynamicMetadataColumns(paths);
     expect(result).toEqual([
-      { id: "metadata.items", label: ".items", columnType: "string" },
-      { id: "metadata.tags", label: ".tags", columnType: "string" },
+      { id: "metadata.items", label: "items", columnType: "string" },
+      { id: "metadata.tags", label: "tags", columnType: "string" },
     ]);
   });
 });
@@ -232,11 +232,11 @@ describe("metadata path extraction integration", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "metadata.items",
-          label: ".items",
+          label: "items",
         }),
         expect.objectContaining({
           id: "metadata.model_name",
-          label: ".model_name",
+          label: "model_name",
         }),
       ]),
     );
