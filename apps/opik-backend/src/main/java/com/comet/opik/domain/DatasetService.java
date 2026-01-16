@@ -783,13 +783,10 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public List<Dataset.PublicWorkspaceInfo> findPublicWorkspacesWithDatasets() {
-        log.info("Finding accessible workspaces with datasets");
-        
-        // Get all workspace IDs that have datasets (not just public ones)
+        // Get all workspace IDs that have at least one public dataset
         List<String> workspaceIds = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            return dao.findAllWorkspaceIds();
+            return dao.findPublicWorkspaceIds();
         });
 
         Optional<String> reactServiceBaseUrl = Optional.ofNullable(authenticationConfig.getReactService())
