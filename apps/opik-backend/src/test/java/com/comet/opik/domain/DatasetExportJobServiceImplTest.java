@@ -213,7 +213,7 @@ class DatasetExportJobServiceImplTest {
     @Test
     void updateJobToProcessing_shouldUpdateStatusToProcessing() {
         // Given
-        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobToProcessing(JOB_ID)
@@ -226,14 +226,13 @@ class DatasetExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.markPendingJobAsProcessing() was called
-        verify(exportJobDAO, times(1)).markPendingJobAsProcessing(eq(WORKSPACE_ID), eq(JOB_ID),
-                eq(DatasetExportStatus.PROCESSING), eq(USER_NAME));
+        verify(exportJobDAO, times(1)).markPendingJobAsProcessing(eq(WORKSPACE_ID), eq(JOB_ID), eq(USER_NAME));
     }
 
     @Test
     void updateJobToProcessing_shouldThrowNotFoundException_whenJobNotPending() {
         // Given - DAO returns 0 because job is not in PENDING state
-        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any(), any())).thenReturn(0);
+        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any())).thenReturn(0);
 
         // When
         Mono<Void> result = service.updateJobToProcessing(JOB_ID)
@@ -275,7 +274,7 @@ class DatasetExportJobServiceImplTest {
     void updateJobToFailed_shouldUpdateStatusAndErrorMessage() {
         // Given
         String errorMessage = "Export failed due to timeout";
-        when(exportJobDAO.updateToFailed(any(), any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobToFailed(JOB_ID, errorMessage)
@@ -288,8 +287,7 @@ class DatasetExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.updateToFailed() was called
-        verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.FAILED),
-                eq(errorMessage), eq(USER_NAME));
+        verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(errorMessage), eq(USER_NAME));
     }
 
     @ParameterizedTest
@@ -300,7 +298,7 @@ class DatasetExportJobServiceImplTest {
         if (status == DatasetExportStatus.COMPLETED) {
             when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any(), any())).thenReturn(0);
         } else {
-            when(exportJobDAO.updateToFailed(any(), any(), any(), any(), any())).thenReturn(0);
+            when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(0);
         }
 
         // When
@@ -323,8 +321,8 @@ class DatasetExportJobServiceImplTest {
             verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
                     eq(DatasetExportStatus.COMPLETED), eq(filePath), eq(expiresAt), eq(USER_NAME));
         } else {
-            verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID),
-                    eq(DatasetExportStatus.FAILED), eq(errorMessage), eq(USER_NAME));
+            verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(errorMessage),
+                    eq(USER_NAME));
         }
     }
 

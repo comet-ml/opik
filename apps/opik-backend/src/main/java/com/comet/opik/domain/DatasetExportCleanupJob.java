@@ -37,8 +37,6 @@ import java.util.stream.Collectors;
 @On(value = "0 0/5 * * * ?", timeZone = "UTC") // every 5 minutes
 public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
-    private static final int CLEANUP_BATCH_SIZE = 100;
-
     private final DatasetExportJobService exportJobService;
     private final FileService fileService;
     private final LockService lockService;
@@ -132,7 +130,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
             return Mono.empty();
         }
 
-        return exportJobService.findExpiredCompletedJobs(now, CLEANUP_BATCH_SIZE)
+        return exportJobService.findExpiredCompletedJobs(now, exportConfig.getCleanupBatchSize())
                 .flatMap(expiredJobs -> {
                     if (expiredJobs.isEmpty()) {
                         if (totalCleaned > 0) {
@@ -183,7 +181,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
             return Mono.empty();
         }
 
-        return exportJobService.findViewedFailedJobs(CLEANUP_BATCH_SIZE)
+        return exportJobService.findViewedFailedJobs(exportConfig.getCleanupBatchSize())
                 .flatMap(viewedFailedJobs -> {
                     if (viewedFailedJobs.isEmpty()) {
                         if (totalCleaned > 0) {

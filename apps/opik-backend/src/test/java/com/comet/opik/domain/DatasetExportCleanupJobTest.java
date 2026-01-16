@@ -53,6 +53,7 @@ class DatasetExportCleanupJobTest {
         // Mock configuration
         lenient().when(exportConfig.getCleanupTimeout()).thenReturn(Duration.minutes(5));
         lenient().when(exportConfig.getCleanupLockWaitTime()).thenReturn(Duration.seconds(1));
+        lenient().when(exportConfig.getCleanupBatchSize()).thenReturn(100);
 
         // Mock lock service to execute the operation synchronously by returning it
         lenient().when(lockService.bestEffortLock(any(), any(), any(), any(), any()))

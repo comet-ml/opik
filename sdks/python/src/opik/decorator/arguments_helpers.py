@@ -2,7 +2,7 @@ import dataclasses
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from .. import datetime_helpers, llm_usage
-from ..api_objects import helpers, span
+from ..api_objects import helpers, span, attachment
 from ..types import ErrorInfoDict, SpanType, DistributedTraceHeadersDict
 
 
@@ -35,6 +35,7 @@ class EndSpanParameters(BaseArguments):
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
     total_cost: Optional[float] = None
+    attachments: Optional[List[attachment.Attachment]] = None
 
 
 @dataclasses.dataclass

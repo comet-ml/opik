@@ -3,6 +3,11 @@ export enum PROMPT_TEMPLATE_STRUCTURE {
   TEXT = "text",
 }
 
+export enum PROMPT_TYPE {
+  MUSTACHE = "mustache",
+  JINJA2 = "jinja2",
+}
+
 export interface Prompt {
   id: string;
   name: string;
@@ -28,4 +33,5 @@ export interface PromptVersion {
   prompt_id: string;
   created_at: string;
   tags?: string[];
+  type?: PROMPT_TYPE;
 }

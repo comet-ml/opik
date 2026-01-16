@@ -12,7 +12,7 @@ import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
-import { stripColumnPrefix } from "@/lib/utils";
+import { stripColumnPrefix, generateBatchGroupId } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
@@ -80,6 +80,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         isAllItemsSelected,
         filters,
         search,
+        batchGroupId: isAllItemsSelected ? generateBatchGroupId() : undefined,
       });
     }
   }, [
