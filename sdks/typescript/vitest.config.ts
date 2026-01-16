@@ -11,6 +11,8 @@ const config = {
     setupFiles: ["./tests/setup.ts"],
     env: {
       OPIK_API_KEY: process.env.OPIK_API_KEY || "test-api-key",
+      // Pass through OPIK_URL_OVERRIDE for local testing
+      OPIK_URL_OVERRIDE: process.env.OPIK_URL_OVERRIDE || "",
     },
   },
 } satisfies ViteUserConfig;
