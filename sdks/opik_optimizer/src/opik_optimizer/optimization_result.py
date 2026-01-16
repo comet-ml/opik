@@ -9,12 +9,6 @@ from dataclasses import dataclass, field
 from contextlib import contextmanager
 
 import pydantic
-import rich.box
-import rich.console
-import rich.panel
-import rich.table
-import rich.text
-
 from .utils.reporting import (
     get_console,
     get_optimization_run_url_by_id,
@@ -22,6 +16,7 @@ from .utils.reporting import (
 from .utils.display import (
     format_prompt_for_plaintext,
     build_plaintext_summary,
+    render_rich_result,
 )
 
 from .api_objects import chat_prompt
@@ -670,7 +665,6 @@ class OptimizationResult(pydantic.BaseModel):
 
     def __rich__(self) -> rich.panel.Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
-        from .utils.display import render_rich_result
 
         return render_rich_result(self)
 
