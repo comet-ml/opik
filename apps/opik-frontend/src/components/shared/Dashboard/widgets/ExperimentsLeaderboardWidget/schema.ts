@@ -4,7 +4,10 @@ import isNumber from "lodash/isNumber";
 import isEmpty from "lodash/isEmpty";
 import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
 import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
-import { MIN_MAX_ROWS, MAX_MAX_ROWS } from "./helpers";
+import {
+  MIN_MAX_EXPERIMENTS,
+  MAX_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 
 const ColumnSortSchema = z.object({
   id: z.string(),
@@ -52,14 +55,14 @@ export const ExperimentsLeaderboardWidgetSchema = z
         const numValue = parseInt(data.maxRows!, 10);
         return (
           isNumber(numValue) &&
-          numValue >= MIN_MAX_ROWS &&
-          numValue <= MAX_MAX_ROWS
+          numValue >= MIN_MAX_EXPERIMENTS &&
+          numValue <= MAX_MAX_EXPERIMENTS
         );
       }
       return true;
     },
     {
-      message: `Maximum rows is required and must be between ${MIN_MAX_ROWS} and ${MAX_MAX_ROWS}`,
+      message: `Maximum rows is required and must be between ${MIN_MAX_EXPERIMENTS} and ${MAX_MAX_EXPERIMENTS}`,
       path: ["maxRows"],
     },
   );

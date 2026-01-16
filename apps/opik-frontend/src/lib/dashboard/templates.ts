@@ -80,6 +80,9 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: 10,
     },
   },
 };
@@ -353,6 +356,9 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: 10,
     },
   },
 };
@@ -656,6 +662,9 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: 10,
     },
   },
 };

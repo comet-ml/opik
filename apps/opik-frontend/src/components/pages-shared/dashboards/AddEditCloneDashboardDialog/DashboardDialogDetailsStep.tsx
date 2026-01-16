@@ -7,7 +7,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Description } from "@/components/ui/description";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -16,12 +15,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
+import DashboardDataSourceSection from "@/components/pages-shared/dashboards/DashboardDataSourceSection/DashboardDataSourceSection";
 import { Control } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
-import { TEMPLATE_TYPE } from "@/types/dashboard";
+import { TEMPLATE_TYPE, EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
+import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
+import { z } from "zod";
 import DashboardTemplateCard from "./DashboardTemplateCard";
 
 interface DashboardFormFields {
@@ -30,6 +30,9 @@ interface DashboardFormFields {
   projectId?: string;
   experimentIds?: string[];
   templateType?: string;
+  experimentDataSource?: EXPERIMENT_DATA_SOURCE;
+  experimentFilters?: z.infer<typeof FiltersArraySchema>;
+  maxExperimentsCount?: string;
 }
 
 interface DashboardDialogDetailsStepProps {
@@ -120,79 +123,18 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
             />
           </AccordionContent>
         </AccordionItem>
+
+        {showDataSourceSection && (
+          <AccordionItem value="additional-settings">
+            <AccordionTrigger className="h-11 py-1.5">
+              Dashboard defaults
+            </AccordionTrigger>
+            <AccordionContent className="px-3 pb-3">
+              <DashboardDataSourceSection />
+            </AccordionContent>
+          </AccordionItem>
+        )}
       </Accordion>
-
-      {showDataSourceSection && (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <h4 className="comet-body-accented">Default data source</h4>
-            <Description>
-              Choose default project and experiments to preview data in this
-              dashboard. Individual widgets can override these settings if
-              needed.
-            </Description>
-          </div>
-
-          <FormField
-            control={control}
-            name="experimentIds"
-            render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["experimentIds"]);
-
-              return (
-                <FormItem>
-                  <FormLabel>Default experiments (optional)</FormLabel>
-                  <FormControl>
-                    <ExperimentsSelectBox
-                      value={field.value || []}
-                      onValueChange={field.onChange}
-                      multiselect
-                      showClearButton
-                      className={cn("flex-1", {
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      })}
-                    />
-                  </FormControl>
-                  <Description>
-                    Used by widgets that show experiment data.
-                  </Description>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
-
-          <FormField
-            control={control}
-            name="projectId"
-            render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["projectId"]);
-
-              return (
-                <FormItem>
-                  <FormLabel>Default project (optional)</FormLabel>
-                  <FormControl>
-                    <ProjectsSelectBox
-                      value={field.value || ""}
-                      onValueChange={field.onChange}
-                      showClearButton
-                      className={cn("flex-1", {
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      })}
-                    />
-                  </FormControl>
-                  <Description>Used to preview data by default.</Description>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 };
