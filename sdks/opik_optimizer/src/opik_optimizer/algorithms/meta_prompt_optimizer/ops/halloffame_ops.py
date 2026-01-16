@@ -5,7 +5,6 @@ This module implements meta-learning: discovering what makes prompts successful
 and re-injecting those patterns into future candidate generation.
 """
 
-from dataclasses import dataclass, field
 from typing import Any
 import json
 from collections import Counter
@@ -13,22 +12,10 @@ import re
 import logging
 
 from .. import prompts as meta_prompts
+from ..types import HallOfFameEntry
 from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class HallOfFameEntry:
-    """Represents a high-performing prompt in the hall of fame"""
-
-    prompt_messages: list[dict[str, str]]
-    score: float
-    trial_number: int
-    improvement_over_baseline: float
-    metric_name: str
-    extracted_patterns: list[str] | None = None  # Filled during pattern extraction
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class PromptHallOfFame:

@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 from typing import Any, Literal
 from collections.abc import Iterator
-from dataclasses import dataclass
 
 from rich.panel import Panel
 from rich.text import Text
@@ -17,19 +16,10 @@ from ...utils.reporting import (  # noqa: F401
     suppress_opik_logs,
     safe_percentage_change,
 )
+from .types import MessageDiffItem
 
 PANEL_WIDTH = 90
 console = get_console()
-
-
-@dataclass
-class MessageDiffItem:
-    """Represents a single message's diff information."""
-
-    role: str
-    change_type: Literal["added", "removed", "unchanged", "changed"]
-    initial_content: str | None
-    optimized_content: str | None
 
 
 def _content_to_string(content: str | list[dict[str, Any]]) -> str:

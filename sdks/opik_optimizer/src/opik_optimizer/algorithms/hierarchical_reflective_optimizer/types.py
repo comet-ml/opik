@@ -1,9 +1,20 @@
 """Type definitions for the Reflective Optimizer."""
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 from pydantic import BaseModel, create_model, ConfigDict
 
 from ...api_objects import types
+
+
+@dataclass
+class MessageDiffItem:
+    """Represents a single message's diff information."""
+
+    role: str
+    change_type: Literal["added", "removed", "unchanged", "changed"]
+    initial_content: str | None
+    optimized_content: str | None
 
 
 class FailureMode(BaseModel):

@@ -16,7 +16,8 @@ from ...utils import (
 from ...utils.prompt_library import PromptOverrides
 from . import reporting as gepa_reporting
 from . import prompts as gepa_prompts
-from .adapter import OpikDataInst, OpikGEPAAdapter
+from .adapter import OpikGEPAAdapter
+from .types import OpikDataInst
 
 logger = logging.getLogger(__name__)
 

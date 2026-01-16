@@ -450,7 +450,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # Add best candidate to hall of fame if qualified (single prompt only)
             if self.hall_of_fame and best_cand_score_avg > 0 and not is_bundle:
-                from .ops.halloffame_ops import HallOfFameEntry
+                from .types import HallOfFameEntry
 
                 # For single prompt optimization, extract the ChatPrompt from dict
                 if isinstance(best_candidate_this_round, dict):

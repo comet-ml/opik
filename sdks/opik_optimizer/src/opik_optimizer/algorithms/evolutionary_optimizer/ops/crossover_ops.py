@@ -4,15 +4,14 @@ import copy
 import logging
 import random
 
-from pydantic import BaseModel
 from deap import creator as _creator
 
 from .. import reporting
+from ..types import CrossoverResponse
 from .... import _llm_calls
 from ...._llm_calls import StructuredOutputParsingError
 from ....api_objects.types import (
     Content,
-    Messages,
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
@@ -21,21 +20,6 @@ from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
 creator = _creator  # backward compt.
-
-
-class CrossoverResponse(BaseModel):
-    """Response containing two child prompts from crossover operation.
-
-    Each child is a list of messages representing a complete prompt.
-    Example:
-        {
-            "child_1": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}],
-            "child_2": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
-        }
-    """
-
-    child_1: Messages
-    child_2: Messages
 
 
 def _deap_crossover_chunking_strategy(

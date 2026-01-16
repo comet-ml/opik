@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
 import random
@@ -15,26 +14,13 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+from .types import OpikDataInst
 
 if TYPE_CHECKING:
     from ...base_optimizer import OptimizationContext
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class OpikDataInst:
-    """Data instance handed to GEPA.
-
-    We keep the original Opik dataset item so metrics and prompt formatting can use it
-    directly without duplicated bookkeeping.
-    """
-
-    input_text: str
-    answer: str
-    additional_context: dict[str, str]
-    opik_item: dict[str, Any]
 
 
 class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]):

@@ -2,17 +2,13 @@ from typing import Any
 
 import logging
 import opik
-from pydantic import BaseModel
 
 from .. import reporting
+from ..types import StyleInferenceResponse
 from .... import _llm_calls
 from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
-
-
-class StyleInferenceResponse(BaseModel):
-    style: str
 
 
 def infer_output_style_from_dataset(

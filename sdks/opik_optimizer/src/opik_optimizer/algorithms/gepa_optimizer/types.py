@@ -1,6 +1,18 @@
-"""Type definitions for GEPA Optimizer.
+"""Type definitions for GEPA Optimizer."""
 
-Currently empty - add custom types here as needed.
-Note: OpikDataInst and OpikGEPAAdapter are defined in adapter.py
-as they are algorithm-specific adapters.
-"""
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass
+class OpikDataInst:
+    """Data instance handed to GEPA.
+
+    We keep the original Opik dataset item so metrics and prompt formatting can use it
+    directly without duplicated bookkeeping.
+    """
+
+    input_text: str
+    answer: str
+    additional_context: dict[str, str]
+    opik_item: dict[str, Any]

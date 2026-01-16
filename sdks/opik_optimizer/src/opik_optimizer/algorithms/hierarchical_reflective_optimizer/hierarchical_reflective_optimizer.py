@@ -700,6 +700,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 stop_reason=context.finish_reason if context.should_stop else None,
                 extras={"improvement": iteration_improvement},
             )
+            # TODO: Remove candidate dict copy once history recording no longer
+            # mutates prompt payloads (candidate_id refactor).
 
             # Stop if improvement is below convergence threshold
             if abs(iteration_improvement) < self.convergence_threshold:

@@ -9,7 +9,8 @@ This module contains extracted operations from the main optimizer:
 - result_ops: Result calculation and formatting
 """
 
-from .halloffame_ops import HallOfFameEntry, PromptHallOfFame
+from ..types import HallOfFameEntry
+from .halloffame_ops import PromptHallOfFame
 from . import candidate_ops, context_ops, result_ops, halloffame_ops
 
 __all__ = [
