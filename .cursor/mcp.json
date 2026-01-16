@@ -14,6 +14,24 @@
       ],
       "envFile": "${workspaceFolder}/.env.local"
     },
+    "slack": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "SLACK_MCP_XOXP_TOKEN",
+        "-e", "LOG_LEVEL=error",
+        "-e",
+        "SLACK_MCP_ADD_MESSAGE_TOOL=true",
+        "ghcr.io/korotovsky/slack-mcp-server:latest",
+        "mcp-server",
+        "--transport",
+        "stdio"
+      ],
+      "envFile": "${workspaceFolder}/.env.local"
+    },
     "Atlassian": {
       "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
       "env": {},
@@ -57,10 +75,7 @@
     },
     "context7": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@context7/mcp-server@latest"
-      ]
+      "args": ["-y", "@upstash/context7-mcp@latest"]
     }
   }
 }
