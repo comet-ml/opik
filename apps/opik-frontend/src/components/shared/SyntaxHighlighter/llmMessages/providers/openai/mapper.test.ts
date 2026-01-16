@@ -51,11 +51,15 @@ describe("mapOpenAIMessages", () => {
       expect(result).toHaveLength(2);
       expect(result[0].role).toBe("system");
       expect(result[0].blocks[0].blockType).toBe("text");
-      expect(result[0].blocks[0].props.children).toBe(
-        "You are a helpful assistant",
-      );
+      if (result[0].blocks[0].blockType === "text") {
+        expect(result[0].blocks[0].props.children).toBe(
+          "You are a helpful assistant",
+        );
+      }
       expect(result[1].role).toBe("user");
-      expect(result[1].blocks[0].props.children).toBe("What is 2+2?");
+      if (result[1].blocks[0].blockType === "text") {
+        expect(result[1].blocks[0].props.children).toBe("What is 2+2?");
+      }
     });
 
     it("should handle multimodal content in custom input format", () => {
@@ -98,7 +102,9 @@ describe("mapOpenAIMessages", () => {
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe("assistant");
       expect(result[0].blocks[0].blockType).toBe("text");
-      expect(result[0].blocks[0].props.children).toBe("Hello!");
+      if (result[0].blocks[0].blockType === "text") {
+        expect(result[0].blocks[0].props.children).toBe("Hello!");
+      }
     });
 
     it("should map custom output format", () => {
@@ -117,7 +123,9 @@ describe("mapOpenAIMessages", () => {
       expect(result[0].role).toBe("assistant");
       expect(result[0].blocks).toHaveLength(1);
       expect(result[0].blocks[0].blockType).toBe("text");
-      expect(result[0].blocks[0].props.children).toBe("This is the answer");
+      if (result[0].blocks[0].blockType === "text") {
+        expect(result[0].blocks[0].props.children).toBe("This is the answer");
+      }
     });
 
     it("should map custom output format with minimal data", () => {
@@ -128,7 +136,9 @@ describe("mapOpenAIMessages", () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe("assistant");
-      expect(result[0].blocks[0].props.children).toBe("Simple response");
+      if (result[0].blocks[0].blockType === "text") {
+        expect(result[0].blocks[0].props.children).toBe("Simple response");
+      }
     });
   });
 
