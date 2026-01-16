@@ -14,7 +14,7 @@ configure()  # HIGHLIGHTED_LINE
 set_global_handler("opik")  # HIGHLIGHTED_LINE
 opik_callback_handler = global_handler  # HIGHLIGHTED_LINE
 
-url = "https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt"
+url = "https://raw.githubusercontent.com/run-llama/llama_index/main/docs/examples/data/paul_graham/paul_graham_essay.txt"
 response = requests.get(url, timeout=60)
 
 path = Path("./data/paul_graham/paul_graham_essay.txt")
