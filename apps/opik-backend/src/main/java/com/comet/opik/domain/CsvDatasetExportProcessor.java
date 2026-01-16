@@ -11,6 +11,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.InternalServerErrorException;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -47,9 +49,18 @@ public interface CsvDatasetExportProcessor {
      * Generates a CSV file from dataset items and uploads it to S3/MinIO.
      *
      * @param datasetId The dataset ID to export
-     * @return A Mono containing the S3/MinIO key of the uploaded file
+     * @return A Mono containing the export result with file path and expiration
      */
-    Mono<String> generateAndUploadCsv(UUID datasetId);
+    Mono<CsvExportResult> generateAndUploadCsv(UUID datasetId);
+
+    /**
+     * Result of CSV export containing file metadata
+     */
+    @Builder
+    record CsvExportResult(
+            @NonNull String filePath,
+            @NonNull Instant expiresAt) {
+    }
 }
 
 @Slf4j
@@ -65,7 +76,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
     private static final int S3_MIN_PART_SIZE = 5242880; // 5 MB - S3 requirement for non-final parts
 
     @Override
-    public Mono<String> generateAndUploadCsv(@NonNull UUID datasetId) {
+    public Mono<CsvExportResult> generateAndUploadCsv(@NonNull UUID datasetId) {
         log.info("Starting CSV generation for dataset: '{}'", datasetId);
 
         return Mono.deferContextual(ctx -> {
@@ -77,7 +88,20 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                         log.info("Discovered '{}' columns for dataset '{}'", columns.size(), datasetId);
 
                         // Step 2: Generate CSV and upload using streaming approach
-                        return generateAndUploadCsvStreaming(datasetId, columns, workspaceId);
+                        return generateAndUploadCsvStreaming(datasetId, columns, workspaceId)
+                                .map(filePath -> {
+                                    // Step 3: Calculate expiration time
+                                    Duration ttl = exportConfig.getDefaultTtl().toJavaDuration();
+                                    Instant expiresAt = Instant.now().plus(ttl);
+
+                                    log.info("CSV export completed for dataset '{}', expires at: '{}'",
+                                            datasetId, expiresAt);
+
+                                    return CsvExportResult.builder()
+                                            .filePath(filePath)
+                                            .expiresAt(expiresAt)
+                                            .build();
+                                });
                     });
         });
     }
