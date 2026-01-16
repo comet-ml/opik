@@ -933,7 +933,7 @@ class DatasetServiceImpl implements DatasetService {
             // Re-throw NotFoundException as-is
             throw e;
         } catch (Exception e) {
-            log.error("Failed to get workspace ID from React service for '{}': {}", workspaceName, e.getMessage());
+            log.error("Failed to get workspace ID from React service for '{}'", workspaceName, e);
             throw new NotFoundException("Workspace not found: " + workspaceName);
         } finally {
             if (response != null) {
