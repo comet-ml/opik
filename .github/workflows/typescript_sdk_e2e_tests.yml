@@ -20,6 +20,8 @@ env:
 jobs:
   run-e2e:
     name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest-m
     timeout-minutes: 30   
     strategy:
