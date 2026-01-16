@@ -178,7 +178,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                             }
                         )
                         # Increment tool call counter if we have access to the optimizer
-                        _llm_calls._increment_tool_counter_if_in_optimizer()
+                        _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
                 else:
                     final_response = msg["content"]
                     break

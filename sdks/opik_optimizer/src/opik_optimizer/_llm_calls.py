@@ -129,7 +129,7 @@ def _increment_llm_counter_if_in_optimizer() -> None:
         frame = frame.f_back
 
 
-def _increment_tool_counter_if_in_optimizer() -> None:
+def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
@@ -146,7 +146,7 @@ def _increment_tool_counter_if_in_optimizer() -> None:
     while frame is not None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_tool_counter()
+            optimizer_candidate._increment_llm_call_tools_counter()
             break
         frame = frame.f_back
 

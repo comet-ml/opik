@@ -1103,7 +1103,7 @@ class TestCounterManagement:
         optimizer = ConcreteOptimizer(model="gpt-4")
 
         assert optimizer.llm_call_counter == 0
-        assert optimizer.tool_call_counter == 0
+        assert optimizer.llm_call_tools_counter == 0
 
     def test_increment_llm_counter(self) -> None:
         """_increment_llm_counter should increment the counter."""
@@ -1114,24 +1114,24 @@ class TestCounterManagement:
 
         assert optimizer.llm_call_counter == 2
 
-    def test_increment_tool_counter(self) -> None:
-        """_increment_tool_counter should increment the counter."""
+    def test_increment_llm_call_tools_counter(self) -> None:
+        """_increment_llm_call_tools_counter should increment the counter."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        optimizer._increment_tool_counter()
+        optimizer._increment_llm_call_tools_counter()
 
-        assert optimizer.tool_call_counter == 1
+        assert optimizer.llm_call_tools_counter == 1
 
     def test_reset_counters(self) -> None:
         """_reset_counters should reset both counters to zero."""
         optimizer = ConcreteOptimizer(model="gpt-4")
         optimizer._increment_llm_counter()
-        optimizer._increment_tool_counter()
+        optimizer._increment_llm_call_tools_counter()
 
         optimizer._reset_counters()
 
         assert optimizer.llm_call_counter == 0
-        assert optimizer.tool_call_counter == 0
+        assert optimizer.llm_call_tools_counter == 0
 
 
 class TestHistoryManagement:
@@ -1190,12 +1190,12 @@ class TestCleanup:
         """cleanup should reset call counters."""
         optimizer = ConcreteOptimizer(model="gpt-4")
         optimizer._increment_llm_counter()
-        optimizer._increment_tool_counter()
+        optimizer._increment_llm_call_tools_counter()
 
         optimizer.cleanup()
 
         assert optimizer.llm_call_counter == 0
-        assert optimizer.tool_call_counter == 0
+        assert optimizer.llm_call_tools_counter == 0
 
     def test_cleanup_clears_opik_client(self) -> None:
         """cleanup should clear the Opik client reference."""

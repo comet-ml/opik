@@ -191,8 +191,7 @@ class BaseOptimizer(ABC):
         self.experiment_config = None
         # Counters for usage/cost; tool_call_counter kept for backward compat
         self.llm_call_counter = 0
-        self.tool_call_counter = 0
-        self.llm_calls_tools_counter = 0
+        self.llm_call_tools_counter = 0
         self.llm_cost_total: float = 0.0
         self.llm_token_usage_total: dict[str, int] = {
             "prompt_tokens": 0,
@@ -284,8 +283,7 @@ class BaseOptimizer(ABC):
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
         self.llm_call_counter = 0
-        self.tool_call_counter = 0
-        self.llm_calls_tools_counter = 0
+        self.llm_call_tools_counter = 0
         self.llm_cost_total = 0.0
         self.llm_token_usage_total = {
             "prompt_tokens": 0,
@@ -297,10 +295,9 @@ class BaseOptimizer(ABC):
         """Increment the LLM call counter."""
         self.llm_call_counter += 1
 
-    def _increment_tool_counter(self) -> None:
+    def _increment_llm_call_tools_counter(self) -> None:
         """Increment the tool call counter."""
-        self.tool_call_counter += 1
-        self.llm_calls_tools_counter += 1
+        self.llm_call_tools_counter += 1
 
     def _add_llm_cost(self, cost: float | None) -> None:
         """Accumulate cost across optimizer calls."""
@@ -918,7 +915,7 @@ class BaseOptimizer(ABC):
             details=details,
             history=history_entries,
             llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
+            llm_calls_tools=self.llm_call_tools_counter,
             dataset_id=context.dataset.id,
             optimization_id=context.optimization_id,
         )

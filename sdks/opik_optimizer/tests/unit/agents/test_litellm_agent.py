@@ -228,7 +228,7 @@ class TestLiteLLMAgentToolCalling:
                 "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
             ):
                 with patch(
-                    "opik_optimizer._llm_calls._increment_tool_counter_if_in_optimizer"
+                    "opik_optimizer._llm_calls._increment_llm_call_tools_counter_if_in_optimizer"
                 ):
                     result = agent.invoke_agent(
                         prompts={"tool-prompt": tool_prompt},

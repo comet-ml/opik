@@ -157,8 +157,8 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
 
     assert "Sunny" in result
     assert captured_model_kwargs[0] == {"temperature": 0.2}
-    assert opt.llm_calls_tools_counter >= 1
-    assert opt.tool_call_counter >= 1
+    assert opt.llm_call_tools_counter >= 1
+    assert opt.llm_call_tools_counter >= 1
     assert opt.llm_cost_total == 1.5
     assert opt.llm_token_usage_total["prompt_tokens"] == 3
     assert opt.llm_token_usage_total["completion_tokens"] == 5

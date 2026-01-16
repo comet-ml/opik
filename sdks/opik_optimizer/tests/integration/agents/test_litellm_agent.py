@@ -60,5 +60,5 @@ def test_live_cost_tracking_round_trip() -> None:
     print(
         f"[live-cost-test] cost={opt.llm_cost_total} "
         f"usage={opt.llm_token_usage_total} "
-        f"llm_calls={opt.llm_call_counter} tools={opt.llm_calls_tools_counter}"
+        f"llm_calls={opt.llm_call_counter} tools={opt.llm_call_tools_counter}"
     )

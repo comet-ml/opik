@@ -78,12 +78,12 @@ class TestHierarchicalReflectiveOptimizerInit:
     def test_counter_reset(self) -> None:
         optimizer = HierarchicalReflectiveOptimizer()
         optimizer._increment_llm_counter()
-        optimizer._increment_tool_counter()
+        optimizer._increment_llm_call_tools_counter()
         assert optimizer.llm_call_counter > 0
-        assert optimizer.tool_call_counter > 0
+        assert optimizer.llm_call_tools_counter > 0
         optimizer._reset_counters()
         assert optimizer.llm_call_counter == 0
-        assert optimizer.tool_call_counter == 0
+        assert optimizer.llm_call_tools_counter == 0
 
 
 class TestHierarchicalReflectiveOptimizerOptimizePrompt:

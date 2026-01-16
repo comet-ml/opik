@@ -168,9 +168,9 @@ class OptimizableAgent:
                         # Increment tool call counter if we have access to the optimizer
                         optimizer_ref = self.optimizer
                         if optimizer_ref is not None and hasattr(
-                            optimizer_ref, "_increment_tool_counter"
+                            optimizer_ref, "_increment_llm_call_tools_counter"
                         ):
-                            optimizer_ref._increment_tool_counter()
+                            optimizer_ref._increment_llm_call_tools_counter()
                 else:
                     final_response = msg["content"]
                     break

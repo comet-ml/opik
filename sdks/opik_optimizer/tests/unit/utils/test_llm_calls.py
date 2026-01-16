@@ -711,7 +711,7 @@ class TestCounterIncrement:
 
         assert optimizer.llm_call_counter == initial_count + 1
 
-    def test_increment_tool_counter_walks_stack(self) -> None:
+    def test_increment_llm_call_tools_counter_walks_stack(self) -> None:
         """Test that tool counter increment walks call stack."""
 
         class MockOptimizer(BaseOptimizer):
@@ -730,11 +730,11 @@ class TestCounterIncrement:
                 return {}
 
         optimizer = MockOptimizer(model="gpt-4o")
-        initial_count = optimizer.tool_call_counter
+        initial_count = optimizer.llm_call_tools_counter
 
         def inner_call(self: Any) -> None:
-            _llm_calls._increment_tool_counter_if_in_optimizer()
+            _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
 
         inner_call(optimizer)
 
-        assert optimizer.tool_call_counter == initial_count + 1
+        assert optimizer.llm_call_tools_counter == initial_count + 1
