@@ -6,7 +6,23 @@ This guide explains how to configure the **Slack MCP server** for use with Curso
 
 This setup uses the **custom Slack MCP server** (`ghcr.io/korotovsky/slack-mcp-server`) which supports **User OAuth Tokens** (`SLACK_MCP_XOXP_TOKEN`). Messages will be posted as your authenticated user account, not as a bot.
 
+### Setup Overview
+
+**Workspace-Level Setup (One-Time, Done by Admin):**
+- **Step 1**: Create a Slack App
+- **Step 2**: Configure User Token Scopes
+
+**User-Level Setup (Per Developer):**
+- **Step 3**: Install App to Workspace
+- **Step 4**: Get Your User OAuth Token
+- **Step 5**: Environment Variables
+- **Step 6**: Restart Cursor
+
+---
+
 ### Step 1: Create a Slack App
+
+**Note**: This is a one-time workspace setup step, typically done by a workspace admin. Once the app is created and configured, all users in the workspace can use it.
 
 1. Go to [Slack API Apps](https://api.slack.com/apps)
 2. Click **"Create New App"** → **"From scratch"**
@@ -15,6 +31,8 @@ This setup uses the **custom Slack MCP server** (`ghcr.io/korotovsky/slack-mcp-s
 5. Click **"Create App"**
 
 ### Step 2: Configure User Token Scopes
+
+**Note**: This is a one-time workspace setup step, typically done by a workspace admin. Once the scopes are configured, all users in the workspace will have access to these scopes when they install the app.
 
 **CRITICAL**: You must add scopes to **"User Token Scopes"** (NOT "Bot Token Scopes") for the User OAuth Token to appear.
 
@@ -34,6 +52,8 @@ This setup uses the **custom Slack MCP server** (`ghcr.io/korotovsky/slack-mcp-s
 **Note**: The `users:read` and `channels:history` scopes are required by the `ghcr.io/korotovsky/slack-mcp-server` to properly cache and access channel information. Without these, you may see "missing_scope" errors in the logs, though basic message posting may still work.
 
 ### Step 3: Install App to Workspace
+
+**Note**: This is a per-user step. Each developer needs to install the app to their workspace to authorize it and get their own User OAuth Token.
 
 1. Scroll to the top of **"OAuth & Permissions"**
 2. Click **"Install to Workspace"** (or **"Reinstall to Workspace"** if you already installed it)
