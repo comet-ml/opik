@@ -24,7 +24,7 @@ export default function useMarkExportJobViewedMutation() {
     onSuccess: (_, variables) => {
       // Invalidate the specific job query to get updated viewed_at
       queryClient.invalidateQueries({
-        queryKey: ["dataset-export-job", variables.jobId],
+        queryKey: ["dataset-export-job", { jobId: variables.jobId }],
       });
       // Also invalidate the all jobs query to ensure consistency
       queryClient.invalidateQueries({
