@@ -52,7 +52,7 @@ This workflow will:
 - **Check current branch**: Get current branch name
 - **Check Slack MCP availability**: 
   - Use Slack MCP tool `channels_list` to test availability (from `ghcr.io/korotovsky/slack-mcp-server`)
-  - Call with minimal parameters: `channel_types: "public_channel"`, `limit: 1`
+  - Call with minimal parameters (for example: `limit: 1`) so that both public and private channels can be returned
   - This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
   - The server must be configured with `mcp-server --transport stdio` in the Docker args and have the `conversations_add_message` tool enabled (e.g., via `SLACK_MCP_ADD_MESSAGE_TOOL=true`) so the final send step can succeed
   - If Slack MCP tool is available and callable: Proceed with message sending via MCP (messages will post as user)
