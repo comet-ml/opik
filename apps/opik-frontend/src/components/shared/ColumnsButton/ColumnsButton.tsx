@@ -16,6 +16,21 @@ import SortableMenuSection from "./SortableMenuSection";
 import { ColumnData } from "@/types/shared";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
+/**
+ * Computes the list of column IDs that should be selected when "Select all" is checked.
+ * Excludes columns specified in excludeFromSelectAll.
+ *
+ * @param allColumnsIds - All available column IDs
+ * @param excludeFromSelectAll - Column IDs to exclude from select all
+ * @returns Filtered list of column IDs for select all functionality
+ */
+export function computeSelectAllColumnsIds(
+  allColumnsIds: string[],
+  excludeFromSelectAll: string[],
+): string[] {
+  return allColumnsIds.filter((id) => !excludeFromSelectAll.includes(id));
+}
+
 type ColumnsButtonShared<TColumnData> = {
   columns: ColumnData<TColumnData>[];
   order: string[];
@@ -55,7 +70,7 @@ const ColumnsButton = <TColumnData,>({
 
   // Columns to select when "Select all" is checked (excludes metadata items)
   const selectAllColumnsIds = useMemo(
-    () => allColumnsIds.filter((id) => !excludeFromSelectAll.includes(id)),
+    () => computeSelectAllColumnsIds(allColumnsIds, excludeFromSelectAll),
     [allColumnsIds, excludeFromSelectAll],
   );
 

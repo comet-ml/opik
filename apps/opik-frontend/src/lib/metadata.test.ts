@@ -1,73 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { getJSONPaths } from "./utils";
-import uniq from "lodash/uniq";
-
-/**
- * Normalizes metadata paths by:
- * - Filtering out paths that start with underscore (internal/private fields)
- * - Filtering out paths that contain array indices (e.g., "metadata.some_list[0].field")
- * - Extracting base array paths from filtered-out paths (e.g., "metadata.some_list")
- * - Deduplicating and sorting the result
- */
-function normalizeMetadataPaths(paths: string[]): string[] {
-  // Filter out paths that start with underscore or contain array indices
-  const filteredPaths = paths.filter((path: string) => {
-    // Filter out paths that start with underscore (internal/private fields)
-    const fieldName = path.startsWith("metadata.")
-      ? path.substring("metadata.".length)
-      : path;
-    if (fieldName.startsWith("_")) {
-      return false;
-    }
-
-    // Filter out paths that contain array indices
-    // e.g., exclude "metadata.some_list[0].field" but keep "metadata.some_list"
-    if (path.includes("[")) {
-      return false;
-    }
-
-    return true;
-  });
-
-  // Extract base array paths from paths that were filtered out
-  // e.g., from "metadata.some_list[0].field" extract "metadata.some_list"
-  const arrayBasePaths = new Set<string>();
-  paths.forEach((path: string) => {
-    if (path.includes("[")) {
-      // Extract the base path before the first "["
-      const basePath = path.substring(0, path.indexOf("["));
-      const fieldName = basePath.startsWith("metadata.")
-        ? basePath.substring("metadata.".length)
-        : basePath;
-      // Only include if it doesn't start with underscore
-      if (!fieldName.startsWith("_")) {
-        arrayBasePaths.add(basePath);
-      }
-    }
-  });
-
-  // Combine filtered paths and array base paths, then deduplicate and sort
-  return uniq([...filteredPaths, ...Array.from(arrayBasePaths)]).sort();
-}
-
-/**
- * Builds DynamicColumn array from normalized metadata paths.
- * Formats labels with "." prefix (e.g., "metadata.time_to_first_token" -> ".time_to_first_token")
- */
-function buildDynamicMetadataColumns(paths: string[]) {
-  return paths.map((path: string) => {
-    // Use "." prefix to indicate it's a path
-    // e.g., "metadata.time_to_first_token" -> ".time_to_first_token"
-    const label = path.startsWith("metadata.")
-      ? `.${path.substring("metadata.".length)}`
-      : `.${path}`;
-
-    return {
-      id: path, // e.g., "metadata.time_to_first_token" or "metadata.some_list"
-      label: label, // e.g., ".time_to_first_token" or ".some_list"
-    };
-  });
-}
+import {
+  normalizeMetadataPaths,
+  buildDynamicMetadataColumns,
+} from "./metadata";
 
 describe("normalizeMetadataPaths", () => {
   it("should filter out paths starting with underscore", () => {
@@ -145,7 +81,7 @@ describe("normalizeMetadataPaths", () => {
     expect(result).toEqual([]);
   });
 
-  it("should filter out private fields at root level", () => {
+  it("should filter out private fields at any level", () => {
     const paths = [
       "metadata.public",
       "metadata._private",
@@ -153,11 +89,10 @@ describe("normalizeMetadataPaths", () => {
       "metadata.nested.public",
     ];
     const result = normalizeMetadataPaths(paths);
-    // Note: The function only filters fields starting with underscore at the root level
-    // Nested paths like "metadata.nested._internal" are not filtered because
-    // the field name after "metadata." is "nested._internal" which doesn't start with "_"
+    // The function filters paths where ANY segment starts with underscore
+    // Nested paths like "metadata.nested._internal" are filtered because
+    // the "_internal" segment starts with "_"
     expect(result).toEqual([
-      "metadata.nested._internal",
       "metadata.nested.public",
       "metadata.public",
     ]);
@@ -182,10 +117,12 @@ describe("buildDynamicMetadataColumns", () => {
       {
         id: "metadata.time_to_first_token",
         label: ".time_to_first_token",
+        columnType: "string",
       },
       {
         id: "metadata.model_name",
         label: ".model_name",
+        columnType: "string",
       },
     ]);
   });
@@ -194,8 +131,8 @@ describe("buildDynamicMetadataColumns", () => {
     const paths = ["custom.path", "another.field"];
     const result = buildDynamicMetadataColumns(paths);
     expect(result).toEqual([
-      { id: "custom.path", label: ".custom.path" },
-      { id: "another.field", label: ".another.field" },
+      { id: "custom.path", label: ".custom.path", columnType: "string" },
+      { id: "another.field", label: ".another.field", columnType: "string" },
     ]);
   });
 
@@ -208,8 +145,8 @@ describe("buildDynamicMetadataColumns", () => {
     const paths = ["metadata.items", "metadata.tags"];
     const result = buildDynamicMetadataColumns(paths);
     expect(result).toEqual([
-      { id: "metadata.items", label: ".items" },
-      { id: "metadata.tags", label: ".tags" },
+      { id: "metadata.items", label: ".items", columnType: "string" },
+      { id: "metadata.tags", label: ".tags", columnType: "string" },
     ]);
   });
 });

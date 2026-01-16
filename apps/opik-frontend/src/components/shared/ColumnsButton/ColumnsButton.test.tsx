@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { computeSelectAllColumnsIds } from "./ColumnsButton";
 
 /**
  * Tests for ColumnsButton excludeFromSelectAll logic
@@ -23,8 +24,9 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
         "metadata.model_name",
       ];
 
-      const selectAllColumnsIds = allColumnsIds.filter(
-        (id) => !excludeFromSelectAll.includes(id),
+      const selectAllColumnsIds = computeSelectAllColumnsIds(
+        allColumnsIds,
+        excludeFromSelectAll,
       );
 
       expect(selectAllColumnsIds).toEqual(["name", "duration", "input"]);
@@ -40,8 +42,9 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
       ];
       const excludeFromSelectAll: string[] = [];
 
-      const selectAllColumnsIds = allColumnsIds.filter(
-        (id) => !excludeFromSelectAll.includes(id),
+      const selectAllColumnsIds = computeSelectAllColumnsIds(
+        allColumnsIds,
+        excludeFromSelectAll,
       );
 
       expect(selectAllColumnsIds).toEqual(allColumnsIds);
@@ -57,8 +60,9 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
       ];
       const excludeFromSelectAll = ["metadata.time_to_first_token"];
 
-      const selectAllColumnsIds = allColumnsIds.filter(
-        (id) => !excludeFromSelectAll.includes(id),
+      const selectAllColumnsIds = computeSelectAllColumnsIds(
+        allColumnsIds,
+        excludeFromSelectAll,
       );
 
       expect(selectAllColumnsIds).toEqual([

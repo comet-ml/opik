@@ -46,6 +46,10 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import {
+  normalizeMetadataPaths,
+  buildDynamicMetadataColumns,
+} from "@/lib/metadata";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   convertColumnDataToColumn,
@@ -241,74 +245,6 @@ const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
 
-/**
- * Normalizes metadata paths by:
- * - Filtering out paths that start with underscore (internal/private fields)
- * - Filtering out paths that contain array indices (e.g., "metadata.some_list[0].field")
- * - Extracting base array paths from filtered-out paths (e.g., "metadata.some_list")
- * - Deduplicating and sorting the result
- */
-function normalizeMetadataPaths(paths: string[]): string[] {
-  // Filter out paths that start with underscore or contain array indices
-  const filteredPaths = paths.filter((path: string) => {
-    // Filter out paths that start with underscore (internal/private fields)
-    const fieldName = path.startsWith("metadata.")
-      ? path.substring("metadata.".length)
-      : path;
-    if (fieldName.startsWith("_")) {
-      return false;
-    }
-
-    // Filter out paths that contain array indices
-    // e.g., exclude "metadata.some_list[0].field" but keep "metadata.some_list"
-    if (path.includes("[")) {
-      return false;
-    }
-
-    return true;
-  });
-
-  // Extract base array paths from paths that were filtered out
-  // e.g., from "metadata.some_list[0].field" extract "metadata.some_list"
-  const arrayBasePaths = new Set<string>();
-  paths.forEach((path: string) => {
-    if (path.includes("[")) {
-      // Extract the base path before the first "["
-      const basePath = path.substring(0, path.indexOf("["));
-      const fieldName = basePath.startsWith("metadata.")
-        ? basePath.substring("metadata.".length)
-        : basePath;
-      // Only include if it doesn't start with underscore
-      if (!fieldName.startsWith("_")) {
-        arrayBasePaths.add(basePath);
-      }
-    }
-  });
-
-  // Combine filtered paths and array base paths, then deduplicate and sort
-  return uniq([...filteredPaths, ...Array.from(arrayBasePaths)]).sort();
-}
-
-/**
- * Builds DynamicColumn array from normalized metadata paths.
- * Formats labels with "." prefix (e.g., "metadata.time_to_first_token" -> ".time_to_first_token")
- */
-function buildDynamicMetadataColumns(paths: string[]): DynamicColumn[] {
-  return paths.map<DynamicColumn>((path: string) => {
-    // Use "." prefix to indicate it's a path
-    // e.g., "metadata.time_to_first_token" -> ".time_to_first_token"
-    // Indentation is handled by SortableMenuItem component (adds pl-4 padding)
-    const label = path.startsWith("metadata.")
-      ? `.${path.substring("metadata.".length)}`
-      : `.${path}`;
-
-    return {
-      id: path, // e.g., "metadata.time_to_first_token" or "metadata.some_list"
-      label: label, // e.g., ".time_to_first_token" or ".some_list"
-      columnType: COLUMN_TYPE.string, // Default to string, could auto-detect
-    };
-  });
-}
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
