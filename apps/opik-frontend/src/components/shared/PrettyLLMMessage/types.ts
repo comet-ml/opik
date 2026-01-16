@@ -26,6 +26,7 @@ export interface PrettyLLMMessageContentProps {
 
 export interface PrettyLLMMessageTextBlockProps {
   children: string | ReactNode;
+  role?: MessageRole;
   showMoreButton?: boolean;
   className?: string;
 }

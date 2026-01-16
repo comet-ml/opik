@@ -736,10 +736,18 @@ const addUniqueMediaUrls = <T extends { url: string; name: string }>(
   createItem: (url: string) => T,
 ) => {
   const matches = input.match(regex) || [];
-  const urlMap = new Map<string, T>();
 
-  // Build initial map from existing collection
-  collection.forEach((item) => urlMap.set(item.url, item));
+  // Keep track of existing items to preserve them (don't deduplicate pre-existing items)
+  const existingItems = [...collection];
+  const urlMap = new Map<string, T[]>();
+
+  // Build map with arrays to preserve multiple items with same URL
+  existingItems.forEach((item) => {
+    if (!urlMap.has(item.url)) {
+      urlMap.set(item.url, []);
+    }
+    urlMap.get(item.url)!.push(item);
+  });
 
   matches.forEach((url) => {
     const existingUrls = Array.from(urlMap.keys());
@@ -755,12 +763,15 @@ const addUniqueMediaUrls = <T extends { url: string; name: string }>(
       }
     });
 
-    urlMap.set(url, createItem(url));
+    // Only add if not already in the map
+    if (!urlMap.has(url)) {
+      urlMap.set(url, [createItem(url)]);
+    }
   });
 
-  // Replace collection with deduplicated items in original order
+  // Replace collection with all items (preserving duplicates from original collection)
   collection.length = 0;
-  collection.push(...urlMap.values());
+  urlMap.forEach((items) => collection.push(...items));
 };
 
 const extractImageURLs = (input: string, images: ParsedImageData[]) => {
@@ -784,7 +795,14 @@ const extractAudioURLs = (input: string, audios: ParsedAudioData[]) => {
   }));
 };
 
-export const processInputData = (input?: object): ProcessedInput => {
+/**
+ * Internal function that extracts media WITHOUT deduplication.
+ * Use this when you need to preserve all media items including duplicates
+ * (e.g., for placeholder resolution in LLM messages).
+ *
+ * For most use cases, use processInputData instead which deduplicates by URL.
+ */
+export const processInputDataInternal = (input?: object): ProcessedInput => {
   if (!input) {
     return {
       media: [],
@@ -825,26 +843,47 @@ export const processInputData = (input?: object): ProcessedInput => {
   extractVideoURLs(inputString, videos);
   extractAudioURLs(inputString, audios);
 
-  const media: ParsedMediaData[] = uniqBy(
-    [
-      ...images.map((image) => ({
-        ...image,
-        type: ATTACHMENT_TYPE.IMAGE as const,
-      })),
-      ...videos.map((video) => ({
-        ...video,
-        type: ATTACHMENT_TYPE.VIDEO as const,
-      })),
-      ...audios.map((audio) => ({
-        ...audio,
-        type: ATTACHMENT_TYPE.AUDIO as const,
-      })),
-    ],
-    "url",
-  );
+  // Don't deduplicate here - each placeholder needs its own media item
+  // even if URLs are identical. This is critical for LLM message components
+  // where multiple placeholders like [image_0] and [image_1] may resolve to
+  // the same URL but need to be displayed separately.
+  const media: ParsedMediaData[] = [
+    ...images.map((image) => ({
+      ...image,
+      type: ATTACHMENT_TYPE.IMAGE as const,
+    })),
+    ...videos.map((video) => ({
+      ...video,
+      type: ATTACHMENT_TYPE.VIDEO as const,
+    })),
+    ...audios.map((audio) => ({
+      ...audio,
+      type: ATTACHMENT_TYPE.AUDIO as const,
+    })),
+  ];
 
   return {
     media,
     formattedData: safelyParseJSON(inputString),
+  };
+};
+
+/**
+ * Processes input data to extract and deduplicate media.
+ * This is the main public API that most consumers should use.
+ *
+ * For LLM message components that need to preserve duplicate URLs with
+ * different placeholders, use processInputDataInternal instead.
+ */
+export const processInputData = (input?: object): ProcessedInput => {
+  const result = processInputDataInternal(input);
+
+  // Deduplicate media by URL for normal use cases
+  // (dataset items, attachments list, etc.)
+  const deduplicatedMedia = uniqBy(result.media, "url");
+
+  return {
+    media: deduplicatedMedia,
+    formattedData: result.formattedData,
   };
 };

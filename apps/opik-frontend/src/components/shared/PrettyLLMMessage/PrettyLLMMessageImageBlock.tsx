@@ -3,18 +3,32 @@ import { cn } from "@/lib/utils";
 import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { PrettyLLMMessageImageBlockProps } from "./types";
+import { useMediaResolver } from "@/hooks/useMediaResolver";
 
+/**
+ * Pure presentation component for displaying images in LLM messages.
+ * Resolves placeholders like "[image_0]" using MediaContext.
+ * No API calls - all data comes from context.
+ */
 const PrettyLLMMessageImageBlock: React.FC<PrettyLLMMessageImageBlockProps> = ({
   images,
   className,
 }) => {
+  const resolveMedia = useMediaResolver();
+
+  console.log("images", images);
+
+  // Resolve placeholders to actual URLs using centralized resolver
   const mediaData: ParsedMediaData[] = useMemo(() => {
-    return images.map((image) => ({
-      url: image.url,
-      name: image.name,
-      type: ATTACHMENT_TYPE.IMAGE,
-    }));
-  }, [images]);
+    return images.map((image) => {
+      const resolved = resolveMedia(image.url, image.name);
+      return {
+        url: resolved.url,
+        name: resolved.name,
+        type: ATTACHMENT_TYPE.IMAGE,
+      };
+    });
+  }, [images, resolveMedia]);
 
   return (
     <div className={cn("w-full py-1", className)}>
