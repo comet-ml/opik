@@ -75,12 +75,29 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
     const { config } = widgetData;
 
-    const dataSource =
-      config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
-
-    const filters = config.filters || [];
     const overrideDefaults = config.overrideDefaults || false;
     const selectedColumns = config.selectedColumns || [];
+
+    const dataSource = useMemo(() => {
+      if (overrideDefaults) {
+        return config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+      }
+      return (
+        globalConfig?.experimentDataSource ||
+        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+      );
+    }, [
+      overrideDefaults,
+      config.dataSource,
+      globalConfig?.experimentDataSource,
+    ]);
+
+    const filters = useMemo(() => {
+      if (overrideDefaults) {
+        return config.filters || [];
+      }
+      return globalConfig?.experimentFilters || [];
+    }, [overrideDefaults, config.filters, globalConfig?.experimentFilters]);
 
     const experimentIds = useMemo(() => {
       if (overrideDefaults) {

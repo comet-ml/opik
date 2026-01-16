@@ -97,8 +97,6 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
   const config = useMemo(() => widgetConfig || {}, [widgetConfig]);
 
   const {
-    dataSource = EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-    filters = [],
     selectedColumns = [],
     enableRanking = true,
     rankingMetric,
@@ -107,10 +105,33 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     columnsOrder = [],
     scoresColumnsOrder = [],
     metadataColumnsOrder = [],
-    maxRows,
     sorting: savedSorting = [],
     overrideDefaults = false,
   } = config;
+
+  const dataSource = useMemo(() => {
+    if (overrideDefaults) {
+      return config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+    }
+    return (
+      globalConfig?.experimentDataSource ||
+      EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+    );
+  }, [overrideDefaults, config.dataSource, globalConfig?.experimentDataSource]);
+
+  const filters = useMemo(() => {
+    if (overrideDefaults) {
+      return config.filters || [];
+    }
+    return globalConfig?.experimentFilters || [];
+  }, [overrideDefaults, config.filters, globalConfig?.experimentFilters]);
+
+  const maxRows = useMemo(() => {
+    if (overrideDefaults) {
+      return config.maxRows;
+    }
+    return globalConfig?.maxExperimentsCount;
+  }, [overrideDefaults, config.maxRows, globalConfig?.maxExperimentsCount]);
 
   const maxRowsValue = useMemo(() => {
     if (!isNumber(maxRows)) {

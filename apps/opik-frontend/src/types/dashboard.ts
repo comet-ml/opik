@@ -175,6 +175,9 @@ export interface BaseDashboardConfig {
   dateRange: DateRangeSerializedValue;
   projectIds: string[];
   experimentIds: string[];
+  experimentDataSource?: EXPERIMENT_DATA_SOURCE;
+  experimentFilters?: Filters;
+  maxExperimentsCount?: number;
 }
 
 export interface DashboardWidgetComponentProps {

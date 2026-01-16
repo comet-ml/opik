@@ -11,6 +11,7 @@ import {
   WIDGET_TYPE,
   WidgetResolver,
   TEMPLATE_TYPE,
+  EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
 import { areLayoutsEqual } from "@/lib/dashboard/layout";
 import { isLooseEqual } from "@/lib/utils";
@@ -71,6 +72,9 @@ export const generateEmptyConfig = (): BaseDashboardConfig => ({
   dateRange: DEFAULT_DATE_PRESET,
   projectIds: [],
   experimentIds: [],
+  experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+  experimentFilters: [],
+  maxExperimentsCount: undefined,
 });
 
 export const generateEmptyDashboard = (): DashboardState => {

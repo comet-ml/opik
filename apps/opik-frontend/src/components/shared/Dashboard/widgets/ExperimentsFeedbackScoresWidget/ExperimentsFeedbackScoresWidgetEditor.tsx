@@ -42,6 +42,7 @@ import {
 import {
   useDashboardStore,
   selectUpdatePreviewWidget,
+  selectConfig,
 } from "@/store/DashboardStore";
 import {
   ExperimentsFeedbackScoresWidgetSchema,
@@ -61,20 +62,41 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
       (state) => state.previewWidget!,
     ) as DashboardWidget & ExperimentsFeedbackScoresWidgetType;
     const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
+    const globalConfig = useDashboardStore(selectConfig);
 
     const { config } = widgetData;
 
-    const dataSource =
-      config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+    const overrideDefaults = config.overrideDefaults || false;
 
-    const filters = useMemo(() => config.filters || [], [config.filters]);
+    const dataSource = useMemo(() => {
+      if (overrideDefaults) {
+        return config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+      }
+      return (
+        globalConfig?.experimentDataSource ||
+        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+      );
+    }, [
+      overrideDefaults,
+      config.dataSource,
+      globalConfig?.experimentDataSource,
+    ]);
+
+    const filters = useMemo(() => {
+      if (overrideDefaults) {
+        return config.filters || [];
+      }
+      return globalConfig?.experimentFilters || [];
+    }, [overrideDefaults, config.filters, globalConfig?.experimentFilters]);
 
     const groups = useMemo(() => config.groups || [], [config.groups]);
 
-    const experimentIds = useMemo(
-      () => config.experimentIds || [],
-      [config.experimentIds],
-    );
+    const experimentIds = useMemo(() => {
+      if (overrideDefaults) {
+        return config.experimentIds || [];
+      }
+      return globalConfig?.experimentIds || [];
+    }, [overrideDefaults, config.experimentIds, globalConfig?.experimentIds]);
 
     const chartType = config.chartType || CHART_TYPE.line;
 
@@ -82,8 +104,6 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
       () => config.feedbackScores || [],
       [config.feedbackScores],
     );
-
-    const overrideDefaults = config.overrideDefaults || false;
 
     const form = useForm<ExperimentsFeedbackScoresWidgetFormData>({
       resolver: zodResolver(ExperimentsFeedbackScoresWidgetSchema),

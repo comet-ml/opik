@@ -18,8 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
-import { Dashboard, TEMPLATE_TYPE } from "@/types/dashboard";
+import {
+  Dashboard,
+  TEMPLATE_TYPE,
+  EXPERIMENT_DATA_SOURCE,
+} from "@/types/dashboard";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
+import { Filters } from "@/types/filters";
+import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import {
@@ -51,6 +57,9 @@ const DashboardFormSchema = z.object({
   projectId: z.string().optional(),
   experimentIds: z.array(z.string()).optional(),
   templateType: z.string().optional(),
+  experimentDataSource: z.nativeEnum(EXPERIMENT_DATA_SOURCE).optional(),
+  experimentFilters: FiltersArraySchema.optional(),
+  maxExperimentsCount: z.number().min(1).max(100).optional(),
 });
 
 type DashboardFormData = z.infer<typeof DashboardFormSchema>;
@@ -119,6 +128,9 @@ const AddEditCloneDashboardDialog: React.FC<
       projectId: defaultProjectId,
       experimentIds: defaultExperimentIds || [],
       templateType: undefined,
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+      experimentFilters: [],
+      maxExperimentsCount: undefined,
     },
   });
 
@@ -249,6 +261,12 @@ const AddEditCloneDashboardDialog: React.FC<
             ? [values.projectId]
             : [];
           dashboardConfig.config.experimentIds = values.experimentIds || [];
+          dashboardConfig.config.experimentDataSource =
+            values.experimentDataSource;
+          dashboardConfig.config.experimentFilters =
+            (values.experimentFilters as Filters) || [];
+          dashboardConfig.config.maxExperimentsCount =
+            values.maxExperimentsCount;
         } else if (mode === "save_as" || mode === "clone") {
           dashboardConfig = regenerateAllIds(dashboard!.config);
           dashboardConfig.config.projectIds = values.projectId
@@ -325,6 +343,19 @@ const AddEditCloneDashboardDialog: React.FC<
                   showDataSourceSection={isCreateMode}
                   descriptionExpanded={!isCreateMode}
                   onSubmit={form.handleSubmit(onSubmit)}
+                  experimentDataSource={form.watch("experimentDataSource")}
+                  experimentFilters={
+                    (form.watch("experimentFilters") as Filters) || []
+                  }
+                  onExperimentDataSourceChange={(value) =>
+                    form.setValue("experimentDataSource", value)
+                  }
+                  onExperimentFiltersChange={(filters) =>
+                    form.setValue("experimentFilters", filters)
+                  }
+                  onMaxExperimentsCountChange={(value) =>
+                    form.setValue("maxExperimentsCount", value)
+                  }
                 />
               </form>
             </Form>
