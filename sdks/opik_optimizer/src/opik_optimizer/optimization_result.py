@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 from collections.abc import Iterator
-import datetime
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 
@@ -24,11 +23,7 @@ from .api_objects import chat_prompt
 from .constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
 
 
-# FIXME: Move to helpers.py
-def _now_iso() -> str:
-    return (
-        datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-    )
+from .utils.time import now_iso
 
 
 # FIXME: Move to helpers.py if we add a time utilities module.
@@ -77,7 +72,7 @@ class OptimizationTrial:
     metrics: dict[str, Any] | None = None
     dataset: str | None = None
     extras: dict[str, Any] | None = None
-    timestamp: str = field(default_factory=_now_iso)
+    timestamp: str = field(default_factory=now_iso)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,7 +110,7 @@ class OptimizationRound:
     generated_prompts: list[dict[str, Any]] | None = None
     stop_reason: str | None = None
     extras: dict[str, Any] | None = None
-    timestamp: str = field(default_factory=_now_iso)
+    timestamp: str = field(default_factory=now_iso)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -268,7 +263,7 @@ class OptimizationHistoryState:
             "trials": [],
             "candidates": [],
             "extra": extras or {},
-            "timestamp": timestamp or _now_iso(),
+            "timestamp": timestamp or now_iso(),
         }
         self._open_rounds[idx] = entry
         return idx
@@ -341,7 +336,7 @@ class OptimizationHistoryState:
             "dataset": dataset,
             "dataset_split": dataset_split_val,
             "extra": extras,
-            "timestamp": timestamp or _now_iso(),
+            "timestamp": timestamp or now_iso(),
         }
         candidate_id: str | None = None
         if trial_payload["trial_index"] is None:
@@ -447,7 +442,7 @@ class OptimizationHistoryState:
         if stop_reason is None and entry.get("stop_reason") is not None:
             stop_reason = entry.get("stop_reason")
         entry["stop_reason"] = stop_reason
-        entry["timestamp"] = timestamp or entry.get("timestamp") or _now_iso()
+        entry["timestamp"] = timestamp or entry.get("timestamp") or now_iso()
         self._merge_round(entry)
         # Reset round-scoped selection meta once consumed
         self._current_selection_meta = None
