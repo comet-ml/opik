@@ -309,8 +309,11 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
         sortable: sortableColumns?.includes("name") || false,
         customMeta: {
           nameKey: "name",
-          idKey: "id",
+          idKey: "dataset_id",
           resource: RESOURCE_TYPE.experiment,
+          getSearch: (data: Experiment) => ({
+            experiments: [data.id],
+          }),
         },
       }),
     );

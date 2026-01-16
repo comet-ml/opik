@@ -172,16 +172,6 @@ export const getDefaultConfig = () => ({
   sorting: [],
 });
 
-export const calculateTitle = (config: Record<string, unknown>) => {
-  const enableRanking = config.enableRanking as boolean;
-  const rankingMetric = config.rankingMetric as string | undefined;
-
-  if (enableRanking && rankingMetric) {
-    return `Experiment leaderboard (${formatMetricName(rankingMetric)})`;
-  }
-  return "Experiment leaderboard";
-};
-
 export const parseMetadataKeys = (experiments: Experiment[]): string[] => {
   const allKeys = experiments.reduce<string[]>((acc, exp) => {
     if (exp.metadata) {
@@ -192,18 +182,6 @@ export const parseMetadataKeys = (experiments: Experiment[]): string[] => {
   }, []);
 
   return uniq(allKeys).sort();
-};
-
-export const formatMetricName = (metric: string): string => {
-  const metricLabels: Record<string, string> = {
-    "duration.p50": "Duration (avg.)",
-    "duration.p90": "Duration (p90)",
-    "duration.p99": "Duration (p99)",
-    trace_count: "Trace count",
-    total_estimated_cost: "Total cost",
-    total_estimated_cost_avg: "Cost per trace",
-  };
-  return metricLabels[metric] || metric;
 };
 
 export const formatConfigColumnName = (key: string): string => {
@@ -246,5 +224,5 @@ export const getRankingFilters = (
 
 export const widgetHelpers = {
   getDefaultConfig,
-  calculateTitle,
+  calculateTitle: () => "Experiment leaderboard",
 };
