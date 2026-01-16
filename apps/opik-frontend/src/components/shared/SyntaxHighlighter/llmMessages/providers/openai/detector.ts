@@ -8,6 +8,12 @@ interface OpenAIMessage {
   name?: string;
 }
 
+interface OpenAICustomInputMessage {
+  role?: string;
+  text?: unknown;
+  files?: unknown[];
+}
+
 interface OpenAIChoice {
   message?: OpenAIMessage;
   index?: number;
@@ -35,6 +41,28 @@ const isOpenAIMessage = (msg: unknown): msg is OpenAIMessage => {
 };
 
 /**
+ * Checks if a message object has the custom input format structure with text/files
+ */
+const isCustomInputMessage = (
+  msg: unknown,
+): msg is OpenAICustomInputMessage => {
+  if (!msg || typeof msg !== "object") return false;
+  const m = msg as Record<string, unknown>;
+
+  // Must have a role field
+  if (!m.role || typeof m.role !== "string") return false;
+
+  // Role must be one of the valid OpenAI roles
+  const validRoles = ["system", "user", "assistant", "tool"];
+  if (!validRoles.includes(m.role)) return false;
+
+  // Must have text field (content equivalent)
+  if (m.text === undefined) return false;
+
+  return true;
+};
+
+/**
  * Checks if an object has OpenAI chat completion input format
  * (messages array with role/content objects)
  */
@@ -48,6 +76,33 @@ const hasOpenAIInputFormat = (data: unknown): boolean => {
 
   // Check that all messages have valid OpenAI message structure
   return d.messages.every(isOpenAIMessage);
+};
+
+/**
+ * Checks if data is a direct array of OpenAI messages
+ */
+const isOpenAIMessageArray = (data: unknown): boolean => {
+  if (!Array.isArray(data)) return false;
+  if (data.length === 0) return false;
+
+  // Check that all items are valid OpenAI messages
+  return data.every(isOpenAIMessage);
+};
+
+/**
+ * Checks if an object has custom input format
+ * (input array with text/files objects)
+ */
+const hasCustomInputFormat = (data: unknown): boolean => {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+
+  // Check for input array
+  if (!Array.isArray(d.input)) return false;
+  if (d.input.length === 0) return false;
+
+  // Check that all messages have valid custom input message structure
+  return d.input.every(isCustomInputMessage);
 };
 
 /**
@@ -71,12 +126,32 @@ const hasOpenAIOutputFormat = (data: unknown): boolean => {
 };
 
 /**
+ * Checks if an object has custom output format
+ * (text field with optional usage and finish_reason)
+ */
+const hasCustomOutputFormat = (data: unknown): boolean => {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+
+  // Must have a text field
+  if (typeof d.text !== "string") return false;
+
+  // Optional fields that commonly appear with this format
+  // If they exist, they should be the right type
+  if (d.usage !== undefined && typeof d.usage !== "object") return false;
+  if (d.finish_reason !== undefined && typeof d.finish_reason !== "string")
+    return false;
+
+  return true;
+};
+
+/**
  * Detects if the provided data is in OpenAI format.
- * Supports both input format (messages array) and output format (choices array).
+ * Supports multiple input and output formats.
  */
 export const detectOpenAIFormat: ProviderDetector = (data, prettifyConfig) => {
-  // If data is null, undefined, or not an object, not supported
-  if (!data || typeof data !== "object") {
+  // If data is null or undefined, not supported
+  if (!data) {
     return false;
   }
 
@@ -88,14 +163,32 @@ export const detectOpenAIFormat: ProviderDetector = (data, prettifyConfig) => {
     return false;
   }
 
-  // Check for input format (messages array)
-  if (isInput && hasOpenAIInputFormat(data)) {
-    return true;
+  // Check for input formats
+  if (isInput) {
+    // Standard format: { messages: [...] }
+    if (hasOpenAIInputFormat(data)) {
+      return true;
+    }
+    // Direct array format: [{ role: "user", content: "..." }]
+    if (isOpenAIMessageArray(data)) {
+      return true;
+    }
+    // Custom input format: { input: [{ role: "system", text: "...", files: [] }] }
+    if (hasCustomInputFormat(data)) {
+      return true;
+    }
   }
 
-  // Check for output format (choices array)
-  if (isOutput && hasOpenAIOutputFormat(data)) {
-    return true;
+  // Check for output formats
+  if (isOutput) {
+    // Standard format: { choices: [...] }
+    if (hasOpenAIOutputFormat(data)) {
+      return true;
+    }
+    // Custom output format: { text: "...", usage: {...}, finish_reason: "..." }
+    if (hasCustomOutputFormat(data)) {
+      return true;
+    }
   }
 
   return false;
