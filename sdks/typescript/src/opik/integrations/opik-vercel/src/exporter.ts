@@ -165,7 +165,7 @@ export class OpikExporter implements SpanExporter {
     const { attributes } = otelSpan;
 
     // Check for threadId in telemetry metadata
-    if (attributes["ai.telemetry.metadata.threadId"]) {
+    if (attributes["ai.telemetry.metadata.threadId"] != null) {
       return attributes["ai.telemetry.metadata.threadId"]?.toString();
     }
 
