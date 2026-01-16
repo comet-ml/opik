@@ -4,54 +4,54 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from opik_optimizer import ChatPrompt
-from opik_optimizer.optimization_result import (
-    OptimizationResult,
-    _format_float,
-    _format_prompt_for_plaintext,
+from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.utils.display import (
+    format_float,
+    format_prompt_for_plaintext,
 )
 
 
 class TestFormatFloat:
-    """Tests for _format_float helper function."""
+    """Tests for format_float helper function."""
 
     def test_formats_float_with_default_precision(self) -> None:
-        result = _format_float(3.14159265)
+        result = format_float(3.14159265)
         assert result == "3.141593"
 
     def test_formats_float_with_custom_precision(self) -> None:
-        result = _format_float(3.14159265, digits=2)
+        result = format_float(3.14159265, digits=2)
         assert result == "3.14"
 
     def test_formats_zero(self) -> None:
-        result = _format_float(0.0)
+        result = format_float(0.0)
         assert result == "0.000000"
 
     def test_formats_negative_float(self) -> None:
-        result = _format_float(-1.5, digits=3)
+        result = format_float(-1.5, digits=3)
         assert result == "-1.500"
 
     def test_passes_through_non_float(self) -> None:
-        result = _format_float("string_value")
+        result = format_float("string_value")
         assert result == "string_value"
 
     def test_passes_through_integer(self) -> None:
-        result = _format_float(42)
+        result = format_float(42)
         assert result == "42"
 
     def test_passes_through_none(self) -> None:
-        result = _format_float(None)
+        result = format_float(None)
         assert result == "None"
 
 
 class TestFormatPromptForPlaintext:
-    """Tests for _format_prompt_for_plaintext function."""
+    """Tests for format_prompt_for_plaintext function."""
 
     def test_formats_single_prompt(self) -> None:
         prompt = ChatPrompt(
             system="You are helpful.",
             user="What is 2+2?",
         )
-        result = _format_prompt_for_plaintext(prompt)
+        result = format_prompt_for_plaintext(prompt)
         assert "system:" in result
         assert "user:" in result
         assert "You are helpful." in result
@@ -62,7 +62,7 @@ class TestFormatPromptForPlaintext:
             "planner": ChatPrompt(system="Plan the task.", user="{task}"),
             "executor": ChatPrompt(system="Execute the plan.", user="{plan}"),
         }
-        result = _format_prompt_for_plaintext(prompts)
+        result = format_prompt_for_plaintext(prompts)
         assert "[planner]" in result
         assert "[executor]" in result
         assert "Plan the task." in result
@@ -71,7 +71,7 @@ class TestFormatPromptForPlaintext:
     def test_truncates_long_content(self) -> None:
         long_content = "x" * 500
         prompt = ChatPrompt(system=long_content, user="short")
-        result = _format_prompt_for_plaintext(prompt)
+        result = format_prompt_for_plaintext(prompt)
         # Content should be truncated
         assert len(result) < 500
 
@@ -91,7 +91,7 @@ class TestFormatPromptForPlaintext:
                 },
             ]
         )
-        result = _format_prompt_for_plaintext(prompt)
+        result = format_prompt_for_plaintext(prompt)
         assert "[multimodal content]" in result
 
 

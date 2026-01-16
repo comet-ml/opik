@@ -17,11 +17,11 @@ import rich.text
 
 from .utils.reporting import (
     _format_message_content,
-    format_prompt_snippet,
     get_console,
     get_link_text,
     get_optimization_run_url_by_id,
 )
+from .utils.display import format_prompt_for_plaintext, format_float
 
 from .api_objects import chat_prompt
 from .constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
@@ -32,48 +32,6 @@ def _now_iso() -> str:
     return (
         datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     )
-
-
-# FIXME: Move to helpers.py
-def _format_float(value: Any, digits: int = 6) -> str:
-    """Format float values with specified precision."""
-    if isinstance(value, float):
-        return f"{value:.{digits}f}"
-    return str(value)
-
-
-# FIXME: Move to display/reporting utils
-def _format_prompt_for_plaintext(
-    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-) -> str:
-    """Format a prompt (single or dict) for plain text display."""
-    if isinstance(prompt, dict):
-        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-        parts = []
-        for key, chat_p in prompt_dict.items():
-            parts.append(f"[{key}]")
-            for msg in chat_p.get_messages():
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                # Handle both string and multimodal content
-                if isinstance(content, str):
-                    snippet = format_prompt_snippet(content, max_length=150)
-                else:
-                    snippet = "[multimodal content]"
-                parts.append(f"  {role}: {snippet}")
-        return "\n".join(parts)
-    else:
-        # Single ChatPrompt
-        parts = []
-        for msg in prompt.get_messages():
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                snippet = format_prompt_snippet(content, max_length=150)
-            else:
-                snippet = "[multimodal content]"
-            parts.append(f"  {role}: {snippet}")
-    return "\n".join(parts)
 
 
 @dataclass
@@ -689,7 +647,7 @@ class OptimizationResult(pydantic.BaseModel):
         temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "N/A"
 
         try:
-            final_prompt_display = _format_prompt_for_plaintext(self.prompt)
+            final_prompt_display = format_prompt_for_plaintext(self.prompt)
         except Exception:
             final_prompt_display = str(self.prompt)
 
@@ -716,11 +674,11 @@ class OptimizationResult(pydantic.BaseModel):
             def _format_range(desc: dict[str, Any]) -> str:
                 if "min" in desc and "max" in desc:
                     step_str = (
-                        f", step={_format_float(desc['step'], precision)}"
+                        f", step={format_float(desc['step'], precision)}"
                         if desc.get("step") is not None
                         else ""
                     )
-                    return f"[{_format_float(desc['min'], precision)}, {_format_float(desc['max'], precision)}{step_str}]"
+                    return f"[{format_float(desc['min'], precision)}, {format_float(desc['max'], precision)}{step_str}]"
                 if desc.get("choices"):
                     return f"choices={desc['choices']}"
                 return str(desc)
@@ -771,7 +729,7 @@ class OptimizationResult(pydantic.BaseModel):
                     else:
                         total_improvement = self.score
                 for row in rows:
-                    value_str = _format_float(row["value"], precision)
+                    value_str = format_float(row["value"], precision)
                     contrib_val = row["contribution"]
                     if contrib_val is not None:
                         contrib_percent = contrib_val * 100
@@ -949,11 +907,11 @@ class OptimizationResult(pydantic.BaseModel):
             def _format_range(desc: dict[str, Any]) -> str:
                 if "min" in desc and "max" in desc:
                     step_str = (
-                        f", step={_format_float(desc['step'], precision)}"
+                        f", step={format_float(desc['step'], precision)}"
                         if desc.get("step") is not None
                         else ""
                     )
-                    return f"[{_format_float(desc['min'], precision)}, {_format_float(desc['max'], precision)}{step_str}]"
+                    return f"[{format_float(desc['min'], precision)}, {format_float(desc['max'], precision)}{step_str}]"
                 if desc.get("choices"):
                     return ",".join(map(str, desc["choices"]))
                 return str(desc)
@@ -970,7 +928,7 @@ class OptimizationResult(pydantic.BaseModel):
                     total_improvement = self.score
 
             for name in sorted(optimized_params):
-                value_str = _format_float(optimized_params[name], precision)
+                value_str = format_float(optimized_params[name], precision)
                 contrib_val = parameter_importance.get(name)
                 if contrib_val is not None:
                     contrib_str = f"{contrib_val:.1%}"
