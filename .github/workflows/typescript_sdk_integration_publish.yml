@@ -1,115 +1,84 @@
 name: TypeScript SDK Integration Build & Publish
-run-name: "TypeScript SDK Integration Build & Publish ${{ github.event.inputs.version || inputs.version || 'auto' }} from ${{github.ref_name}} by @${{ github.actor }}"
-
+run-name: "TypeScript SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
-  push:
-    paths:
-      - "sdks/typescript/src/opik/integrations/**"
-      - ".github/workflows/typescript_sdk_integration_publish.yml"
+  workflow_dispatch:
   pull_request:
     paths:
-      - "sdks/typescript/src/opik/integrations/**"
-      - ".github/workflows/typescript_sdk_integration_publish.yml"
-  workflow_dispatch:
-    inputs:
-      version:
-        type: string
-        required: true
-        description: Version
-        default: ""
-      is_release:
-        type: boolean
-        required: false
-        description: Whether this is a release (publishes to NPM)
-        default: false
-      skip_commit_push:
-        type: boolean
-        required: false
-        description: Skip commit and push
-        default: false
-  workflow_call:
-    inputs:
-      version:
-        type: string
-        required: true
-        description: Version
-        default: ""
-      is_release:
-        type: boolean
-        required: false
-        default: false
-      skip_commit_push:
-        type: boolean
-        required: false
-        default: false
-
+      - 'sdks/typescript/**'
+      - 'apps/opik-backend/**'
+  push:
+    branches: 
+      - 'main'
+    paths: 
+      - 'sdks/typescript/**'
+      - 'apps/opik-backend/**'
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_URL_OVERRIDE: http://localhost:5173/api
+  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  run-e2e:
+    name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
+    runs-on: ubuntu-latest-m
+    timeout-minutes: 30   
     strategy:
+      fail-fast: false
       matrix:
-        integration:
-          - opik-openai
-          - opik-gemini
-          - opik-langchain
-          - opik-vercel
-    env:
-      IS_RELEASE: ${{ inputs.is_release }}
-      INTEGRATION: ${{ matrix.integration }}
-      WORKING_DIR: sdks/typescript/src/opik/integrations/${{ matrix.integration }}
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR }}
+        node_version: [18, 20, 22]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
+          
+      - name: Set up Node.js ${{matrix.node_version}}
+        uses: actions/setup-node@v4.2.0
         with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-
-      - name: Verify integration exists
+          node-version: ${{matrix.node_version}}
+    
+      - name: Run latest Opik server
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
         run: |
-          if [ ! -d "${{ github.workspace }}/${{ env.WORKING_DIR }}" ]; then
-            echo "Error: Integration '${{ env.INTEGRATION }}' not found at path: ${{ env.WORKING_DIR }}"
-            exit 1
-          fi
-          echo "Integration '${{ env.INTEGRATION }}' found"
+          cd ${{ github.workspace }}
+          ./opik.sh --build --guardrails
+      
+      - name: Check Opik server availability
+        shell: bash
+        run: |
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+          cd ${{ github.workspace }}/deployment/docker-compose
+          echo "Check Docker pods are up"
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          echo "Check backend health"
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
-      - name: Build and Publish TypeScript SDK Integration
-        id: build_publish
-        uses: ./.github/actions/typescript-sdk-build-and-publish
+      - name: Install TypeScript SDK dependencies
+        working-directory: sdks/typescript
+        run: npm ci
+
+      - name: Build TypeScript SDK
+        working-directory: sdks/typescript
+        run: npm run build
+
+      - name: Run integration tests
+        working-directory: sdks/typescript
+        run: npm run test:integration
+
+      - name: Keep BE log in case of failure
+        if: failure()
+        run: |
+          docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_node${{matrix.node_version}}.log
+
+      - name: Attach BE log
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          working_directory: ${{ env.WORKING_DIR }}
-          version: ${{ inputs.version || '' }}
-          is_release: ${{ env.IS_RELEASE }}
-          package_name: ${{ env.INTEGRATION }}
-          npm_access: "public"
-          enable_cache: "true"
-          cache_dependency_path: ${{ env.WORKING_DIR }}/package-lock.json
-          test_package_installation: "true"
-          npm_token: ${{ secrets.NPM_TOKEN }}
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-          skip_commit_push: ${{ inputs.skip_commit_push }}
+          name: opik-backend-log-node${{matrix.node_version}}
+          path: ${{ github.workspace }}/opik-backend_node${{matrix.node_version}}.log
 
-      - name: Summary
+      - name: Stop opik server
+        if: always()
         run: |
-          echo "## ${{ env.INTEGRATION }} Build" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Is Release:** ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ env.IS_RELEASE }}" = "true" ]; then
-            echo "**Published:** ✅ Published to NPM" >> $GITHUB_STEP_SUMMARY
-            echo "**Package:** 📦 ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "**NPM:** 🔗 https://www.npmjs.com/package/${{ steps.build_publish.outputs.package_name }}/v/${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Install with:**" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "npm install ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Status:** ⏭️ Build and tests only" >> $GITHUB_STEP_SUMMARY
-          fi
+          cd ${{ github.workspace }}
+          ./opik.sh --stop --guardrails
