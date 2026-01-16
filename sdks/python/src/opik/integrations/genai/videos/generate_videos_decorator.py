@@ -75,7 +75,9 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
         config = kwargs.get("config")
         if config is not None:
             if hasattr(config, "model_dump"):
-                new_metadata["config"] = config.model_dump(mode="json", exclude_none=True)
+                new_metadata["config"] = config.model_dump(
+                    mode="json", exclude_none=True
+                )
             elif isinstance(config, dict):
                 new_metadata["config"] = config
 

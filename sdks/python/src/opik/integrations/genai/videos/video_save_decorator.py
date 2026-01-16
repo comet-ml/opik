@@ -56,9 +56,7 @@ def _create_video_save_decorator(
                 result = func(file)
                 span_data.update(
                     attachments=[
-                        attachment.Attachment(
-                            data=str(file), content_type="video/mp4"
-                        )
+                        attachment.Attachment(data=str(file), content_type="video/mp4")
                     ]
                 )
                 return result

@@ -12,9 +12,7 @@ from opik.message_processing import messages
 @pytest.fixture
 def original_file() -> Generator[str, None, None]:
     """Create a file with test content and clean up after test."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         f.write("test content")
         path = f.name
 
