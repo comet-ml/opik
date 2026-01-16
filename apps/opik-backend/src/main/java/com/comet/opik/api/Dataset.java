@@ -81,12 +81,12 @@ public record Dataset(
             @NotNull String sourceWorkspaceName,
             @NotNull UUID sourceDatasetId,
             @NotBlank String name,
-            @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "cannot exceed 255 characters") String description
-    ) {}
+            @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 255, message = "cannot exceed 255 characters") String description) {
+    }
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record PublicWorkspaceInfo(
             String workspaceId,
-            String workspaceName
-    ) {}
+            String workspaceName) {
+    }
 }

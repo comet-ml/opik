@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
-import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetLastExperimentCreated;
@@ -14,7 +13,6 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
-import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
@@ -23,6 +21,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -38,8 +37,8 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -47,12 +46,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
@@ -117,7 +117,8 @@ public interface DatasetService {
 
     DatasetPage findPublicDatasetsByWorkspace(String workspaceName, int page, int size, String name);
 
-    Dataset importDataset(String sourceWorkspaceName, UUID sourceDatasetId, String targetName, String targetDescription);
+    Mono<Dataset> importDataset(String sourceWorkspaceName, UUID sourceDatasetId, String targetName,
+            String targetDescription);
 }
 
 @Singleton
@@ -783,7 +784,10 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-        // Get all workspace IDs that have at least one public dataset
+    public List<Dataset.PublicWorkspaceInfo> findPublicWorkspacesWithDatasets() {
+        log.info("Finding accessible workspaces with datasets");
+
+        // Get all workspace IDs that have datasets (not just public ones)
         List<String> workspaceIds = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
             return dao.findPublicWorkspaceIds();
@@ -791,7 +795,7 @@ class DatasetServiceImpl implements DatasetService {
 
         Optional<String> reactServiceBaseUrl = Optional.ofNullable(authenticationConfig.getReactService())
                 .map(AuthenticationConfig.UrlConfig::url);
-        
+
         if (reactServiceBaseUrl.isEmpty()) {
             log.warn("React service is not configured, cannot resolve workspace names");
             return List.of();
@@ -806,7 +810,8 @@ class DatasetServiceImpl implements DatasetService {
         List<Dataset.PublicWorkspaceInfo> workspaces = workspaceIds.stream()
                 .map(workspaceId -> {
                     try {
-                        String workspaceName = workspaceNameService.getWorkspaceName(workspaceId, reactServiceBaseUrl.get());
+                        String workspaceName = workspaceNameService.getWorkspaceName(workspaceId,
+                                reactServiceBaseUrl.get());
                         return new Dataset.PublicWorkspaceInfo(workspaceId, workspaceName);
                     } catch (javax.ws.rs.WebApplicationException | javax.ws.rs.ProcessingException e) {
                         log.warn("Failed to get workspace name for workspaceId '{}': {}", workspaceId, e.getMessage());
@@ -822,7 +827,8 @@ class DatasetServiceImpl implements DatasetService {
 
     @Override
     public DatasetPage findPublicDatasetsByWorkspace(String workspaceName, int page, int size, String name) {
-        log.info("Finding accessible datasets for workspace '{}', page '{}', size '{}', name '{}'", workspaceName, page, size, name);
+        log.info("Finding accessible datasets for workspace '{}', page '{}', size '{}', name '{}'", workspaceName, page,
+                size, name);
 
         // Convert workspace name to ID
         String workspaceId = getWorkspaceId(workspaceName);
@@ -843,49 +849,67 @@ class DatasetServiceImpl implements DatasetService {
 
             List<Dataset> enrichedDatasets = enrichDatasetWithAdditionalInformation(datasets);
 
-            return new DatasetPage(enrichedDatasets, page, enrichedDatasets.size(), count, sortingFactory.getSortableFields());
+            return new DatasetPage(enrichedDatasets, page, enrichedDatasets.size(), count,
+                    sortingFactory.getSortableFields());
         });
     }
 
     @Override
-    public Dataset importDataset(String sourceWorkspaceName, UUID sourceDatasetId, String targetName, String targetDescription) {
+    public Mono<Dataset> importDataset(String sourceWorkspaceName, UUID sourceDatasetId, String targetName,
+            String targetDescription) {
         log.info("Importing dataset '{}' from workspace '{}' to current workspace with name '{}'",
                 sourceDatasetId, sourceWorkspaceName, targetName);
 
-        String targetWorkspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
+        return Mono.deferContextual(ctx -> {
+            String targetWorkspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-        // Convert source workspace name to ID
-        String sourceWorkspaceId = getWorkspaceId(sourceWorkspaceName);
+            // Convert source workspace name to ID (blocking operation)
+            Mono<String> sourceWorkspaceIdMono = Mono.fromCallable(() -> getWorkspaceId(sourceWorkspaceName))
+                    .subscribeOn(Schedulers.boundedElastic());
 
-        // Verify source dataset exists and user has access to it
-        // Note: We don't check visibility here - if the user can see the workspace/dataset in the UI,
-        // they have access to it. The frontend only shows workspaces/datasets the user has access to.
-        Dataset sourceDataset = findById(sourceDatasetId, sourceWorkspaceId, null);
-        if (sourceDataset == null) {
-            throw new NotFoundException("Dataset not found or you don't have access to it");
-        }
+            // Verify source dataset exists and user has access to it, then create new dataset (blocking operations)
+            Mono<Dataset> newDatasetMono = sourceWorkspaceIdMono
+                    .flatMap(sourceWorkspaceId -> Mono.fromCallable(() -> {
+                        // Note: We don't check visibility here - if the user can see the workspace/dataset in the UI,
+                        // they have access to it. The frontend only shows workspaces/datasets the user has access to.
+                        Dataset sourceDataset = findById(sourceDatasetId, sourceWorkspaceId, null);
+                        if (sourceDataset == null) {
+                            throw new NotFoundException("Dataset not found or you don't have access to it");
+                        }
+                        return sourceWorkspaceId;
+                    }).subscribeOn(Schedulers.boundedElastic()))
+                    .flatMap(sourceWorkspaceId -> Mono.fromCallable(() -> {
+                        Dataset newDataset = save(Dataset.builder()
+                                .name(targetName)
+                                .description(targetDescription)
+                                .visibility(Visibility.PRIVATE)
+                                .build());
 
-        // Create new dataset in target workspace
-        Dataset newDataset = save(Dataset.builder()
-                .name(targetName)
-                .description(targetDescription)
-                .visibility(Visibility.PRIVATE)
-                .build());
+                        log.info("Created new dataset '{}' in workspace '{}', copying items from source dataset '{}'",
+                                newDataset.id(), targetWorkspaceId, sourceDatasetId);
 
-        log.info("Created new dataset '{}' in workspace '{}', copying items from source dataset '{}'",
-                newDataset.id(), targetWorkspaceId, sourceDatasetId);
+                        return newDataset;
+                    }).subscribeOn(Schedulers.boundedElastic()));
 
-        // Copy items from source dataset to target dataset
-        copyItemsFromDataset(sourceWorkspaceId, sourceDatasetId, newDataset.id())
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, targetWorkspaceId)
-                        .put(RequestContext.USER_NAME, userName))
-                .block();
+            // Copy items from source dataset to target dataset (reactive operation)
+            return sourceWorkspaceIdMono
+                    .zipWith(newDatasetMono)
+                    .flatMap(tuple -> {
+                        String sourceWorkspaceId = tuple.getT1();
+                        Dataset newDataset = tuple.getT2();
 
-        log.info("Successfully imported dataset '{}' from workspace '{}' to dataset '{}' in workspace '{}'",
-                sourceDatasetId, sourceWorkspaceName, newDataset.id(), targetWorkspaceId);
-
-        return newDataset;
+                        return copyItemsFromDataset(sourceWorkspaceId, sourceDatasetId, newDataset.id())
+                                .contextWrite(
+                                        contextCtx -> contextCtx.put(RequestContext.WORKSPACE_ID, targetWorkspaceId)
+                                                .put(RequestContext.USER_NAME, userName))
+                                .then(Mono.just(newDataset))
+                                .doOnSuccess(dataset -> log.info(
+                                        "Successfully imported dataset '{}' from workspace '{}' to dataset '{}' in workspace '{}'",
+                                        sourceDatasetId, sourceWorkspaceName, dataset.id(), targetWorkspaceId));
+                    });
+        })
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext));
     }
 
     private String getWorkspaceId(String workspaceName) {
@@ -902,7 +926,7 @@ class DatasetServiceImpl implements DatasetService {
 
         Optional<String> reactServiceBaseUrl = Optional.ofNullable(authenticationConfig.getReactService())
                 .map(AuthenticationConfig.UrlConfig::url);
-        
+
         if (reactServiceBaseUrl.isEmpty()) {
             log.error("React service is not configured, cannot resolve workspace name '{}'", workspaceName);
             throw new NotFoundException("Workspace not found: " + workspaceName);
@@ -932,9 +956,31 @@ class DatasetServiceImpl implements DatasetService {
         } catch (NotFoundException e) {
             // Re-throw NotFoundException as-is
             throw e;
+        } catch (ProcessingException e) {
+            // Handle JAX-RS client processing errors (network issues, connection problems)
+            Throwable cause = e.getCause();
+            if (cause instanceof ConnectException) {
+                // Handle connection failures
+                log.error("Connection failed while resolving workspace name '{}' from React service: {}", workspaceName,
+                        cause.getMessage(), e);
+                throw new NotFoundException("Workspace not found: " + workspaceName);
+            } else if (cause instanceof SocketTimeoutException) {
+                // Handle timeout errors
+                log.error("Timeout while resolving workspace name '{}' from React service: {}", workspaceName,
+                        cause.getMessage(), e);
+                throw new NotFoundException("Workspace not found: " + workspaceName);
+            } else {
+                // Other network/processing errors
+                log.error("Network error while resolving workspace name '{}' from React service: {} - {}",
+                        workspaceName,
+                        e.getClass().getSimpleName(), e.getMessage(), e);
+                throw new NotFoundException("Workspace not found: " + workspaceName);
+            }
         } catch (Exception e) {
-            log.error("Failed to get workspace ID from React service for '{}'", workspaceName, e);
-            throw new NotFoundException("Workspace not found: " + workspaceName);
+            // Unexpected exceptions should surface as server errors
+            log.error("Unexpected error while resolving workspace name '{}' from React service: {} - {}", workspaceName,
+                    e.getClass().getSimpleName(), e.getMessage(), e);
+            throw new InternalServerErrorException("Failed to resolve workspace: " + workspaceName, e);
         } finally {
             if (response != null) {
                 try {

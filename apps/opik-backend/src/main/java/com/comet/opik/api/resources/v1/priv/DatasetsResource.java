@@ -792,7 +792,8 @@ public class DatasetsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name) {
-        log.info("Getting public datasets for workspace '{}', page '{}', size '{}', name '{}'", workspaceName, page, size, name);
+        log.info("Getting public datasets for workspace '{}', page '{}', size '{}', name '{}'", workspaceName, page,
+                size, name);
         DatasetPage datasetPage = service.findPublicDatasetsByWorkspace(workspaceName, page, size, name);
         log.info("Found {} public datasets for workspace '{}'", datasetPage.total(), workspaceName);
         return Response.ok(datasetPage).build();
@@ -818,7 +819,9 @@ public class DatasetsResource {
                 request.sourceWorkspaceName(),
                 request.sourceDatasetId(),
                 request.name(),
-                request.description());
+                request.description())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
 
         log.info("Imported dataset '{}' from workspace '{}' to dataset '{}' in workspace '{}'",
                 request.sourceDatasetId(), request.sourceWorkspaceName(), importedDataset.id(), workspaceId);
