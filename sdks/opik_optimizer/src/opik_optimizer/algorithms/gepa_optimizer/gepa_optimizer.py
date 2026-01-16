@@ -5,7 +5,7 @@ from opik import Dataset
 
 from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
 from ...optimization_result import build_candidate_entry
-from ...reporting_utils import (
+from ...utils.reporting import (
     convert_tqdm_to_rich,
     suppress_opik_logs,
 )

@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from opik.evaluation.metrics import base_metric
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik_optimizer.multi_metric_objective import MultiMetricObjective
+from opik_optimizer.metrics.multi_metric_objective import MultiMetricObjective
 
 
 # Mock metric functions for testing

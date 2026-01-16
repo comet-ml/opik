@@ -22,7 +22,7 @@ from .... import _llm_calls
 from ....optimization_result import OptimizationRound
 from .. import prompts as meta_prompts
 from .. import reporting
-from .... import reporting_utils
+from ....utils import reporting as reporting_utils
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 

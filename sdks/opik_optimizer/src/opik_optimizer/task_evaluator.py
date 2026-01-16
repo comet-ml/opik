@@ -5,11 +5,11 @@ from collections.abc import Callable
 
 import opik
 from .api_objects.types import MetricFunction
-from .reporting_utils import suppress_experiment_reporting
+from .utils.reporting import suppress_experiment_reporting
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
-from . import multi_metric_objective
+from .metrics.multi_metric_objective import MultiMetricObjective
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
                     return metric_val
 
                 # Handle MultiMetricObjective - always returns list (preserves original)
-                if isinstance(metric, multi_metric_objective.MultiMetricObjective):
+                if isinstance(metric, MultiMetricObjective):
                     # MultiMetricObjective.__call__ always returns ScoreResult
                     if isinstance(metric_val, score_result.ScoreResult):
                         if (

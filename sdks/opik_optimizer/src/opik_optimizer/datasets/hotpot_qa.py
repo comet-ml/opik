@@ -3,7 +3,7 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import (
+from opik_optimizer.utils.dataset import (
     DatasetHandle,
     FilterBy,
     warn_deprecated_dataset,

@@ -12,9 +12,9 @@ from rich.panel import Panel
 from rich.progress import Progress
 from rich.text import Text
 
-from .utils import get_optimization_run_url_by_id
-from .api_objects import chat_prompt
-from .utils.candidate_selection import DEFAULT_SELECTION_POLICY
+from .core import get_optimization_run_url_by_id
+from ..api_objects import chat_prompt
+from .candidate_selection import DEFAULT_SELECTION_POLICY
 
 PANEL_WIDTH = 70
 

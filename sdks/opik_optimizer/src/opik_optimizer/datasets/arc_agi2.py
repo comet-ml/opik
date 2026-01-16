@@ -10,12 +10,12 @@ import opik
 from datasets import load_dataset
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import (
+from opik_optimizer.utils.dataset import (
     DatasetHandle,
     FilterBy,
     resolve_dataset_seed,
 )
-from opik_optimizer.utils.image_utils import encode_image_to_base64_uri
+from opik_optimizer.utils.image import encode_image_to_base64_uri
 
 logger = logging.getLogger(__name__)
 

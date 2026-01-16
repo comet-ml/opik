@@ -6,7 +6,7 @@ from collections.abc import Generator
 
 import pytest
 
-from opik_optimizer.logging_config import setup_logging
+from opik_optimizer.utils.logging import setup_logging
 
 
 try:  # pragma: no cover - executed only when rich is installed normally

@@ -195,7 +195,7 @@ class TestGepaOptimizerAgentUsage:
         self.agent is properly assigned from context.agent for use
         in OpikGEPAAdapter and reflection operations.
         """
-        from opik_optimizer.optimizable_agent import OptimizableAgent
+        from opik_optimizer.agents.optimizable_agent import OptimizableAgent
         from opik_optimizer.base_optimizer import OptimizationContext
 
         optimizer = GepaOptimizer(

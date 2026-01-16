@@ -19,7 +19,8 @@ from ...base_optimizer import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
-from ... import _throttle, task_evaluator
+from ... import task_evaluator
+from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from ...optimization_result import build_candidate_entry
 from . import types

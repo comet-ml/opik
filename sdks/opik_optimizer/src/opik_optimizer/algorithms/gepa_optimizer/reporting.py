@@ -15,7 +15,7 @@ from rich.progress import (
     MofNCompleteColumn,
 )
 
-from ...reporting_utils import (  # noqa: F401
+from ...utils.reporting import (  # noqa: F401
     display_configuration,
     display_header,
     display_result,

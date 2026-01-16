@@ -644,7 +644,7 @@ class TestReporterLifecycle:
             lambda study, params=None, target=None: {},
         )
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.compute_sensitivity_from_trials",
+            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.sensitivity_analysis",
             lambda trials, specs: {},
         )
 

@@ -26,6 +26,8 @@ from opik_optimizer import (
     GepaOptimizer,
     HierarchicalReflectiveOptimizer,
     ParameterOptimizer,
+)
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
 )
 

@@ -18,7 +18,8 @@ from opik.api_objects import optimization
 from opik import Dataset, opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 
-from . import reporting_utils, task_evaluator, helpers
+from . import task_evaluator, helpers
+from .utils import reporting as reporting_utils
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent

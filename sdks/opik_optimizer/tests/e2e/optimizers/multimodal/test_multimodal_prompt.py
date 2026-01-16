@@ -11,7 +11,6 @@ Note: Some optimizers are expected to fail initially as they don't yet
 support content_parts. These will be updated to support multimodal prompts.
 """
 
-import os
 from typing import Any
 
 import pytest
@@ -29,6 +28,8 @@ from opik_optimizer import (
     GepaOptimizer,
     HierarchicalReflectiveOptimizer,
     ParameterOptimizer,
+)
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
 )
 

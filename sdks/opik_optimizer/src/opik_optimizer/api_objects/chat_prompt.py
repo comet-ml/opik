@@ -89,7 +89,6 @@ class ChatPrompt:
             self._validate_tools(tools)
 
         self.name = name
-
         self.system = system
         self.user = user
         self.messages = messages

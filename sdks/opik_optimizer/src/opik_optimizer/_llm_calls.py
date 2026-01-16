@@ -11,7 +11,7 @@ from litellm.exceptions import BadRequestError
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
-from . import _throttle
+from .utils import throttle as _throttle
 from . import utils as _utils
 from typing import TYPE_CHECKING
 

@@ -345,7 +345,7 @@ class TestEvolutionaryOptimizerAgentUsage:
         This test ensures that when pre_optimization is called,
         self.agent is properly assigned from context.agent.
         """
-        from opik_optimizer.optimizable_agent import OptimizableAgent
+        from opik_optimizer.agents.optimizable_agent import OptimizableAgent
         from opik_optimizer.base_optimizer import OptimizationContext
 
         optimizer = EvolutionaryOptimizer(

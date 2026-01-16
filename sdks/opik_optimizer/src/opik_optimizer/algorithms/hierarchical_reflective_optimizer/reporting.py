@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from ...api_objects import chat_prompt
-from ...reporting_utils import (  # noqa: F401
+from ...utils.reporting import (  # noqa: F401
     convert_tqdm_to_rich,
     display_configuration,
     display_header,

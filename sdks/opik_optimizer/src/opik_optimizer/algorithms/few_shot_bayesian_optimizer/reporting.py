@@ -7,7 +7,7 @@ from rich.text import Text
 if TYPE_CHECKING:
     from ...api_objects.chat_prompt import ChatPrompt
 
-from ...reporting_utils import (  # noqa: F401
+from ...utils.reporting import (  # noqa: F401
     display_configuration,
     display_header,
     display_messages,

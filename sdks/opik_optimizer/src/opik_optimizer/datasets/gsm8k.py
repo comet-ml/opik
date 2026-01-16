@@ -3,7 +3,7 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 GSM8K_SPEC = DatasetSpec(
     name="gsm8k",

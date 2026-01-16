@@ -10,7 +10,7 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from . import reporting
-from ...reporting_utils import get_console
+from ...utils.reporting import get_console
 from ... import _llm_calls
 from ...utils.prompt_library import PromptLibrary
 

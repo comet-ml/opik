@@ -22,7 +22,7 @@ from opik_optimizer.datasets import hotpot
 from benchmarks.metrics.hotpot import hotpot_f1
 
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
-from opik_optimizer.logging_config import setup_logging
+from opik_optimizer.utils.logging import setup_logging
 from opik_optimizer import HierarchicalReflectiveOptimizer, OptimizableAgent, ChatPrompt
 from typing import Any
 from collections.abc import Callable

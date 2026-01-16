@@ -10,7 +10,7 @@ from ...base_optimizer import (
 from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ... import _throttle
+from ...utils import throttle as _throttle
 from ...optimization_result import OptimizationRound
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame

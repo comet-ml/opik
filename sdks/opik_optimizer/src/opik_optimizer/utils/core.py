@@ -148,7 +148,6 @@ def _convert_literals_to_json_compatible(value: Any) -> Any:
     return str(value)
 
 
-# FIXME: We now have a OptimizationContext
 def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
@@ -172,7 +171,7 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-# FIXME: Refactor and move to tools/wikipedia.py
+# Deprecated functions
 def __getattr__(name: str) -> Any:
     """Provide backward compatibility for moved Wikipedia functions."""
     if name == "search_wikipedia":

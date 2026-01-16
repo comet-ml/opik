@@ -7,7 +7,8 @@ owning optimizer for telemetry and budgeting.
 """
 
 from ..api_objects import chat_prompt
-from .. import _llm_calls, _throttle
+from .. import _llm_calls
+from ..utils import throttle as _throttle
 import os
 from typing import Any
 import json
@@ -49,7 +50,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
         self,
-        model: str,
+        model: str | None,
         messages: list[dict[str, str]],
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
@@ -197,7 +198,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             if os.getenv("ARC_AGI2_DEBUG", "0") not in {"", "0", "false", "False"}:
                 try:
                     # Lightweight debug to confirm number of completions returned
-                    from opik_optimizer.utils.dataset_utils import resolve_dataset_seed  # noqa: F401
+                    from opik_optimizer.utils.dataset import resolve_dataset_seed  # noqa: F401
                 except Exception:
                     pass
             if len(choices) > 1:

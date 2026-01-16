@@ -18,7 +18,7 @@ from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ... import reporting_utils
+from ...utils import reporting as reporting_utils
 from .types import ParameterType
 from .ops import sensitivity_analysis
 from .ops.search_ops import ParameterSearchSpace

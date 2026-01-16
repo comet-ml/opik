@@ -13,7 +13,7 @@ import rich.panel
 import rich.table
 import rich.text
 
-from .reporting_utils import (
+from .utils.reporting import (
     _format_message_content,
     format_prompt_snippet,
     get_console,
@@ -25,12 +25,14 @@ from .api_objects import chat_prompt
 from .constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
 
 
+# FIXME: Move to helpers.py
 def _now_iso() -> str:
     return (
         datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     )
 
 
+# FIXME: Move to helpers.py
 def _format_float(value: Any, digits: int = 6) -> str:
     """Format float values with specified precision."""
     if isinstance(value, float):
@@ -38,6 +40,7 @@ def _format_float(value: Any, digits: int = 6) -> str:
     return str(value)
 
 
+# FIXME: Move to display/reporting utils
 def _format_prompt_for_plaintext(
     prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
 ) -> str:
@@ -411,6 +414,7 @@ class OptimizationHistoryState:
             entry["extra"] = {**(entry.get("extra") or {}), **extras}
         if dataset_split is not None:
             entry["dataset_split"] = dataset_split
+        # FIXME: Move to pareto_front utils
         if pareto_front is not None:
             entry.setdefault("extra", {})
             entry["extra"]["pareto_front"] = pareto_front
@@ -521,6 +525,7 @@ class OptimizationResult(pydantic.BaseModel):
                 stop_details["error"] = str(self.details["error"])
             self.details["stop_reason_details"] = stop_details
 
+    # FIXME: Move to display/reporting utils
     def get_run_link(self) -> str:
         return get_optimization_run_url_by_id(
             optimization_id=self.optimization_id, dataset_id=self.dataset_id
@@ -581,6 +586,7 @@ class OptimizationResult(pydantic.BaseModel):
         else:
             return "0.00% (no improvement from 0)"
 
+    # FIXME: Move to display/reporting utils
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
@@ -718,6 +724,7 @@ class OptimizationResult(pydantic.BaseModel):
         )
         return "\n".join(output)
 
+    # FIXME: Move to display/reporting utils
     def __rich__(self) -> rich.panel.Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()

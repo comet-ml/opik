@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from opik_optimizer.utils.dataset_utils import resolve_slice_request
+from opik_optimizer.utils.dataset import resolve_slice_request
 
 
 def test_resolve_slice_request_respects_split_without_presets() -> None:

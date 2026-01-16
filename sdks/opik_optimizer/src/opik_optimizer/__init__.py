@@ -18,14 +18,9 @@ from .algorithms import (
     FewShotBayesianOptimizer,
     ParameterOptimizer,
 )
-from .logging_config import setup_logging
+from .utils.logging import setup_logging
 from .optimization_result import OptimizationResult
 from .metrics.multi_metric_objective import MultiMetricObjective
-from .algorithms.parameter_optimizer import (
-    ParameterSearchSpace,
-    ParameterSpec,
-    ParameterType,
-)
 
 # FIXME: Remove once LiteLLM issue is resolved
 # https://github.com/BerriAI/litellm/issues/16813
@@ -49,9 +44,7 @@ warnings.filterwarnings(
 )
 
 __all__ = [
-    "AlgorithmResult",
-    "BaseOptimizer",
-    "ChatPrompt",
+    # Algorithms
     "FewShotBayesianOptimizer",
     "GepaOptimizer",
     "MetaPromptOptimizer",
@@ -59,12 +52,14 @@ __all__ = [
     "HierarchicalReflectiveOptimizer",
     "HRPO",
     "ParameterOptimizer",
+    # API Objects
+    "BaseOptimizer",
+    "ChatPrompt",
+    "AlgorithmResult",
     "OptimizationResult",
     "OptimizableAgent",
-    "setup_logging",
-    "datasets",
+    # Metrics
     "MultiMetricObjective",
-    "ParameterSearchSpace",
-    "ParameterSpec",
-    "ParameterType",
+    # Datasets
+    "datasets",
 ]
