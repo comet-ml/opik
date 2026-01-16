@@ -98,3 +98,6 @@ response.txt
 # Playwright
 .playwright-mcp/
 *~
+
+# Cursor IDE local commands
+.cursor/commands/

@@ -1,4 +1,10 @@
-import { NotebookText, ChartLine, Hash, FlaskConical } from "lucide-react";
+import {
+  NotebookText,
+  ChartLine,
+  Hash,
+  FlaskConical,
+  Trophy,
+} from "lucide-react";
 import {
   WidgetResolver,
   WidgetComponents,
@@ -17,6 +23,9 @@ import { widgetHelpers as projectStatsCardHelpers } from "./ProjectStatsCardWidg
 import ExperimentsFeedbackScoresWidget from "./ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidget";
 import ExperimentsFeedbackScoresWidgetEditor from "./ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor";
 import { widgetHelpers as experimentsFeedbackScoresHelpers } from "./ExperimentsFeedbackScoresWidget/helpers";
+import ExperimentLeaderboardWidget from "./ExperimentLeaderboardWidget/ExperimentLeaderboardWidget";
+import ExperimentLeaderboardWidgetEditor from "./ExperimentLeaderboardWidget/ExperimentLeaderboardWidgetEditor";
+import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentLeaderboardWidget/helpers";
 
 export const widgetResolver: WidgetResolver = (
   type: string,
@@ -86,6 +95,22 @@ export const widgetResolver: WidgetResolver = (
           disabled: false,
         },
       };
+    case WIDGET_TYPES.EXPERIMENT_LEADERBOARD:
+      return {
+        Widget: ExperimentLeaderboardWidget,
+        Editor: ExperimentLeaderboardWidgetEditor,
+        getDefaultConfig: experimentLeaderboardHelpers.getDefaultConfig,
+        calculateTitle: experimentLeaderboardHelpers.calculateTitle,
+        metadata: {
+          title: "Experiment leaderboard",
+          description:
+            "Rank and compare experiments across multiple metrics in a sortable table.",
+          icon: <Trophy className="size-4" />,
+          category: WIDGET_CATEGORY.EVALUATION,
+          iconColor: "text-[#FFD700]",
+          disabled: false,
+        },
+      };
     default:
       return {
         Widget: TextMarkdownWidget,
@@ -110,6 +135,7 @@ export const getAllWidgetTypes = (): string[] => {
     WIDGET_TYPES.PROJECT_METRICS,
     WIDGET_TYPES.PROJECT_STATS_CARD,
     WIDGET_TYPES.EXPERIMENTS_FEEDBACK_SCORES,
+    WIDGET_TYPES.EXPERIMENT_LEADERBOARD,
     WIDGET_TYPES.TEXT_MARKDOWN,
   ];
 };
