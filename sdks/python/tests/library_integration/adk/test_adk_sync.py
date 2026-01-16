@@ -2130,10 +2130,10 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
             ttft < MAX_REASONABLE_TTFT_SECONDS
         ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
-    # Verify that different LLM calls have different (or same) TTFT values
-    # They might be similar but should be tracked independently
+    # Verify that different LLM calls have distinct TTFT values when possible
+    # They might be similar in magnitude but should be tracked independently per call
     ttft_values = [span.metadata["time_to_first_token"] for span in llm_spans]
-    assert len(set(ttft_values)) >= 1, "Should have at least one unique TTFT value"
+    assert len(set(ttft_values)) >= 2, "Expected at least two distinct TTFT values for multiple LLM calls"
 
 
 @pytest_skip_for_adk_older_than_1_3_0
