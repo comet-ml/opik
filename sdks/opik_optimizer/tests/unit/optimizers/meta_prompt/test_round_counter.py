@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
@@ -5,7 +6,9 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
 )
 
 
-def test_round_counter_increments_on_non_improving_rounds(simple_chat_prompt) -> None:
+def test_round_counter_increments_on_non_improving_rounds(
+    simple_chat_prompt: Any,
+) -> None:
     optimizer = MetaPromptOptimizer(model="gpt-4")
     optimizer.verbose = 0
 

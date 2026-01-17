@@ -81,7 +81,13 @@ class _DisplaySpy:
     def __init__(self) -> None:
         self.header_calls: list[tuple[str, str | None]] = []
 
-    def show_header(self, *, algorithm: str, optimization_id: str | None) -> None:
+    def show_header(
+        self,
+        *,
+        algorithm: str,
+        optimization_id: str | None,
+        dataset_id: str | None = None,
+    ) -> None:
         self.header_calls.append((algorithm, optimization_id))
 
     def show_configuration(self, *, prompt, optimizer_config) -> None:
@@ -829,9 +835,8 @@ def test_on_evaluation_handles_non_finite_scores(
 def test_optimize_prompt_uses_injected_display(
     monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
 ) -> None:
-    optimizer = ConcreteOptimizer(model="gpt-4")
     spy = _DisplaySpy()
-    optimizer._display = spy
+    optimizer = ConcreteOptimizer(model="gpt-4", display=spy)
 
     mock_dataset = MagicMock()
     mock_metric = MagicMock(__name__="metric")
@@ -863,7 +868,8 @@ def test_optimize_prompt_uses_injected_display(
         optimizer, "_finalize_optimization", lambda *args, **kwargs: None
     )
 
-    optimizer.optimize_prompt(
+    BaseOptimizer.optimize_prompt(
+        optimizer,
         prompt=simple_chat_prompt,
         dataset=mock_dataset,
         metric=mock_metric,

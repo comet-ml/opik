@@ -10,7 +10,7 @@ from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import (
     display_messages,
     display_text_block,
-    display_renderable_with_prefix,
+    display_renderable,
 )
 from .display_utils import (
     compute_message_diff_order,  # noqa: F401
@@ -368,7 +368,7 @@ def display_hierarchical_synthesis(
     )
 
     # Capture the panel as rendered text with ANSI styles and prefix each line
-    display_renderable_with_prefix(panel, prefix="│ ")
+    display_renderable(panel)
     display_text_block("│")
 
 
@@ -389,7 +389,8 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
         width=PANEL_WIDTH,
     )
 
-    display_renderable_with_prefix(header_panel, prefix="│   ")
+    display_text_block("│")
+    display_renderable(header_panel)
     display_text_block("│")
 
     for idx, failure_mode in enumerate(failure_modes, 1):
@@ -409,7 +410,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
             width=PANEL_WIDTH,
         )
 
-        display_renderable_with_prefix(panel, prefix="│   ")
+        display_renderable(panel)
 
         if idx < len(failure_modes):
             display_text_block("│")
@@ -444,7 +445,7 @@ def display_prompt_improvement(
                     padding=(0, 1),
                 )
 
-                display_renderable_with_prefix(panel, prefix="│     ")
+                display_renderable(panel)
                 display_text_block("│   ")
 
     try:

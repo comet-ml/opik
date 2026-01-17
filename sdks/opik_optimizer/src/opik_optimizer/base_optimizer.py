@@ -1392,6 +1392,7 @@ class BaseOptimizer(ABC):
         self._display.show_header(
             algorithm=self.__class__.__name__,
             optimization_id=context.optimization_id,
+            dataset_id=context.dataset.id,
         )
 
         # Determine the prompt to display (single or dict)

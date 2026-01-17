@@ -16,7 +16,13 @@ from . import terminal as display_terminal
 class RunDisplay(Protocol):
     """Protocol for run-level display handlers."""
 
-    def show_header(self, *, algorithm: str, optimization_id: str | None) -> None: ...
+    def show_header(
+        self,
+        *,
+        algorithm: str,
+        optimization_id: str | None,
+        dataset_id: str | None = None,
+    ) -> None: ...
 
     def show_configuration(
         self,
@@ -53,10 +59,17 @@ class OptimizationRunDisplay:
     def __init__(self, *, verbose: int = 1) -> None:
         self._verbose = verbose
 
-    def show_header(self, *, algorithm: str, optimization_id: str | None) -> None:
+    def show_header(
+        self,
+        *,
+        algorithm: str,
+        optimization_id: str | None,
+        dataset_id: str | None = None,
+    ) -> None:
         display_terminal.display_header(
             algorithm=algorithm,
             optimization_id=optimization_id,
+            dataset_id=dataset_id,
             verbose=self._verbose,
         )
 
