@@ -171,7 +171,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts: dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
         metric: MetricFunction,
-        agent: OptimizableAgent,
+        agent: OptimizableAgent | None,
         n_samples: int | None,
         context: OptimizationContext,
         empty_score: float | None = None,
@@ -285,7 +285,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         dataset: opik.Dataset,
         validation_dataset: opik.Dataset | None,
         metric: MetricFunction,
-        agent: OptimizableAgent,
+        agent: OptimizableAgent | None,
         optimization_id: str | None,
         n_samples: int | None,
         attempt: int,
@@ -384,7 +384,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             self.post_candidate(
                 best_prompts,
                 score=fallback_score,
-                trial_index=context.trials_completed,
                 round_handle=round_handle,
             )
             return best_prompts, fallback_score, fallback_result
@@ -406,7 +405,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self.post_candidate(
             best_prompt_bundle,
             score=best_score_local,
-            trial_index=context.trials_completed,
             round_handle=round_handle,
         )
 
@@ -432,7 +430,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             self.post_candidate(
                 improved_chat_prompts,
                 score=improved_score,
-                trial_index=context.trials_completed,
                 round_handle=round_handle,
             )
 
@@ -464,7 +461,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         return {
             "trials_completed": context.trials_completed,
-            "rounds_completed": context.trials_completed,
             "iterations_completed": context.trials_completed,
             "convergence_threshold": self.convergence_threshold,
         }
@@ -699,7 +695,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             self.post_candidate(
                 best_prompts,
                 score=best_score,
-                trial_index=context.trials_completed,
                 extras={
                     "failure_modes": [
                         fm.name for fm in hierarchical_analysis.unified_failure_modes

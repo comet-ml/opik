@@ -617,7 +617,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Step 6. Evaluate the initial population
         logger.debug("Evaluating initial population")
-        start_trials = context.trials_completed
         fitnesses: list[Any] = list(
             map(self._deap_evaluate_individual_fitness, deap_population)
         )
@@ -661,7 +660,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.set_default_dataset_split(context.dataset_split or "train")
         round_handle = self.begin_round()
         generation_idx = 0
-        candidate_entries: list[dict[str, Any]] = []
         for idx, ind in enumerate(deap_population):
             if not ind.fitness.valid:
                 continue
@@ -673,17 +671,15 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     "primary": ind.fitness.values[0],
                     "length": ind.fitness.values[1],
                 }
-            entry = self.record_candidate_entry(
+            self.record_candidate_entry(
                 prompt_or_payload=candidate_prompts,
                 score=primary_score,
                 id=f"gen0_ind{idx}",
                 metrics=metrics,
             )
-            candidate_entries.append(entry)
             self.post_candidate(
                 candidate_prompts,
                 score=primary_score,
-                trial_index=start_trials + idx + 1,
                 metrics=metrics,
                 round_handle=round_handle,
             )
@@ -718,7 +714,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             if hasattr(context, "dataset_split")
             else None,
             stop_reason=context.finish_reason,
-            candidates=candidate_entries,
             extras={
                 "stopped": context.should_stop,
                 "stop_reason": context.finish_reason,
@@ -840,8 +835,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
 
                     # History logging for this transition
-                    round_candidate_entries: list[dict[str, Any]] = []
-                    start_trials = context.trials_completed
                     posted_idx = 0
                     for ind in deap_population:
                         if not ind.fitness.valid:
@@ -854,17 +847,15 @@ class EvolutionaryOptimizer(BaseOptimizer):
                                 "primary": ind.fitness.values[0],
                                 "length": ind.fitness.values[1],
                             }
-                        entry = self.record_candidate_entry(
+                        self.record_candidate_entry(
                             prompt_or_payload=candidate_prompts,
                             score=primary_score,
                             id=f"gen{generation_idx}_ind{posted_idx}",
                             metrics=cand_metrics,
                         )
-                        round_candidate_entries.append(entry)
                         self.post_candidate(
                             candidate_prompts,
                             score=primary_score,
-                            trial_index=start_trials + posted_idx + 1,
                             metrics=cand_metrics,
                             round_handle=round_handle,
                         )
@@ -895,7 +886,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         best_score=best_primary_score_overall,
                         best_candidate=best_prompts_overall,
                         stop_reason=context.finish_reason,
-                        candidates=round_candidate_entries,
                         pareto_front=pareto_front,
                         selection_meta=selection_meta,
                         extras={

@@ -88,9 +88,14 @@ def evaluate_bundle(
         additional_metadata=additional_metadata,
     )
 
+    if optimizer.agent is None:
+        raise ValueError("EvolutionaryOptimizer requires an agent to run evaluations.")
+
+    agent = optimizer.agent
+
     def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
         # Pass full bundle to the agent
-        model_output = optimizer.agent.invoke_agent(
+        model_output = agent.invoke_agent(
             prompts=prompts_bundle,
             dataset_item=dataset_item,
         )

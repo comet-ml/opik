@@ -143,9 +143,12 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 prompt.model_kwargs["n"] = 1
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
+            last_tool_response: str | None = None
             count = 0
             # honour system-wide max tool call loop
             max_iterations = tool_call_max_iterations()
+            if max_iterations <= 0:
+                return "Tool-calling loop aborted (max_iterations <= 0)."
             while count < max_iterations:
                 count += 1
                 response = self._llm_complete(
@@ -175,6 +178,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                             )
                         except Exception:
                             tool_result = f"Error in calling tool `{tool_name}`"
+                        last_tool_response = str(tool_result)
                         all_messages.append(
                             {
                                 "role": "tool",
@@ -193,6 +197,15 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 else:
                     final_response = msg["content"]
                     break
+            if count >= max_iterations and msg.tool_calls:
+                final_response = (
+                    last_tool_response
+                    if last_tool_response is not None
+                    else (
+                        "Tool-calling loop aborted after reaching the maximum of "
+                        f"{max_iterations} iterations."
+                    )
+                )
             result = final_response
         else:
             response = self._llm_complete(

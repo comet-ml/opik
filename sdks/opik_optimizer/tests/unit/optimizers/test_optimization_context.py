@@ -52,6 +52,8 @@ class SimpleOptimizer(BaseOptimizer):
                 self.stopped_early = True
                 break
 
+            round_handle = self.begin_round()
+
             # Evaluate a candidate prompt
             score = self.evaluate_prompt(
                 prompt=best_prompt,
@@ -68,6 +70,13 @@ class SimpleOptimizer(BaseOptimizer):
             # Update context counters
             context.trials_completed = self._trials_completed
 
+            self.post_candidate(
+                best_prompt,
+                score=score,
+                round_handle=round_handle,
+            )
+            self.post_round(round_handle)
+
             # Check for perfect score early stop
             if self.skip_perfect_score and score >= self.perfect_score:
                 context.should_stop = True
@@ -80,13 +89,13 @@ class SimpleOptimizer(BaseOptimizer):
         if context.finish_reason is None:
             context.finish_reason = "completed"
 
+        history_state = self.get_history_entries()
         return AlgorithmResult(
             best_prompts=best_prompt,
             best_score=best_score,
-            history=[],
+            history=history_state,
             metadata={
                 "trials_completed": self._trials_completed,
-                "rounds_completed": self._rounds_completed,
                 "stopped_early": self.stopped_early,
                 "finish_reason": context.finish_reason,
                 "initial_prompt": context.initial_prompts,
@@ -101,7 +110,6 @@ class SimpleOptimizer(BaseOptimizer):
     def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
         return {
             "trials_completed": self._trials_completed,
-            "rounds_completed": self._rounds_completed,
         }
 
 
@@ -292,7 +300,7 @@ class TestMidOptimizationEarlyStop:
         # Should have completed all 5 rounds
         assert optimizer.stopped_early is False
         assert result.details.get("finish_reason") == "completed"
-        assert result.details.get("rounds_completed") == 5
+        assert len(result.history) == 5
         assert result.details.get("trials_completed") == 5
 
     def test_finish_reason_is_set_on_completion(

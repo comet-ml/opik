@@ -129,7 +129,7 @@ class TestOptimizationResultInitialization:
         assert result.details.get("schema_version") is None
         assert result.details_version == "v1"
         assert result.details.get("trials_completed") == 1
-        assert result.details.get("rounds_completed") == 1
+        assert len(result.history) == 1
         assert result.details.get("stop_reason_details") is None
 
     def test_details_counters_default_from_history(self) -> None:
@@ -139,7 +139,7 @@ class TestOptimizationResultInitialization:
             metric_name="accuracy",
             details={"iterations_completed": 3, "trials_used": 4},
         )
-        assert result.details.get("rounds_completed") == 0
+        assert len(result.history) == 0
         assert result.details.get("trials_completed") == 0
 
     def test_trials_completed_from_nested_history(self) -> None:
@@ -152,7 +152,7 @@ class TestOptimizationResultInitialization:
                 {"round": 1, "trials": [{"trial_index": 2}]},
             ],
         )
-        assert result.details.get("rounds_completed") == 2
+        assert len(result.history) == 2
         assert result.details.get("trials_completed") == 3
 
     def test_stop_reason_details_are_populated(self) -> None:
@@ -266,7 +266,7 @@ class TestRichRendering:
             dataset_id="ds-456",
             initial_prompt=prompt,
             initial_score=0.6,
-            details={"rounds_completed": 1, "trials_completed": 1, "model": "gpt-4"},
+            details={"trials_completed": 1, "model": "gpt-4"},
             history=[],
         )
 
@@ -353,7 +353,7 @@ class TestOptimizationResultStr:
             prompt=ChatPrompt(system="Test", user="Query"),
             score=0.85,
             metric_name="accuracy",
-            details={"trials_completed": 3, "rounds_completed": 3},
+            details={"trials_completed": 3},
         )
         output = str(result)
         assert "Trials Completed: 3" in output

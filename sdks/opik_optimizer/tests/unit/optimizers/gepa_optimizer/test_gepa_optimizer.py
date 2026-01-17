@@ -186,7 +186,7 @@ class TestGepaOptimizerEarlyStop:
         # The optimizer returns 0 from get_metadata (no optimization trials yet)
         # The base class defaults this to 1 to reflect the baseline evaluation
         assert result.details["trials_completed"] == 1
-        assert result.details["rounds_completed"] == 1
+        assert len(result.history) == 1
 
 
 class TestGepaOptimizerAgentUsage:

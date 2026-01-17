@@ -86,7 +86,7 @@ def _fast_run_optimization(monkeypatch: pytest.MonkeyPatch) -> None:
             best_prompts=context.current_best_prompt,
             best_score=context.current_best_score or 0.0,
             metadata={},
-            history=[],
+            history=self.get_history_entries(),
         )
 
     monkeypatch.setattr(EvolutionaryOptimizer, "run_optimization", _run_optimization)
@@ -315,7 +315,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         # The optimizer returns 0 from get_metadata (no optimization trials yet)
         # The base class defaults this to 1 to reflect the baseline evaluation
         assert result.details["trials_completed"] == 1
-        assert result.details["rounds_completed"] == 1
+        assert len(result.history) == 1
 
     def test_optimization_tracks_trials_and_rounds(
         self,
@@ -354,7 +354,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         # The optimizer should have tracked the actual number of trials
         # baseline (1) + initial population (2) + some from generations
         assert result.details["trials_completed"] >= 1
-        assert result.details["rounds_completed"] > 0
+        assert len(result.history) > 0
         # Verify that evaluate_prompt was called during optimization
         assert evaluation_count[0] > 1  # At least baseline + some evaluations
 

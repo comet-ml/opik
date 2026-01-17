@@ -313,7 +313,11 @@ def build_history_context(
             context += f"Best score this round: {best_score:.4f}\n"
             context += "Top prompts generated:\n"
 
-            generated = round_data.get("generated_prompts") or []
+            generated = (
+                round_data.get("generated_prompts")
+                or round_data.get("candidates")
+                or []
+            )
             sorted_generated = sorted(
                 generated,
                 key=lambda p: p.get("score", -float("inf")),

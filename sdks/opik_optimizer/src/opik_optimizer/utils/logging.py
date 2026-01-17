@@ -167,6 +167,39 @@ def _format_debug_value(value: Any) -> str:
     return str(value)
 
 
+_SECRET_KEY_MARKERS = {
+    "api_key",
+    "apikey",
+    "token",
+    "access_token",
+    "secret",
+    "password",
+    "pass",
+    "key",
+}
+
+
+def _sanitize_debug_value(value: Any) -> Any:
+    """Return a redacted version of the value for debug logs."""
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, val in value.items():
+            key_lower = str(key).lower()
+            if any(marker in key_lower for marker in _SECRET_KEY_MARKERS):
+                sanitized[key] = "<REDACTED>"
+            else:
+                sanitized[key] = _sanitize_debug_value(val)
+        return sanitized
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_debug_value(item) for item in value]
+    if isinstance(value, str):
+        lowered = value.lower()
+        if any(marker in lowered for marker in _SECRET_KEY_MARKERS):
+            return "<REDACTED>"
+        return value
+    return value
+
+
 def debug_log(event: str, **fields: Any) -> None:
     """Emit a structured debug line for optimizer events."""
     logger = logging.getLogger("opik_optimizer.debug")
@@ -199,12 +232,12 @@ def debug_tool_call(
     logger = logging.getLogger("opik_optimizer.debug")
     if not logger.isEnabledFor(logging.DEBUG):
         return
-    arg_text = _format_debug_value(arguments)
+    arg_text = _format_debug_value(_sanitize_debug_value(arguments))
     if isinstance(arg_text, str) and len(arg_text) > DEFAULT_TOOL_DEBUG_CLIP:
         arg_text = arg_text[:DEFAULT_TOOL_DEBUG_CLIP] + "..."
-    result_text = _format_debug_value(result)
+    result_text = _format_debug_value(_sanitize_debug_value(result))
     if isinstance(result, list) and result:
-        preview = result[0]
+        preview = _sanitize_debug_value(result[0])
         result_text = _format_debug_value(preview)
     clip_limit = DEFAULT_TOOL_DEBUG_CLIP
     if (

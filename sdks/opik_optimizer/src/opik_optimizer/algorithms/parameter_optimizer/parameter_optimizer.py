@@ -1,7 +1,7 @@
 """Simple Optuna-based optimizer for model parameter tuning."""
 
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, NoReturn
 
 import copy
 import logging
@@ -13,9 +13,10 @@ from optuna.trial import Trial, TrialState
 
 from opik import Dataset
 
-from ...base_optimizer import BaseOptimizer, OptimizationContext
+from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResult
 from ...optimization_result import OptimizationResult
-from ...agents import OptimizableAgent, LiteLLMAgent
+from ...agents import OptimizableAgent
+from ...agents import LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import display as display_utils
@@ -104,18 +105,21 @@ class ParameterOptimizer(BaseOptimizer):
         max_trials: int = 10,
         *args: Any,
         **kwargs: Any,
-    ) -> OptimizationResult:
+    ) -> NoReturn:
         raise NotImplementedError(
             "ParameterOptimizer.optimize_prompt is not supported. "
             "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
             "where parameter_space is a ParameterSearchSpace or dict defining the parameters to optimize."
         )
 
-    def run_optimization(self, context: OptimizationContext) -> OptimizationResult:
+    def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
         raise NotImplementedError(
             "ParameterOptimizer does not use the standard run_optimization flow. "
             "Use optimize_parameter() instead."
         )
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {}
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
         """Return optimizer-specific configuration for display."""
@@ -288,6 +292,48 @@ class ParameterOptimizer(BaseOptimizer):
                 baseline_score,
                 self.perfect_score,
             )
+            self._history_builder.clear()
+            baseline_round = self.begin_round(stage="baseline", type="baseline")
+            self.record_candidate_entry(
+                prompt_or_payload=base_prompts
+                if not is_single_prompt_optimization
+                else list(base_prompts.values())[0],
+                score=baseline_score,
+                id="baseline",
+                extra={
+                    "parameters": {},
+                    "model_kwargs": copy.deepcopy(base_model_kwargs),
+                    "model": list(base_prompts.values())[0].model,
+                    "type": "baseline",
+                    "stage": "baseline",
+                },
+            )
+            self.post_candidate(
+                base_prompts
+                if not is_single_prompt_optimization
+                else list(base_prompts.values())[0],
+                score=baseline_score,
+                extras={
+                    "parameters": {},
+                    "model_kwargs": copy.deepcopy(base_model_kwargs),
+                    "model": list(base_prompts.values())[0].model,
+                    "type": "baseline",
+                    "stage": "baseline",
+                },
+                round_handle=baseline_round,
+            )
+            self.post_round(
+                baseline_round,
+                best_score=baseline_score,
+                best_candidate=base_prompts
+                if not is_single_prompt_optimization
+                else list(base_prompts.values())[0],
+                stop_reason="baseline_score_met_threshold",
+                extras={
+                    "type": "baseline",
+                    "stage": "baseline",
+                },
+            )
             display_prompt = (
                 list(base_prompts.values())[0]
                 if is_single_prompt_optimization
@@ -336,7 +382,7 @@ class ParameterOptimizer(BaseOptimizer):
                     "perfect_score": self.perfect_score,
                     "skip_perfect_score": self.skip_perfect_score,
                 },
-                history=[],
+                history=self.get_history_entries(),
                 llm_calls=self.llm_call_counter,
                 llm_calls_tools=self.llm_call_tools_counter,
                 optimization_id=self.current_optimization_id,
@@ -649,7 +695,6 @@ class ParameterOptimizer(BaseOptimizer):
             self.post_candidate(
                 trial.user_attrs.get("model_kwargs"),
                 score=float(trial.value) if trial.value is not None else None,
-                trial_index=trial.number,
                 extras=None,
                 round_handle=round_handle,
                 timestamp=timestamp_source.isoformat(),
@@ -723,7 +768,6 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_precision": 6,
             "trials_requested": total_trials,
             "trials_completed": len(history_entries),
-            "rounds_completed": len(history_entries),
             "stopped_early": len(history_entries) < total_trials,
             "stop_reason": None,
             "selection_meta": {

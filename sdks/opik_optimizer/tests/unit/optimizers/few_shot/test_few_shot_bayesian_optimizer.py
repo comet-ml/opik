@@ -91,7 +91,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             return AlgorithmResult(
                 best_prompts=best_prompt,
                 best_score=0.85,
-                history=[],
+                history=optimizer.get_history_entries(),
                 metadata={
                     "initial_prompt": initial_prompt,
                     "initial_score": 0.5,
@@ -164,7 +164,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             return AlgorithmResult(
                 best_prompts=best_prompt,
                 best_score=0.85,
-                history=[],
+                history=optimizer.get_history_entries(),
                 metadata={
                     "initial_prompt": initial_prompt,
                     "initial_score": 0.5,
@@ -264,4 +264,4 @@ class TestFewShotBayesianOptimizerEarlyStop:
         # The optimizer returns 0 from get_metadata (no optimization trials yet)
         # The base class defaults this to 1 to reflect the baseline evaluation
         assert result.details["trials_completed"] == 1
-        assert result.details["rounds_completed"] == 1
+        assert len(result.history) == 1

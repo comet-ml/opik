@@ -225,12 +225,17 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                     score=score,
                     metrics={"adapter_metric": score},
                 )
+                round_handle = self._optimizer.begin_round()
                 self._optimizer.post_candidate(
                     prompt_variants,
                     score=score,
-                    trial_index=self._context.trials_completed,
                     metrics=candidate_entry.get("metrics"),
-                    round_handle=getattr(self._context, "rounds_completed", None),
+                    round_handle=round_handle,
+                )
+                self._optimizer.post_round(
+                    round_handle,
+                    best_score=score,
+                    best_prompt=prompt_variants,
                 )
                 if self._context.should_stop:
                     break
@@ -348,13 +353,18 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 metrics={self._metric_name: score_value, "opik_score": score_value},
                 extra={"output": output_text, "candidate": candidate},
             )
+            round_handle = self._optimizer.begin_round()
             self._optimizer.post_candidate(
                 prompt_variants,
                 score=score_value,
-                trial_index=self._context.trials_completed,
                 metrics=candidate_entry.get("metrics"),
                 extras=candidate_entry.get("extra"),
-                round_handle=getattr(self._context, "rounds_completed", None),
+                round_handle=round_handle,
+            )
+            self._optimizer.post_round(
+                round_handle,
+                best_score=score_value,
+                best_prompt=prompt_variants,
             )
             if self._context.should_stop:
                 break

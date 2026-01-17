@@ -28,6 +28,7 @@ from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSpec,
 )
 from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
+from opik_optimizer import optimization_result
 from opik_optimizer.optimization_result import OptimizerCandidate, OptimizationResult
 from opik_optimizer.base_optimizer import AlgorithmResult, BaseOptimizer
 
@@ -101,7 +102,7 @@ def test_history_schema_smoke(
             best_prompts=ctx.prompts,
             best_score=0.1,
             history=dummy_history,
-            metadata={"trials_completed": 1, "rounds_completed": 1},
+            metadata={"trials_completed": 1},
         ),
         raising=False,
     )
@@ -134,7 +135,7 @@ def test_history_schema_smoke(
                 score=0.1,
                 metric_name="accuracy",
                 history=dummy_history,
-                details={"trials_completed": 1, "rounds_completed": 1},
+                details={"trials_completed": 1},
             )
 
         monkeypatch.setattr(
@@ -167,3 +168,30 @@ def test_history_schema_smoke(
         assert isinstance(
             cand.get("candidate"), (dict, OptimizerCandidate, type(simple_chat_prompt))
         )
+
+
+def test_history_state_auto_assigns_trial_indices() -> None:
+    state = optimization_result.OptimizationHistoryState()
+    round_handle = state.start_round(round_index=0)
+    state.record_trial(round_handle=round_handle, score=0.1)
+    state.record_trial(round_handle=round_handle, score=0.2)
+    state.end_round(round_handle=round_handle, best_score=0.2)
+    round_handle_two = state.start_round(round_index=1)
+    state.record_trial(round_handle=round_handle_two, score=0.3)
+    state.record_trial(round_handle=round_handle_two, score=0.4)
+    state.end_round(round_handle=round_handle_two, best_score=0.4)
+    history = state.get_entries()
+    assert history[0]["trials"][0]["trial_index"] == 0
+    assert history[0]["trials"][1]["trial_index"] == 1
+    assert history[1]["trials"][0]["trial_index"] == 2
+    assert history[1]["trials"][1]["trial_index"] == 3
+
+
+def test_history_state_defaults_stop_reason_completed() -> None:
+    state = optimization_result.OptimizationHistoryState()
+    round_handle = state.start_round(round_index=0)
+    state.record_trial(round_handle=round_handle, score=0.1)
+    state.end_round(round_handle=round_handle, best_score=0.1)
+    history = state.get_entries()
+    assert history[0]["stop_reason"] == "completed"
+    assert history[0]["stopped"] is False

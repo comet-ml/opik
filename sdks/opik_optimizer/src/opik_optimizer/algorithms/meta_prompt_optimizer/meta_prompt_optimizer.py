@@ -12,7 +12,6 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import throttle as _throttle
 from ...utils.logging import debug_log
-from ...optimization_result import OptimizationRound, first_trial_index
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame
 
@@ -282,7 +281,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Use baseline score from context (computed by base class)
         initial_score = cast(float, context.baseline_score)
         best_score = initial_score
-        rounds: list[OptimizationRound | dict[str, Any]] = []
+        # History is tracked by the shared state helper.
         self._history_builder.clear()
 
         # Calculate the maximum number of rounds
@@ -296,7 +295,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     break
 
                 self._current_round = round_num
-                previous_best_score = best_score
                 debug_log(
                     "round_start",
                     round_index=round_num + 1,
@@ -330,7 +328,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_prompts=best_prompts,
                     best_score=best_score,
                     round_num=round_num,
-                    previous_rounds=rounds,
+                    previous_rounds=self.get_history_entries(),
                     metric=metric,
                     prompts_this_round=prompts_this_round,
                     build_history_context_fn=self._build_history_context,
@@ -421,17 +419,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                         )
 
                 round_handle = self.begin_round()
-                round_data = self._create_round_data(
-                    round_num=round_num,
-                    current_best_prompt=best_candidate_this_round,
-                    current_best_score=best_cand_score_avg,
-                    best_prompt_overall=best_prompts,
-                    evaluated_candidates=prompt_scores,
-                    previous_best_score=previous_best_score,
-                    improvement_this_round=improvement,
-                    trial_index=context.trials_completed,
-                    stop_reason=context.finish_reason if context.should_stop else None,
-                )
                 self.set_selection_meta(
                     {
                         "selection_policy": self.selection_strategy,
@@ -440,11 +427,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     }
                 )
                 # Record each evaluated candidate as trials
-                first_trial_idx = first_trial_index(
-                    context.trials_completed, len(prompt_scores)
-                )
                 for idx, (cand_prompt, cand_score) in enumerate(prompt_scores):
-                    trial_index = first_trial_idx + idx
                     self.record_candidate_entry(
                         prompt_or_payload=cand_prompt,
                         score=cand_score,
@@ -454,7 +437,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     self.post_candidate(
                         cand_prompt,
                         score=cand_score,
-                        trial_index=trial_index,
                         round_handle=round_handle,
                         extras={"round_num": round_num},
                     )
@@ -470,11 +452,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         if self._context is not None
                         else None,
                     },
-                    candidates=round_data.candidates
-                    if hasattr(round_data, "candidates")
-                    else None,
                 )
-                rounds.append(round_data)
 
                 if best_cand_score_avg > best_score:
                     best_score = best_cand_score_avg
@@ -501,46 +479,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_score=best_score,
             history=history,
             metadata={
-                "rounds_completed": len(rounds),
                 "prompts_per_round": self.prompts_per_round,
                 "hall_of_fame_size": self.hall_of_fame_size
                 if self.use_hall_of_fame
                 else 0,
             },
-        )
-
-    def _create_round_data(
-        self,
-        round_num: int,
-        current_best_prompt: Any,
-        current_best_score: float,
-        best_prompt_overall: Any,
-        evaluated_candidates: list[tuple[Any, float]],
-        previous_best_score: float,
-        improvement_this_round: float,
-        trial_index: int | None = None,
-        stop_reason: str | None = None,
-    ) -> OptimizationRound:
-        """Create a normalized round entry (delegates to ops)."""
-        return result_ops.create_round_data(
-            round_num=round_num,
-            current_best_prompt=current_best_prompt,
-            current_best_score=current_best_score,
-            best_prompt_overall=best_prompt_overall,
-            evaluated_candidates=evaluated_candidates,
-            previous_best_score=previous_best_score,
-            improvement_this_round=improvement_this_round,
-            trial_index=trial_index,
-            best_so_far=self._context.current_best_score
-            if self._context is not None
-            else None,
-            stop_reason=stop_reason
-            if stop_reason is not None
-            else (
-                getattr(self._context, "finish_reason", None)
-                if self._context is not None
-                else None
-            ),
         )
 
     def _get_task_context(self, metric: MetricFunction) -> tuple[str, int]:
@@ -555,9 +498,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             extract_metric_understanding=self.extract_metric_understanding,
         )
 
-    def _build_history_context(
-        self, previous_rounds: Sequence[OptimizationRound | dict[str, Any]]
-    ) -> str:
+    def _build_history_context(self, previous_rounds: Sequence[dict[str, Any]]) -> str:
         """Build context from Hall of Fame and previous optimization rounds."""
         top_prompts_to_show = max(
             self.prompts_per_round, self.synthesis_prompts_per_round

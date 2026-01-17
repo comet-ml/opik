@@ -208,7 +208,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "total_rounds": context.max_trials,
             "rounds": [],
             "trials_completed": context.trials_completed,
-            "rounds_completed": context.trials_completed,
         }
 
     # FIXME: Dead code, should be wired or removed
@@ -398,7 +397,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompts: dict[str, chat_prompt.ChatPrompt],
         original_prompts: dict[str, chat_prompt.ChatPrompt],
         fewshot_prompt_template: str,
-        agent: OptimizableAgent,
+        agent: OptimizableAgent | None,
         dataset: Dataset,
         validation_dataset: Dataset | None,
         metric: MetricFunction,
@@ -409,6 +408,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         is_single_prompt_optimization: bool = False,
     ) -> AlgorithmResult:
+            raise ValueError(
+                "FewShotBayesianOptimizer requires an agent for optimization."
+            )
         # Load the dataset
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
@@ -641,7 +643,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             self.post_candidate(
                 prompt_cand_display,
                 score=score_val,
-                trial_index=trial.number,
                 round_handle=round_handle,
                 timestamp=timestamp,
             )

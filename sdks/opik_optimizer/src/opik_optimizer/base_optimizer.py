@@ -89,7 +89,7 @@ class OptimizationContext:
     evaluation_dataset: Dataset
     validation_dataset: Dataset | None
     metric: MetricFunction
-    agent: OptimizableAgent
+    agent: OptimizableAgent | None
     optimization: optimization.Optimization | None
     optimization_id: str | None
     experiment_config: dict[str, Any] | None
@@ -815,7 +815,6 @@ class BaseOptimizer(ABC):
             "temperature": self.model_parameters.get("temperature"),
             "model_parameters": dict(self.model_parameters),
             "trials_completed": context.trials_completed,
-            "rounds_completed": getattr(self, "_current_round", 0) + 1,
             "finish_reason": finish_reason,
             "stopped_early": stopped_early,
             "stop_reason": finish_reason,
@@ -1506,15 +1505,34 @@ class BaseOptimizer(ABC):
 
             # Merge in optimizer-specific metadata first
             early_stop_details.update(optimizer_metadata)
+            early_stop_details.pop("rounds_completed", None)
 
-            # Set trials/rounds based on what actually happened
+            # Set trials based on what actually happened
             # In early stop, we completed the baseline evaluation, so at minimum:
             # - trials_completed defaults to 1 if not set or 0 (baseline evaluation)
-            # - rounds_completed defaults to 1 if not set or 0 (initial round)
             if early_stop_details.get("trials_completed", 0) == 0:
                 early_stop_details["trials_completed"] = 1
-            if early_stop_details.get("rounds_completed", 0) == 0:
-                early_stop_details["rounds_completed"] = 1
+
+            # Build a minimal history entry for baseline-only early stop
+            self._history_builder.clear()
+            baseline_round = self.begin_round()
+            self.record_candidate_entry(
+                prompt_or_payload=early_result_prompt,
+                score=baseline_score,
+                id="baseline",
+            )
+            self.post_candidate(
+                early_result_prompt,
+                score=baseline_score,
+                round_handle=baseline_round,
+            )
+            stop_reason = early_stop_details.get("stop_reason")
+            self.post_round(
+                baseline_round,
+                best_score=baseline_score,
+                best_prompt=early_result_prompt,
+                stop_reason=stop_reason if isinstance(stop_reason, str) else None,
+            )
 
             self._finalize_optimization(context, status="completed")
             debug_log(
@@ -1531,7 +1549,7 @@ class BaseOptimizer(ABC):
                 score=baseline_score,
                 metric_name=context.metric.__name__,
                 details=early_stop_details,
-                history=[],
+                history=self._history_builder.get_entries(),
                 llm_calls=self.llm_call_counter,
                 llm_calls_tools=self.llm_call_tools_counter,
                 dataset_id=context.dataset.id,
@@ -1704,11 +1722,6 @@ class BaseOptimizer(ABC):
     ) -> None:
         """Record a candidate trial in history (post-candidate hook)."""
         if hasattr(self._history_builder, "record_trial"):
-            if trial_index is None and self.__context is not None:
-                try:
-                    trial_index = self.__context.trials_completed
-                except Exception:
-                    trial_index = None
             stop_reason = None
             if self.__context is not None and self.__context.should_stop:
                 stop_reason = getattr(self.__context, "finish_reason", None)
@@ -1859,8 +1872,9 @@ class BaseOptimizer(ABC):
     ) -> float | EvaluationResult:
         random.seed(seed)
         n_threads = normalize_eval_threads(n_threads)
-        if allow_tool_use is None and getattr(self, "_context", None) is not None:
-            allow_tool_use = self._context.allow_tool_use
+        if allow_tool_use is None:
+            context = getattr(self, "_context", None)
+            allow_tool_use = context.allow_tool_use if context is not None else True
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)

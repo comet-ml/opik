@@ -250,6 +250,9 @@ class GepaOptimizer(BaseOptimizer):
 
         self._adapter_metric_calls = 0
 
+        if self.agent is None:
+            raise ValueError("GepaOptimizer requires an agent to run evaluations.")
+
         adapter = OpikGEPAAdapter(
             base_prompts=optimizable_prompts,
             agent=self.agent,
@@ -343,15 +346,9 @@ class GepaOptimizer(BaseOptimizer):
                     )
 
                     try:
-                        # Use base class evaluate_prompt which handles dict prompts
-                        score = self.evaluate_prompt(
-                            prompt=prompt_variants,
-                            dataset=dataset,
-                            metric=metric,
-                            agent=self.agent,
-                            n_samples=n_samples,
-                            verbose=0,
-                        )
+                        # Use base evaluate() to ensure trial counters and best tracking update
+                        context.evaluation_dataset = dataset
+                        score = self.evaluate(prompt_variants)
                         score = float(score)
                     except Exception:
                         logger.debug(
@@ -389,7 +386,6 @@ class GepaOptimizer(BaseOptimizer):
                     self.post_candidate(
                         prompt_variants,
                         score=score,
-                        trial_index=context.trials_completed + 1,
                         metrics=candidate_entry.get("metrics"),
                         extras={
                             "components": components,
@@ -397,7 +393,6 @@ class GepaOptimizer(BaseOptimizer):
                         },
                         round_handle=round_handle,
                     )
-                    context.trials_completed += 1
                     debug_log(
                         "candidate_end",
                         candidate_index=idx,

@@ -69,6 +69,8 @@ class OptimizationTrial:
     candidate: Any
     metrics: dict[str, Any] | None = None
     dataset: str | None = None
+    dataset_split: str | None = None
+    candidate_id: str | None = None
     extras: dict[str, Any] | None = None
     timestamp: str = field(default_factory=now_iso)
 
@@ -79,6 +81,8 @@ class OptimizationTrial:
             "candidate": self.candidate,
             "metrics": self.metrics,
             "dataset": self.dataset,
+            "dataset_split": self.dataset_split,
+            "candidate_id": self.candidate_id,
             "extra": self.extras,
             "timestamp": self.timestamp,
         }
@@ -103,10 +107,14 @@ class OptimizationRound:
     round_index: int
     trials: list[OptimizationTrial] = field(default_factory=list)
     best_score: float | None = None
+    best_so_far: float | None = None
     best_prompt: Any | None = None
+    best_candidate: Any | None = None
     candidates: list[dict[str, Any]] | None = None
     generated_prompts: list[dict[str, Any]] | None = None
     stop_reason: str | None = None
+    stopped: bool | None = None
+    dataset_split: str | None = None
     extras: dict[str, Any] | None = None
     timestamp: str = field(default_factory=now_iso)
 
@@ -115,10 +123,14 @@ class OptimizationRound:
             "round_index": self.round_index,
             "trials": [t.to_dict() for t in self.trials],
             "best_score": self.best_score,
+            "best_so_far": self.best_so_far,
             "best_prompt": self.best_prompt,
+            "best_candidate": self.best_candidate,
             "candidates": self.candidates,
             "generated_prompts": self.generated_prompts,
             "stop_reason": self.stop_reason,
+            "stopped": self.stopped,
+            "dataset_split": self.dataset_split,
             "extra": self.extras,
             "timestamp": self.timestamp,
         }
@@ -136,9 +148,9 @@ class OptimizationHistoryState:
     """
 
     def __init__(self) -> None:
-        self.entries: list[dict[str, Any]] = []
+        self.entries: list[OptimizationRound] = []
         self._best_so_far: float | None = None
-        self._open_rounds: dict[Any, dict[str, Any]] = {}
+        self._open_rounds: dict[Any, OptimizationRound] = {}
         self._default_dataset_split: str | None = None
         self._current_selection_meta: dict[str, Any] | None = None
         self._current_pareto_front: list[dict[str, Any]] | None = None
@@ -153,7 +165,7 @@ class OptimizationHistoryState:
     def _next_candidate_id(self, prefix: str | None = None) -> str:
         """Generate a simple incremental candidate ID, optionally with a prefix."""
         base = len(self.entries)
-        suffix = sum(len(e.get("trials") or []) for e in self.entries)
+        suffix = sum(len(e.trials) for e in self.entries)
         stem = prefix or "cand"
         return f"{stem}_{base}_{suffix}"
 
@@ -198,55 +210,30 @@ class OptimizationHistoryState:
 
         return normalized
 
-    def _merge_round(self, entry: dict[str, Any]) -> None:
-        """
-        Merge a new entry into the existing entries when round_index matches.
-
-        This keeps trials and candidates grouped per round while preserving
-        the most recent best_score/prompt metadata.
-        """
-        round_idx = entry.get("round_index")
-        if round_idx is None:
-            self.entries.append(entry)
-            return
-
+    def _merge_round(self, entry: OptimizationRound) -> None:
+        """Merge a new entry into existing entries when round_index matches."""
+        round_idx = entry.round_index
         for existing in self.entries:
-            if existing.get("round_index") == round_idx:
-                # Merge trials
-                trials_new = entry.get("trials") or []
-                trials_existing = existing.get("trials") or []
-                existing["trials"] = trials_existing + trials_new
-
-                # Merge candidates
-                candidates_new = entry.get("candidates") or []
-                candidates_existing = existing.get("candidates") or []
-                existing["candidates"] = candidates_existing + candidates_new
-
-                # Prefer newer best_score/best_prompt if present
-                if entry.get("best_score") is not None:
-                    existing["best_score"] = entry.get("best_score")
-                if entry.get("best_prompt") is not None:
-                    existing["best_prompt"] = entry.get("best_prompt")
-                if entry.get("best_so_far") is not None:
-                    existing["best_so_far"] = entry.get("best_so_far")
-
-                # Merge extras shallowly
-                if entry.get("extra"):
-                    existing["extra"] = {
-                        **(existing.get("extra") or {}),
-                        **entry["extra"],
-                    }
-
-                # Update stop_reason/stopped if provided
-                if entry.get("stop_reason") is not None:
-                    existing["stop_reason"] = entry.get("stop_reason")
-                    existing["stopped"] = entry.get("stop_reason") not in (
-                        None,
-                        "completed",
-                    )
+            if existing.round_index == round_idx:
+                existing.trials.extend(entry.trials)
+                if entry.candidates:
+                    existing.candidates = (existing.candidates or []) + entry.candidates
+                if entry.best_score is not None:
+                    existing.best_score = entry.best_score
+                if entry.best_prompt is not None:
+                    existing.best_prompt = entry.best_prompt
+                if entry.best_candidate is not None:
+                    existing.best_candidate = entry.best_candidate
+                if entry.best_so_far is not None:
+                    existing.best_so_far = entry.best_so_far
+                if entry.extras:
+                    existing.extras = {**(existing.extras or {}), **entry.extras}
+                if entry.stop_reason is not None:
+                    existing.stop_reason = entry.stop_reason
+                    existing.stopped = entry.stop_reason not in (None, "completed")
+                if entry.dataset_split is not None:
+                    existing.dataset_split = entry.dataset_split
                 return
-
-        # No existing round, append new
         self.entries.append(entry)
 
     def start_round(
@@ -256,13 +243,13 @@ class OptimizationHistoryState:
         timestamp: str | None = None,
     ) -> Any:
         idx = int(round_index) if round_index is not None else len(self.entries)
-        entry: dict[str, Any] = {
-            "round_index": idx,
-            "trials": [],
-            "candidates": [],
-            "extra": extras or {},
-            "timestamp": timestamp or now_iso(),
-        }
+        entry = OptimizationRound(
+            round_index=idx,
+            trials=[],
+            candidates=[],
+            extras=extras or {},
+            timestamp=timestamp or now_iso(),
+        )
         self._open_rounds[idx] = entry
         debug_log("round_start", round_index=idx, extras=extras)
         return idx
@@ -307,12 +294,9 @@ class OptimizationHistoryState:
     ) -> dict[str, Any]:
         entry = self._open_rounds.setdefault(
             round_handle,
-            {
-                "round_index": round_handle,
-                "trials": [],
-                "candidates": [],
-                "extra": {},
-            },
+            OptimizationRound(
+                round_index=round_handle, trials=[], candidates=[], extras={}
+            ),
         )
         score_val = self._coerce_float(score) if score is not None else None
         candidate_payload_raw: Any = (
@@ -320,63 +304,58 @@ class OptimizationHistoryState:
             if isinstance(candidate, OptimizerCandidate)
             else candidate
         )
-        candidate_payload: Any
         if isinstance(candidate_payload_raw, dict):
-            # Work on a shallow copy to avoid mutating source prompt dicts.
             candidate_payload = dict(candidate_payload_raw)
         else:
             candidate_payload = candidate_payload_raw
         dataset_split_val = dataset_split or self._default_dataset_split
-        trial_payload: dict[str, Any] = {
-            "trial_index": int(trial_index) if isinstance(trial_index, int) else None,
-            "score": score_val,
-            "candidate": candidate_payload,
-            "metrics": metrics,
-            "dataset": dataset,
-            "dataset_split": dataset_split_val,
-            "extra": extras,
-            "timestamp": timestamp or now_iso(),
-        }
+        trial = OptimizationTrial(
+            trial_index=int(trial_index) if isinstance(trial_index, int) else None,
+            score=score_val,
+            candidate=candidate_payload,
+            metrics=metrics,
+            dataset=dataset,
+            dataset_split=dataset_split_val,
+            extras=extras,
+            timestamp=timestamp or now_iso(),
+        )
         candidate_id: str | None = None
-        if trial_payload["trial_index"] is None:
-            # Auto-assign a trial index if one wasn't provided.
-            trial_payload["trial_index"] = sum(
-                len(e.get("trials") or []) for e in self.entries
-            ) + len(entry.get("trials") or [])
+        if trial.trial_index is None:
+            trial.trial_index = sum(len(e.trials) for e in self.entries) + len(
+                entry.trials
+            )
         if isinstance(candidate_payload, dict):
             candidate_id = candidate_payload.get("id")
-        # TODO: Align history schema and downstream consumers with candidate_id
-        # stored on trials (not injected into candidate payloads).
         if candidate_id is None and candidate_id_prefix is not None:
             candidate_id = self._next_candidate_id(candidate_id_prefix)
         if candidate_id is not None:
-            trial_payload["candidate_id"] = candidate_id
-        entry.setdefault("trials", []).append(trial_payload)
+            trial.candidate_id = candidate_id
+        entry.trials.append(trial)
         if score_val is not None:
             self._best_so_far = (
                 score_val
                 if self._best_so_far is None
                 else max(self._best_so_far, score_val)
             )
-            entry["best_so_far"] = self._best_so_far
+            entry.best_so_far = self._best_so_far
         if candidates:
             normalized_candidates = self._normalize_candidates(candidates) or []
-            entry.setdefault("candidates", []).extend(normalized_candidates)
+            entry.candidates = (entry.candidates or []) + normalized_candidates
         if stop_reason is not None:
-            entry["stop_reason"] = stop_reason
-            entry["stopped"] = stop_reason not in (None, "completed")
+            entry.stop_reason = stop_reason
+            entry.stopped = stop_reason not in (None, "completed")
         else:
-            entry.setdefault("stop_reason", None)
-            entry.setdefault("stopped", False)
+            entry.stop_reason = entry.stop_reason or None
+            entry.stopped = entry.stopped if entry.stopped is not None else False
         debug_log(
             "trial_recorded",
             round_index=round_handle,
-            trial_index=trial_payload.get("trial_index"),
+            trial_index=trial.trial_index,
             score=score_val,
             dataset_split=dataset_split_val,
-            candidate_id=trial_payload.get("candidate_id"),
+            candidate_id=trial.candidate_id,
         )
-        return trial_payload
+        return trial.to_dict()
 
     def end_round(
         self,
@@ -395,20 +374,17 @@ class OptimizationHistoryState:
     ) -> dict[str, Any]:
         entry = self._open_rounds.pop(
             round_handle,
-            {
-                "round_index": round_handle,
-                "trials": [],
-                "candidates": [],
-                "extra": {},
-            },
+            OptimizationRound(
+                round_index=round_handle, trials=[], candidates=[], extras={}
+            ),
         )
         dataset_split_val = dataset_split or self._default_dataset_split
         if candidates:
             normalized_candidates = self._normalize_candidates(candidates) or []
-            entry.setdefault("candidates", []).extend(normalized_candidates)
-        if best_score is not None and entry.get("best_score") is None:
+            entry.candidates = (entry.candidates or []) + normalized_candidates
+        if best_score is not None and entry.best_score is None:
             best_score_val = self._coerce_float(best_score)
-            entry["best_score"] = best_score_val
+            entry.best_score = best_score_val
             if best_score_val is not None:
                 self._best_so_far = (
                     best_score_val
@@ -416,65 +392,65 @@ class OptimizationHistoryState:
                     else max(self._best_so_far, best_score_val)
                 )
         if best_candidate is not None:
-            entry["best_candidate"] = (
+            entry.best_candidate = (
                 best_candidate.to_dict()
                 if isinstance(best_candidate, OptimizerCandidate)
                 else best_candidate
             )
         if best_prompt is not None:
-            entry["best_prompt"] = best_prompt
+            entry.best_prompt = best_prompt
         if self._best_so_far is not None:
-            entry["best_so_far"] = self._best_so_far
+            entry.best_so_far = self._best_so_far
         if extras:
-            entry["extra"] = {**(entry.get("extra") or {}), **extras}
+            entry.extras = {**(entry.extras or {}), **extras}
         if dataset_split_val is not None:
-            entry["dataset_split"] = dataset_split_val
+            entry.dataset_split = dataset_split_val
 
-        # FIXME: Move to pareto_front utils
-        # FIXME: Move pareto handling into a shared pareto utils module if we add one.
         pareto_payload = pareto_front
         if pareto_payload is None:
             pareto_payload = self._current_pareto_front
         if pareto_payload is not None:
-            entry.setdefault("extra", {})
-            entry["extra"]["pareto_front"] = pareto_payload
+            entry.extras = {**(entry.extras or {}), "pareto_front": pareto_payload}
         selection_meta_payload = (
             selection_meta
             if selection_meta is not None
             else self._current_selection_meta
         )
         if selection_meta_payload is not None:
-            entry.setdefault("extra", {})
-            entry["extra"]["selection_meta"] = selection_meta_payload
-        if stop_reason is None and entry.get("stop_reason") is not None:
-            stop_reason = entry.get("stop_reason")
-        entry["stop_reason"] = stop_reason
-        entry["timestamp"] = timestamp or entry.get("timestamp") or now_iso()
+            entry.extras = {
+                **(entry.extras or {}),
+                "selection_meta": selection_meta_payload,
+            }
+        if stop_reason is None and entry.stop_reason is not None:
+            stop_reason = entry.stop_reason
+        if stop_reason is None:
+            stop_reason = "completed"
+        entry.stop_reason = stop_reason
+        entry.stopped = stop_reason not in (None, "completed")
+        entry.timestamp = timestamp or entry.timestamp or now_iso()
         self._merge_round(entry)
-        # Reset round-scoped selection meta once consumed
         self._current_selection_meta = None
         self._current_pareto_front = None
         debug_log(
             "round_end",
             round_index=round_handle,
-            best_score=entry.get("best_score"),
-            best_so_far=entry.get("best_so_far"),
-            trials=len(entry.get("trials") or []),
-            selection_meta=entry.get("extra", {}).get("selection_meta")
-            if isinstance(entry.get("extra"), dict)
+            best_score=entry.best_score,
+            best_so_far=entry.best_so_far,
+            trials=len(entry.trials),
+            selection_meta=(entry.extras or {}).get("selection_meta")
+            if isinstance(entry.extras, dict)
             else None,
         )
-        return entry
+        return entry.to_dict()
 
     def finalize_stop(self, stop_reason: str | None = None) -> None:
         self._stamp_stop_reason(stop_reason)
 
     def get_entries(self) -> list[dict[str, Any]]:
-        # Flush any open rounds into finalized entries before returning.
         for entry in list(self._open_rounds.values()):
             self._merge_round(entry)
         self._open_rounds.clear()
-        return list(self.entries)
+        return [entry.to_dict() for entry in self.entries]
 
     def clear(self) -> None:
         self.entries.clear()
@@ -487,13 +463,8 @@ class OptimizationHistoryState:
         if not self.entries or stop_reason is None:
             return
         last = self.entries[-1]
-        last["stop_reason"] = stop_reason
-        last["stopped"] = stop_reason not in (None, "completed")
-
-
-def first_trial_index(trials_completed: int, num_candidates: int) -> int:
-    """Return the first trial index for a contiguous candidate batch."""
-    return trials_completed - num_candidates + 1
+        last.stop_reason = stop_reason
+        last.stopped = stop_reason not in (None, "completed")
 
 
 def build_candidate_entry(
@@ -567,9 +538,7 @@ class OptimizationResult(pydantic.BaseModel):
         trials_from_history = sum(
             len(round_state.get("trials", [])) for round_state in self.history
         )
-        rounds_from_history = len(self.history)
         self.details.setdefault("trials_completed", trials_from_history)
-        self.details.setdefault("rounds_completed", rounds_from_history)
         # Populate stop_reason_details if stop_reason is provided.
         if (
             self.details.get("stop_reason") is not None
@@ -646,15 +615,12 @@ class OptimizationResult(pydantic.BaseModel):
             return "0.00% (no improvement from 0)"
 
     def _rounds_completed(self) -> int:
-        """Return rounds_completed from details or fallback to history length."""
-        rounds_completed = self.details.get("rounds_completed")
-        if isinstance(rounds_completed, int):
-            return rounds_completed
+        """Return rounds completed based on history length."""
         return len(self.history)
 
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
-        rounds_ran = self._rounds_completed()
+        rounds_ran = len(self.history)
         trials_completed = self.details.get("trials_completed")
         improvement_str = (
             self._calculate_improvement_str()
