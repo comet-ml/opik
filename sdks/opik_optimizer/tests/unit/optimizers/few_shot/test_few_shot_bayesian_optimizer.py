@@ -6,20 +6,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik import Dataset
 from opik_optimizer import (
     AlgorithmResult,
     ChatPrompt,
     FewShotBayesianOptimizer,
     OptimizationResult,
 )
+from tests.unit.test_helpers import make_mock_dataset
 
 
 def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
     return 1.0
-
-
-from tests.unit.test_helpers import make_mock_dataset
 
 
 def _make_dataset() -> MagicMock:

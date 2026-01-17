@@ -7,7 +7,8 @@ This module provides reusable test fixtures, mock builders, and helper functions
 to reduce duplication across test files.
 """
 
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from unittest.mock import MagicMock
 
 from opik import Dataset
@@ -105,6 +106,7 @@ def make_fake_evaluator(
     Returns:
         Fake evaluate function
     """
+
     def fake_evaluate(
         dataset,
         evaluated_task,

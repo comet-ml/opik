@@ -10,21 +10,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik import Dataset
-from opik_optimizer import ChatPrompt
+from opik_optimizer import ChatPrompt, task_evaluator
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops import candidate_ops
-from opik_optimizer import task_evaluator
+from tests.unit.test_helpers import make_mock_dataset
 
 
 pytestmark = pytest.mark.usefixtures(
     "disable_rate_limiting", "suppress_expected_optimizer_warnings"
 )
-
-
-from tests.unit.test_helpers import make_mock_dataset
 
 
 def _make_dataset() -> MagicMock:

@@ -28,6 +28,7 @@ from opik_optimizer.base_optimizer import (
 )
 from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
+from opik_optimizer import ChatPrompt
 from tests.unit.test_helpers import (
     make_candidate_agent,
     make_fake_evaluator,
@@ -1230,13 +1231,13 @@ class TestSetupOptimization:
     ) -> None:
         """Should create LiteLLMAgent if no agent provided."""
         mock_opik_client()
-        from opik import Dataset
         from opik_optimizer.agents import LiteLLMAgent
 
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         context = optimizer._setup_optimization(
             prompt=simple_chat_prompt,
@@ -1257,14 +1258,13 @@ class TestSetupOptimization:
     ) -> None:
         """Should use provided agent."""
         mock_opik_client()
-        from opik import Dataset
         from opik_optimizer.agents import OptimizableAgent
 
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
-
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
         mock_agent = MagicMock(spec=OptimizableAgent)
 
         context = optimizer._setup_optimization(
@@ -1551,29 +1551,19 @@ class TestOptimizationContextDataclass:
 
     def test_creates_context_with_required_fields(self) -> None:
         """Should create context with all required fields."""
-        mock_prompt = MagicMock()
-        mock_dataset = MagicMock()
+        mock_prompt = ChatPrompt(name="test", system="test", user="test")
+        mock_dataset = make_mock_dataset()
         mock_metric = MagicMock()
         mock_agent = MagicMock()
 
-        context = OptimizationContext(
-            prompts={"main": mock_prompt},
-            initial_prompts={"main": mock_prompt},
-            is_single_prompt_optimization=True,
+        context = make_optimization_context(
+            mock_prompt,
             dataset=mock_dataset,
-            evaluation_dataset=mock_dataset,
-            validation_dataset=None,
             metric=mock_metric,
             agent=mock_agent,
-            optimization=None,
-            optimization_id=None,
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
         )
 
-        assert context.prompts == {"main": mock_prompt}
+        assert "test" in context.prompts
         assert context.is_single_prompt_optimization is True
         assert context.max_trials == 10
         assert context.baseline_score is None  # Default
@@ -1581,42 +1571,16 @@ class TestOptimizationContextDataclass:
 
     def test_baseline_score_default(self) -> None:
         """baseline_score should default to None."""
-        context = OptimizationContext(
-            prompts={},
-            initial_prompts={},
-            is_single_prompt_optimization=True,
-            dataset=MagicMock(),
-            evaluation_dataset=MagicMock(),
-            validation_dataset=None,
-            metric=MagicMock(),
-            agent=MagicMock(),
-            optimization=None,
-            optimization_id=None,
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
+        context = make_optimization_context(
+            ChatPrompt(name="test", system="test", user="test"),
         )
 
         assert context.baseline_score is None
 
     def test_extra_params_default(self) -> None:
         """extra_params should default to empty dict."""
-        context = OptimizationContext(
-            prompts={},
-            initial_prompts={},
-            is_single_prompt_optimization=True,
-            dataset=MagicMock(),
-            evaluation_dataset=MagicMock(),
-            validation_dataset=None,
-            metric=MagicMock(),
-            agent=MagicMock(),
-            optimization=None,
-            optimization_id=None,
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
+        context = make_optimization_context(
+            ChatPrompt(name="test", system="test", user="test"),
         )
 
         assert context.extra_params == {}

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik import Dataset
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer, OptimizationResult
 from opik_optimizer.base_optimizer import AlgorithmResult
 from opik_optimizer.api_objects import chat_prompt
@@ -15,13 +14,11 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops import (
     crossover_ops,
     mutation_ops,
 )
+from tests.unit.test_helpers import make_mock_dataset
 
 
 def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
     return 1.0
-
-
-from tests.unit.test_helpers import make_mock_dataset
 
 
 def _make_dataset() -> MagicMock:
