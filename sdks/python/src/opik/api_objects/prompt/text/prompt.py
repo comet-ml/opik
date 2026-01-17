@@ -24,6 +24,7 @@ class Prompt(base_prompt.BasePrompt):
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = True,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -35,6 +36,7 @@ class Prompt(base_prompt.BasePrompt):
             metadata: Optional metadata for the prompt.
             type: The template type (MUSTACHE or JINJA2).
             validate_placeholders: Whether to validate template placeholders.
+            tags: Optional list of tags for categorization and filtering.
 
         Raises:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
@@ -46,6 +48,7 @@ class Prompt(base_prompt.BasePrompt):
         self._name = name
         self._metadata = metadata
         self._type = type
+        self._tags = copy.copy(tags) if tags else []
 
         self._sync_with_backend()
 
@@ -84,6 +87,12 @@ class Prompt(base_prompt.BasePrompt):
 
     @property
     @override
+    def version_id(self) -> str:
+        """The unique identifier of the prompt version."""
+        return self.__internal_api__version_id__
+
+    @property
+    @override
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
@@ -93,6 +102,12 @@ class Prompt(base_prompt.BasePrompt):
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
+
+    @property
+    @override
+    def tags(self) -> List[str]:
+        """The tags associated with the prompt."""
+        return copy.copy(self._tags)
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
@@ -171,4 +186,5 @@ class Prompt(base_prompt.BasePrompt):
         prompt._commit = prompt_version.commit
         prompt._metadata = prompt_version.metadata
         prompt._type = prompt_version.type
+        prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
         return prompt
