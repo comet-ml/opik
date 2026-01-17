@@ -102,12 +102,16 @@ def test_json_to_dict_handles_python_literal(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Ensure python-style reprs are parsed via literal_eval fallback."""
+    # Clear any leftover output from previous tests (e.g., optimizer cleanup logging)
+    capsys.readouterr()
+
     payload = """[{'role': 'system', 'content': 'Do not forget to cite sources.'}]"""
 
     result = json_to_dict(payload)
 
     assert result == [{"role": "system", "content": "Do not forget to cite sources."}]
 
+    # Check that json_to_dict didn't produce any output
     captured = capsys.readouterr()
     assert captured.out == ""
 

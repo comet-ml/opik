@@ -15,7 +15,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
     MetaPromptOptimizer,
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops import candidate_ops
-from tests.unit.test_helpers import make_mock_dataset
+from tests.unit.test_helpers import make_mock_dataset, STANDARD_DATASET_ITEMS
 
 
 pytestmark = pytest.mark.usefixtures(
@@ -23,20 +23,16 @@ pytestmark = pytest.mark.usefixtures(
 )
 
 
-def _make_dataset() -> MagicMock:
-    return make_mock_dataset(
-        [{"id": "1", "question": "Q1", "answer": "A1"}],
-        name="test-dataset",
-        dataset_id="dataset-123",
-    )
-
-
 def test_synthesis_prompts_called_on_schedule(
     mock_opik_client: Callable[..., MagicMock],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock_opik_client()
-    dataset = _make_dataset()
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS,
+        name="test-dataset",
+        dataset_id="dataset-123",
+    )
 
     optimizer = MetaPromptOptimizer(model="gpt-4o")
     optimizer.prompts_per_round = 1

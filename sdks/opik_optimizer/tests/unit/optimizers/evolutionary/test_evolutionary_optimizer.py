@@ -14,19 +14,11 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops import (
     crossover_ops,
     mutation_ops,
 )
-from tests.unit.test_helpers import make_mock_dataset
-
-
-def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
-    return 1.0
-
-
-def _make_dataset() -> MagicMock:
-    return make_mock_dataset(
-        [{"id": "1", "question": "Q1", "answer": "A1"}],
-        name="test-dataset",
-        dataset_id="dataset-123",
-    )
+from tests.unit.test_helpers import (
+    make_mock_dataset,
+    make_simple_metric,
+    STANDARD_DATASET_ITEMS,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -161,12 +153,14 @@ class TestEvolutionaryOptimizerOptimizePrompt:
 
         optimizer = EvolutionaryOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
             n_samples=2,
         )
@@ -191,12 +185,14 @@ class TestEvolutionaryOptimizerOptimizePrompt:
                 name="secondary", system="Secondary", user="{input}"
             ),
         }
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
             n_samples=2,
         )
@@ -211,13 +207,15 @@ class TestEvolutionaryOptimizerOptimizePrompt:
     ) -> None:
         mock_full_optimization_flow()
         optimizer = EvolutionaryOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         with pytest.raises((ValueError, TypeError)):
             optimizer.optimize_prompt(
                 prompt="invalid string",  # type: ignore[arg-type]
                 dataset=dataset,
-                metric=_metric,
+                metric=make_simple_metric(),
                 max_trials=1,
             )
 
@@ -232,12 +230,14 @@ class TestEvolutionaryOptimizerOptimizePrompt:
 
         optimizer = EvolutionaryOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
             n_samples=2,
         )
@@ -257,7 +257,9 @@ class TestEvolutionaryOptimizerEarlyStop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         mock_opik_client()
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = EvolutionaryOptimizer(
             model="gpt-4o", perfect_score=0.95, enable_moo=False
         )
@@ -274,7 +276,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
         )
 
@@ -288,7 +290,9 @@ class TestEvolutionaryOptimizerEarlyStop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Verify EvolutionaryOptimizer early stop reports at least 1 trial."""
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = EvolutionaryOptimizer(
             model="gpt-4o",
             skip_perfect_score=True,
@@ -302,7 +306,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
         )
 
@@ -318,7 +322,9 @@ class TestEvolutionaryOptimizerEarlyStop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Verify EvolutionaryOptimizer tracks trials/rounds during actual optimization."""
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = EvolutionaryOptimizer(
             model="gpt-4o",
             skip_perfect_score=False,  # Don't early stop
@@ -341,7 +347,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=10,  # Allow up to 10 trials
         )
 
@@ -355,8 +361,12 @@ class TestEvolutionaryOptimizerEarlyStop:
 
 def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:
     """EvolutionaryOptimizer should evaluate against the validation dataset when supplied."""
-    dataset_train = _make_dataset()
-    dataset_val = _make_dataset()
+    dataset_train = make_mock_dataset(
+        STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+    )
+    dataset_val = make_mock_dataset(
+        STANDARD_DATASET_ITEMS, name="validation-dataset", dataset_id="dataset-456"
+    )
     dataset_val.name = "validation-ds"
 
     optimizer = EvolutionaryOptimizer(
@@ -379,7 +389,7 @@ def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) 
         prompt=prompt,
         dataset=dataset_train,
         validation_dataset=dataset_val,
-        metric=_metric,
+        metric=make_simple_metric(),
         max_trials=3,
     )
 
@@ -404,7 +414,9 @@ class TestEvolutionaryOptimizerAgentUsage:
             skip_perfect_score=False,  # Disable early stop
         )
 
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         mock_agent = MagicMock()
         mock_agent.invoke.return_value = "test output"
 
@@ -428,7 +440,7 @@ class TestEvolutionaryOptimizerAgentUsage:
             optimizer.optimize_prompt(
                 prompt=prompt,
                 dataset=dataset,
-                metric=_metric,
+                metric=make_simple_metric(),
                 agent=mock_agent,
                 max_trials=10,
             )

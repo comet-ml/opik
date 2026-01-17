@@ -7,13 +7,19 @@ This module provides reusable test fixtures, mock builders, and helper functions
 to reduce duplication across test files.
 """
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Callable
 from unittest.mock import MagicMock
 
 from opik import Dataset
 from opik_optimizer import ChatPrompt
 from opik_optimizer.base_optimizer import OptimizationContext
+
+if TYPE_CHECKING:
+    from opik_optimizer.api_objects.types import MetricFunction
+
+# Standard test dataset items - used across multiple optimizer tests
+STANDARD_DATASET_ITEMS = [{"id": "1", "question": "Q1", "answer": "A1"}]
 
 
 # ============================================================
@@ -286,6 +292,21 @@ def make_optimization_result(
     if initial_score is not None:
         result["initial_score"] = initial_score
     return result
+
+
+def make_simple_metric() -> "MetricFunction":
+    """
+    Create a simple metric function that always returns 1.0.
+
+    Returns:
+        Metric function that returns 1.0 for any input
+    """
+
+    def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
+        return 1.0
+
+    metric.__name__ = "simple_metric"
+    return metric  # type: ignore[return-value]
 
 
 def make_fake_llm_call(

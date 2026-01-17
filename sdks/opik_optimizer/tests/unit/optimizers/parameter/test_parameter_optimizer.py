@@ -15,19 +15,11 @@ from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSpec,
 )
 from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
-from tests.unit.test_helpers import make_mock_dataset
-
-
-def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
-    return 1.0
-
-
-def _make_dataset() -> MagicMock:
-    return make_mock_dataset(
-        [{"id": "1", "question": "Q1", "answer": "A1"}],
-        name="test-dataset",
-        dataset_id="dataset-123",
-    )
+from tests.unit.test_helpers import (
+    make_mock_dataset,
+    make_simple_metric,
+    STANDARD_DATASET_ITEMS,
+)
 
 
 class TestParameterOptimizerInit:
@@ -58,13 +50,15 @@ class TestParameterOptimizerOptimizePrompt:
         mock_optimization_context()
         optimizer = ParameterOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         with pytest.raises(NotImplementedError):
             optimizer.optimize_prompt(
                 prompt=prompt,
                 dataset=dataset,
-                metric=_metric,
+                metric=make_simple_metric(),
                 max_trials=1,
             )
 
@@ -76,7 +70,9 @@ class TestParameterOptimizerEarlyStop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         mock_opik_client()
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = ParameterOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -99,7 +95,7 @@ class TestParameterOptimizerEarlyStop:
         result = optimizer.optimize_parameter(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             parameter_space=parameter_space,
             max_trials=1,
         )

@@ -12,19 +12,11 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
     OptimizationResult,
 )
-from tests.unit.test_helpers import make_mock_dataset
-
-
-def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
-    return 1.0
-
-
-def _make_dataset() -> MagicMock:
-    return make_mock_dataset(
-        [{"id": "1", "question": "Q1", "answer": "A1"}],
-        name="test-dataset",
-        dataset_id="dataset-123",
-    )
+from tests.unit.test_helpers import (
+    make_mock_dataset,
+    make_simple_metric,
+    STANDARD_DATASET_ITEMS,
+)
 
 
 class TestFewShotBayesianOptimizerInit:
@@ -75,7 +67,9 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             max_examples=2,
         )
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
@@ -110,7 +104,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=2,
             n_samples=2,
         )
@@ -139,7 +133,9 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
                 name="secondary", system="Secondary", user="{input}"
             ),
         }
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
@@ -181,7 +177,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=2,
             n_samples=2,
         )
@@ -196,13 +192,15 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
     ) -> None:
         mock_optimization_context()
         optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         with pytest.raises((ValueError, TypeError)):
             optimizer.optimize_prompt(
                 prompt="invalid string",  # type: ignore[arg-type]
                 dataset=dataset,
-                metric=_metric,
+                metric=make_simple_metric(),
                 max_trials=1,
             )
 
@@ -214,7 +212,9 @@ class TestFewShotBayesianOptimizerEarlyStop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         mock_opik_client()
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = FewShotBayesianOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -228,7 +228,7 @@ class TestFewShotBayesianOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
         )
 
@@ -244,7 +244,9 @@ class TestFewShotBayesianOptimizerEarlyStop:
     ) -> None:
         """Verify FewShotBayesianOptimizer early stop reports at least 1 trial."""
         mock_opik_client()
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = FewShotBayesianOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -253,7 +255,7 @@ class TestFewShotBayesianOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             max_trials=1,
         )
 
