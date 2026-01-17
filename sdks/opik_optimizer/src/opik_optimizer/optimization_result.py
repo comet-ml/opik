@@ -472,6 +472,11 @@ class OptimizationHistoryState:
         last["stopped"] = stop_reason not in (None, "completed")
 
 
+def first_trial_index(trials_completed: int, num_candidates: int) -> int:
+    """Return the first trial index for a contiguous candidate batch."""
+    return trials_completed - num_candidates + 1
+
+
 def build_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,

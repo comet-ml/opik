@@ -132,7 +132,8 @@ class TestOptimizationResultInitialization:
         assert result.optimization_id == "opt-123"
         assert result.initial_score == 0.60
         assert result.llm_cost_total == 5.50
-        assert result.details.get("schema_version") == "v1"
+        assert result.details.get("schema_version") is None
+        assert result.details_version == "v1"
         assert result.details.get("trials_completed") == 1
         assert result.details.get("rounds_completed") == 1
         assert result.details.get("stop_reason_details") is None
@@ -156,7 +157,9 @@ class TestOptimizationResultInitialization:
         )
         stop_details = result.details.get("stop_reason_details") or {}
         assert stop_details.get("best_score") == 0.25
-        assert stop_details.get("error") == "boom"
+        assert stop_details.get("error") == (
+            "An error occurred during optimization; see internal logs for details."
+        )
 
     def test_creates_with_dict_of_prompts(self) -> None:
         prompts = {

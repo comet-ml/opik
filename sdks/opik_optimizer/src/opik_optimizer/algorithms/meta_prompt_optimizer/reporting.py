@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from ...api_objects import chat_prompt
 from ...utils.reporting import (
     convert_tqdm_to_rich,
-    get_console,
     suppress_opik_logs,
 )
 from ...utils.display import (
@@ -14,8 +13,6 @@ from ...utils.display import (
     display_prefixed_block,
     display_text_block,
 )
-
-console = get_console()
 
 
 @contextmanager
@@ -27,7 +24,6 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
         def failed_to_generate(self, num_prompts: int, error: str) -> None:
             if verbose >= 1:
                 display_prefixed_block(
-                    console,
                     [
                         f"Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}",
                         "",
@@ -39,41 +35,37 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
         def round_start(self, round_number: int) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console, f"│ - Starting round {round_number + 1} of {max_rounds}"
+                    f"│ - Starting round {round_number + 1} of {max_rounds}"
                 )
 
         def round_end(self, round_number: int, score: float, best_score: float) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console, f"│    Completed round {round_number + 1} of {max_rounds}"
+                    f"│    Completed round {round_number + 1} of {max_rounds}"
                 )
                 if best_score == 0 and score == 0:
                     display_text_block(
-                        console,
                         "│    No improvement in this optimization round - score is 0",
                         style="yellow",
                     )
                 elif best_score == 0:
                     display_text_block(
-                        console,
                         f"│    Found a new best performing prompt: {score:.4f}",
                         style="green",
                     )
                 elif score > best_score:
                     perc_change = (score - best_score) / best_score
                     display_text_block(
-                        console,
                         f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})",
                         style="green",
                     )
                 elif score <= best_score:
                     display_text_block(
-                        console,
                         "│    No improvement in this optimization round",
                         style="red",
                     )
 
-                display_text_block(console, "│")
+                display_text_block("│")
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -94,11 +86,10 @@ def display_evaluation(
     """Context manager to display messages during an evaluation phase."""
     # Entry point
     if verbose >= 1:
-        display_text_block(console, f"> {message}")
+        display_text_block(f"> {message}")
         if dataset_name:
             dataset_type = "validation" if is_validation else "training"
             display_text_block(
-                console,
                 f"  Using {dataset_type} dataset: {dataset_name}",
                 style="dim",
             )
@@ -107,9 +98,7 @@ def display_evaluation(
     class Reporter:
         def set_score(self, s: float) -> None:
             if verbose >= 1:
-                display_text_block(
-                    console, f"\r  Baseline score was: {s:.4f}.\n", style="green"
-                )
+                display_text_block(f"\r  Baseline score was: {s:.4f}.\n", style="green")
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -127,25 +116,22 @@ def display_optimization_start_message(
     is_using_validation: bool = False,
 ) -> None:
     if verbose >= 1:
-        display_text_block(console, "> Starting the optimization run")
+        display_text_block("> Starting the optimization run")
         if dataset_training_name and validation_dataset_name and is_using_validation:
             display_text_block(
-                console,
                 f"│  Training dataset (feedback): {dataset_training_name}",
                 style="dim",
             )
             display_text_block(
-                console,
                 f"│  Validation dataset (ranking): {validation_dataset_name}",
                 style="dim",
             )
         elif dataset_training_name:
             display_text_block(
-                console,
                 f"│  Using training dataset: {dataset_training_name} (for both feedback and ranking)",
                 style="dim",
             )
-        display_text_block(console, "│")
+        display_text_block("│")
 
 
 class CandidateGenerationReporter:
@@ -156,11 +142,10 @@ class CandidateGenerationReporter:
     def set_generated_prompts(self) -> None:
         summary = f" ({self.selection_summary})" if self.selection_summary else ""
         display_text_block(
-            console,
             f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
             style="dim",
         )
-        display_text_block(console, "│")
+        display_text_block("│")
 
 
 @contextmanager
@@ -169,12 +154,11 @@ def display_candidate_generation_report(
 ) -> Iterator[CandidateGenerationReporter]:
     if verbose >= 1:
         display_text_block(
-            console,
             f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:",
         )
         if selection_summary:
             display_text_block(
-                console, f"│      Evaluation settings: {selection_summary}", style="dim"
+                f"│      Evaluation settings: {selection_summary}", style="dim"
             )
 
     try:
@@ -199,61 +183,55 @@ def display_prompt_candidate_scoring_report(
         ) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console, f"│    Evaluating candidate prompt {candidate_count + 1}:"
+                    f"│    Evaluating candidate prompt {candidate_count + 1}:"
                 )
                 if selection_summary:
                     display_text_block(
-                        console,
                         f"│         Evaluation settings: {selection_summary}",
                         style="dim",
                     )
                 if dataset_name:
                     dataset_type = "validation" if is_validation else "training"
                     display_text_block(
-                        console,
                         f"│         (using {dataset_type} dataset: {dataset_name} for ranking)",
                         style="dim",
                     )
                 for name, prompt in prompts.items():
-                    display_text_block(console, f"│         {name}:")
+                    display_text_block(f"│         {name}:")
                     display_messages(prompt.get_messages(), "│         ")
-                    display_text_block(console, "│")
+                    display_text_block("│")
 
         def set_final_score(self, best_score: float, score: float) -> None:
             if verbose >= 1:
                 if best_score == 0 and score > 0:
                     display_text_block(
-                        console, f"│          Evaluation score: {score:.4f}", "green"
+                        f"│          Evaluation score: {score:.4f}", "green"
                     )
                 elif best_score == 0 and score == 0:
                     display_text_block(
-                        console,
                         f"│         Evaluation score: {score:.4f}",
                         "dim yellow",
                     )
                 elif score > best_score:
                     perc_change = (score - best_score) / best_score
                     display_text_block(
-                        console,
                         f"│          Evaluation score: {score:.4f} ({perc_change:.2%})",
                         "green",
                     )
                 elif score < best_score:
                     perc_change = (score - best_score) / best_score
                     display_text_block(
-                        console,
                         f"│          Evaluation score: {score:.4f} ({perc_change:.2%})",
                         "red",
                     )
                 else:
                     display_text_block(
-                        console,
                         f"│         Evaluation score: {score:.4f}",
                         "dim yellow",
                     )
 
-                display_text_block(console, "│")
-                display_text_block(console, "│")
+                display_text_block("│")
+                display_text_block("│")
 
     try:
         with suppress_opik_logs():

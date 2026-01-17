@@ -10,35 +10,15 @@ from rich.progress import Progress
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def suppress_experiment_reporting(func: F) -> F:
-    """Decorator to suppress opik experiment result/link display."""
-
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        from opik.evaluation import report
-
-        original_results: Callable[..., None] = report.display_experiment_results
-        original_link: Callable[..., None] = report.display_experiment_link
-
-        def noop(*args: Any, **kwargs: Any) -> None:
-            pass
-
-        report.display_experiment_results = noop  # type: ignore[assignment]
-        report.display_experiment_link = noop  # type: ignore[assignment]
-
-        try:
-            return func(*args, **kwargs)
-        finally:
-            report.display_experiment_results = original_results  # type: ignore[assignment]
-            report.display_experiment_link = original_link  # type: ignore[assignment]
-
-    return wrapper  # type: ignore[return-value]
+_CONSOLE: Console | None = None
 
 
 def get_console(*args: Any, **kwargs: Any) -> Console:
-    console = Console(*args, **kwargs)
-    console.is_jupyter = False
-    return console
+    global _CONSOLE
+    if _CONSOLE is None:
+        _CONSOLE = Console(*args, **kwargs)
+        _CONSOLE.is_jupyter = False
+    return _CONSOLE
 
 
 @contextmanager
@@ -103,6 +83,31 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
         yield
     finally:
         opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
+
+
+def suppress_experiment_reporting(func: F) -> F:
+    """Decorator to suppress opik experiment result/link display."""
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        from opik.evaluation import report
+
+        original_results: Callable[..., None] = report.display_experiment_results
+        original_link: Callable[..., None] = report.display_experiment_link
+
+        def noop(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        report.display_experiment_results = noop  # type: ignore[assignment]
+        report.display_experiment_link = noop  # type: ignore[assignment]
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            report.display_experiment_results = original_results  # type: ignore[assignment]
+            report.display_experiment_link = original_link  # type: ignore[assignment]
+
+    return wrapper  # type: ignore[return-value]
 
 
 @contextmanager

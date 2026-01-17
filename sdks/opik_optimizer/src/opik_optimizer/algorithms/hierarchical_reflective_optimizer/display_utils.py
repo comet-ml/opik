@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from rich.text import Text
 
 from ...utils.display import display_text_block, safe_percentage_change
+from ...utils.reporting import get_console
 from ...utils.multimodal import content_to_string
 from .types import MessageDiffItem
 
@@ -92,7 +93,6 @@ def compute_message_diff_order(
 
 # FIXME: This needs to be centralized as we need this on all optimizers.
 def display_optimized_prompt_diff(
-    console: Any,
     initial_messages: list[dict[str, str]],
     optimized_messages: list[dict[str, str]],
     initial_score: float,
@@ -106,68 +106,66 @@ def display_optimized_prompt_diff(
     if verbose < 1:
         return
 
-    display_text_block(console, "│")
-    display_text_block(console, "│")
+    console = get_console()
+    display_text_block("│")
+    display_text_block("│")
 
     if prompt_name:
         display_text_block(
-            console, f"│ > Optimization Results for '{prompt_name}'", "bold green"
+            f"│ > Optimization Results for '{prompt_name}'", "bold green"
         )
     else:
-        display_text_block(console, "│ > Optimization Results", "bold green")
-    display_text_block(console, "│")
+        display_text_block("│ > Optimization Results", "bold green")
+    display_text_block("│")
 
     if initial_messages == optimized_messages:
-        display_text_block(console, "│   Prompt unchanged", "dim")
-        display_text_block(console, "│")
+        display_text_block("│   Prompt unchanged", "dim")
+        display_text_block("│")
         return
 
     if best_score > initial_score:
         perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
         if has_percentage:
             display_text_block(
-                console,
                 f"│   Prompt improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
                 "green",
             )
         else:
             display_text_block(
-                console,
                 f"│   Prompt improved from {initial_score:.4f} to {best_score:.4f}",
                 "green",
             )
     else:
         display_text_block(
-            console,
             f"│   No improvement found (score: {best_score:.4f})",
             "yellow",
         )
 
-    display_text_block(console, "│")
-    display_text_block(console, "│   Prompt Changes:", "cyan")
-    display_text_block(console, "│")
+    display_text_block("│")
+    display_text_block("│   Prompt Changes:", "cyan")
+    display_text_block("│")
 
     diff_items = compute_message_diff_order(initial_messages, optimized_messages)
 
     for item in diff_items:
         if item.change_type == "added":
-            display_text_block(console, f"│     {item.role}: (added)", "green bold")
+            display_text_block(f"│     {item.role}: (added)", "green bold")
             assert item.optimized_content is not None
             optimized_str = content_to_string(item.optimized_content)
             for line in optimized_str.splitlines():
                 console.print(Text("│       ").append(Text(f"+{line}", style="green")))
-            display_text_block(console, "│")
+            display_text_block("│")
         elif item.change_type == "removed":
-            display_text_block(console, f"│     {item.role}: (removed)", "red bold")
+            display_text_block(f"│     {item.role}: (removed)", "red bold")
             assert item.initial_content is not None
             initial_str = content_to_string(item.initial_content)
             for line in initial_str.splitlines():
                 console.print(Text("│       ").append(Text(f"-{line}", style="red")))
-            display_text_block(console, "│")
+            display_text_block("│")
         elif item.change_type == "unchanged":
-            display_text_block(console, f"│     {item.role}: (unchanged)", "dim")
+            display_text_block(f"│     {item.role}: (unchanged)", "dim")
         else:
-            display_text_block(console, f"│     {item.role}: (changed)", "cyan bold")
+            display_text_block(f"│     {item.role}: (changed)", "cyan bold")
 
             assert item.initial_content is not None
             assert item.optimized_content is not None
@@ -199,7 +197,6 @@ def display_optimized_prompt_diff(
                 console.print(diff_content)
             elif initial_str != optimized_str:
                 display_text_block(
-                    console,
                     "│       (content changed but diff unavailable)",
                     "dim",
                 )
@@ -209,4 +206,4 @@ def display_optimized_prompt_diff(
                 console.print(
                     Text("│       ").append(Text(f"+{optimized_str}", style="green"))
                 )
-            display_text_block(console, "│")
+            display_text_block("│")

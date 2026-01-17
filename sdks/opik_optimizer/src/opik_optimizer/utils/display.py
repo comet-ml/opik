@@ -300,7 +300,7 @@ def display_result(
         return
 
     console = get_console()
-    display_text_block(console, "\n> Optimization complete\n")
+    display_text_block("\n> Optimization complete\n")
 
     content: list[rich.console.RenderableType] = []
 
@@ -366,7 +366,7 @@ def display_configuration(
         return
 
     console = get_console()
-    display_text_block(console, "> Let's optimize the prompt:\n")
+    display_text_block("> Let's optimize the prompt:\n")
 
     if messages is None:
         pass
@@ -394,11 +394,9 @@ def display_configuration(
     if isinstance(messages, (chat_prompt.ChatPrompt, dict)):
         selection_summary = summarize_selection_policy(messages)
 
-    display_text_block(
-        console, f"\nUsing {optimizer_config['optimizer']} with the parameters: "
-    )
+    display_text_block(f"\nUsing {optimizer_config['optimizer']} with the parameters: ")
     if selection_summary:
-        display_text_block(console, f"  - evaluation: {selection_summary}", style="dim")
+        display_text_block(f"  - evaluation: {selection_summary}", style="dim")
 
     for key, value in optimizer_config.items():
         if key == "optimizer":
@@ -409,7 +407,7 @@ def display_configuration(
         )
         console.print(parameter_text)
 
-    display_text_block(console, "\n")
+    display_text_block("\n")
 
 
 @contextmanager
@@ -421,20 +419,16 @@ def display_evaluation(
     selection_summary: str | None = None,
 ) -> Iterator[Any]:
     """Context manager to display messages during an evaluation phase."""
-    console = get_console()
-
     if verbose >= 1:
-        display_text_block(console, f"> {message}")
+        display_text_block(f"> {message}")
         if dataset_name:
             dataset_type = "validation" if is_validation else "training"
             display_text_block(
-                console,
                 f"  Using {dataset_type} dataset: {dataset_name}",
                 style="dim",
             )
         if selection_summary:
             display_text_block(
-                console,
                 f"  Evaluation settings: {selection_summary}",
                 style="dim",
             )
@@ -443,7 +437,6 @@ def display_evaluation(
         def set_score(self, score: float) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console,
                     f"\r  Baseline score was: {score:.4f}.\n",
                     style="green",
                 )
@@ -470,13 +463,10 @@ def display_evaluation_progress(
     if verbose < 1:
         return
 
-    console = get_console()
-
-    display_text_block(console, f"│    {prefix}:")
+    display_text_block(f"│    {prefix}:")
 
     if evaluation_settings:
         display_text_block(
-            console,
             f"│         Evaluation settings: {evaluation_settings}",
             style="dim",
         )
@@ -484,17 +474,16 @@ def display_evaluation_progress(
     if dataset_name:
         ds_type = dataset_type or "training"
         display_text_block(
-            console,
             f"│         (using {ds_type} dataset: {dataset_name} for ranking)",
             style="dim",
         )
 
     for name, prompt in prompts.items():
-        display_text_block(console, f"│         {name}:")
+        display_text_block(f"│         {name}:")
         display_messages(prompt.get_messages(), "│         ")
 
-    display_text_block(console, f"│         Score: {score_text}", style=style)
-    display_text_block(console, "│")
+    display_text_block(f"│         Score: {score_text}", style=style)
+    display_text_block("│")
 
 
 def build_plaintext_summary(
@@ -804,10 +793,9 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     )
 
 
-def display_tool_description(
-    console: rich.console.Console, description: str, title: str, style: str
-) -> None:
+def display_tool_description(description: str, title: str, style: str) -> None:
     """Render a simple tool description panel."""
+    console = get_console()
     panel = rich.panel.Panel(
         rich.text.Text(description),
         title=title,
@@ -819,42 +807,39 @@ def display_tool_description(
     console.print(panel)
 
 
-def display_text_block(
-    console: rich.console.Console | None, text: str, style: str = ""
-) -> None:
+def display_text_block(text: str, style: str = "") -> None:
     """Print a prefixed single-line text block."""
-    target = console or get_console()
-    target.print(rich.text.Text(text, style=style))
+    console = get_console()
+    console.print(rich.text.Text(text, style=style))
 
 
 def display_prefixed_block(
-    console: rich.console.Console | None,
     lines: list[str],
     prefix: str = "│ ",
     style: str = "",
 ) -> None:
     """Print a block of lines with a prefix."""
     rendered = "\n".join(f"{prefix}{line}" for line in lines)
-    target = console or get_console()
-    target.print(rich.text.Text(rendered, style=style), highlight=False)
+    console = get_console()
+    console.print(rich.text.Text(rendered, style=style), highlight=False)
 
 
 def display_error(error_message: str, verbose: int = 1) -> None:
     """Display an error message with a standard prefix."""
     if verbose >= 1:
-        display_text_block(None, f"│   {error_message}", style="dim red")
+        display_text_block(f"│   {error_message}", style="dim red")
 
 
 def display_success(message: str, verbose: int = 1) -> None:
     """Display a success message with a standard prefix."""
     if verbose >= 1:
-        display_text_block(None, f"│   {message}", style="dim green")
+        display_text_block(f"│   {message}", style="dim green")
 
 
 def display_message(message: str, verbose: int = 1) -> None:
     """Display a neutral message with a standard prefix."""
     if verbose >= 1:
-        display_text_block(None, f"│   {message}", style="dim")
+        display_text_block(f"│   {message}", style="dim")
 
 
 def format_prompt_snippet(text: str, max_length: int = 100) -> str:

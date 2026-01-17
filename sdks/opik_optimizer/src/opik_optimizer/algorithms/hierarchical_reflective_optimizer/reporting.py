@@ -9,10 +9,10 @@ from ...api_objects import chat_prompt
 from ...utils.reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
 from ...utils.display import display_messages, display_text_block
 from .display_utils import (
-    compute_message_diff_order,
+    compute_message_diff_order,  # noqa: F401
     display_optimized_prompt_diff as _display_optimized_prompt_diff,
 )
-from .types import MessageDiffItem
+from .types import MessageDiffItem  # noqa: F401
 
 __all__ = [
     "MessageDiffItem",
@@ -21,7 +21,6 @@ __all__ = [
 ]
 
 PANEL_WIDTH = 90
-console = get_console()
 
 
 def display_retry_attempt(
@@ -33,7 +32,6 @@ def display_retry_attempt(
     """Display retry attempt information."""
     if verbose >= 1:
         display_text_block(
-            console,
             f"│    Retry attempt {attempt + 1}/{max_attempts} for failure mode '{failure_mode_name}' (no improvement observed)",
             style="yellow",
         )
@@ -48,50 +46,45 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
         def failed_to_generate(self, num_prompts: int, error: str) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console,
                     f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}",
                     style="red",
                 )
-                display_text_block(console, "│")
+                display_text_block("│")
 
         def round_start(self, round_number: int) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console, f"│ - Starting round {round_number + 1} of {max_rounds}"
+                    f"│ - Starting round {round_number + 1} of {max_rounds}"
                 )
 
         def round_end(self, round_number: int, score: float, best_score: float) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console, f"│    Completed round {round_number + 1} of {max_rounds}"
+                    f"│    Completed round {round_number + 1} of {max_rounds}"
                 )
                 if best_score == 0 and score == 0:
                     display_text_block(
-                        console,
                         "│    No improvement in this round - score is 0",
                         style="yellow",
                     )
                 elif best_score == 0:
                     display_text_block(
-                        console,
                         f"│    Found a new best performing prompt: {score:.4f}",
                         style="green",
                     )
                 elif score > best_score:
                     perc_change = (score - best_score) / best_score
                     display_text_block(
-                        console,
                         f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})",
                         style="green",
                     )
                 elif score <= best_score:
                     display_text_block(
-                        console,
                         "│    No improvement in this round",
                         style="red",
                     )
 
-                display_text_block(console, "│")
+                display_text_block("│")
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -119,7 +112,7 @@ def display_evaluation(
     """
     # Entry point
     if verbose >= 1:
-        display_text_block(console, f"{indent}{message}")
+        display_text_block(f"{indent}{message}")
 
     # Create a simple object with a method to set the score
     class Reporter:
@@ -131,11 +124,10 @@ def display_evaluation(
                 if baseline_score is None:
                     # This is the baseline evaluation
                     display_text_block(
-                        console,
                         f"{score_indent}Baseline score was: {s:.4f}.",
                         style="green",
                     )
-                    display_text_block(console, "│")
+                    display_text_block("│")
                 else:
                     # This is an improved prompt evaluation - show comparison
                     if s > baseline_score:
@@ -145,7 +137,6 @@ def display_evaluation(
                             else 0
                         )
                         display_text_block(
-                            console,
                             f"{score_indent}Score for updated prompt: {s:.4f} (+{improvement_pct:.1f}%)",
                             style="green bold",
                         )
@@ -156,17 +147,15 @@ def display_evaluation(
                             else 0
                         )
                         display_text_block(
-                            console,
                             f"{score_indent}Score for updated prompt: {s:.4f} (-{decline_pct:.1f}%)",
                             style="red",
                         )
                     else:
                         display_text_block(
-                            console,
                             f"{score_indent}Score for updated prompt: {s:.4f} (no change)",
                             style="yellow",
                         )
-                    display_text_block(console, "│")
+                    display_text_block("│")
 
     # Use our log suppression context manager and yield the reporter
     # Adjust progress bar indentation based on indent style
@@ -181,8 +170,8 @@ def display_evaluation(
 
 def display_optimization_start_message(verbose: int = 1) -> None:
     if verbose >= 1:
-        display_text_block(console, "> Starting the optimization run")
-        display_text_block(console, "│")
+        display_text_block("> Starting the optimization run")
+        display_text_block("│")
 
 
 class CandidateGenerationReporter:
@@ -193,11 +182,10 @@ class CandidateGenerationReporter:
     def set_generated_prompts(self) -> None:
         summary = f" ({self.selection_summary})" if self.selection_summary else ""
         display_text_block(
-            console,
             f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
             style="dim",
         )
-        display_text_block(console, "│")
+        display_text_block("│")
 
 
 @contextmanager
@@ -206,12 +194,11 @@ def display_candidate_generation_report(
 ) -> Iterator[CandidateGenerationReporter]:
     if verbose >= 1:
         display_text_block(
-            console,
             f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:",
         )
         if selection_summary:
             display_text_block(
-                console, f"│      Evaluation settings: {selection_summary}", style="dim"
+                f"│      Evaluation settings: {selection_summary}", style="dim"
             )
 
     try:
@@ -233,12 +220,10 @@ def display_prompt_candidate_scoring_report(
         ) -> None:
             if verbose >= 1:
                 display_text_block(
-                    console,
                     f"│       Evaluating candidate prompt {candidate_count + 1}:",
                 )
                 if selection_summary:
                     display_text_block(
-                        console,
                         f"│            Evaluation settings: {selection_summary}",
                         style="dim",
                     )
@@ -248,37 +233,33 @@ def display_prompt_candidate_scoring_report(
             if verbose >= 1:
                 if best_score == 0 and score > 0:
                     display_text_block(
-                        console, f"│             Evaluation score: {score:.4f}", "green"
+                        f"│             Evaluation score: {score:.4f}", "green"
                     )
                 elif best_score == 0 and score == 0:
                     display_text_block(
-                        console,
                         f"│            Evaluation score: {score:.4f}",
                         "dim yellow",
                     )
                 elif score > best_score:
                     perc_change = (score - best_score) / best_score
                     display_text_block(
-                        console,
                         f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
                         "green",
                     )
                 elif score < best_score:
                     perc_change = (score - best_score) / best_score
                     display_text_block(
-                        console,
                         f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
                         "red",
                     )
                 else:
                     display_text_block(
-                        console,
                         f"│            Evaluation score: {score:.4f}",
                         "dim yellow",
                     )
 
-                display_text_block(console, "│   ")
-                display_text_block(console, "│   ")
+                display_text_block("│   ")
+                display_text_block("│   ")
 
     try:
         with suppress_opik_logs():
@@ -292,9 +273,9 @@ def display_prompt_candidate_scoring_report(
 def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterator[Any]:
     """Context manager to display progress for a single optimization round."""
     if verbose >= 1:
-        display_text_block(console, "│")
-        display_text_block(console, "│")
-        console.print(
+        display_text_block("│")
+        display_text_block("│")
+        get_console().print(
             Text("│ ").append(Text(f"Round {round_index}", style="bold cyan"))
         )
 
@@ -302,7 +283,7 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
         def iteration_complete(self, best_score: float, improved: bool) -> None:
             if verbose >= 1:
                 if improved:
-                    console.print(
+                    get_console().print(
                         Text("│ ").append(
                             Text(
                                 f"Round {round_index} complete - New best score: {best_score:.4f}",
@@ -311,7 +292,7 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
                         )
                     )
                 else:
-                    console.print(
+                    get_console().print(
                         Text("│ ").append(
                             Text(
                                 f"Round {round_index} complete - No improvement (best: {best_score:.4f})",
@@ -319,7 +300,7 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
                             )
                         )
                     )
-                display_text_block(console, "│")
+                display_text_block("│")
 
     try:
         yield Reporter()
@@ -331,8 +312,8 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
 def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
     """Context manager to display progress during root cause analysis with batch tracking."""
     if verbose >= 1:
-        display_text_block(console, "│   ")
-        console.print(
+        display_text_block("│   ")
+        get_console().print(
             Text("│   ").append(
                 Text("Analyzing root cause of failed evaluation items", style="cyan")
             )
@@ -341,7 +322,7 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
     class Reporter:
         def set_completed(self, total_test_cases: int, num_batches: int) -> None:
             if verbose >= 1:
-                console.print(
+                get_console().print(
                     Text("│   ").append(
                         Text(
                             f"Analyzed {total_test_cases} test cases across {num_batches} batches",
@@ -349,7 +330,7 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
                         )
                     )
                 )
-                display_text_block(console, "│   ")
+                display_text_block("│   ")
 
     try:
         with suppress_opik_logs():
@@ -363,7 +344,7 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
 def display_batch_synthesis(num_batches: int, verbose: int = 1) -> Iterator[Any]:
     """Context manager to display message during batch synthesis."""
     if verbose >= 1:
-        console.print(
+        get_console().print(
             Text("│   ").append(Text("Synthesizing failure modes", style="cyan"))
         )
 
@@ -400,8 +381,8 @@ def display_hierarchical_synthesis(
     )
 
     # Capture the panel as rendered text with ANSI styles and prefix each line
-    with console.capture() as capture:
-        console.print(panel)
+    with get_console().capture() as capture:
+        get_console().print(panel)
 
     rendered_panel = capture.get()
 
@@ -409,8 +390,8 @@ def display_hierarchical_synthesis(
     prefixed_output = "\n".join(f"│ {line}" for line in rendered_panel.splitlines())
 
     # Print the prefixed output (will include colors)
-    console.print(prefixed_output, highlight=False)
-    display_text_block(console, "│")
+    get_console().print(prefixed_output, highlight=False)
+    display_text_block("│")
 
 
 def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
@@ -430,8 +411,8 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
         width=PANEL_WIDTH,
     )
 
-    with console.capture() as capture:
-        console.print(header_panel)
+    with get_console().capture() as capture:
+        get_console().print(header_panel)
 
     rendered_header = capture.get()
 
@@ -439,8 +420,8 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
     prefixed_output = "\n".join(f"│   {line}" for line in rendered_header.splitlines())
 
     # Print the prefixed output (will include colors)
-    console.print(prefixed_output, highlight=False)
-    display_text_block(console, "│")
+    get_console().print(prefixed_output, highlight=False)
+    display_text_block("│")
 
     for idx, failure_mode in enumerate(failure_modes, 1):
         # Create content for this failure mode
@@ -460,8 +441,8 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
         )
 
         # Capture and prefix each line
-        with console.capture() as capture:
-            console.print(panel)
+        with get_console().capture() as capture:
+            get_console().print(panel)
 
         rendered_panel = capture.get()
 
@@ -471,10 +452,10 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
         )
 
         # Print the prefixed output (will include colors)
-        console.print(prefixed_output, highlight=False)
+        get_console().print(prefixed_output, highlight=False)
 
         if idx < len(failure_modes):
-            console.print("│")
+            get_console().print("│")
 
 
 @contextmanager
@@ -483,9 +464,9 @@ def display_prompt_improvement(
 ) -> Iterator[Any]:
     """Context manager to display progress while generating improved prompt."""
     if verbose >= 1:
-        display_text_block(console, "│")
-        display_text_block(console, "│   ")
-        console.print(
+        display_text_block("│")
+        display_text_block("│   ")
+        get_console().print(
             Text("│   ").append(
                 Text(f"Addressing: {failure_mode_name}", style="bold cyan")
             )
@@ -508,8 +489,8 @@ def display_prompt_improvement(
                 )
 
                 # Capture and prefix each line
-                with console.capture() as capture:
-                    console.print(panel)
+                with get_console().capture() as capture:
+                    get_console().print(panel)
 
                 rendered_panel = capture.get()
 
@@ -519,8 +500,8 @@ def display_prompt_improvement(
                 )
 
                 # Print the prefixed output (will include colors)
-                console.print(prefixed_output, highlight=False)
-                display_text_block(console, "│   ")
+                get_console().print(prefixed_output, highlight=False)
+                display_text_block("│   ")
 
     try:
         with suppress_opik_logs():
@@ -540,7 +521,7 @@ def display_iteration_improvement(
         return
 
     if improvement > 0:
-        console.print(
+        get_console().print(
             Text("│   ").append(
                 Text(
                     f"✓ Improvement: {improvement:.2%} (from {best_score:.4f} to {current_score:.4f})",
@@ -549,7 +530,7 @@ def display_iteration_improvement(
             )
         )
     else:
-        console.print(
+        get_console().print(
             Text("│   ").append(
                 Text(
                     f"✗ No improvement: {improvement:.2%} (score: {current_score:.4f}, best: {best_score:.4f})",
@@ -569,7 +550,6 @@ def display_optimized_prompt_diff(
 ) -> None:
     """Display git-style diff of prompt changes."""
     _display_optimized_prompt_diff(
-        console,
         initial_messages,
         optimized_messages,
         initial_score,

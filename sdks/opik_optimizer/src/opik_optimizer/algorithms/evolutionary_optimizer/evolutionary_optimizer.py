@@ -18,6 +18,7 @@ from opik_optimizer.base_optimizer import (
     OptimizationContext,
 )
 from opik_optimizer.utils.prompt_library import PromptOverrides
+from opik_optimizer.optimization_result import first_trial_index
 from ...api_objects import chat_prompt
 
 from . import helpers, reporting
@@ -809,8 +810,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     valid_individuals = [
                         ind for ind in deap_population if ind.fitness.valid
                     ]
-                    first_trial_index = (
-                        context.trials_completed - len(valid_individuals) + 1
+                    first_trial_idx = first_trial_index(
+                        context.trials_completed, len(valid_individuals)
                     )
                     valid_idx = 0
                     for ind in deap_population:
@@ -834,7 +835,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         self.post_candidate(
                             candidate_prompts,
                             score=primary_score,
-                            trial_index=first_trial_index + valid_idx,
+                            trial_index=first_trial_idx + valid_idx,
                             metrics=metrics,
                             round_handle=round_handle,
                         )

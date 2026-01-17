@@ -11,11 +11,9 @@ from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import throttle as _throttle
-from ...optimization_result import OptimizationRound
+from ...optimization_result import OptimizationRound, first_trial_index
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame
-from ..._llm_calls import StructuredOutputParsingError
-from litellm.exceptions import BadRequestError
 
 # Import ops modules
 from .ops import candidate_ops, context_ops, result_ops
@@ -320,99 +318,29 @@ class MetaPromptOptimizer(BaseOptimizer):
                     self.prompts_per_round, max_trials - context.trials_completed
                 )
 
-                try:
-                    if is_single_prompt_optimization:
-                        single_candidates = candidate_ops.generate_candidate_prompts(
-                            optimizer=self,
-                            current_prompt=list(best_prompts.values())[0],
-                            best_score=best_score,
-                            round_num=round_num,
-                            previous_rounds=rounds,
-                            metric=metric,
-                            optimization_id=optimization_id,
-                            project_name=self.project_name,
-                            build_history_context_fn=self._build_history_context,
-                            get_task_context_fn=self._get_task_context,
-                            winning_patterns=(
-                                self.hall_of_fame.get_patterns_for_injection()
-                                if self.hall_of_fame
-                                else None
-                            ),
-                        )
-                        prompt_key = next(iter(best_prompts.keys()))
-                        candidate_prompts = [
-                            {prompt_key: prompt}
-                            for prompt in single_candidates[:prompts_this_round]
-                        ]
-                    else:
-                        bundle_candidates = (
-                            candidate_ops.generate_agent_bundle_candidates(
-                                optimizer=self,
-                                current_prompts=best_prompts,
-                                best_score=best_score,
-                                round_num=round_num,
-                                previous_rounds=rounds,
-                                metric=metric,
-                                optimization_id=optimization_id,
-                                project_name=self.project_name,
-                                build_history_context_fn=self._build_history_context,
-                                get_task_context_fn=self._get_task_context,
-                            )
-                        )
-                        # Extract prompts from bundle candidates and limit to prompts_this_round
-                        candidate_prompts = [
-                            bundle.prompts
-                            for bundle in bundle_candidates[:prompts_this_round]
-                        ]
-
-                    synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
-                    if (
-                        is_single_prompt_optimization
-                        and self.synthesis_prompts_per_round > 0
-                        and round_num >= self.synthesis_start_round
-                        and self.synthesis_round_interval > 0
-                        and (round_num - self.synthesis_start_round)
-                        % self.synthesis_round_interval
-                        == 0
-                    ):
-                        try:
-                            synthesis_prompts = (
-                                candidate_ops.generate_synthesis_prompts(
-                                    optimizer=self,
-                                    current_prompt=list(best_prompts.values())[0],
-                                    best_score=best_score,
-                                    previous_rounds=rounds,
-                                    metric=metric,
-                                    get_task_context_fn=self._get_task_context,
-                                    optimization_id=optimization_id,
-                                    project_name=self.project_name,
-                                )
-                            )
-                            prompt_key = next(iter(best_prompts.keys()))
-                            synthesis_candidates = [
-                                {prompt_key: prompt} for prompt in synthesis_prompts
-                            ]
-                        except Exception as synth_exc:
-                            if isinstance(
-                                synth_exc,
-                                (BadRequestError, StructuredOutputParsingError),
-                            ):
-                                raise
-                            logger.warning(
-                                "Synthesis prompt generation failed: %s", synth_exc
-                            )
-
-                    if synthesis_candidates:
-                        candidate_prompts = synthesis_candidates + candidate_prompts
-                        candidate_prompts = candidate_prompts[:prompts_this_round]
-
-                except Exception as e:
-                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
-                        raise
+                candidate_prompts = candidate_ops.generate_round_candidates(
+                    optimizer=self,
+                    best_prompts=best_prompts,
+                    best_score=best_score,
+                    round_num=round_num,
+                    previous_rounds=rounds,
+                    metric=metric,
+                    prompts_this_round=prompts_this_round,
+                    build_history_context_fn=self._build_history_context,
+                    get_task_context_fn=self._get_task_context,
+                    optimization_id=optimization_id,
+                    project_name=self.project_name,
+                    is_single_prompt_optimization=is_single_prompt_optimization,
+                    winning_patterns=(
+                        self.hall_of_fame.get_patterns_for_injection()
+                        if self.hall_of_fame
+                        else None
+                    ),
+                )
+                if not candidate_prompts:
                     logger.warning(
-                        f"Failed to generate {prompts_this_round} candidates: {e}"
+                        "No candidate prompts generated in round %s", round_num
                     )
-                    # Regular generation failed - break to prevent infinite loop
                     break
 
                 # Step 2. Score each candidate prompt
@@ -505,9 +433,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                     }
                 )
                 # Record each evaluated candidate as trials
-                first_trial_index = context.trials_completed - len(prompt_scores) + 1
+                first_trial_idx = first_trial_index(
+                    context.trials_completed, len(prompt_scores)
+                )
                 for idx, (cand_prompt, cand_score) in enumerate(prompt_scores):
-                    trial_index = first_trial_index + idx
+                    trial_index = first_trial_idx + idx
                     self.record_candidate_entry(
                         prompt_or_payload=cand_prompt,
                         score=cand_score,

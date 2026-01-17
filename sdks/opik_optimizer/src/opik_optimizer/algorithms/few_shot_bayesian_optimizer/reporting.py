@@ -2,19 +2,16 @@ from io import StringIO
 from typing import TYPE_CHECKING
 
 from rich.panel import Panel
-from rich.text import Text
 
 if TYPE_CHECKING:
     from ...api_objects.chat_prompt import ChatPrompt
 
-from ...utils.reporting import get_console  # noqa: F401
 from ...utils.display import (
     DEFAULT_PANEL_WIDTH,
     display_messages,
     display_text_block,
 )
-
-console = get_console()
+from ...utils.reporting import get_console
 
 
 def display_few_shot_prompt_template(
@@ -27,18 +24,16 @@ def display_few_shot_prompt_template(
     if verbose < 1:
         return
 
-    console.print(
-        Text("> Let's add a placeholder for few-shot examples in the messages:")
-    )
-    console.print(Text("│    Created the prompt template:\n│", style="dim yellow"))
+    display_text_block("> Let's add a placeholder for few-shot examples in the messages:")
+    display_text_block("│    Created the prompt template:\n│", style="dim yellow")
 
     # Display all prompts with placeholders
     for name, prompt in prompts_with_placeholder.items():
-        console.print(Text(f"│    {name}:"))
+        display_text_block(f"│    {name}:")
         display_messages(prompt.get_messages(), prefix="│    ")
-        console.print(Text("│"))
+        display_text_block("│")
 
-    console.print(Text(f"│\n│   With the {placeholder} following the format:"))
+    display_text_block(f"│\n│   With the {placeholder} following the format:")
 
     panel = Panel(
         Text(fewshot_template),
@@ -47,7 +42,7 @@ def display_few_shot_prompt_template(
     )
     # Use a temporary buffer to render the panel
     buffer = StringIO()
-    temp_console = get_console(file=buffer, width=console.width)
+    temp_console = get_console(file=buffer, width=get_console().width)
     temp_console.print(panel)
 
     # Add prefix to each line
@@ -55,15 +50,15 @@ def display_few_shot_prompt_template(
     prefixed = "\n".join(f"│    {line}" for line in panel_output.splitlines())
 
     # Print the final result
-    console.print(Text(prefixed))
-    console.print()
+    display_text_block(prefixed)
+    display_text_block("")
 
 
 def start_optimization_run(verbose: int = 1) -> None:
     """Start the optimization run"""
     if verbose >= 1:
-        display_text_block(console, "\n> Starting the optimization run")
-        console.print(Text("│"))
+        display_text_block("\n> Starting the optimization run")
+        display_text_block("│")
 
 
 def display_trial_start(
@@ -77,14 +72,12 @@ def display_trial_start(
     if verbose < 1:
         return
 
-    console.print(Text(f"│ - Starting trial {trial_number + 1} of {total_trials}"))
+    display_text_block(f"│ - Starting trial {trial_number + 1} of {total_trials}")
     if selection_summary:
-        display_text_block(
-            console, f"│   Evaluation settings: {selection_summary}", style="dim"
-        )
-    console.print(Text("│"))
+        display_text_block(f"│   Evaluation settings: {selection_summary}", style="dim")
+    display_text_block("│")
     display_messages(messages, prefix="│    ")
-    console.print("│")
+    display_text_block("│")
 
 
 def display_trial_score(
@@ -99,25 +92,21 @@ def display_trial_score(
 
     if baseline_score == 0:
         display_text_block(
-            console,
             f"│    Trial {trial_number + 1} - score was: {score:.4f}\n│",
             style="green",
         )
     elif score is not None and score > baseline_score:
         display_text_block(
-            console,
             f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
             style="green",
         )
     elif score is not None and score <= baseline_score:
         display_text_block(
-            console,
             f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
             style="red",
         )
     else:
         display_text_block(
-            console,
             f"│    Trial {trial_number + 1} - score was not set.\n│",
             style="dim yellow",
         )

@@ -689,9 +689,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
-            history_candidate = {name: prompt for name, prompt in best_prompts.items()}
             self.post_candidate(
-                history_candidate,
+                best_prompts,
                 score=best_score,
                 trial_index=context.trials_completed,
                 extras={
@@ -705,12 +704,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             self.post_round(
                 round_handle=round_handle,
                 best_score=best_score,
-                best_candidate=history_candidate,
+                best_candidate=best_prompts,
                 stop_reason=context.finish_reason if context.should_stop else None,
                 extras={"improvement": iteration_improvement},
             )
-            # TODO: Remove candidate dict copy once history recording no longer
-            # mutates prompt payloads (candidate_id refactor).
 
             # Stop if improvement is below convergence threshold
             if abs(iteration_improvement) < self.convergence_threshold:

@@ -844,3 +844,98 @@ def generate_synthesis_prompts(
             raise ValueError(
                 f"Unexpected error during synthesis prompt generation: {e}"
             )
+
+
+def generate_round_candidates(
+    *,
+    optimizer: Any,
+    best_prompts: dict[str, chat_prompt.ChatPrompt],
+    best_score: float,
+    round_num: int,
+    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
+    metric: MetricFunction,
+    prompts_this_round: int,
+    build_history_context_fn: Callable,
+    get_task_context_fn: Callable,
+    optimization_id: str | None = None,
+    project_name: str | None = None,
+    is_single_prompt_optimization: bool,
+    winning_patterns: list[str] | None = None,
+) -> list[dict[str, chat_prompt.ChatPrompt]]:
+    """
+    Generate candidate prompt bundles for a single optimization round.
+
+    Returns a list of prompt bundles (dict[str, ChatPrompt]) for evaluation.
+    """
+    try:
+        if is_single_prompt_optimization:
+            single_candidates = generate_candidate_prompts(
+                optimizer=optimizer,
+                current_prompt=list(best_prompts.values())[0],
+                best_score=best_score,
+                round_num=round_num,
+                previous_rounds=previous_rounds,
+                metric=metric,
+                optimization_id=optimization_id,
+                project_name=project_name,
+                build_history_context_fn=build_history_context_fn,
+                get_task_context_fn=get_task_context_fn,
+                winning_patterns=winning_patterns,
+            )
+            prompt_key = next(iter(best_prompts.keys()))
+            candidate_prompts = [
+                {prompt_key: prompt}
+                for prompt in single_candidates[:prompts_this_round]
+            ]
+        else:
+            bundle_candidates = generate_agent_bundle_candidates(
+                optimizer=optimizer,
+                current_prompts=best_prompts,
+                best_score=best_score,
+                round_num=round_num,
+                previous_rounds=previous_rounds,
+                metric=metric,
+                optimization_id=optimization_id,
+                project_name=project_name,
+                build_history_context_fn=build_history_context_fn,
+                get_task_context_fn=get_task_context_fn,
+            )
+            candidate_prompts = [
+                bundle.prompts for bundle in bundle_candidates[:prompts_this_round]
+            ]
+
+        synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+        if (
+            is_single_prompt_optimization
+            and optimizer.synthesis_prompts_per_round > 0
+            and round_num >= optimizer.synthesis_start_round
+            and optimizer.synthesis_round_interval > 0
+            and (round_num - optimizer.synthesis_start_round)
+            % optimizer.synthesis_round_interval
+            == 0
+        ):
+            synthesis_prompts = generate_synthesis_prompts(
+                optimizer=optimizer,
+                current_prompt=list(best_prompts.values())[0],
+                best_score=best_score,
+                previous_rounds=previous_rounds,
+                metric=metric,
+                get_task_context_fn=get_task_context_fn,
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
+            prompt_key = next(iter(best_prompts.keys()))
+            synthesis_candidates = [
+                {prompt_key: prompt} for prompt in synthesis_prompts
+            ]
+
+        if synthesis_candidates:
+            candidate_prompts = synthesis_candidates + candidate_prompts
+            candidate_prompts = candidate_prompts[:prompts_this_round]
+
+        return candidate_prompts
+    except Exception as exc:
+        if isinstance(exc, (BadRequestError, StructuredOutputParsingError)):
+            raise
+        logger.warning("Failed to generate %s candidates: %s", prompts_this_round, exc)
+        return []
