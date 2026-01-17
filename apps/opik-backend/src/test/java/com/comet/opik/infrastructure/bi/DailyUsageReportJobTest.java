@@ -541,11 +541,9 @@ class DailyUsageReportJobTest {
                             .map(Map.Entry::getKey)
                             .orElseThrow();
 
-                    Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    Experiment experiment = experimentResourceClient.createPartialExperiment()
                             .name(experimentName)
                             .datasetName(datasetName)
-                            .promptVersion(null)
-                            .promptVersions(null)
                             .build();
 
                     experimentResourceClient.create(experiment, apiKey, workspaceName);
