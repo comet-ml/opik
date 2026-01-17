@@ -74,7 +74,7 @@ def create_round_data(
         round_index=round_num,
         trials=[
             OptimizationTrial(
-                trial_index=trial_index,
+                trial_index=None,
                 score=cand.get("score"),
                 candidate=cand.get("candidate"),
                 extras={"improvement": cand.get("extra", {}).get("improvement")},

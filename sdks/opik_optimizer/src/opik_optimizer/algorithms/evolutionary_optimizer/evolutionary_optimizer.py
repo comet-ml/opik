@@ -18,7 +18,6 @@ from opik_optimizer.base_optimizer import (
     OptimizationContext,
 )
 from opik_optimizer.utils.prompt_library import PromptOverrides
-from opik_optimizer.optimization_result import first_trial_index
 from ...api_objects import chat_prompt
 
 from . import helpers, reporting
@@ -807,13 +806,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
                     # History logging for this transition
                     candidate_entries: list[dict[str, Any]] = []
-                    valid_individuals = [
-                        ind for ind in deap_population if ind.fitness.valid
-                    ]
-                    first_trial_idx = first_trial_index(
-                        context.trials_completed, len(valid_individuals)
-                    )
-                    valid_idx = 0
+                    start_trials = context.trials_completed
+                    posted_idx = 0
                     for ind in deap_population:
                         if not ind.fitness.valid:
                             continue
@@ -828,18 +822,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         entry = self.record_candidate_entry(
                             prompt_or_payload=candidate_prompts,
                             score=primary_score,
-                            id=f"gen{generation_idx}_ind{valid_idx}",
+                            id=f"gen{generation_idx}_ind{posted_idx}",
                             metrics=metrics,
                         )
                         candidate_entries.append(entry)
                         self.post_candidate(
                             candidate_prompts,
                             score=primary_score,
-                            trial_index=first_trial_idx + valid_idx,
+                            trial_index=start_trials + posted_idx + 1,
                             metrics=metrics,
                             round_handle=round_handle,
                         )
-                        valid_idx += 1
+                        posted_idx += 1
 
                     pareto_front = None
                     selection_meta = None
