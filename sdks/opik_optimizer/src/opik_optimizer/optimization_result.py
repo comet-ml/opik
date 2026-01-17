@@ -512,6 +512,7 @@ class OptimizationResult(pydantic.BaseModel):
     """
 
     schema_version: str = OPTIMIZATION_RESULT_SCHEMA_VERSION
+    details_version: str = OPTIMIZATION_RESULT_SCHEMA_VERSION
     optimizer: str = "Optimizer"
 
     prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
@@ -538,7 +539,6 @@ class OptimizationResult(pydantic.BaseModel):
 
     def model_post_init(self, _context: Any) -> None:
         self.details = dict(self.details)
-        self.details.setdefault("schema_version", OPTIMIZATION_RESULT_SCHEMA_VERSION)
         # Fill counters from current history if not provided explicitly.
         trials_from_history = sum(
             len(round_state.get("trials", [])) for round_state in self.history
@@ -553,7 +553,11 @@ class OptimizationResult(pydantic.BaseModel):
         ):
             stop_details: dict[str, Any] = {"best_score": self.score}
             if self.details.get("error"):
-                stop_details["error"] = str(self.details["error"])
+                # Avoid exposing raw error messages which may contain sensitive data.
+                stop_details["error"] = (
+                    "An error occurred during optimization; "
+                    "see internal logs for details."
+                )
             self.details["stop_reason_details"] = stop_details
 
     # FIXME: Move to display/reporting utils

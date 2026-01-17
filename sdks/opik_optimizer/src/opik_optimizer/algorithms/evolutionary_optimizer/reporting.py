@@ -9,30 +9,9 @@ from ...utils.reporting import (
     get_console,
     suppress_opik_logs,
 )
-from ...utils.display import (
-    display_error as _display_error,
-    display_message as _display_message,
-    display_success as _display_success,
-    display_text_block,
-    display_tool_description,
-)
+from ...utils.display import display_text_block, display_tool_description
 
 console = get_console()
-
-
-def display_error(error_message: str, verbose: int = 1) -> None:
-    """Backward-compatible wrapper for error display."""
-    _display_error(error_message, verbose=verbose)
-
-
-def display_success(message: str, verbose: int = 1) -> None:
-    """Backward-compatible wrapper for success display."""
-    _display_success(message, verbose=verbose)
-
-
-def display_message(message: str, verbose: int = 1) -> None:
-    """Backward-compatible wrapper for neutral display."""
-    _display_message(message, verbose=verbose)
 
 
 # FIXME: Move to new reporting utils module.

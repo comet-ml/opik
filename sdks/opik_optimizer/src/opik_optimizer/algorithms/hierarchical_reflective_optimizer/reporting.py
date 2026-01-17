@@ -14,6 +14,12 @@ from .display_utils import (
 )
 from .types import MessageDiffItem
 
+__all__ = [
+    "MessageDiffItem",
+    "compute_message_diff_order",
+    "display_optimized_prompt_diff",
+]
+
 PANEL_WIDTH = 90
 console = get_console()
 

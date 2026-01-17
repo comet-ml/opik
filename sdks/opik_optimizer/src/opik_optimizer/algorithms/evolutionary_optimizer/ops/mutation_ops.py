@@ -14,7 +14,8 @@ from ....api_objects.types import (
     rebuild_content_with_new_text,
 )
 from .... import utils, _llm_calls
-from .. import reporting, helpers
+from .. import helpers
+from ....utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
 
 
@@ -318,7 +319,7 @@ def _semantic_mutation(
             model_parameters=prompt.model_kwargs,
         )
     except Exception as e:
-        reporting.display_error(
+        display_error(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
             verbose=verbose,
         )
@@ -460,7 +461,7 @@ def deap_mutation(
                     model_parameters=model_parameters,
                     prompts=prompts,
                 )
-                reporting.display_success(
+                display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by randomizing words (word-level mutation).",
                     verbose=verbose,
                 )
@@ -471,7 +472,7 @@ def deap_mutation(
                     model_parameters=model_parameters,
                     prompts=prompts,
                 )
-                reporting.display_success(
+                display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
                     verbose=verbose,
                 )
@@ -485,7 +486,7 @@ def deap_mutation(
                     output_style_guidance=output_style_guidance,
                     prompts=prompts,
                 )
-                reporting.display_success(
+                display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited using an LLM (semantic mutation).",
                     verbose=verbose,
                 )

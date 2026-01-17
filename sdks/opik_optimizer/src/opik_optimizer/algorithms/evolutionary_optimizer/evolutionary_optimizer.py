@@ -21,6 +21,7 @@ from opik_optimizer.utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 
 from . import helpers, reporting
+from ...utils import display as display_utils
 from . import prompts as evo_prompts
 from .ops import crossover_ops, mutation_ops, style_ops, population_ops
 
@@ -881,7 +882,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
             finally:
                 if context.finish_reason == "max_trials":
-                    reporting.display_message(
+                    display_utils.display_message(
                         f"Stopped early: max_trials reached after round {self._current_round + 1}",
                         verbose=self.verbose,
                     )

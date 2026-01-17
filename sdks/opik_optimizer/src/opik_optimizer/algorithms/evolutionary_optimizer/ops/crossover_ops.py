@@ -6,7 +6,7 @@ import random
 
 from deap import creator as _creator
 
-from .. import reporting
+from ....utils.display import display_message
 from ..types import CrossoverResponse
 from .... import _llm_calls
 from ...._llm_calls import StructuredOutputParsingError
@@ -102,7 +102,7 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
     Applies crossover to ALL prompts in the dict.
     Handles both string content and content parts (preserving images/video).
     """
-    reporting.display_message(
+    display_message(
         "      Recombining prompts by mixing and matching words and sentences.",
         verbose=verbose,
     )
@@ -203,9 +203,7 @@ def llm_deap_crossover(
     Applies LLM crossover to ALL prompts in the dict.
     Falls back to deap_crossover on failure.
     """
-    reporting.display_message(
-        "      Recombining prompts using an LLM.", verbose=verbose
-    )
+    display_message("      Recombining prompts using an LLM.", verbose=verbose)
 
     # Individuals are dicts mapping prompt_name -> messages
     child1_data: dict[str, list[dict[str, Any]]] = {}

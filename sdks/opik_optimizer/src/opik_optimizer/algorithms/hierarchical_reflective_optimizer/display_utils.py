@@ -10,6 +10,7 @@ from ...utils.display import display_text_block, safe_percentage_change
 from ...utils.multimodal import content_to_string
 from .types import MessageDiffItem
 
+
 # FIXME: This needs to be centralized as we need this on all optimizers.
 def compute_message_diff_order(
     initial_messages: list[dict[str, str]],
@@ -150,9 +151,7 @@ def display_optimized_prompt_diff(
 
     for item in diff_items:
         if item.change_type == "added":
-            display_text_block(
-                console, f"│     {item.role}: (added)", "green bold"
-            )
+            display_text_block(console, f"│     {item.role}: (added)", "green bold")
             assert item.optimized_content is not None
             optimized_str = content_to_string(item.optimized_content)
             for line in optimized_str.splitlines():
@@ -193,9 +192,7 @@ def display_optimized_prompt_diff(
                     elif line.startswith("-"):
                         diff_content.append("│       " + line + "\n", style="red")
                     elif line.startswith("@@"):
-                        diff_content.append(
-                            "│       " + line + "\n", style="cyan dim"
-                        )
+                        diff_content.append("│       " + line + "\n", style="cyan dim")
                     else:
                         diff_content.append("│       " + line + "\n", style="dim")
 
