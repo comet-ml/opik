@@ -14,7 +14,7 @@
 
 ## Project Structure & Module Organization
 
-- Source lives in `src/opik_optimizer/`, with shared components (`base_optimizer.py`, `optimization_result.py`, `optimizable_agent.py`) and optimizer packages (for example `evolutionary_optimizer/`, `meta_prompt_optimizer/`).
+- Source lives in `src/opik_optimizer/`, with shared components (`base_optimizer.py`, `optimization_result.py`) and optimizer packages (for example `evolutionary_optimizer/`, `meta_prompt_optimizer/`). Agent interfaces are in `agents/optimizable_agent.py`.
 - **All optimizer algorithms MUST follow the standardized structure** defined in `.cursor/rules/algorithm-structure.mdc`. See `algorithms/template_optimizer/` for a complete working template.
 - Shared utilities sit under `optimization_config/`, `utils/`, `metrics/`, `mcp_utils/`, and `integrations/`.
 - Tests are in `tests/`, split into `tests/unit/` for fast, deterministic coverage and `tests/e2e/optimizers/` for higher-level optimizer runs.
