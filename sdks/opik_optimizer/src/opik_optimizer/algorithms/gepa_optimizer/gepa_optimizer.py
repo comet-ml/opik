@@ -381,7 +381,7 @@ class GepaOptimizer(BaseOptimizer):
                             "source": candidate.get("source"),
                         },
                     )
-                    self.finish_candidate(
+                    self.post_candidate(
                         prompt_variants,
                         score=score,
                         trial_index=context.trials_completed,
@@ -399,7 +399,7 @@ class GepaOptimizer(BaseOptimizer):
                             "gepa_scores": filtered_val_scores,
                         }
                     )
-                    self.finish_round(
+                    self.post_round(
                         round_handle,
                         stop_reason=context.finish_reason
                         if context.should_stop

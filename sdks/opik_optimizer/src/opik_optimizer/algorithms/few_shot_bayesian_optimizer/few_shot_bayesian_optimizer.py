@@ -623,7 +623,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "type": trial.user_attrs.get("type"),
                 },
             )
-            self.finish_candidate(
+            self.post_candidate(
                 prompt_cand_display,
                 score=score_val,
                 trial_index=trial.number,
@@ -642,7 +642,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     else None,
                 }
             )
-            self.finish_round(
+            self.post_round(
                 round_handle,
                 stop_reason=getattr(self._context, "finish_reason", None)
                 if self._context is not None

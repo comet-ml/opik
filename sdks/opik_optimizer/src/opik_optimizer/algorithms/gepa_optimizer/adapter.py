@@ -225,7 +225,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                     score=score,
                     metrics={"adapter_metric": score},
                 )
-                self._optimizer.finish_candidate(
+                self._optimizer.post_candidate(
                     prompt_variants,
                     score=score,
                     trial_index=self._context.trials_completed,
@@ -348,7 +348,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 metrics={self._metric_name: score_value, "opik_score": score_value},
                 extra={"output": output_text, "candidate": candidate},
             )
-            self._optimizer.finish_candidate(
+            self._optimizer.post_candidate(
                 prompt_variants,
                 score=score_value,
                 trial_index=self._context.trials_completed,

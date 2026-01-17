@@ -360,7 +360,7 @@ class ParameterOptimizer(BaseOptimizer):
                 "stage": "baseline",
             },
         )
-        self.finish_candidate(
+        self.post_candidate(
             base_prompts if not is_single_prompt_optimization else first_prompt,
             score=baseline_score,
             extras={
@@ -372,7 +372,7 @@ class ParameterOptimizer(BaseOptimizer):
             },
             round_handle=baseline_round,
         )
-        self.finish_round(
+        self.post_round(
             baseline_round,
             best_score=baseline_score,
             best_candidate=base_prompts
@@ -632,7 +632,7 @@ class ParameterOptimizer(BaseOptimizer):
                     "type": trial.user_attrs.get("type"),
                 },
             )
-            self.finish_candidate(
+            self.post_candidate(
                 trial.user_attrs.get("model_kwargs"),
                 score=float(trial.value) if trial.value is not None else None,
                 trial_index=trial.number,
@@ -640,7 +640,7 @@ class ParameterOptimizer(BaseOptimizer):
                 round_handle=round_handle,
                 timestamp=timestamp_source.isoformat(),
             )
-            self.finish_round(
+            self.post_round(
                 round_handle=round_handle,
                 stop_reason=getattr(self._context, "finish_reason", None)
                 if self._context is not None

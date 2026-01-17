@@ -21,7 +21,7 @@ from opik import Dataset, opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from . import task_evaluator, helpers
-from .utils import reporting as reporting_utils
+from .utils import display as display_utils
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
@@ -555,7 +555,7 @@ class BaseOptimizer(ABC):
         Returns:
             The baseline score
         """
-        with reporting_utils.display_evaluation(
+        with display_utils.display_evaluation(
             verbose=self.verbose
         ) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
@@ -696,7 +696,7 @@ class BaseOptimizer(ABC):
         else:
             style = "red"
 
-        reporting_utils.display_evaluation_progress(
+        display_utils.display_evaluation_progress(
             prefix=prefix,
             score_text=(
                 f"{coerced_score:.4f}"
@@ -1373,7 +1373,7 @@ class BaseOptimizer(ABC):
 
     def _display_header(self, optimization_id: str | None = None) -> None:
         """Display optimization header with algorithm name and run link."""
-        reporting_utils.display_header(
+        display_utils.display_header(
             algorithm=self.__class__.__name__,
             optimization_id=optimization_id,
             verbose=self.verbose,
@@ -1385,7 +1385,7 @@ class BaseOptimizer(ABC):
         context: OptimizationContext,
     ) -> None:
         """Display optimization configuration using optimizer-specific config."""
-        reporting_utils.display_configuration(
+        display_utils.display_configuration(
             messages=prompt,
             optimizer_config=self.get_config(context),
             verbose=self.verbose,
@@ -1406,8 +1406,8 @@ class BaseOptimizer(ABC):
             context.validation_dataset is not None
             and context.evaluation_dataset is context.validation_dataset
         )
-        selection_summary = reporting_utils.summarize_selection_policy(context.prompts)
-        return reporting_utils.display_evaluation(
+        selection_summary = display_utils.summarize_selection_policy(context.prompts)
+        return display_utils.display_evaluation(
             verbose=self.verbose,
             dataset_name=dataset_name,
             is_validation=is_validation,
@@ -1421,7 +1421,7 @@ class BaseOptimizer(ABC):
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
     ) -> None:
         """Display final optimization result."""
-        reporting_utils.display_result(
+        display_utils.display_result(
             initial_score=initial_score,
             best_score=best_score,
             prompt=prompt,
@@ -1705,11 +1705,11 @@ class BaseOptimizer(ABC):
         self._last_candidate_entry = entry
         return entry
 
-    def start_candidate(self, candidate: Any, round_handle: Any) -> Any:
+    def pre_candidate(self, candidate: Any, round_handle: Any) -> Any:
         """Optional pre-hook for candidate; returns the candidate as the handle."""
         return candidate
 
-    def finish_candidate(
+    def post_candidate(
         self,
         candidate_handle: Any,
         *,
@@ -1723,7 +1723,7 @@ class BaseOptimizer(ABC):
         timestamp: str | None = None,
         round_handle: Any | None = None,
     ) -> None:
-        """Record a candidate trial in history."""
+        """Record a candidate trial in history (post-candidate hook)."""
         if hasattr(self._history_builder, "record_trial"):
             if trial_index is None and self.__context is not None:
                 try:
@@ -1750,7 +1750,7 @@ class BaseOptimizer(ABC):
                 stop_reason=stop_reason,
             )
 
-    def finish_round(
+    def post_round(
         self,
         round_handle: Any,
         *,

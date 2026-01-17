@@ -663,7 +663,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             score=best_primary_score_overall,
             id="gen0_ind0",
         )
-        self.finish_candidate(
+        self.post_candidate(
             best_prompts_overall,
             score=best_primary_score_overall,
             trial_index=context.trials_completed,
@@ -692,7 +692,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             self.set_pareto_front(pareto_front)
             self.set_selection_meta(selection_meta)
 
-        self.finish_round(
+        self.post_round(
             round_handle,
             best_score=best_primary_score_overall,
             best_prompt=best_prompts_overall,
@@ -830,7 +830,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             metrics=metrics,
                         )
                         candidate_entries.append(entry)
-                        self.finish_candidate(
+                        self.post_candidate(
                             candidate_prompts,
                             score=primary_score,
                             trial_index=first_trial_index + valid_idx,
@@ -859,7 +859,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             ),
                             "pareto_front": pareto_front,
                         }
-                    self.finish_round(
+                    self.post_round(
                         round_handle=round_handle,
                         best_score=best_primary_score_overall,
                         best_candidate=best_prompts_overall,

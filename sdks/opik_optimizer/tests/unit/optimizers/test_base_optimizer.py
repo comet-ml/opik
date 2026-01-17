@@ -1144,13 +1144,13 @@ class TestHistoryManagement:
         optimizer = ConcreteOptimizer(model="gpt-4")
 
         handle = optimizer.begin_round()
-        optimizer.finish_candidate(
+        optimizer.post_candidate(
             simple_chat_prompt,
             score=0.5,
             trial_index=1,
             round_handle=handle,
         )
-        optimizer.finish_round(
+        optimizer.post_round(
             round_handle=handle,
             best_score=0.5,
             best_candidate=simple_chat_prompt,
@@ -1166,13 +1166,13 @@ class TestHistoryManagement:
         optimizer = ConcreteOptimizer(model="gpt-4")
 
         handle = optimizer.begin_round()
-        optimizer.finish_candidate(
+        optimizer.post_candidate(
             simple_chat_prompt,
             score=0.5,
             trial_index=1,
             round_handle=handle,
         )
-        optimizer.finish_round(
+        optimizer.post_round(
             round_handle=handle,
             best_score=0.5,
             best_candidate=simple_chat_prompt,
