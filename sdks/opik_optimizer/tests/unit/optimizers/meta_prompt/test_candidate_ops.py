@@ -18,6 +18,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
     AgentBundleCandidate,
     AgentMetadata,
 )
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops import result_ops
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -380,3 +381,19 @@ class TestDataLeakagePatterns:
         result = sanitize_generated_prompts(prompt_json, "my_metric")
 
         assert len(result["prompts"]) == 1
+        assert "Clean prompt" in result["prompts"][0]["prompt"][0]["content"]
+
+
+def test_create_round_data_uses_none_trial_indices() -> None:
+    round_data = result_ops.create_round_data(
+        round_num=0,
+        current_best_prompt={"main": ChatPrompt(system="s", user="u")},
+        current_best_score=0.9,
+        best_prompt_overall={"main": ChatPrompt(system="s", user="u")},
+        evaluated_candidates=[({"main": ChatPrompt(system="s", user="u")}, 0.8)],
+        previous_best_score=0.7,
+        improvement_this_round=0.1,
+        trial_index=5,
+    )
+    assert round_data.trials
+    assert all(trial.trial_index is None for trial in round_data.trials)

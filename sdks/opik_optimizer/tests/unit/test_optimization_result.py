@@ -148,6 +148,19 @@ class TestOptimizationResultInitialization:
         assert result.details.get("rounds_completed") == 0
         assert result.details.get("trials_completed") == 0
 
+    def test_trials_completed_from_nested_history(self) -> None:
+        result = OptimizationResult(
+            prompt=ChatPrompt(system="Test", user="Query"),
+            score=0.5,
+            metric_name="accuracy",
+            history=[
+                {"round": 0, "trials": [{"trial_index": 0}, {"trial_index": 1}]},
+                {"round": 1, "trials": [{"trial_index": 2}]},
+            ],
+        )
+        assert result.details.get("rounds_completed") == 2
+        assert result.details.get("trials_completed") == 3
+
     def test_stop_reason_details_are_populated(self) -> None:
         result = OptimizationResult(
             prompt=ChatPrompt(system="Test", user="Query"),

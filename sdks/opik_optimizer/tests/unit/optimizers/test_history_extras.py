@@ -63,10 +63,11 @@ def test_selection_meta_and_pareto_defaults() -> None:
     handle = state.start_round(round_index=0)
     state.set_selection_meta({"policy": "test"})
     state.set_pareto_front([{"id": "c1", "score": 0.5}])
+    candidate = {"prompt": "x"}
     state.record_trial(
         round_handle=handle,
         score=0.4,
-        candidate={"prompt": "x"},
+        candidate=candidate,
         candidate_id_prefix="auto",
     )
     state.end_round(round_handle=handle, best_score=0.5)
@@ -76,3 +77,4 @@ def test_selection_meta_and_pareto_defaults() -> None:
     assert entry["extra"]["pareto_front"][0]["id"] == "c1"
     assert entry.get("dataset_split") == "train"
     assert entry["trials"][0].get("candidate_id", "").startswith("auto_")
+    assert "id" not in candidate
