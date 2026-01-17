@@ -85,6 +85,17 @@ class ConcreteOptimizer(BaseOptimizer):
         return {"test_param": "test_value", "count": 42}
 
 
+class _ToolFlagAgent(MagicMock):
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_allow_tool_use: bool | None = None
+
+    def invoke_agent(self, prompts, dataset_item, allow_tool_use=False, seed=None):
+        _ = prompts, dataset_item, seed
+        self.last_allow_tool_use = allow_tool_use
+        return "ok"
+
+
 class _DisplaySpy:
     def __init__(self) -> None:
         self.header_calls: list[tuple[str, str | None]] = []
@@ -1146,6 +1157,44 @@ class TestSelectEvaluationDataset:
         # When warn_unsupported=True, the warning says validation is ignored,
         # so training dataset should be returned
         assert result is training_ds
+
+
+class TestToolUseFlag:
+    def test_evaluate_prompt_passes_allow_tool_use(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        optimizer = ConcreteOptimizer()
+        agent = _ToolFlagAgent()
+        dataset = make_mock_dataset()
+
+        def assert_output(output: dict[str, Any]) -> None:
+            assert agent.last_allow_tool_use is True
+
+        monkeypatch.setattr(
+            "opik_optimizer.task_evaluator.evaluate",
+            make_fake_evaluator(assert_output=assert_output),
+        )
+
+        prompt = ChatPrompt(system="Test", user="Query")
+        optimizer.evaluate_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=lambda *_: 1.0,
+            agent=agent,
+            allow_tool_use=True,
+        )
+
+    def test_setup_optimization_sets_allow_tool_use(self) -> None:
+        optimizer = ConcreteOptimizer()
+        dataset = make_mock_dataset()
+        prompt = ChatPrompt(system="Test", user="Query")
+        context = optimizer._setup_optimization(
+            prompt=prompt,
+            dataset=dataset,
+            metric=lambda *_: 1.0,
+            allow_tool_use=False,
+        )
+        assert context.allow_tool_use is False
 
 
 class TestSetupOptimization:

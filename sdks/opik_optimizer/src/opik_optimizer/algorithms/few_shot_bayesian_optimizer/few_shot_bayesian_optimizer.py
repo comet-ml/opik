@@ -142,6 +142,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
+        allow_tool_use: bool | None = None,
     ) -> float:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -182,6 +183,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples=n_samples,
             seed=seed,
             return_evaluation_result=False,
+            allow_tool_use=allow_tool_use,
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:

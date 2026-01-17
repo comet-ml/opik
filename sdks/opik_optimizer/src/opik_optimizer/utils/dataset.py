@@ -283,9 +283,30 @@ def fetch_records_for_slice(
                 count=slice_request.count,
                 filter_by=filter_by,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Streaming fetch failed for %s (split=%s start=%s count=%s); falling back to non-streaming: %s",
+                slice_request.dataset_name,
+                slice_request.source_split,
+                slice_request.start,
+                slice_request.count,
+                exc,
+            )
             # If streaming is unavailable for this dataset, fall back to full download.
             pass
+
+    if filter_by is None and slice_request.count is not None:
+        split = load_kwargs.get("split")
+        if isinstance(split, str):
+            end = slice_request.start + slice_request.count
+            sliced_kwargs = dict(load_kwargs)
+            sliced_kwargs["split"] = f"{split}[{slice_request.start}:{end}]"
+            logger.warning(
+                "Streaming unavailable; loading unshuffled slice %s for %s",
+                sliced_kwargs["split"],
+                slice_request.dataset_name,
+            )
+            return load_fn(**sliced_kwargs).to_list()
 
     return download_and_slice_hf_dataset(
         load_fn=load_fn,

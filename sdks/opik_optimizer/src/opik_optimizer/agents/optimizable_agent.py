@@ -11,6 +11,7 @@ from litellm.integrations.opik.opik import OpikLogger
 from opik.opik_context import update_current_trace
 from ..constants import resolve_project_name
 from ..utils import throttle as _throttle
+from ..utils.logging import debug_tool_call
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -211,6 +212,12 @@ class OptimizableAgent(ABC):
                                 "tool_call_id": tool_call["id"],
                                 "content": str(tool_result),
                             }
+                        )
+                        debug_tool_call(
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            result=tool_result,
+                            tool_call_id=tool_call["id"],
                         )
                         # Increment tool call counter if we have access to the optimizer
                         optimizer_ref = self.optimizer

@@ -95,6 +95,7 @@ class OptimizationContext:
     n_samples: int | None
     max_trials: int
     project_name: str
+    allow_tool_use: bool = True
     baseline_score: float | None = None
     extra_params: dict[str, Any] = field(default_factory=dict)
 
@@ -554,6 +555,7 @@ class BaseOptimizer(ABC):
             n_samples=n_samples,
             max_trials=max_trials,
             project_name=project_name,
+            allow_tool_use=bool(extra_params.get("allow_tool_use", True)),
             baseline_score=None,
             extra_params=extra_params,
         )
@@ -589,6 +591,7 @@ class BaseOptimizer(ABC):
                 n_samples=context.n_samples,
                 n_threads=getattr(self, "n_threads", None),
                 verbose=self.verbose,
+                allow_tool_use=context.allow_tool_use,
                 experiment_config=self._prepare_experiment_config(
                     prompt=context.prompts,
                     dataset=context.evaluation_dataset,
@@ -646,6 +649,7 @@ class BaseOptimizer(ABC):
             n_samples=context.n_samples,
             n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
             verbose=0,
+            allow_tool_use=context.allow_tool_use,
         )
         # Record trial and update counters
         coerced_score = self._coerce_score(score)
@@ -1359,6 +1363,7 @@ class BaseOptimizer(ABC):
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
+        allow_tool_use: bool = True,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -1388,6 +1393,7 @@ class BaseOptimizer(ABC):
            optimization_id: Optional ID to use when creating the Opik optimization run
            validation_dataset: Optional validation dataset for ranking candidates
            max_trials: Maximum number of optimization trials
+           allow_tool_use: Whether tools may be executed during evaluation (default True)
            **kwargs: Additional arguments passed to _setup_optimization and _run_optimization
 
         Returns:
@@ -1411,6 +1417,7 @@ class BaseOptimizer(ABC):
             optimization_id=optimization_id,
             max_trials=max_trials,
             auto_continue=auto_continue,
+            allow_tool_use=allow_tool_use,
             **kwargs,
         )
         debug_log(
@@ -1792,6 +1799,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[False] = False,
+        allow_tool_use: bool | None = None,
     ) -> float: ...
 
     @overload
@@ -1808,6 +1816,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[True] = True,
+        allow_tool_use: bool | None = None,
     ) -> EvaluationResult: ...
 
     def evaluate_prompt(
@@ -1823,9 +1832,12 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
+        allow_tool_use: bool | None = None,
     ) -> float | EvaluationResult:
         random.seed(seed)
         n_threads = normalize_eval_threads(n_threads)
+        if allow_tool_use is None and getattr(self, "_context", None) is not None:
+            allow_tool_use = self._context.allow_tool_use
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
@@ -1857,11 +1869,15 @@ class BaseOptimizer(ABC):
 
             if requested_n > 1 and hasattr(agent, "invoke_agent_candidates"):
                 candidates = agent.invoke_agent_candidates(
-                    prompts=prompts_dict, dataset_item=dataset_item
+                    prompts=prompts_dict,
+                    dataset_item=dataset_item,
+                    allow_tool_use=bool(allow_tool_use),
                 )
                 if not candidates:
                     raw_model_output = agent.invoke_agent(
-                        prompts=prompts_dict, dataset_item=dataset_item
+                        prompts=prompts_dict,
+                        dataset_item=dataset_item,
+                        allow_tool_use=bool(allow_tool_use),
                     )
                     cleaned_model_output = raw_model_output.strip()
                 else:
@@ -1904,7 +1920,9 @@ class BaseOptimizer(ABC):
                         pass
             else:
                 raw_model_output = agent.invoke_agent(
-                    prompts=prompts_dict, dataset_item=dataset_item
+                    prompts=prompts_dict,
+                    dataset_item=dataset_item,
+                    allow_tool_use=bool(allow_tool_use),
                 )
                 cleaned_model_output = raw_model_output.strip()
 

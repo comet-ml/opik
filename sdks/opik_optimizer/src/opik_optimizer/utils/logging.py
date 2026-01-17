@@ -6,11 +6,16 @@ import importlib.metadata
 import logging
 import os
 from typing import Any
+import json
 
 from rich.console import Console
 from rich.logging import RichHandler
 
-from ..constants import OPIK_OPTIMIZER_NO_BANNER_ENV
+from ..constants import (
+    OPIK_OPTIMIZER_NO_BANNER_ENV,
+    DEFAULT_TOOL_DEBUG_CLIP,
+    DEFAULT_TOOL_DEBUG_PREFIX,
+)
 
 DEFAULT_LOG_FORMAT = "%(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -152,10 +157,13 @@ def _format_debug_value(value: Any) -> str:
     """Format a debug value for logging."""
     if isinstance(value, float):
         return f"{value:.4f}"
+    if isinstance(value, dict):
+        try:
+            return json.dumps(value, ensure_ascii=True, sort_keys=True)
+        except Exception:
+            return f"dict({len(value)})"
     if isinstance(value, (list, tuple, set)):
         return f"{type(value).__name__}({len(value)})"
-    if isinstance(value, dict):
-        return f"dict({len(value)})"
     return str(value)
 
 
@@ -169,6 +177,44 @@ def debug_log(event: str, **fields: Any) -> None:
         if value is None:
             continue
         parts.append(f"{key}={_format_debug_value(value)}")
+    logger.debug(" ".join(parts))
+
+
+def debug_tool_call(
+    *,
+    tool_name: str,
+    arguments: dict[str, Any] | None,
+    result: Any,
+    tool_call_id: str | None = None,
+) -> None:
+    """Emit a structured debug line for tool execution."""
+    logger = logging.getLogger("opik_optimizer.debug")
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    arg_text = _format_debug_value(arguments)
+    if isinstance(arg_text, str) and len(arg_text) > DEFAULT_TOOL_DEBUG_CLIP:
+        arg_text = arg_text[:DEFAULT_TOOL_DEBUG_CLIP] + "..."
+    result_text = _format_debug_value(result)
+    if isinstance(result, list) and result:
+        preview = result[0]
+        result_text = _format_debug_value(preview)
+    clip_limit = DEFAULT_TOOL_DEBUG_CLIP
+    if (
+        isinstance(result_text, str)
+        and clip_limit > 0
+        and len(result_text) > clip_limit
+    ):
+        result_text = result_text[:clip_limit] + "..."
+    call_text = f"{tool_name}({arg_text})"
+    parts = [f"{DEFAULT_TOOL_DEBUG_PREFIX}event=tool_call", f"call={call_text}"]
+    if tool_call_id:
+        trimmed_id = tool_call_id.replace("call_", "", 1)
+        parts.append(f"call_id={trimmed_id}")
+    if isinstance(result_text, str):
+        safe_response = result_text.replace('"', '\\"')
+    else:
+        safe_response = str(result_text)
+    parts.append(f'response="{safe_response}"')
     logger.debug(" ".join(parts))
 
 

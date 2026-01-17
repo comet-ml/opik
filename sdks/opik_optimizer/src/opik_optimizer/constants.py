@@ -16,6 +16,19 @@ OPTIMIZATION_RESULT_SCHEMA_VERSION = "v1"
 
 # Display/console output controls
 OPIK_OPTIMIZER_NO_BANNER_ENV = "OPIK_OPTIMIZER_NO_BANNER"
+OPIK_OPTIMIZATION_STUDIO_ENV = "OPIK_OPTIMIZATION_STUDIO"
+
+# Display Defaults
+DEFAULT_DISPLAY_PREFIX = "│ "
+DEFAULT_PANEL_WIDTH = 70
+DEFAULT_TOOL_DEBUG_PREFIX = "🔧 "
+DEFAULT_TOOL_DEBUG_CLIP = 200
+
+
+def is_optimization_studio() -> bool:
+    """Return whether optimization output should be studio-friendly."""
+    value = os.getenv(OPIK_OPTIMIZATION_STUDIO_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def resolve_project_name(project_name: str | None = None) -> str:

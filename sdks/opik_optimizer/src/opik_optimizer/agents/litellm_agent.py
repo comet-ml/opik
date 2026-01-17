@@ -18,6 +18,7 @@ import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
 from ..constants import resolve_project_name
+from ..utils.logging import debug_tool_call
 from ..utils.candidate_selection import extract_choice_logprob
 
 
@@ -177,6 +178,12 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                                 "tool_call_id": tool_call["id"],
                                 "content": str(tool_result),
                             }
+                        )
+                        debug_tool_call(
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            result=tool_result,
+                            tool_call_id=tool_call["id"],
                         )
                         # Increment tool call counter if we have access to the optimizer
                         _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()

@@ -128,7 +128,7 @@ def format_tool_summary(tool: dict[str, Any]) -> str:
     function_block = tool.get("function", {})
     name = function_block.get("name") or tool.get("name", "unknown_tool")
     description = function_block.get("description", "No description")
-    return f"  • {name}: {description}"
+    return f"{name}: {description}"
 
 
 def build_plaintext_summary(

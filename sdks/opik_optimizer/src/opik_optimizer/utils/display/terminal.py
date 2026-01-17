@@ -13,6 +13,7 @@ import rich.table
 import rich.text
 
 from ...api_objects import chat_prompt
+from ...constants import is_optimization_studio
 from ..reporting import get_optimization_run_url_by_id
 from .format import (
     format_float,
@@ -22,6 +23,7 @@ from .format import (
 )
 from ..multimodal import format_message_content
 from ..reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
+from ...constants import DEFAULT_PANEL_WIDTH, DEFAULT_DISPLAY_PREFIX
 
 
 def _format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Text:
@@ -231,6 +233,8 @@ def display_header(
 ) -> None:
     if verbose < 1:
         return
+    if is_optimization_studio():
+        return
 
     link_text = get_link_text(
         pre_text="-> View optimization details ",
@@ -257,62 +261,30 @@ def display_result(
     verbose: int = 1,
 ) -> None:
     """
-    Display optimization results including score improvement and optimized prompts.
+    Display a brief optimization summary.
     """
     if verbose < 1:
         return
 
-    console = get_console()
     display_text_block("\n> Optimization complete\n")
-
-    content: list[rich.console.RenderableType] = []
 
     if best_score > initial_score:
         perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
         if has_percentage:
-            content.append(
-                rich.text.Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
-                    style="bold green",
-                )
+            display_text_block(
+                f"  Improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
+                style="bold green",
             )
         else:
-            content.append(
-                rich.text.Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
-                    style="bold green",
-                )
+            display_text_block(
+                f"  Improved from {initial_score:.4f} to {best_score:.4f}",
+                style="bold green",
             )
     else:
-        content.append(
-            rich.text.Text(
-                "Optimization run did not find a better prompt than the initial one.\n"
-                f"Score: {best_score:.4f}",
-                style="dim bold red",
-            )
+        display_text_block(
+            "  No improvement over the initial prompt.",
+            style="dim bold red",
         )
-
-    content.append(rich.text.Text("\nOptimized prompt:"))
-
-    if isinstance(prompt, dict):
-        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-        for key, chat_p in prompt_dict.items():
-            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
-            content.extend(prompt_items)
-    else:
-        prompt_items = _display_chat_prompt_messages_and_tools(prompt, key=None)
-        content.extend(prompt_items)
-
-    console.print(
-        rich.panel.Panel(
-            rich.console.Group(*content),
-            title="Optimization results",
-            title_align="left",
-            border_style="green",
-            width=DEFAULT_PANEL_WIDTH,
-            padding=(1, 2),
-        )
-    )
 
 
 def display_configuration(
@@ -453,6 +425,7 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     """Create a rich Panel for the final optimization result."""
     model_name = result.details.get("model", "[dim]N/A[/dim]")
     trials_completed = result.details.get("trials_completed")
+    stop_reason = result.details.get("stop_reason")
     rounds_ran = (
         result._rounds_completed()
         if hasattr(result, "_rounds_completed")
@@ -488,6 +461,22 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
         str(trials_completed) if isinstance(trials_completed, int) else str(rounds_ran)
     )
     table.add_row("Trials Completed:", display_trials)
+    improvement_display = "N/A"
+    if isinstance(result.initial_score, (int, float)):
+        improvement_value, has_percentage = safe_percentage_change(
+            result.score, result.initial_score
+        )
+        if has_percentage and improvement_value is not None:
+            improvement_display = f"{improvement_value:.2%}"
+    stop_display = stop_reason or "completed"
+    table.add_row(
+        "Key metrics:",
+        f"Trials: {display_trials} | Best: {final_score_str} | Δ: {improvement_display} | Stop: {stop_display}",
+    )
+    table.add_row(
+        "Best prompt summary:",
+        _summarize_prompt_structure(result.prompt),
+    )
     table.add_row(
         "Optimization run link:",
         get_link_text(
@@ -505,56 +494,19 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
 
     panel_title = "[bold]Final Optimized Prompt[/bold]"
     try:
-        chat_group_items: list[rich.console.RenderableType] = []
+        prompt_items: list[rich.console.RenderableType] = []
         if isinstance(result.prompt, dict):
             prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], result.prompt)
             for key, chat_p in prompt_dict.items():
-                key_header = rich.text.Text(f"[{key}]", style="bold yellow")
-                chat_group_items.append(key_header)
-                chat_group_items.append(rich.text.Text("---", style="dim"))
-                for msg in chat_p.get_messages():
-                    role = msg.get("role", "unknown")
-                    content = msg.get("content", "")
-                    role_style = (
-                        "bold green"
-                        if role == "user"
-                        else (
-                            "bold blue"
-                            if role == "assistant"
-                            else ("bold magenta" if role == "system" else "")
-                        )
-                    )
-                    formatted_content = _format_message_content(content)
-                    role_text = rich.text.Text(
-                        f"{role.capitalize()}:", style=role_style
-                    )
-                    chat_group_items.append(
-                        rich.console.Group(role_text, formatted_content)
-                    )
-                    chat_group_items.append(rich.text.Text("---", style="dim"))
-                chat_group_items.append(rich.text.Text(""))
+                prompt_items.extend(
+                    _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                )
         else:
-            for msg in result.prompt.get_messages():
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                role_style = (
-                    "bold green"
-                    if role == "user"
-                    else (
-                        "bold blue"
-                        if role == "assistant"
-                        else ("bold magenta" if role == "system" else "")
-                    )
-                )
-                formatted_content = _format_message_content(content)
-                role_text = rich.text.Text(f"{role.capitalize()}:", style=role_style)
-                chat_group_items.append(
-                    rich.console.Group(role_text, formatted_content)
-                )
-                chat_group_items.append(rich.text.Text("---", style="dim"))
-
+            prompt_items.extend(
+                _display_chat_prompt_messages_and_tools(result.prompt, key=None)
+            )
         prompt_renderable: rich.console.RenderableType = rich.console.Group(
-            *chat_group_items
+            *prompt_items
         )
     except Exception:
         prompt_renderable = rich.text.Text(str(result.prompt or ""), overflow="fold")
@@ -653,6 +605,33 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     )
 
 
+def _summarize_prompt_structure(
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Summarize prompt structure for the final report row."""
+
+    def _summarize_single(chat_p: chat_prompt.ChatPrompt) -> str:
+        has_tools = bool(getattr(chat_p, "tools", None))
+        shots = 0
+        for msg in chat_p.get_messages():
+            content = msg.get("content", "")
+            if isinstance(content, str) and "<!-- FEW-SHOT EXAMPLES -->" in content:
+                _, after = content.split("<!-- FEW-SHOT EXAMPLES -->", 1)
+                shots = after.count("\nQ:") or after.count("\n Q:") or after.count("Q:")
+                break
+        parts = ["system", f"{shots} shots" if shots else "no shots", "user"]
+        if has_tools:
+            parts.append("tools")
+        return " + ".join(parts)
+
+    if isinstance(prompt, dict):
+        summaries = []
+        for key, chat_p in prompt.items():
+            summaries.append(f"[{key}] {_summarize_single(chat_p)}")
+        return "; ".join(summaries)
+    return _summarize_single(prompt)
+
+
 def display_tool_description(description: str, title: str, style: str) -> None:
     """Render a simple tool description panel."""
     console = get_console()
@@ -675,7 +654,7 @@ def display_text_block(text: str, style: str = "") -> None:
 
 def display_prefixed_block(
     lines: list[str],
-    prefix: str = "│ ",
+    prefix: str = DEFAULT_DISPLAY_PREFIX,
     style: str = "",
 ) -> None:
     """Print a block of lines with a prefix."""
@@ -693,7 +672,7 @@ def display_renderable(renderable: rich.console.RenderableType) -> None:
 def display_renderable_with_prefix(
     renderable: rich.console.RenderableType,
     *,
-    prefix: str = "│ ",
+    prefix: str = DEFAULT_DISPLAY_PREFIX,
 ) -> None:
     """Render a Rich object and reprint it with a prefix on each line."""
     console = get_console()
@@ -707,7 +686,7 @@ def display_key_value_block(
     title: str,
     items: dict[str, Any],
     *,
-    prefix: str = "│ ",
+    prefix: str = DEFAULT_DISPLAY_PREFIX,
     title_style: str = "dim",
     float_precision: int = 6,
 ) -> None:
@@ -739,6 +718,3 @@ def display_message(message: str, verbose: int = 1) -> None:
     """Display a neutral message with a standard prefix."""
     if verbose >= 1:
         display_text_block(f"│   {message}", style="dim")
-
-
-DEFAULT_PANEL_WIDTH = 70
