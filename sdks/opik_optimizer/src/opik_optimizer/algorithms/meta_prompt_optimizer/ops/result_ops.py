@@ -82,7 +82,7 @@ def create_round_data(
             for cand in candidates
         ],
         best_score=current_best_score,
-        best_prompt=best_prompt_overall,
+        best_prompt=current_best_prompt,
         candidates=candidates,
         generated_prompts=generated_prompts_log,
         stop_reason=stop_reason,
