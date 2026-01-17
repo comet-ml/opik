@@ -28,8 +28,8 @@ os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
-# Using WARNING as a sensible default to avoid flooding users with INFO/DEBUG
-setup_logging(level=logging.WARNING)
+# Use env override when present, otherwise defaults to WARNING
+setup_logging()
 
 warning_filters.add_warning_filters()
 

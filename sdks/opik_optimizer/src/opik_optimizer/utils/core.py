@@ -20,60 +20,6 @@ if TYPE_CHECKING:
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
-_DEFAULT_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "WARNING").upper()
-numeric_level = logging.getLevelName(_DEFAULT_LOG_LEVEL)
-if isinstance(numeric_level, int):
-    logger.setLevel(numeric_level)
-
-
-def format_prompt(prompt: str, **kwargs: Any) -> str:
-    """
-    Format a prompt string with the given keyword arguments.
-
-    Args:
-        prompt: The prompt string to format
-        **kwargs: Keyword arguments to format into the prompt
-
-    Returns:
-        str: The formatted prompt string
-
-    Raises:
-        ValueError: If any required keys are missing from kwargs
-    """
-    try:
-        return prompt.format(**kwargs)
-    except KeyError as e:
-        raise ValueError(f"Missing required key in prompt: {e}")
-
-
-def validate_prompt(prompt: str) -> bool:
-    """
-    Validate a prompt string.
-
-    Args:
-        prompt: The prompt string to validate
-
-    Returns:
-        bool: True if the prompt is valid, False otherwise
-    """
-    if not prompt or not prompt.strip():
-        return False
-    return True
-
-
-def setup_logging(log_level: str = "INFO") -> None:
-    """
-    Setup logging configuration.
-
-    Args:
-        log_level: The log level to use (default: INFO)
-    """
-    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    if log_level not in valid_levels:
-        raise ValueError(f"Invalid log level. Must be one of {valid_levels}")
-
-    numeric_level = getattr(logging, log_level.upper())
-    logging.basicConfig(level=numeric_level)
 
 
 def get_random_seed() -> int:

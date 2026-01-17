@@ -1,6 +1,11 @@
+"""Shared logging helpers for the optimizer SDK."""
+
+from __future__ import annotations
+
 import importlib.metadata
 import logging
 import os
+from typing import Any
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -9,6 +14,7 @@ from ..constants import OPIK_OPTIMIZER_NO_BANNER_ENV
 
 DEFAULT_LOG_FORMAT = "%(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 # Store configured state to prevent reconfiguration
 _logging_configured = False
@@ -16,6 +22,7 @@ _configured_level: int | None = None
 
 
 def _coerce_level(level: int | str) -> int:
+    """Coerce a log level to an integer."""
     if isinstance(level, int):
         return level
 
@@ -36,58 +43,48 @@ def _coerce_level(level: int | str) -> int:
 
 
 def setup_logging(
-    level: int | str = logging.WARNING,
+    level: int | str | None = None,
     format_string: str = DEFAULT_LOG_FORMAT,
     date_format: str = DEFAULT_DATE_FORMAT,
     force: bool = False,
 ) -> None:
-    """
-    Configures logging for the opik_optimizer package using rich.
-
-    Args:
-        level: The desired logging level (e.g., logging.DEBUG, logging.INFO, logging.WARNING).
-        format_string: The format string for log messages.
-        date_format: The format string for the date/time in log messages.
-        force: If True, reconfigure logging even if already configured.
-    """
-    env_level = os.getenv("OPIK_LOG_LEVEL") or os.getenv("OPIK_OPTIMIZER_LOG_LEVEL")
-    target_level = _coerce_level(env_level if env_level is not None else level)
-
+    """Configure the global logging and optional banner."""
     global _logging_configured, _configured_level
-    should_reconfigure = (
-        force or not _logging_configured or _configured_level != target_level
-    )
-
-    if _logging_configured and not should_reconfigure:
-        # Use logger after getting it
+    if level is None:
+        env_level = os.getenv("OPIK_OPTIMIZER_LOG_LEVEL", "").strip().upper()
+        level = env_level if env_level else logging.WARNING
+    if isinstance(level, str):
+        normalized = level.strip().upper()
+        if (
+            normalized
+            and normalized not in VALID_LOG_LEVELS
+            and not normalized.isdigit()
+        ):
+            raise ValueError(
+                f"Invalid log level '{level}'. Must be one of {sorted(VALID_LOG_LEVELS)}"
+            )
+    target_level = _coerce_level(level)
+    if _logging_configured and not force and _configured_level == target_level:
         return
 
-    # Configure opik_optimizer package logger
-    package_logger = logging.getLogger("opik_optimizer")
+    console_handler = RichHandler(
+        level=target_level,
+        markup=True,
+        rich_tracebacks=False,
+        show_time=True,
+        show_level=True,
+        show_path=False,
+    )
 
-    # Avoid adding handlers repeatedly if force=True replaces them
-    if not package_logger.handlers or should_reconfigure:
-        # Remove existing handlers if forcing re-configuration
-        if package_logger.handlers:
-            for handler in package_logger.handlers[:]:
-                package_logger.removeHandler(handler)
-
-        console_handler = RichHandler(
-            rich_tracebacks=True,
-            markup=True,  # Enable rich markup in log messages
-            log_time_format=f"[{date_format}]",  # Apply date format
-        )
-        # RichHandler manages formatting, so we don't need a separate formatter
-        # formatter = logging.Formatter(format_string, datefmt=date_format)
-        # console_handler.setFormatter(formatter)
-        package_logger.addHandler(console_handler)
-
-        if format_string:
-            formatter = logging.Formatter(format_string, datefmt=date_format)
-            console_handler.setFormatter(formatter)
-
-    package_logger.setLevel(target_level)
-    package_logger.propagate = False  # Don't duplicate messages in root logger
+    logging.basicConfig(
+        level=target_level,
+        format=format_string,
+        datefmt=date_format,
+        handlers=[console_handler],
+        force=True,
+    )
+    # Align root logger too so module loggers inherit the env level.
+    logging.getLogger().setLevel(target_level)
 
     # Set levels for noisy libraries like LiteLLM and httpx
     logging.getLogger("LiteLLM").setLevel(logging.WARNING)
@@ -134,10 +131,34 @@ def setup_logging(
         )
         Console().print(banner)
 
-        # Use level name provided by rich handler by default
-        package_logger.info(
-            f"Opik Agent Optimizer logging configured to level: [bold cyan]{logging.getLevelName(target_level)}[/bold cyan]"
+        logging.getLogger(__name__).info(
+            "Opik Agent Optimizer logging configured to level: %s",
+            logging.getLevelName(target_level),
         )
+
+
+def _format_debug_value(value: Any) -> str:
+    """Format a debug value for logging."""
+    if isinstance(value, float):
+        return f"{value:.4f}"
+    if isinstance(value, (list, tuple, set)):
+        return f"{type(value).__name__}({len(value)})"
+    if isinstance(value, dict):
+        return f"dict({len(value)})"
+    return str(value)
+
+
+def debug_log(event: str, **fields: Any) -> None:
+    """Emit a structured debug line for optimizer events."""
+    logger = logging.getLogger("opik_optimizer.debug")
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    parts = [f"event={event}"]
+    for key, value in fields.items():
+        if value is None:
+            continue
+        parts.append(f"{key}={_format_debug_value(value)}")
+    logger.debug(" ".join(parts))
 
 
 # Ensure logger obtained after setup can be used immediately if needed
