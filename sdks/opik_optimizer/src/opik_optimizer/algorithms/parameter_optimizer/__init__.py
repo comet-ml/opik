@@ -1,10 +1,7 @@
 from .parameter_optimizer import ParameterOptimizer
-from .ops.search_ops import ParameterSearchSpace, ParameterSpec
-from .types import ParameterType
+from .ops import ParameterSearchSpace
 
 __all__ = [
     "ParameterOptimizer",
     "ParameterSearchSpace",
-    "ParameterSpec",
-    "ParameterType",
 ]

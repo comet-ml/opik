@@ -1,11 +1,9 @@
 from typing import Any, cast
 
 import copy
-import hashlib
 import json
 import logging
 import warnings
-import random
 from datetime import datetime
 
 import optuna
@@ -24,7 +22,7 @@ from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from . import helpers, types
 from . import prompts as few_shot_prompts
-from .columnar_search_space import ColumnarSearchSpace
+from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
 from collections.abc import Callable
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -210,14 +208,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "rounds_completed": context.trials_completed,
         }
 
-    # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
-    def _make_rng(self, *parts: object) -> random.Random:
-        """Create a deterministic RNG keyed by the base seed plus contextual parts (e.g., trial id)."""
-        namespace = "|".join(str(part) for part in (self.seed, *parts))
-        digest = hashlib.sha256(namespace.encode("utf-8")).digest()
-        derived_seed = int.from_bytes(digest[:8], "big")
-        return random.Random(derived_seed)
-
     # FIXME: Dead code, should be wired or removed
     def _split_dataset(
         self, dataset: list[dict[str, Any]], train_ratio: float
@@ -235,7 +225,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if not dataset:
             return [], []
 
-        rng = self._make_rng("split_dataset", train_ratio)
+        rng = helpers.make_rng(self.seed, "split_dataset", train_ratio)
         dataset_copy = dataset.copy()
         rng.shuffle(dataset_copy)
 
@@ -322,78 +312,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             new_prompts[prompt_name] = new_prompt
 
         return new_prompts, str(response_content.template)
-
-    def _build_columnar_search_space(
-        self, dataset_items: list[dict[str, Any]]
-    ) -> ColumnarSearchSpace:
-        """
-        Infer a lightweight columnar index so Optuna can learn over categorical fields.
-
-        We only keep columns that repeat across rows (avoid high-cardinality text) and
-        cap unique values to keep the search space manageable.
-        """
-        if not dataset_items:
-            return ColumnarSearchSpace.empty()
-
-        candidate_columns: list[str] = []
-        for key in dataset_items[0]:
-            if key == "id":
-                continue
-
-            unique_values: set[str] = set()
-            skip_column = False
-            for item in dataset_items:
-                if key not in item:
-                    skip_column = True
-                    break
-                str_value = helpers.stringify_column_value(item.get(key))
-                if str_value is None:
-                    skip_column = True
-                    break
-                unique_values.add(str_value)
-                if len(unique_values) > self._MAX_UNIQUE_COLUMN_VALUES:
-                    skip_column = True
-                    break
-
-            if skip_column:
-                continue
-
-            if len(unique_values) < 2 or len(unique_values) >= len(dataset_items):
-                continue
-
-            candidate_columns.append(key)
-
-        if not candidate_columns:
-            return ColumnarSearchSpace.empty()
-
-        combo_to_indices: dict[str, list[int]] = {}
-        for idx, item in enumerate(dataset_items):
-            combo_parts: list[str] = []
-            skip_example = False
-            for column in candidate_columns:
-                str_value = helpers.stringify_column_value(item.get(column))
-                if str_value is None:
-                    skip_example = True
-                    break
-                combo_parts.append(f"{column}={str_value}")
-
-            if skip_example:
-                continue
-
-            combo_label = "|".join(combo_parts)
-            combo_to_indices.setdefault(combo_label, []).append(idx)
-
-        if not combo_to_indices:
-            return ColumnarSearchSpace.empty()
-
-        max_group_size = max(len(indices) for indices in combo_to_indices.values())
-        combo_labels = sorted(combo_to_indices.keys())
-        return ColumnarSearchSpace(
-            columns=candidate_columns,
-            combo_labels=combo_labels,
-            combo_to_indices=combo_to_indices,
-            max_group_size=max_group_size,
-        )
 
     def _suggest_example_index(
         self,
@@ -495,7 +413,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         dataset_items = dataset.get_items()
         columnar_search_space = (
-            self._build_columnar_search_space(dataset_items)
+            build_columnar_search_space(
+                dataset_items, max_unique_column_values=self._MAX_UNIQUE_COLUMN_VALUES
+            )
             if self.enable_columnar_selection
             else ColumnarSearchSpace.empty()
         )
@@ -508,7 +428,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         eval_dataset_items = evaluation_dataset.get_items()
         eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
         if n_samples is not None and n_samples < len(dataset_items):
-            rng = self._make_rng("optimization_eval_ids", n_samples)
+            rng = helpers.make_rng(self.seed, "optimization_eval_ids", n_samples)
             eval_dataset_item_ids = rng.sample(eval_dataset_item_ids, n_samples)
 
         configuration_updates = parent_helpers.drop_none(

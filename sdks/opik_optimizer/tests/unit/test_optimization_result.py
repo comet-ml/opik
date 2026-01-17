@@ -122,7 +122,7 @@ class TestOptimizationResultInitialization:
             initial_prompt=ChatPrompt(system="Initial", user="Query"),
             initial_score=0.60,
             details={"rounds": [1, 2, 3], "model": "gpt-4"},
-            history=[{"round": 1, "score": 0.7}],
+            history=[{"round": 1, "trials": [{"trial_index": 0, "score": 0.7}]}],
             llm_calls=100,
             llm_calls_tools=10,
             llm_cost_total=5.50,

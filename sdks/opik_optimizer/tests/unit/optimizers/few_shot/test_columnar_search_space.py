@@ -1,8 +1,11 @@
 import optuna
 
 from opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
-    ColumnarSearchSpace,
     FewShotBayesianOptimizer,
+)
+from opik_optimizer.algorithms.few_shot_bayesian_optimizer.ops.columnarsearch_ops import (
+    ColumnarSearchSpace,
+    build_columnar_search_space,
 )
 
 
@@ -54,8 +57,7 @@ def _hotpot_like_records() -> list[dict[str, str]]:
 
 
 def test_builds_columnar_search_space_with_repeated_categories() -> None:
-    optimizer = FewShotBayesianOptimizer(model="openai/gpt-4o-mini")
-    space = optimizer._build_columnar_search_space(_hotpot_like_records())
+    space = build_columnar_search_space(_hotpot_like_records())
 
     assert space.is_enabled
     assert space.columns == ["type", "level"]
@@ -70,7 +72,7 @@ def test_builds_columnar_search_space_with_repeated_categories() -> None:
 def test_columnar_sampling_resolves_index_from_combo_and_member() -> None:
     optimizer = FewShotBayesianOptimizer(model="openai/gpt-4o-mini")
     records = _hotpot_like_records()
-    space = optimizer._build_columnar_search_space(records)
+    space = build_columnar_search_space(records)
     trial = optuna.trial.FixedTrial(
         {
             "example_0_combo": "type=bridge|level=easy",
@@ -102,7 +104,7 @@ def test_fallback_to_index_sampling_when_no_columns_available() -> None:
         {"id": "2", "question": "b?", "answer": "b"},
         {"id": "3", "question": "c?", "answer": "c"},
     ]
-    space = optimizer._build_columnar_search_space(records)
+    space = build_columnar_search_space(records)
     trial = optuna.trial.FixedTrial({"example_0": 2})
 
     index, choice = optimizer._suggest_example_index(
@@ -126,7 +128,7 @@ def test_columnar_selection_can_be_disabled() -> None:
 
     # Replicate the early selection path with columnar disabled.
     columnar_space = (
-        optimizer._build_columnar_search_space(records)
+        build_columnar_search_space(records)
         if optimizer.enable_columnar_selection
         else ColumnarSearchSpace.empty()
     )
@@ -150,7 +152,7 @@ def test_diversity_adjustment_prefers_new_index_within_combo() -> None:
         model="openai/gpt-4o-mini", enable_diversity=True
     )
     records = _hotpot_like_records()
-    space = optimizer._build_columnar_search_space(records)
+    space = build_columnar_search_space(records)
     selected_indices = {0}
     trial = optuna.trial.FixedTrial(
         {
@@ -176,7 +178,7 @@ def test_diversity_can_be_disabled_to_allow_duplicates() -> None:
         model="openai/gpt-4o-mini", enable_diversity=False
     )
     records = _hotpot_like_records()
-    space = optimizer._build_columnar_search_space(records)
+    space = build_columnar_search_space(records)
     selected_indices = {0}
     trial = optuna.trial.FixedTrial(
         {

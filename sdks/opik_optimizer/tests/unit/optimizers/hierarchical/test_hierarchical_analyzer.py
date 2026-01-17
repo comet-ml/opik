@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer import (
+from opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops import (
     HierarchicalRootCauseAnalyzer,
 )
 from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
@@ -160,7 +160,7 @@ class TestHierarchicalAnalyzerAsync:
         )
 
         with patch(
-            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer._llm_calls.call_model_async",
+            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async",
             new_callable=AsyncMock,
         ) as mock_call:
             mock_call.return_value = mock_response
@@ -227,7 +227,7 @@ class TestHierarchicalAnalyzerAsync:
         )
 
         with patch(
-            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer._llm_calls.call_model_async",
+            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async",
             new_callable=AsyncMock,
         ) as mock_call:
             mock_call.return_value = mock_response
@@ -279,7 +279,7 @@ class TestHierarchicalAnalyzerAsync:
             return synthesis_response
 
         with patch(
-            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer._llm_calls.call_model_async",
+            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async",
             new_callable=AsyncMock,
             side_effect=mock_call,
         ):
@@ -357,7 +357,7 @@ class TestHierarchicalAnalyzerConcurrency:
             )
 
         with patch(
-            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer._llm_calls.call_model_async",
+            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async",
             new_callable=AsyncMock,
             side_effect=track_concurrent,
         ):
@@ -382,7 +382,7 @@ class TestHierarchicalAnalyzerErrorHandling:
             raise RuntimeError("LLM call failed")
 
         with patch(
-            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer._llm_calls.call_model_async",
+            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async",
             new_callable=AsyncMock,
             side_effect=failing_call,
         ):
@@ -407,7 +407,7 @@ class TestHierarchicalAnalyzerErrorHandling:
         )
 
         with patch(
-            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_root_cause_analyzer._llm_calls.call_model_async",
+            "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async",
             new_callable=AsyncMock,
             return_value=synthesis_response,
         ):

@@ -11,7 +11,7 @@ from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
 
-from .hierarchical_root_cause_analyzer import HierarchicalRootCauseAnalyzer
+from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
     FailureMode,
     ImprovedPrompt,
