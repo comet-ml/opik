@@ -113,9 +113,18 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
                     return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, integrationName);
                 })
-                .map(opikSpan -> opikSpan.toBuilder()
-                        .projectName(projectName)
-                        .build())
+                .map(opikSpan -> {
+                    var builder = opikSpan.toBuilder()
+                            .projectName(projectName);
+                    // Clear usage from root spans to prevent double-counting (OPIK-3814).
+                    // Root spans often inherit/duplicate usage from child spans in OTEL
+                    // instrumentation (e.g., LangGraph + Pydantic AI), causing trace usage
+                    // to be counted twice when aggregating span usage.
+                    if (opikSpan.parentSpanId() == null) {
+                        builder.usage(null);
+                    }
+                    return builder.build();
+                })
                 .toList();
 
         // check if there spans without parentId: we will use them as a Trace too
