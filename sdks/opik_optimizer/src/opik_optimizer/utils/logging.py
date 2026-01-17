@@ -50,9 +50,11 @@ def setup_logging(
 ) -> None:
     """Configure the global logging and optional banner."""
     global _logging_configured, _configured_level
-    if level is None:
-        env_level = os.getenv("OPIK_OPTIMIZER_LOG_LEVEL", "").strip().upper()
-        level = env_level if env_level else logging.WARNING
+    env_level = os.getenv("OPIK_OPTIMIZER_LOG_LEVEL", "").strip().upper()
+    if env_level:
+        level = env_level
+    elif level is None:
+        level = logging.WARNING
     if isinstance(level, str):
         normalized = level.strip().upper()
         if (
@@ -85,6 +87,7 @@ def setup_logging(
     )
     # Align root logger too so module loggers inherit the env level.
     logging.getLogger().setLevel(target_level)
+    logging.getLogger("opik_optimizer").setLevel(target_level)
 
     # Set levels for noisy libraries like LiteLLM and httpx
     logging.getLogger("LiteLLM").setLevel(logging.WARNING)
