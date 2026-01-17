@@ -264,6 +264,7 @@ class OptimizationHistoryState:
             "timestamp": timestamp or now_iso(),
         }
         self._open_rounds[idx] = entry
+        debug_log("round_start", round_index=idx, extras=extras)
         return idx
 
     def set_default_dataset_split(self, dataset_split: str | None) -> None:
@@ -367,6 +368,14 @@ class OptimizationHistoryState:
         else:
             entry.setdefault("stop_reason", None)
             entry.setdefault("stopped", False)
+        debug_log(
+            "trial_recorded",
+            round_index=round_handle,
+            trial_index=trial_payload.get("trial_index"),
+            score=score_val,
+            dataset_split=dataset_split_val,
+            candidate_id=trial_payload.get("candidate_id"),
+        )
         return trial_payload
 
     def end_round(
@@ -445,6 +454,16 @@ class OptimizationHistoryState:
         # Reset round-scoped selection meta once consumed
         self._current_selection_meta = None
         self._current_pareto_front = None
+        debug_log(
+            "round_end",
+            round_index=round_handle,
+            best_score=entry.get("best_score"),
+            best_so_far=entry.get("best_so_far"),
+            trials=len(entry.get("trials") or []),
+            selection_meta=entry.get("extra", {}).get("selection_meta")
+            if isinstance(entry.get("extra"), dict)
+            else None,
+        )
         return entry
 
     def finalize_stop(self, stop_reason: str | None = None) -> None:

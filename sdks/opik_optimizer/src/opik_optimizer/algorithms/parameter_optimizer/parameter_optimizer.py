@@ -19,6 +19,7 @@ from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import display as display_utils
+from ...utils.logging import debug_log
 from .types import ParameterType
 from .ops import sensitivity_analysis
 from .ops.search_ops import ParameterSearchSpace
@@ -434,7 +435,14 @@ class ParameterOptimizer(BaseOptimizer):
                     tuned_prompts
                 ),
             ) as trial_reporter:
+                context = getattr(self, "_context", None)
                 self._set_reporter(trial_reporter)
+                debug_log(
+                    "trial_start",
+                    trial_index=trial.number + 1,
+                    trials_completed=context.trials_completed if context else None,
+                    max_trials=total_trials,
+                )
                 score = self.evaluate_prompt(
                     prompt=tuned_prompts,
                     agent=agent,
@@ -454,6 +462,12 @@ class ParameterOptimizer(BaseOptimizer):
 
                 trial_reporter.set_score(score, is_best=is_best)
                 self._clear_reporter()
+                debug_log(
+                    "trial_end",
+                    trial_index=trial.number + 1,
+                    score=score,
+                    trials_completed=context.trials_completed if context else None,
+                )
 
             # Store per-prompt model_kwargs in trial attrs
             trial.set_user_attr("parameters", sampled_values)

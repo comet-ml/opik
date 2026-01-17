@@ -10,6 +10,7 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
+from ...utils.logging import debug_log
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
@@ -499,6 +500,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 break
 
             iteration += 1
+            debug_log(
+                "round_start",
+                round_index=iteration,
+                trials_completed=context.trials_completed,
+                max_trials=max_trials,
+            )
             logger.info(
                 f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
@@ -707,6 +714,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 best_candidate=best_prompts,
                 stop_reason=context.finish_reason if context.should_stop else None,
                 extras={"improvement": iteration_improvement},
+            )
+            debug_log(
+                "round_end",
+                round_index=iteration,
+                best_score=best_score,
+                trials_completed=context.trials_completed,
             )
 
             # Stop if improvement is below convergence threshold

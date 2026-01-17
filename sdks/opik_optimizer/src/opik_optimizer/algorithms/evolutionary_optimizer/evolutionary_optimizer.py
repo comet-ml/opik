@@ -18,6 +18,7 @@ from opik_optimizer.base_optimizer import (
     OptimizationContext,
 )
 from opik_optimizer.utils.prompt_library import PromptOverrides
+from opik_optimizer.utils.logging import debug_log
 from ...api_objects import chat_prompt
 
 from . import helpers, reporting
@@ -723,6 +724,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             )
                         break
 
+                    debug_log(
+                        "round_start",
+                        round_index=generation_idx,
+                        population=self.population_size,
+                        trials_completed=context.trials_completed,
+                    )
                     evo_reporter.start_gen(generation_idx, self.num_generations)
                     round_handle = self.begin_round()
 
@@ -802,6 +809,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         best_primary_score_overall,
                         initial_primary_score,
                         verbose=self.verbose,
+                    )
+                    debug_log(
+                        "round_end",
+                        round_index=generation_idx,
+                        best_score=best_primary_score_overall,
+                        trials_completed=context.trials_completed,
                     )
 
                     # History logging for this transition

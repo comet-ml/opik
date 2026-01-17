@@ -11,6 +11,7 @@ from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import throttle as _throttle
+from ...utils.logging import debug_log
 from ...optimization_result import OptimizationRound, first_trial_index
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame
@@ -296,6 +297,12 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 self._current_round = round_num
                 previous_best_score = best_score
+                debug_log(
+                    "round_start",
+                    round_index=round_num + 1,
+                    trials_completed=context.trials_completed,
+                    max_trials=max_trials,
+                )
 
                 # Check if we should extract patterns from hall of fame
                 if self.hall_of_fame and self.hall_of_fame.should_extract_patterns(
@@ -475,6 +482,12 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 # Increment round counter
                 round_num += 1
+                debug_log(
+                    "round_end",
+                    round_index=round_num,
+                    best_score=best_score,
+                    trials_completed=context.trials_completed,
+                )
         finally:
             # finish_reason, stopped_early, stop_reason are handled by base class
             self._clear_reporter()

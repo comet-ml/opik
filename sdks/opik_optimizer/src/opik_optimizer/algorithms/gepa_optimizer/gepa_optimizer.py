@@ -11,6 +11,7 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import rebuild_content_with_new_text
 from ...utils.candidate import unique_ordered_by_key
 from ...utils.prompt_library import PromptOverrides
+from ...utils.logging import debug_log
 from . import helpers, reporting as gepa_reporting
 from . import prompts as gepa_prompts
 from .adapter import OpikGEPAAdapter
@@ -360,6 +361,12 @@ class GepaOptimizer(BaseOptimizer):
 
                     rescored.append(score)
                     candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
+                    debug_log(
+                        "candidate_start",
+                        candidate_index=idx,
+                        candidate_id=candidate_id,
+                        trials_completed=context.trials_completed,
+                    )
                     components = {
                         k: v
                         for k, v in candidate.items()
@@ -389,6 +396,13 @@ class GepaOptimizer(BaseOptimizer):
                             "candidate_id": candidate_id,
                         },
                         round_handle=round_handle,
+                    )
+                    debug_log(
+                        "candidate_end",
+                        candidate_index=idx,
+                        candidate_id=candidate_id,
+                        score=score,
+                        trials_completed=context.trials_completed,
                     )
                     self.set_selection_meta(
                         {
@@ -476,6 +490,15 @@ class GepaOptimizer(BaseOptimizer):
                 ),
             }
             chosen["extra"] = extra
+        debug_log(
+            "selection",
+            candidate_index=best_idx,
+            candidate_id=filtered_candidates[best_idx].get("id")
+            if filtered_candidates and 0 <= best_idx < len(filtered_candidates)
+            else None,
+            best_score=best_score,
+            selection_policy=candidate_selection_strategy,
+        )
         final_prompts = self._rebuild_prompts_from_candidate(
             optimizable_prompts, best_candidate
         )

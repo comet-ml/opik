@@ -20,6 +20,7 @@ from ...agents import OptimizableAgent
 from ... import task_evaluator, helpers as parent_helpers
 from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
+from ...utils.logging import debug_log
 from . import helpers, types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
@@ -520,6 +521,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 f"Trial {trial.number}: n_examples={n_examples}, indices={example_indices}"
             )
             logger.debug(f"Evaluating trial {trial.number}...")
+            debug_log(
+                "trial_start",
+                trial_index=trial.number + 1,
+                trials_completed=context.trials_completed,
+                max_trials=n_trials,
+            )
 
             # Set custom task for evaluate_prompt override
             self._custom_evaluated_task = llm_task
@@ -536,6 +543,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 self._custom_eval_item_ids = None
 
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
+            debug_log(
+                "trial_end",
+                trial_index=trial.number + 1,
+                score=score,
+                trials_completed=context.trials_completed,
+            )
 
             # Trial results for Optuna
             trial_result_config = {

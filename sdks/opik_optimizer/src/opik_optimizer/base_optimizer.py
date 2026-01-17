@@ -34,6 +34,7 @@ from .optimization_result import (
     OptimizationResult,
     build_candidate_entry,
 )
+from .utils.logging import debug_log
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 
@@ -276,11 +277,23 @@ class BaseOptimizer(ABC):
             if context.current_best_score >= self.perfect_score:
                 context.finish_reason = context.finish_reason or "perfect_score"
                 context.should_stop = True
+                debug_log(
+                    "early_stop",
+                    reason=context.finish_reason,
+                    best_score=context.current_best_score,
+                    trials_completed=context.trials_completed,
+                )
                 return True
 
         if context.trials_completed >= context.max_trials:
             context.finish_reason = context.finish_reason or "max_trials"
             context.should_stop = True
+            debug_log(
+                "early_stop",
+                reason=context.finish_reason,
+                trials_completed=context.trials_completed,
+                max_trials=context.max_trials,
+            )
             return True
 
         return False
@@ -560,6 +573,13 @@ class BaseOptimizer(ABC):
         """
         if not hasattr(self, "_display"):
             self._display = OptimizationRunDisplay(verbose=self.verbose)
+        debug_log(
+            "baseline_start",
+            dataset=getattr(context.evaluation_dataset, "name", None),
+            max_trials=context.max_trials,
+            n_samples=context.n_samples,
+            n_threads=getattr(self, "n_threads", None),
+        )
         with self._display.baseline_evaluation(context) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=context.prompts,
@@ -580,6 +600,7 @@ class BaseOptimizer(ABC):
             )
             baseline_score = self._coerce_score(baseline_score)
             baseline_reporter.set_score(baseline_score)
+            debug_log("baseline_end", score=baseline_score)
 
         return baseline_score
 
@@ -638,6 +659,13 @@ class BaseOptimizer(ABC):
 
         # Call display hook
         self._on_evaluation(context, prompts, coerced_score)
+        debug_log(
+            "evaluation_complete",
+            trials_completed=context.trials_completed,
+            score=coerced_score,
+            best_score=context.current_best_score,
+            dataset=getattr(context.evaluation_dataset, "name", None),
+        )
 
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
@@ -1385,6 +1413,14 @@ class BaseOptimizer(ABC):
             auto_continue=auto_continue,
             **kwargs,
         )
+        debug_log(
+            "optimize_start",
+            optimizer=self.__class__.__name__,
+            dataset=getattr(dataset, "name", None),
+            max_trials=max_trials,
+            n_samples=n_samples,
+            n_threads=getattr(self, "n_threads", None),
+        )
 
         # Base class handles ALL display - optimizers should not call reporting
         if self._display is None:
@@ -1471,6 +1507,13 @@ class BaseOptimizer(ABC):
                 early_stop_details["rounds_completed"] = 1
 
             self._finalize_optimization(context, status="completed")
+            debug_log(
+                "optimize_end",
+                optimizer=self.__class__.__name__,
+                best_score=baseline_score,
+                trials_completed=context.trials_completed,
+                stop_reason=context.finish_reason,
+            )
             return self._build_early_result(
                 optimizer_name=self.__class__.__name__,
                 prompt=early_result_prompt,
@@ -1516,6 +1559,13 @@ class BaseOptimizer(ABC):
             )
 
             self._finalize_optimization(context, status="completed")
+            debug_log(
+                "optimize_end",
+                optimizer=self.__class__.__name__,
+                best_score=result.score,
+                trials_completed=context.trials_completed,
+                stop_reason=context.finish_reason,
+            )
             return result
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
