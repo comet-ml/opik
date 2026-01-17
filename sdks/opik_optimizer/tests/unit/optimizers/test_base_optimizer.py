@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any, TYPE_CHECKING, cast
+from collections.abc import Callable
 from unittest.mock import MagicMock
 
 import pytest
@@ -27,6 +28,12 @@ from opik_optimizer.base_optimizer import (
 )
 from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
+from tests.unit.test_helpers import (
+    make_candidate_agent,
+    make_fake_evaluator,
+    make_mock_dataset,
+    make_optimization_context,
+)
 
 if TYPE_CHECKING:
     from opik import Dataset
@@ -138,10 +145,7 @@ class TestValidateOptimizationInputs:
         self, optimizer, simple_chat_prompt, mock_dataset, mock_metric
     ) -> None:
         """Should accept a valid ChatPrompt, Dataset, and metric."""
-        # Patch Dataset check
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
 
         # Should not raise
         optimizer._validate_optimization_inputs(
@@ -152,9 +156,7 @@ class TestValidateOptimizationInputs:
         self, optimizer, simple_chat_prompt, mock_metric
     ) -> None:
         """Should accept a dict of ChatPrompt objects."""
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
         prompt_dict = {"main": simple_chat_prompt}
 
         # Should not raise
@@ -162,9 +164,7 @@ class TestValidateOptimizationInputs:
 
     def test_rejects_non_chatprompt(self, optimizer, mock_metric) -> None:
         """Should reject prompt that is not a ChatPrompt."""
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
 
         with pytest.raises(ValueError, match="ChatPrompt"):
             optimizer._validate_optimization_inputs(
@@ -175,9 +175,7 @@ class TestValidateOptimizationInputs:
         self, optimizer, mock_metric
     ) -> None:
         """Should reject dict containing non-ChatPrompt values."""
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
         invalid_dict = {"main": "not a prompt"}
 
         with pytest.raises(ValueError, match="ChatPrompt"):
@@ -194,9 +192,7 @@ class TestValidateOptimizationInputs:
 
     def test_rejects_non_callable_metric(self, optimizer, simple_chat_prompt) -> None:
         """Should reject metric that is not callable."""
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
 
         with pytest.raises(ValueError, match="function"):
             optimizer._validate_optimization_inputs(
@@ -207,9 +203,7 @@ class TestValidateOptimizationInputs:
         self, optimizer, multimodal_chat_prompt, mock_metric
     ) -> None:
         """Should reject multimodal prompts when support_content_parts=False."""
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
 
         with pytest.raises(ValueError, match="content parts"):
             optimizer._validate_optimization_inputs(
@@ -223,9 +217,7 @@ class TestValidateOptimizationInputs:
         self, optimizer, multimodal_chat_prompt, mock_metric
     ) -> None:
         """Should accept multimodal prompts when support_content_parts=True."""
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
+        mock_ds = make_mock_dataset()
 
         # Should not raise
         optimizer._validate_optimization_inputs(
@@ -293,307 +285,52 @@ class TestSkipAndResultHelpers:
         assert result.details["stopped_early"] is True
 
 
-def test_evaluate_prompt_selects_best_candidate(
+@pytest.mark.parametrize(
+    "selection_policy,expected_output,logprobs,metric_func",
+    [
+        (
+            None,  # Default: best candidate
+            "good",
+            None,
+            lambda _di, lo: 1.0 if lo == "good" else 0.0,
+        ),
+        ("first", "bad", None, lambda _di, _lo: 1.0),
+        ("concat", "bad\n\ngood", None, lambda _di, _lo: 1.0),
+        ("max_logprob", "good", [0.2, 0.9], lambda _di, _lo: 1.0),
+    ],
+)
+def test_evaluate_prompt_selection_policies(
     monkeypatch: pytest.MonkeyPatch,
+    selection_policy: str | None,
+    expected_output: str,
+    logprobs: list[float] | None,
+    metric_func: Callable,
 ) -> None:
-    """Choose the highest-scoring candidate when pass@k returns multiple outputs."""
+    """Test different selection policies for candidate evaluation."""
     optimizer = ConcreteOptimizer(model="gpt-4")
+    agent = make_candidate_agent(candidates=["bad", "good"], logprobs=logprobs)
 
-    class CandidateAgent(MagicMock):
-        def invoke_agent_candidates(
-            self, prompts, dataset_item, allow_tool_use=False, seed=None
-        ):
-            _ = allow_tool_use, seed
-            return ["bad", "good"]
-
-        def invoke_agent(self, prompts, dataset_item, allow_tool_use=False, seed=None):
-            _ = allow_tool_use, seed
-            return "bad"
-
-    agent = CandidateAgent()
-
-    def metric(dataset_item, llm_output):
-        _ = dataset_item
-        return 1.0 if llm_output == "good" else 0.0
+    model_params: dict[str, Any] = {"n": 2}
+    if selection_policy:
+        model_params["selection_policy"] = selection_policy
 
     prompt = chat_prompt.ChatPrompt(
         name="p",
         messages=[{"role": "user", "content": "{input}"}],
-        model_parameters={"n": 2},
+        model_parameters=model_params,
     )
 
-    def fake_evaluate(
-        dataset,
-        evaluated_task,
-        metric,
-        num_threads,
-        optimization_id=None,
-        dataset_item_ids=None,
-        project_name=None,
-        n_samples=None,
-        experiment_config=None,
-        verbose=1,
-        return_evaluation_result=False,
-    ):
-        _ = (
-            dataset,
-            metric,
-            num_threads,
-            optimization_id,
-            dataset_item_ids,
-            project_name,
-            n_samples,
-            experiment_config,
-            verbose,
-            return_evaluation_result,
-        )
-        output = evaluated_task({"id": "1", "input": "x"})
-        assert output["llm_output"] == "good"
-        return 1.0
-
+    fake_evaluate = make_fake_evaluator(expected_output=expected_output)
     monkeypatch.setattr(
         "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
     )
 
-    dataset = MagicMock()
-    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
+    dataset = make_mock_dataset([{"id": "1", "input": "x"}])
 
     score = optimizer.evaluate_prompt(
         prompt=prompt,
         dataset=dataset,
-        metric=metric,
-        agent=agent,
-        n_threads=1,
-        verbose=0,
-    )
-
-    assert score == 1.0
-
-
-def test_evaluate_prompt_selects_first_candidate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Respect selection_policy=first when multiple candidates are returned."""
-    optimizer = ConcreteOptimizer(model="gpt-4")
-
-    class CandidateAgent(MagicMock):
-        def invoke_agent_candidates(
-            self, prompts, dataset_item, allow_tool_use=False, seed=None
-        ):
-            _ = allow_tool_use, seed
-            return ["bad", "good"]
-
-        def invoke_agent(self, prompts, dataset_item, allow_tool_use=False, seed=None):
-            _ = allow_tool_use, seed
-            return "bad"
-
-    agent = CandidateAgent()
-
-    def metric(dataset_item, llm_output):
-        _ = dataset_item, llm_output
-        return 1.0
-
-    prompt = chat_prompt.ChatPrompt(
-        name="p",
-        messages=[{"role": "user", "content": "{input}"}],
-        model_parameters={"n": 2, "selection_policy": "first"},
-    )
-
-    def fake_evaluate(
-        dataset,
-        evaluated_task,
-        metric,
-        num_threads,
-        optimization_id=None,
-        dataset_item_ids=None,
-        project_name=None,
-        n_samples=None,
-        experiment_config=None,
-        verbose=1,
-        return_evaluation_result=False,
-    ):
-        _ = (
-            dataset,
-            metric,
-            num_threads,
-            optimization_id,
-            dataset_item_ids,
-            project_name,
-            n_samples,
-            experiment_config,
-            verbose,
-            return_evaluation_result,
-        )
-        output = evaluated_task({"id": "1", "input": "x"})
-        assert output["llm_output"] == "bad"
-        return 1.0
-
-    monkeypatch.setattr(
-        "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
-    )
-
-    dataset = MagicMock()
-    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
-
-    score = optimizer.evaluate_prompt(
-        prompt=prompt,
-        dataset=dataset,
-        metric=metric,
-        agent=agent,
-        n_threads=1,
-        verbose=0,
-    )
-
-    assert score == 1.0
-
-
-def test_evaluate_prompt_concats_candidates(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Respect selection_policy=concat and join multiple candidates."""
-    optimizer = ConcreteOptimizer(model="gpt-4")
-
-    class CandidateAgent(MagicMock):
-        def invoke_agent_candidates(
-            self, prompts, dataset_item, allow_tool_use=False, seed=None
-        ):
-            _ = allow_tool_use, seed
-            return ["bad", "good"]
-
-        def invoke_agent(self, prompts, dataset_item, allow_tool_use=False, seed=None):
-            _ = allow_tool_use, seed
-            return "bad"
-
-    agent = CandidateAgent()
-
-    def metric(dataset_item, llm_output):
-        _ = dataset_item, llm_output
-        return 1.0
-
-    prompt = chat_prompt.ChatPrompt(
-        name="p",
-        messages=[{"role": "user", "content": "{input}"}],
-        model_parameters={"n": 2, "selection_policy": "concat"},
-    )
-
-    def fake_evaluate(
-        dataset,
-        evaluated_task,
-        metric,
-        num_threads,
-        optimization_id=None,
-        dataset_item_ids=None,
-        project_name=None,
-        n_samples=None,
-        experiment_config=None,
-        verbose=1,
-        return_evaluation_result=False,
-    ):
-        _ = (
-            dataset,
-            metric,
-            num_threads,
-            optimization_id,
-            dataset_item_ids,
-            project_name,
-            n_samples,
-            experiment_config,
-            verbose,
-            return_evaluation_result,
-        )
-        output = evaluated_task({"id": "1", "input": "x"})
-        assert output["llm_output"] == "bad\n\ngood"
-        return 1.0
-
-    monkeypatch.setattr(
-        "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
-    )
-
-    dataset = MagicMock()
-    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
-
-    score = optimizer.evaluate_prompt(
-        prompt=prompt,
-        dataset=dataset,
-        metric=metric,
-        agent=agent,
-        n_threads=1,
-        verbose=0,
-    )
-
-    assert score == 1.0
-
-
-def test_evaluate_prompt_selects_max_logprob_candidate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Prefer the candidate with the highest logprob when configured."""
-    optimizer = ConcreteOptimizer(model="gpt-4")
-
-    class CandidateAgent(MagicMock):
-        def invoke_agent_candidates(
-            self, prompts, dataset_item, allow_tool_use=False, seed=None
-        ):
-            _ = allow_tool_use, seed
-            self._last_candidate_logprobs = [0.2, 0.9]
-            return ["bad", "good"]
-
-        def invoke_agent(self, prompts, dataset_item, allow_tool_use=False, seed=None):
-            _ = allow_tool_use, seed
-            return "bad"
-
-    agent = CandidateAgent()
-
-    def metric(dataset_item, llm_output):
-        _ = dataset_item, llm_output
-        return 1.0
-
-    prompt = chat_prompt.ChatPrompt(
-        name="p",
-        messages=[{"role": "user", "content": "{input}"}],
-        model_parameters={"n": 2, "selection_policy": "max_logprob"},
-    )
-
-    def fake_evaluate(
-        dataset,
-        evaluated_task,
-        metric,
-        num_threads,
-        optimization_id=None,
-        dataset_item_ids=None,
-        project_name=None,
-        n_samples=None,
-        experiment_config=None,
-        verbose=1,
-        return_evaluation_result=False,
-    ):
-        _ = (
-            dataset,
-            metric,
-            num_threads,
-            optimization_id,
-            dataset_item_ids,
-            project_name,
-            n_samples,
-            experiment_config,
-            verbose,
-            return_evaluation_result,
-        )
-        output = evaluated_task({"id": "1", "input": "x"})
-        assert output["llm_output"] == "good"
-        return 1.0
-
-    monkeypatch.setattr(
-        "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
-    )
-
-    dataset = MagicMock()
-    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
-
-    score = optimizer.evaluate_prompt(
-        prompt=prompt,
-        dataset=dataset,
-        metric=metric,
+        metric=metric_func,
         agent=agent,
         n_threads=1,
         verbose=0,
@@ -609,25 +346,16 @@ def test_evaluate_forwards_configured_n_threads(
     optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
     optimizer.n_threads = 1
 
-    dataset = MagicMock()
+    dataset = make_mock_dataset()
     metric = MagicMock()
     agent = MagicMock()
 
-    optimizer._context = OptimizationContext(
-        prompts={"main": simple_chat_prompt},
-        initial_prompts={"main": simple_chat_prompt},
-        is_single_prompt_optimization=True,
+    optimizer._context = make_optimization_context(
+        simple_chat_prompt,
         dataset=dataset,
-        evaluation_dataset=dataset,
-        validation_dataset=None,
         metric=metric,
         agent=agent,
-        optimization=None,
-        optimization_id=None,
-        experiment_config=None,
-        n_samples=None,
         max_trials=3,
-        project_name="Test",
     )
 
     captured_call: dict[str, Any] = {}
@@ -661,11 +389,9 @@ def test_normalize_n_threads_clamps_bounds(
 ) -> None:
     """Thread counts are clamped to safe bounds before evaluator calls."""
     optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
-    dataset = MagicMock()
+    dataset = make_mock_dataset([{"id": "1", "input": "x"}])
     metric = MagicMock(__name__="metric")
     agent = MagicMock()
-
-    dataset.get_items.return_value = [{"id": "1", "input": "x"}]
 
     captured: list[int] = []
 
@@ -718,26 +444,16 @@ def test_evaluate_coerces_infinite_scores(
 ) -> None:
     """Metrics returning non-builtin numerics (e.g., Decimal('Infinity')) are coerced safely."""
     optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
-    dataset = MagicMock()
+    dataset = make_mock_dataset()
     metric = MagicMock()
     agent = MagicMock()
 
-    optimizer._context = OptimizationContext(
-        prompts={"main": simple_chat_prompt},
-        initial_prompts={"main": simple_chat_prompt},
-        is_single_prompt_optimization=True,
+    optimizer._context = make_optimization_context(
+        simple_chat_prompt,
         dataset=dataset,
-        evaluation_dataset=dataset,
-        validation_dataset=None,
         metric=metric,
         agent=agent,
-        optimization=None,
-        optimization_id=None,
-        experiment_config=None,
-        n_samples=None,
         max_trials=3,
-        project_name="Test",
-        baseline_score=None,
         current_best_score=float("inf"),
     )
 
@@ -791,26 +507,16 @@ def test_on_evaluation_handles_non_finite_scores(
 ) -> None:
     """_on_evaluation should not crash when scores are non-finite."""
     optimizer = ConcreteOptimizer(model="gpt-4", verbose=1)
-    dataset = MagicMock()
+    dataset = make_mock_dataset()
     metric = MagicMock()
     agent = MagicMock()
 
-    context = OptimizationContext(
-        prompts={"main": simple_chat_prompt},
-        initial_prompts={"main": simple_chat_prompt},
-        is_single_prompt_optimization=True,
+    context = make_optimization_context(
+        simple_chat_prompt,
         dataset=dataset,
-        evaluation_dataset=dataset,
-        validation_dataset=None,
         metric=metric,
         agent=agent,
-        optimization=None,
-        optimization_id=None,
-        experiment_config=None,
-        n_samples=None,
         max_trials=5,
-        project_name="Test",
-        baseline_score=None,
     )
     context.current_best_score = float("inf")
     context.trials_completed = 1
@@ -842,22 +548,12 @@ def test_optimize_prompt_uses_injected_display(
     mock_metric = MagicMock(__name__="metric")
 
     def fake_setup(*args, **kwargs):
-        return OptimizationContext(
-            prompts={"main": simple_chat_prompt},
-            initial_prompts={"main": simple_chat_prompt},
-            is_single_prompt_optimization=True,
+        return make_optimization_context(
+            simple_chat_prompt,
             dataset=mock_dataset,
-            evaluation_dataset=mock_dataset,
-            validation_dataset=None,
             metric=mock_metric,
             agent=MagicMock(),
-            optimization=None,
-            optimization_id=None,
-            experiment_config=None,
-            n_samples=None,
             max_trials=1,
-            project_name="Test",
-            baseline_score=None,
         )
 
     monkeypatch.setattr(optimizer, "_setup_optimization", fake_setup)
@@ -883,25 +579,15 @@ def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:
     optimizer = ConcreteOptimizer(
         model="gpt-4", perfect_score=0.8, skip_perfect_score=True
     )
-    dataset = MagicMock()
+    dataset = make_mock_dataset()
     metric = MagicMock()
     agent = MagicMock()
-    context = OptimizationContext(
-        prompts={"main": simple_chat_prompt},
-        initial_prompts={"main": simple_chat_prompt},
-        is_single_prompt_optimization=True,
+    context = make_optimization_context(
+        simple_chat_prompt,
         dataset=dataset,
-        evaluation_dataset=dataset,
-        validation_dataset=None,
         metric=metric,
         agent=agent,
-        optimization=None,
-        optimization_id=None,
-        experiment_config=None,
-        n_samples=None,
         max_trials=5,
-        project_name="Test",
-        baseline_score=None,
     )
     optimizer._context = context
 
@@ -927,25 +613,15 @@ def test_evaluate_sets_finish_reason_on_max_trials(simple_chat_prompt) -> None:
     optimizer = ConcreteOptimizer(
         model="gpt-4", perfect_score=1.5, skip_perfect_score=True
     )
-    dataset = MagicMock()
+    dataset = make_mock_dataset()
     metric = MagicMock()
     agent = MagicMock()
-    context = OptimizationContext(
-        prompts={"main": simple_chat_prompt},
-        initial_prompts={"main": simple_chat_prompt},
-        is_single_prompt_optimization=True,
+    context = make_optimization_context(
+        simple_chat_prompt,
         dataset=dataset,
-        evaluation_dataset=dataset,
-        validation_dataset=None,
         metric=metric,
         agent=agent,
-        optimization=None,
-        optimization_id=None,
-        experiment_config=None,
-        n_samples=None,
         max_trials=1,
-        project_name="Test",
-        baseline_score=None,
     )
     optimizer._context = context
 
@@ -1392,10 +1068,7 @@ class TestCreateOptimizationRun:
         mock_client = mock_opik_client()
         mock_client.create_optimization.return_value = MagicMock(id="opt-123")
 
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
+        mock_ds = make_mock_dataset(name="test-dataset")
 
         def metric(dataset_item, llm_output):
             return 1.0
@@ -1409,10 +1082,7 @@ class TestCreateOptimizationRun:
         mock_client = mock_opik_client()
         mock_client.create_optimization.side_effect = Exception("API error")
 
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
+        mock_ds = make_mock_dataset(name="test-dataset")
 
         def metric(dataset_item, llm_output):
             return 1.0
@@ -1429,22 +1099,15 @@ class TestSelectEvaluationDataset:
         return ConcreteOptimizer(model="gpt-4")
 
     def test_returns_training_dataset_when_no_validation(self, optimizer) -> None:
-        from opik import Dataset
-
-        training_ds = MagicMock(spec=Dataset)
-        training_ds.name = "training"
+        training_ds = make_mock_dataset(name="training")
 
         result = optimizer._select_evaluation_dataset(training_ds, None)
 
         assert result is training_ds
 
     def test_returns_validation_dataset_when_provided(self, optimizer) -> None:
-        from opik import Dataset
-
-        training_ds = MagicMock(spec=Dataset)
-        training_ds.name = "training"
-        validation_ds = MagicMock(spec=Dataset)
-        validation_ds.name = "validation"
+        training_ds = make_mock_dataset(name="training")
+        validation_ds = make_mock_dataset(name="validation")
 
         result = optimizer._select_evaluation_dataset(training_ds, validation_ds)
 
@@ -1452,12 +1115,8 @@ class TestSelectEvaluationDataset:
 
     def test_returns_training_when_warn_unsupported_set(self, optimizer) -> None:
         """When warn_unsupported=True, validation_dataset is ignored and training is returned."""
-        from opik import Dataset
-
-        training_ds = MagicMock(spec=Dataset)
-        training_ds.name = "training"
-        validation_ds = MagicMock(spec=Dataset)
-        validation_ds.name = "validation"
+        training_ds = make_mock_dataset(name="training")
+        validation_ds = make_mock_dataset(name="validation")
 
         result = optimizer._select_evaluation_dataset(
             training_ds, validation_ds, warn_unsupported=True
@@ -1492,12 +1151,11 @@ class TestSetupOptimization:
     ) -> None:
         """_setup_optimization should return an OptimizationContext."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         context = optimizer._setup_optimization(
             prompt=simple_chat_prompt,
@@ -1520,12 +1178,11 @@ class TestSetupOptimization:
     ) -> None:
         """Single ChatPrompt should be normalized to dict."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         context = optimizer._setup_optimization(
             prompt=simple_chat_prompt,
@@ -1547,12 +1204,11 @@ class TestSetupOptimization:
     ) -> None:
         """Dict of prompts should be preserved."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         prompts = {"main": simple_chat_prompt}
         context = optimizer._setup_optimization(
@@ -1630,12 +1286,11 @@ class TestSetupOptimization:
     ) -> None:
         """Extra kwargs should be stored in context.extra_params."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         context = optimizer._setup_optimization(
             prompt=simple_chat_prompt,
@@ -1660,21 +1315,10 @@ class TestFinalizeOptimization:
     def test_updates_optimization_status(self, optimizer) -> None:
         """Should update optimization status when optimization exists."""
         mock_optimization = MagicMock()
-        context = OptimizationContext(
-            prompts={},
-            initial_prompts={},
-            is_single_prompt_optimization=True,
-            dataset=MagicMock(),
-            evaluation_dataset=MagicMock(),
-            validation_dataset=None,
-            metric=MagicMock(),
-            agent=MagicMock(),
+        context = make_optimization_context(
+            ChatPrompt(name="test", system="test", user="test"),
             optimization=mock_optimization,
             optimization_id="opt-123",
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
         )
 
         optimizer._finalize_optimization(context, status="completed")
@@ -1683,21 +1327,8 @@ class TestFinalizeOptimization:
 
     def test_handles_none_optimization(self, optimizer) -> None:
         """Should not raise when optimization is None."""
-        context = OptimizationContext(
-            prompts={},
-            initial_prompts={},
-            is_single_prompt_optimization=True,
-            dataset=MagicMock(),
-            evaluation_dataset=MagicMock(),
-            validation_dataset=None,
-            metric=MagicMock(),
-            agent=MagicMock(),
-            optimization=None,
-            optimization_id=None,
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
+        context = make_optimization_context(
+            ChatPrompt(name="test", system="test", user="test"),
         )
 
         # Should not raise
@@ -1724,21 +1355,8 @@ class TestFinalizeFinishReason:
     @pytest.fixture
     def base_context(self) -> OptimizationContext:
         """Create a minimal context for testing."""
-        return OptimizationContext(
-            prompts={},
-            initial_prompts={},
-            is_single_prompt_optimization=True,
-            dataset=MagicMock(),
-            evaluation_dataset=MagicMock(),
-            validation_dataset=None,
-            metric=MagicMock(),
-            agent=MagicMock(),
-            optimization=None,
-            optimization_id=None,
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
+        return make_optimization_context(
+            ChatPrompt(name="test", system="test", user="test"),
         )
 
     def test_sets_max_trials_when_limit_reached(self, optimizer, base_context) -> None:
@@ -1832,21 +1450,13 @@ class TestBuildFinalResultStoppedEarly:
     @pytest.fixture
     def base_context(self, simple_chat_prompt) -> OptimizationContext:
         """Create a context with required fields for _build_final_result."""
-        return OptimizationContext(
-            prompts={"main": simple_chat_prompt},
-            initial_prompts={"main": simple_chat_prompt},
-            is_single_prompt_optimization=True,
-            dataset=MagicMock(id="ds-123"),
-            evaluation_dataset=MagicMock(),
-            validation_dataset=None,
-            metric=MagicMock(__name__="test_metric"),
-            agent=MagicMock(),
-            optimization=None,
+        dataset = make_mock_dataset(dataset_id="ds-123")
+        metric = MagicMock(__name__="test_metric")
+        return make_optimization_context(
+            simple_chat_prompt,
+            dataset=dataset,
+            metric=metric,
             optimization_id="opt-123",
-            experiment_config=None,
-            n_samples=None,
-            max_trials=10,
-            project_name="Test",
             baseline_score=0.5,
         )
 
@@ -2032,12 +1642,11 @@ class TestDefaultOptimizePrompt:
     ) -> None:
         """Should return early result when baseline score meets threshold."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         # Create optimizer that uses default optimize_prompt
         class DefaultOptimizer(BaseOptimizer):
@@ -2072,12 +1681,11 @@ class TestDefaultOptimizePrompt:
     ) -> None:
         """Should call _run_optimization when baseline doesn't meet threshold."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         run_optimization_called = []
 
@@ -2119,12 +1727,11 @@ class TestDefaultOptimizePrompt:
     ) -> None:
         """Early stop should report at least 1 trial/round completed (baseline evaluation)."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         class DefaultOptimizer(BaseOptimizer):
             def run_optimization(self, context: OptimizationContext):
@@ -2160,12 +1767,11 @@ class TestDefaultOptimizePrompt:
     ) -> None:
         """Early stop should use optimizer-provided trial/round counts if available."""
         mock_opik_client()
-        from opik import Dataset
-
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         class CustomOptimizer(BaseOptimizer):
             def run_optimization(self, context: OptimizationContext):

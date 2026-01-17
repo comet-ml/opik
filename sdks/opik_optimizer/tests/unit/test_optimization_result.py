@@ -451,7 +451,7 @@ class TestOptimizationResultDisplay:
         with patch("opik_optimizer.optimization_result.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
-            mock_console.return_value.print.assert_called_once()
+            assert mock_console.return_value.print.call_count == 2
 
     def test_display_shows_link_when_available(
         self, capsys: pytest.CaptureFixture
@@ -466,8 +466,9 @@ class TestOptimizationResultDisplay:
         with patch("opik_optimizer.optimization_result.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
-        captured = capsys.readouterr()
-        assert "Optimization run link:" in captured.out
+            mock_console.return_value.print.assert_any_call(
+                "Optimization run link: https://www.comet.com/opik/api/v1/session/redirect/optimizations/?optimization_id=opt-123&dataset_id=ds-123&path=a99999999999999999999999999999=="
+            )
 
     def test_display_shows_no_link_message_when_missing(
         self, capsys: pytest.CaptureFixture
@@ -480,8 +481,10 @@ class TestOptimizationResultDisplay:
         with patch("opik_optimizer.optimization_result.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
-        captured = capsys.readouterr()
-        assert "No optimization run link available" in captured.out
+            mock_console.return_value.print.assert_any_call(
+                "Optimization run link: No optimization run link available",
+                style="dim",
+            )
 
 
 class TestOptimizationResultModelDump:

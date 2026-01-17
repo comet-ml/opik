@@ -23,6 +23,7 @@ from opik_optimizer._llm_calls import (
 )
 from opik_optimizer import _llm_calls
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
+from tests.unit.test_helpers import make_mock_response
 
 
 class TestBuildCallTimeParams:
@@ -225,10 +226,7 @@ class TestParseResponse:
 
     def test_returns_content_when_no_response_model(self) -> None:
         """When no response_model is provided, should return raw content."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello, world!"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("Hello, world!")
 
         result = _parse_response(mock_response)
 
@@ -241,10 +239,7 @@ class TestParseResponse:
             name: str
             count: int
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "test", "count": 42}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"name": "test", "count": 42}')
 
         result = _parse_response(mock_response, response_model=TestModel)
 
@@ -256,11 +251,7 @@ class TestParseResponse:
         """Should raise BadRequestError when content is empty and finish_reason indicates truncation."""
         from litellm.exceptions import BadRequestError
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = ""
-        mock_response.choices[0].finish_reason = "length"
-        mock_response.model = "gpt-4"
+        mock_response = make_mock_response("", finish_reason="length")
 
         with pytest.raises(BadRequestError) as exc_info:
             _parse_response(mock_response)
@@ -269,10 +260,9 @@ class TestParseResponse:
 
     def test_does_not_raise_on_truncation_with_non_empty_content(self) -> None:
         """Should NOT raise when finish_reason is 'length' but content is not empty."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Some partial content"
-        mock_response.choices[0].finish_reason = "length"
+        mock_response = make_mock_response(
+            "Some partial content", finish_reason="length"
+        )
 
         result = _parse_response(mock_response)
 
@@ -282,11 +272,7 @@ class TestParseResponse:
         """Should handle 'max_tokens' finish reason like 'length'."""
         from litellm.exceptions import BadRequestError
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "   "  # Whitespace only
-        mock_response.choices[0].finish_reason = "max_tokens"
-        mock_response.model = "gpt-4"
+        mock_response = make_mock_response("   ", finish_reason="max_tokens")
 
         with pytest.raises(BadRequestError):
             _parse_response(mock_response)
@@ -295,11 +281,7 @@ class TestParseResponse:
         """Should handle 'token limit' finish reason like 'length'."""
         from litellm.exceptions import BadRequestError
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = ""
-        mock_response.choices[0].finish_reason = "token limit"
-        mock_response.model = "gpt-4"
+        mock_response = make_mock_response("", finish_reason="token limit")
 
         with pytest.raises(BadRequestError):
             _parse_response(mock_response)
@@ -310,10 +292,7 @@ class TestParseResponse:
         class TestModel(BaseModel):
             field: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "not valid json"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("not valid json")
 
         with pytest.raises(StructuredOutputParsingError) as exc_info:
             _parse_response(mock_response, response_model=TestModel)
@@ -326,10 +305,7 @@ class TestParseResponse:
         class TestModel(BaseModel):
             required_field: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"wrong_field": "value"}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"wrong_field": "value"}')
 
         with pytest.raises(StructuredOutputParsingError) as exc_info:
             _parse_response(mock_response, response_model=TestModel)
@@ -344,11 +320,8 @@ class TestParseResponse:
         class TestModel(BaseModel):
             name: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
         # Python repr style (single quotes) - fallback should handle this
-        mock_response.choices[0].message.content = "{'name': 'test'}"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("{'name': 'test'}")
 
         result = _parse_response(mock_response, response_model=TestModel)
 
@@ -357,9 +330,7 @@ class TestParseResponse:
 
     def test_handles_none_finish_reason(self) -> None:
         """Should handle when finish_reason attribute is missing or None."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Response content"
+        mock_response = make_mock_response("Response content")
         # Don't set finish_reason at all (will return None via getattr default)
         del mock_response.choices[0].finish_reason
 
@@ -416,12 +387,7 @@ class TestEdgeCases:
             inner: Inner
             name: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = '{"inner": {"value": 42}, "name": "test"}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"inner": {"value": 42}, "name": "test"}')
 
         result = _parse_response(mock_response, response_model=Outer)
 
@@ -435,10 +401,7 @@ class TestEdgeCases:
         class ListModel(BaseModel):
             items: list[str]
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"items": ["a", "b", "c"]}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"items": ["a", "b", "c"]}')
 
         result = _parse_response(mock_response, response_model=ListModel)
 
@@ -447,10 +410,7 @@ class TestEdgeCases:
 
     def test_parse_response_handles_unicode_content(self) -> None:
         """Should correctly handle Unicode content."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello, 世界! 🌍"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("Hello, 世界! 🌍")
 
         result = _parse_response(mock_response)
 
@@ -494,10 +454,7 @@ class TestCallModelSync:
 
     def test_call_model_increments_counter(self) -> None:
         """Test that call_model increments LLM counter."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         with patch(
             "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
@@ -513,10 +470,7 @@ class TestCallModelSync:
 
     def test_call_model_with_structured_output(self) -> None:
         """Test call_model with Pydantic response model."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "test", "score": 0.9}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
 
         with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
             mock_completion = MagicMock(return_value=mock_response)
@@ -538,10 +492,7 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_increments_counter(self) -> None:
         """Test that call_model_async increments LLM counter."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         with patch(
             "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
@@ -559,10 +510,7 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_with_structured_output(self) -> None:
         """Test call_model_async with Pydantic response model."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "test", "score": 0.9}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
 
         with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
             async_mock = AsyncMock(return_value=mock_response)
@@ -580,10 +528,7 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_passes_model_parameters(self) -> None:
         """Test that model_parameters are passed to acompletion."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         captured_kwargs: dict[str, Any] = {}
 
@@ -607,10 +552,7 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_project_name_passed(self) -> None:
         """Test that project_name is passed to track_completion."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         captured_project: str | None = None
 

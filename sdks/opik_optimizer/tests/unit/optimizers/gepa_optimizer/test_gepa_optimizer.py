@@ -14,12 +14,15 @@ def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
     return 1.0
 
 
+from tests.unit.test_helpers import make_mock_dataset
+
+
 def _make_dataset() -> MagicMock:
-    dataset = MagicMock(spec=Dataset)
-    dataset.name = "test-dataset"
-    dataset.id = "dataset-123"
-    dataset.get_items.return_value = [{"id": "1", "question": "Q1", "answer": "A1"}]
-    return dataset
+    return make_mock_dataset(
+        [{"id": "1", "question": "Q1", "answer": "A1"}],
+        name="test-dataset",
+        dataset_id="dataset-123",
+    )
 
 
 class TestGepaOptimizerInit:
