@@ -6,6 +6,7 @@ import math
 from typing import Any, ContextManager, TYPE_CHECKING
 
 from ..api_objects import chat_prompt
+
 if TYPE_CHECKING:
     from ..base_optimizer import OptimizationContext
 from . import display as display_utils
@@ -36,9 +37,7 @@ class OptimizationRunDisplay:
             verbose=self._verbose,
         )
 
-    def baseline_evaluation(
-        self, context: "OptimizationContext"
-    ) -> ContextManager[Any]:
+    def baseline_evaluation(self, context: OptimizationContext) -> ContextManager[Any]:
         dataset = context.evaluation_dataset
         dataset_name = getattr(dataset, "name", None)
         is_validation = (
@@ -56,7 +55,7 @@ class OptimizationRunDisplay:
     def evaluation_progress(
         self,
         *,
-        context: "OptimizationContext",
+        context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         score: float,
         display_info: dict[str, Any] | None = None,
@@ -94,7 +93,7 @@ class OptimizationRunDisplay:
         )
 
     def _build_evaluation_display_info(
-        self, context: "OptimizationContext"
+        self, context: OptimizationContext
     ) -> dict[str, Any]:
         dataset = context.evaluation_dataset
         dataset_name = getattr(dataset, "name", None)
