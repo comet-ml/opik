@@ -5,7 +5,7 @@ import opik.opik_context
 from opik.api_objects import attachment
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 
-from ...testlib import (
+from tests.testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
     FeedbackScoreModel,

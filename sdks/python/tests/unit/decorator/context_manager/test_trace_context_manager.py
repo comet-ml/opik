@@ -3,7 +3,7 @@ import pytest
 import opik
 import opik.opik_context
 from opik.types import ErrorInfoDict
-from ...testlib import (
+from tests.testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
     TraceModel,
