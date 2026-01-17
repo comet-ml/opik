@@ -380,7 +380,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 score=fallback_score,
                 id=f"trial{context.trials_completed}_fallback",
             )
-            self.finish_candidate(
+            self.post_candidate(
                 best_prompts,
                 score=fallback_score,
                 trial_index=context.trials_completed,
@@ -402,7 +402,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             score=best_score_local,
             id=f"trial{context.trials_completed}_best0",
         )
-        self.finish_candidate(
+        self.post_candidate(
             best_prompt_bundle,
             score=best_score_local,
             trial_index=context.trials_completed,
@@ -428,7 +428,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 score=improved_score,
                 id=f"trial{context.trials_completed}_cand{idx}",
             )
-            self.finish_candidate(
+            self.post_candidate(
                 improved_chat_prompts,
                 score=improved_score,
                 trial_index=context.trials_completed,
@@ -690,7 +690,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
 
             history_candidate = {name: prompt for name, prompt in best_prompts.items()}
-            self.finish_candidate(
+            self.post_candidate(
                 history_candidate,
                 score=best_score,
                 trial_index=context.trials_completed,
@@ -702,7 +702,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 },
                 round_handle=round_handle,
             )
-            self.finish_round(
+            self.post_round(
                 round_handle=round_handle,
                 best_score=best_score,
                 best_candidate=history_candidate,
