@@ -9,10 +9,8 @@ from contextlib import contextmanager
 
 import pydantic
 import rich.panel
-from .utils.reporting import (
-    get_console,
-    get_optimization_run_url_by_id,
-)
+from .utils.reporting import get_console
+from .utils.core import get_optimization_run_url_by_id
 from .utils.display import (
     format_prompt_for_plaintext,
     build_plaintext_summary,

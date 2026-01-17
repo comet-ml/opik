@@ -11,9 +11,9 @@ from ...utils.reporting import (  # noqa: F401
     get_console,
     suppress_opik_logs,
 )
+from ...utils.display import display_text_block
 
 console = get_console()
-PANEL_WIDTH = 70
 
 
 @contextmanager
@@ -26,17 +26,19 @@ def display_evaluation(
 
     # Entry point
     if verbose >= 1:
-        console.print(Text(f"> {message}"))
+        display_text_block(console, f"> {message}")
         if selection_summary:
-            console.print(
-                Text(f"│ Evaluation settings: {selection_summary}", style="dim")
+            display_text_block(
+                console, f"│ Evaluation settings: {selection_summary}", style="dim"
             )
 
     # Create a simple object with a method to set the score
     class Reporter:
         def set_score(self, s: float) -> None:
             if verbose >= 1:
-                console.print(Text(f"│ Baseline score was: {s:.4f}.\n", style="green"))
+                display_text_block(
+                    console, f"│ Baseline score was: {s:.4f}.\n", style="green"
+                )
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -60,15 +62,14 @@ def display_trial_evaluation(
 
     if verbose >= 1:
         console.print("")
-        console.print(
-            Text(
-                f"│ Trial {trial_number + 1}/{total_trials} ({stage} search)",
-                style="cyan bold",
-            )
+        display_text_block(
+            console,
+            f"│ Trial {trial_number + 1}/{total_trials} ({stage} search)",
+            style="cyan bold",
         )
         if selection_summary:
-            console.print(
-                Text(f"│ Evaluation settings: {selection_summary}", style="dim")
+            display_text_block(
+                console, f"│ Evaluation settings: {selection_summary}", style="dim"
             )
 
         # Display parameters being tested
@@ -89,11 +90,13 @@ def display_trial_evaluation(
         def set_score(self, s: float, is_best: bool = False) -> None:
             if verbose >= 1:
                 if is_best:
-                    console.print(
-                        Text(f"│ Score: {s:.4f} (new best)", style="green bold")
+                    display_text_block(
+                        console,
+                        f"│ Score: {s:.4f} (new best)",
+                        style="green bold",
                     )
                 else:
-                    console.print(Text(f"│ Score: {s:.4f}", style="dim"))
+                    display_text_block(console, f"│ Score: {s:.4f}", style="dim")
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich("│   Evaluation", verbose=verbose):

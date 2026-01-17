@@ -24,7 +24,7 @@ from ..types import (
     AgentMetadata,
     AgentBundleCandidate,
 )
-from ....utils import reporting as reporting_utils
+from ....utils import display as display_utils
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 
@@ -168,7 +168,7 @@ def generate_candidate_prompts(
     with reporting.display_candidate_generation_report(
         optimizer.prompts_per_round,
         verbose=optimizer.verbose,
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
+        selection_summary=display_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
         logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
@@ -421,7 +421,7 @@ def generate_agent_bundle_candidates(
     with reporting.display_candidate_generation_report(
         optimizer.prompts_per_round,
         verbose=optimizer.verbose,
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompts),
+        selection_summary=display_utils.summarize_selection_policy(current_prompts),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating agent bundle prompts for round {round_num + 1}")
         logger.debug("Generating from agents: %s", list(current_prompts.keys()))
@@ -622,7 +622,7 @@ def generate_synthesis_prompts(
     with reporting.display_candidate_generation_report(
         num_synthesis_prompts,
         verbose=optimizer.verbose,  # Synthesis generates a small number of prompts
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
+        selection_summary=display_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         # Get top performers from Hall of Fame
         top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []

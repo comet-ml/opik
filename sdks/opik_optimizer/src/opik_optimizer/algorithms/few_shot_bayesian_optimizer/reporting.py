@@ -7,15 +7,13 @@ from rich.text import Text
 if TYPE_CHECKING:
     from ...api_objects.chat_prompt import ChatPrompt
 
-from ...utils.reporting import (  # noqa: F401
-    display_configuration,
-    display_header,
+from ...utils.reporting import get_console  # noqa: F401
+from ...utils.display import (
+    DEFAULT_PANEL_WIDTH,
     display_messages,
-    display_result,
-    get_console,
+    display_text_block,
 )
 
-PANEL_WIDTH = 70
 console = get_console()
 
 
@@ -44,7 +42,7 @@ def display_few_shot_prompt_template(
 
     panel = Panel(
         Text(fewshot_template),
-        width=PANEL_WIDTH,
+        width=DEFAULT_PANEL_WIDTH,
         border_style="dim",
     )
     # Use a temporary buffer to render the panel
@@ -64,7 +62,7 @@ def display_few_shot_prompt_template(
 def start_optimization_run(verbose: int = 1) -> None:
     """Start the optimization run"""
     if verbose >= 1:
-        console.print(Text("\n> Starting the optimization run"))
+        display_text_block(console, "\n> Starting the optimization run")
         console.print(Text("│"))
 
 
@@ -81,8 +79,8 @@ def display_trial_start(
 
     console.print(Text(f"│ - Starting trial {trial_number + 1} of {total_trials}"))
     if selection_summary:
-        console.print(
-            Text(f"│   Evaluation settings: {selection_summary}", style="dim")
+        display_text_block(
+            console, f"│   Evaluation settings: {selection_summary}", style="dim"
         )
     console.print(Text("│"))
     display_messages(messages, prefix="│    ")
@@ -100,30 +98,26 @@ def display_trial_score(
         return
 
     if baseline_score == 0:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was: {score:.4f}\n│",
-                style="green",
-            )
+        display_text_block(
+            console,
+            f"│    Trial {trial_number + 1} - score was: {score:.4f}\n│",
+            style="green",
         )
     elif score is not None and score > baseline_score:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
-                style="green",
-            )
+        display_text_block(
+            console,
+            f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
+            style="green",
         )
     elif score is not None and score <= baseline_score:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
-                style="red",
-            )
+        display_text_block(
+            console,
+            f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
+            style="red",
         )
     else:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was not set.\n│",
-                style="dim yellow",
-            )
+        display_text_block(
+            console,
+            f"│    Trial {trial_number + 1} - score was not set.\n│",
+            style="dim yellow",
         )

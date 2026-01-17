@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import rich.box
 import rich.console
@@ -11,7 +14,10 @@ import rich.table
 import rich.text
 
 from ..api_objects import chat_prompt
-from .reporting import _format_message_content, get_link_text
+from .candidate_selection import DEFAULT_SELECTION_POLICY
+from .core import get_optimization_run_url_by_id
+from .multimodal import format_message_content
+from .reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
 
 
 def format_float(value: Any, digits: int = 6) -> str:
@@ -50,6 +56,445 @@ def format_prompt_for_plaintext(
             snippet = "[multimodal content]"
         parts.append(f"  {role}: {snippet}")
     return "\n".join(parts)
+
+
+def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
+    """
+    Calculate percentage change safely, handling division by zero.
+
+    Args:
+        current: Current value
+        baseline: Baseline value to compare against
+
+    Returns:
+        Tuple of (percentage_change, has_percentage) where:
+        - percentage_change: The percentage change if calculable, otherwise 0
+        - has_percentage: True if percentage was calculated, False if baseline was zero
+    """
+    if baseline == 0:
+        return 0.0, False
+    return ((current - baseline) / baseline), True
+
+
+def summarize_selection_policy(
+    prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Return a compact n/policy summary for prompt evaluation reporting."""
+    prompts_list = list(prompts.values()) if isinstance(prompts, dict) else [prompts]
+    summaries = []
+    for prompt in prompts_list:
+        model_parameters = prompt.model_kwargs or {}
+        n_value = model_parameters.get("n", 1) or 1
+        try:
+            n_value = int(n_value)
+        except (TypeError, ValueError):
+            n_value = 1
+        policy = str(
+            model_parameters.get("selection_policy", DEFAULT_SELECTION_POLICY)
+            or DEFAULT_SELECTION_POLICY
+        ).lower()
+        summaries.append(f"n={n_value} policy={policy}")
+
+    unique = sorted(set(summaries))
+    if len(unique) == 1:
+        return unique[0]
+    return "mixed (" + ", ".join(unique) + ")"
+
+
+def _format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Text:
+    return format_message_content(content)
+
+
+def display_messages(messages: list[dict[str, Any]], prefix: str = "") -> None:
+    """
+    Display messages using Rich panels, supporting both string and multimodal content.
+
+    Args:
+        messages: List of message dictionaries to display.
+        prefix: Optional prefix to add to each line of output.
+    """
+    for msg in messages:
+        content: str | list[dict[str, Any]] = msg.get("content", "")
+        formatted_content = _format_message_content(content)
+        role = msg.get("role", "message")
+
+        panel = rich.panel.Panel(
+            formatted_content,
+            title=role,
+            title_align="left",
+            border_style="dim",
+            width=DEFAULT_PANEL_WIDTH,
+            padding=(1, 2),
+        )
+
+        console = get_console()
+        with console.capture() as capture:
+            console.print(panel)
+
+        rendered_panel = capture.get()
+        for line in rendered_panel.splitlines():
+            console.print(rich.text.Text(prefix) + rich.text.Text.from_ansi(line))
+
+
+def _format_tool_panel(tool: dict[str, Any]) -> rich.panel.Panel:
+    function_block = tool.get("function", {})
+    name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description", "")
+    parameters = function_block.get("parameters", {})
+
+    body_lines: list[str] = []
+    if description:
+        body_lines.append(description)
+    if parameters:
+        formatted_schema = json.dumps(parameters, indent=2, sort_keys=True)
+        body_lines.append("\nSchema:\n" + formatted_schema)
+
+    content = rich.text.Text(
+        "\n".join(body_lines) if body_lines else "(no metadata)", overflow="fold"
+    )
+    return rich.panel.Panel(
+        content,
+        title=f"tool: {name}",
+        title_align="left",
+        border_style="cyan",
+        width=DEFAULT_PANEL_WIDTH,
+        padding=(1, 2),
+    )
+
+
+def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None:
+    """Display tools with optional prefix for each line."""
+    if not tools:
+        return
+
+    console = get_console()
+    console.print(rich.text.Text(f"{prefix}Tools registered:\n", style="bold"))
+    for tool in tools:
+        panel = _format_tool_panel(tool)
+        with console.capture() as capture:
+            console.print(panel)
+        rendered_panel = capture.get()
+        for line in rendered_panel.splitlines():
+            console.print(rich.text.Text(prefix) + rich.text.Text.from_ansi(line))
+    console.print("")
+
+
+def _format_tool_summary(tool: dict[str, Any]) -> str:
+    """Format a concise tool summary showing only name and description."""
+    function_block = tool.get("function", {})
+    name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description", "No description")
+    return f"  • {name}: {description}"
+
+
+def _display_chat_prompt_messages_and_tools(
+    chat_p: chat_prompt.ChatPrompt,
+    key: str | None = None,
+) -> list[rich.console.RenderableType]:
+    """
+    Extract and format messages and tools from a ChatPrompt for display.
+
+    Args:
+        chat_p: The ChatPrompt to display
+        key: Optional key name if this is part of a dictionary of prompts
+
+    Returns:
+        List of Rich renderable items
+    """
+    items: list[rich.console.RenderableType] = []
+
+    if key:
+        items.append(rich.text.Text(f"\n[{key}]", style="bold yellow"))
+
+    messages = chat_p.get_messages()
+    for msg in messages:
+        content_value: str | list[dict[str, Any]] = msg.get("content", "")
+        formatted_content = _format_message_content(content_value)
+        role = msg.get("role", "message")
+
+        items.append(
+            rich.panel.Panel(
+                formatted_content,
+                title=role,
+                title_align="left",
+                border_style="dim",
+                width=DEFAULT_PANEL_WIDTH,
+                padding=(1, 2),
+            )
+        )
+
+    if chat_p.tools:
+        tool_summary_lines = ["Tools:"]
+        for tool in chat_p.tools:
+            tool_summary_lines.append(_format_tool_summary(tool))
+        items.append(
+            rich.panel.Panel(
+                rich.text.Text("\n".join(tool_summary_lines), style="dim cyan"),
+                border_style="dim",
+                width=DEFAULT_PANEL_WIDTH,
+                padding=(1, 2),
+            )
+        )
+
+    return items
+
+
+def get_link_text(
+    pre_text: str,
+    link_text: str,
+    optimization_id: str | None = None,
+    dataset_id: str | None = None,
+) -> rich.text.Text:
+    if optimization_id is not None and dataset_id is not None:
+        optimization_url = get_optimization_run_url_by_id(
+            optimization_id=optimization_id, dataset_id=dataset_id
+        )
+
+        result_text = rich.text.Text(pre_text + link_text)
+        result_text.stylize(
+            f"link {optimization_url}",
+            len(pre_text),
+            len(result_text),
+        )
+        return result_text
+    return rich.text.Text("No optimization run link available", style="dim")
+
+
+def display_header(
+    algorithm: str,
+    optimization_id: str | None = None,
+    dataset_id: str | None = None,
+    verbose: int = 1,
+) -> None:
+    if verbose < 1:
+        return
+
+    link_text = get_link_text(
+        pre_text="-> View optimization details ",
+        link_text="in your Opik dashboard",
+        optimization_id=optimization_id,
+        dataset_id=dataset_id,
+    )
+
+    content = rich.text.Text.assemble(
+        ("● ", "green"), "Running Opik Evaluation - ", (algorithm, "blue"), "\n\n"
+    ).append(link_text)
+
+    panel = rich.panel.Panel(content, box=rich.box.ROUNDED, width=DEFAULT_PANEL_WIDTH)
+
+    console = get_console()
+    console.print(panel)
+    console.print("\n")
+
+
+def display_result(
+    initial_score: float,
+    best_score: float,
+    prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
+    verbose: int = 1,
+) -> None:
+    """
+    Display optimization results including score improvement and optimized prompts.
+    """
+    if verbose < 1:
+        return
+
+    console = get_console()
+    display_text_block(console, "\n> Optimization complete\n")
+
+    content: list[rich.console.RenderableType] = []
+
+    if best_score > initial_score:
+        perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
+        if has_percentage:
+            content.append(
+                rich.text.Text(
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
+                    style="bold green",
+                )
+            )
+        else:
+            content.append(
+                rich.text.Text(
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
+                    style="bold green",
+                )
+            )
+    else:
+        content.append(
+            rich.text.Text(
+                "Optimization run did not find a better prompt than the initial one.\n"
+                f"Score: {best_score:.4f}",
+                style="dim bold red",
+            )
+        )
+
+    content.append(rich.text.Text("\nOptimized prompt:"))
+
+    if isinstance(prompt, dict):
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+        for key, chat_p in prompt_dict.items():
+            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+            content.extend(prompt_items)
+    else:
+        prompt_items = _display_chat_prompt_messages_and_tools(prompt, key=None)
+        content.extend(prompt_items)
+
+    console.print(
+        rich.panel.Panel(
+            rich.console.Group(*content),
+            title="Optimization results",
+            title_align="left",
+            border_style="green",
+            width=DEFAULT_PANEL_WIDTH,
+            padding=(1, 2),
+        )
+    )
+
+
+def display_configuration(
+    messages: list[dict[str, str]]
+    | dict[str, chat_prompt.ChatPrompt]
+    | chat_prompt.ChatPrompt
+    | None,
+    optimizer_config: dict[str, Any],
+    verbose: int = 1,
+    tools: list[dict[str, Any]] | None = None,
+) -> None:
+    """Displays the LLM messages and optimizer configuration using Rich panels."""
+    if verbose < 1:
+        return
+
+    console = get_console()
+    display_text_block(console, "> Let's optimize the prompt:\n")
+
+    if messages is None:
+        pass
+    elif isinstance(messages, dict):
+        messages_dict = cast(dict[str, chat_prompt.ChatPrompt], messages)
+        if len(messages_dict) == 1:
+            chat_p = list(messages_dict.values())[0]
+            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=None)
+            for item in prompt_items:
+                console.print(item)
+        else:
+            for key, chat_p in messages_dict.items():
+                prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                for item in prompt_items:
+                    console.print(item)
+    elif isinstance(messages, chat_prompt.ChatPrompt):
+        prompt_items = _display_chat_prompt_messages_and_tools(messages, key=None)
+        for item in prompt_items:
+            console.print(item)
+    elif isinstance(messages, list):
+        display_messages(messages)
+        _display_tools(tools)
+
+    selection_summary = None
+    if isinstance(messages, (chat_prompt.ChatPrompt, dict)):
+        selection_summary = summarize_selection_policy(messages)
+
+    display_text_block(
+        console, f"\nUsing {optimizer_config['optimizer']} with the parameters: "
+    )
+    if selection_summary:
+        display_text_block(console, f"  - evaluation: {selection_summary}", style="dim")
+
+    for key, value in optimizer_config.items():
+        if key == "optimizer":
+            continue
+        parameter_text = rich.text.Text.assemble(
+            rich.text.Text(f"  - {key}: ", style="dim"),
+            rich.text.Text(str(value), style="cyan"),
+        )
+        console.print(parameter_text)
+
+    display_text_block(console, "\n")
+
+
+@contextmanager
+def display_evaluation(
+    message: str = "First we will establish the baseline performance:",
+    verbose: int = 1,
+    dataset_name: str | None = None,
+    is_validation: bool = False,
+    selection_summary: str | None = None,
+) -> Iterator[Any]:
+    """Context manager to display messages during an evaluation phase."""
+    console = get_console()
+
+    if verbose >= 1:
+        display_text_block(console, f"> {message}")
+        if dataset_name:
+            dataset_type = "validation" if is_validation else "training"
+            display_text_block(
+                console,
+                f"  Using {dataset_type} dataset: {dataset_name}",
+                style="dim",
+            )
+        if selection_summary:
+            display_text_block(
+                console,
+                f"  Evaluation settings: {selection_summary}",
+                style="dim",
+            )
+
+    class Reporter:
+        def set_score(self, score: float) -> None:
+            if verbose >= 1:
+                display_text_block(
+                    console,
+                    f"\r  Baseline score was: {score:.4f}.\n",
+                    style="green",
+                )
+
+    with suppress_opik_logs():
+        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
+            try:
+                yield Reporter()
+            finally:
+                pass
+
+
+def display_evaluation_progress(
+    prefix: str,
+    score_text: str,
+    style: str,
+    prompts: dict[str, chat_prompt.ChatPrompt],
+    verbose: int = 1,
+    dataset_name: str | None = None,
+    dataset_type: str | None = None,
+    evaluation_settings: str | None = None,
+) -> None:
+    """Display progress after evaluating a prompt candidate."""
+    if verbose < 1:
+        return
+
+    console = get_console()
+
+    display_text_block(console, f"│    {prefix}:")
+
+    if evaluation_settings:
+        display_text_block(
+            console,
+            f"│         Evaluation settings: {evaluation_settings}",
+            style="dim",
+        )
+
+    if dataset_name:
+        ds_type = dataset_type or "training"
+        display_text_block(
+            console,
+            f"│         (using {ds_type} dataset: {dataset_name} for ranking)",
+            style="dim",
+        )
+
+    for name, prompt in prompts.items():
+        display_text_block(console, f"│         {name}:")
+        display_messages(prompt.get_messages(), "│         ")
+
+    display_text_block(console, f"│         Score: {score_text}", style=style)
+    display_text_block(console, "│")
 
 
 def build_plaintext_summary(
@@ -359,6 +804,59 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     )
 
 
+def display_tool_description(
+    console: rich.console.Console, description: str, title: str, style: str
+) -> None:
+    """Render a simple tool description panel."""
+    panel = rich.panel.Panel(
+        rich.text.Text(description),
+        title=title,
+        title_align="left",
+        border_style=style,
+        width=DEFAULT_PANEL_WIDTH,
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+
+def display_text_block(
+    console: rich.console.Console | None, text: str, style: str = ""
+) -> None:
+    """Print a prefixed single-line text block."""
+    target = console or get_console()
+    target.print(rich.text.Text(text, style=style))
+
+
+def display_prefixed_block(
+    console: rich.console.Console | None,
+    lines: list[str],
+    prefix: str = "│ ",
+    style: str = "",
+) -> None:
+    """Print a block of lines with a prefix."""
+    rendered = "\n".join(f"{prefix}{line}" for line in lines)
+    target = console or get_console()
+    target.print(rich.text.Text(rendered, style=style), highlight=False)
+
+
+def display_error(error_message: str, verbose: int = 1) -> None:
+    """Display an error message with a standard prefix."""
+    if verbose >= 1:
+        display_text_block(None, f"│   {error_message}", style="dim red")
+
+
+def display_success(message: str, verbose: int = 1) -> None:
+    """Display a success message with a standard prefix."""
+    if verbose >= 1:
+        display_text_block(None, f"│   {message}", style="dim green")
+
+
+def display_message(message: str, verbose: int = 1) -> None:
+    """Display a neutral message with a standard prefix."""
+    if verbose >= 1:
+        display_text_block(None, f"│   {message}", style="dim")
+
+
 def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     """
     Normalize whitespace in a prompt snippet and truncate it for compact display.
@@ -375,3 +873,6 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     if len(normalized) > max_length:
         return normalized[:max_length] + "…"
     return normalized
+
+
+DEFAULT_PANEL_WIDTH = 70

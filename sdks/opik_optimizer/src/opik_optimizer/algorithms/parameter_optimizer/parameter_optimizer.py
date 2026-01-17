@@ -18,7 +18,7 @@ from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...utils import reporting as reporting_utils
+from ...utils import display as display_utils
 from .types import ParameterType
 from .ops import sensitivity_analysis
 from .ops.search_ops import ParameterSearchSpace
@@ -236,7 +236,7 @@ class ParameterOptimizer(BaseOptimizer):
         optimization = self._create_optimization_run(dataset, metric, optimization_id)
 
         # Display header with optimization link
-        reporting_utils.display_header(
+        display_utils.display_header(
             algorithm=self.__class__.__name__,
             optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
@@ -249,7 +249,7 @@ class ParameterOptimizer(BaseOptimizer):
             if is_single_prompt_optimization
             else base_prompts
         )
-        reporting_utils.display_configuration(
+        display_utils.display_configuration(
             messages=display_prompt,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
@@ -267,7 +267,7 @@ class ParameterOptimizer(BaseOptimizer):
         # Evaluate baseline with reporting
         with reporting.display_evaluation(
             verbose=self.verbose,
-            selection_summary=reporting_utils.summarize_selection_policy(base_prompts),
+            selection_summary=display_utils.summarize_selection_policy(base_prompts),
         ) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompts,
@@ -292,7 +292,7 @@ class ParameterOptimizer(BaseOptimizer):
                 if is_single_prompt_optimization
                 else base_prompts
             )
-            reporting_utils.display_result(
+            display_utils.display_result(
                 initial_score=baseline_score,
                 best_score=baseline_score,
                 prompt=display_prompt,
@@ -430,7 +430,7 @@ class ParameterOptimizer(BaseOptimizer):
                 stage=current_stage,
                 parameters=sampled_values,
                 verbose=self.verbose,
-                selection_summary=reporting_utils.summarize_selection_policy(
+                selection_summary=display_utils.summarize_selection_policy(
                     tuned_prompts
                 ),
             ) as trial_reporter:
@@ -665,7 +665,7 @@ class ParameterOptimizer(BaseOptimizer):
             if is_single_prompt_optimization
             else best_tuned_prompts
         )
-        reporting_utils.display_result(
+        display_utils.display_result(
             initial_score=baseline_score,
             best_score=best_score,
             prompt=display_prompt,

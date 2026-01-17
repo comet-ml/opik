@@ -784,7 +784,7 @@ def test_on_evaluation_handles_non_finite_scores(
         captured.update(kwargs)
 
     monkeypatch.setattr(
-        "opik_optimizer.utils.reporting.display_evaluation_progress",
+        "opik_optimizer.utils.display.display_evaluation_progress",
         fake_display_evaluation_progress,
     )
 

@@ -1,37 +1,41 @@
 from contextlib import contextmanager
 from typing import Any
 
-from rich.panel import Panel
 from rich.text import Text
 
 from ...api_objects import chat_prompt
-from ...utils.reporting import (  # noqa: F401
+from ...utils.reporting import (
     convert_tqdm_to_rich,
-    display_configuration,
-    display_header,
-    display_messages,
-    display_result,
     get_console,
     suppress_opik_logs,
 )
+from ...utils.display import (
+    display_error as _display_error,
+    display_message as _display_message,
+    display_success as _display_success,
+    display_text_block,
+    display_tool_description,
+)
 
-PANEL_WIDTH = 70
 console = get_console()
 
 
+def display_error(error_message: str, verbose: int = 1) -> None:
+    """Backward-compatible wrapper for error display."""
+    _display_error(error_message, verbose=verbose)
+
+
+def display_success(message: str, verbose: int = 1) -> None:
+    """Backward-compatible wrapper for success display."""
+    _display_success(message, verbose=verbose)
+
+
+def display_message(message: str, verbose: int = 1) -> None:
+    """Backward-compatible wrapper for neutral display."""
+    _display_message(message, verbose=verbose)
+
+
 # FIXME: Move to new reporting utils module.
-def display_tool_description(description: str, title: str, style: str) -> None:
-    panel = Panel(
-        Text(description),
-        title=title,
-        title_align="left",
-        border_style=style,
-        width=PANEL_WIDTH,
-        padding=(1, 2),
-    )
-    console.print(panel)
-
-
 @contextmanager
 def infer_output_style(verbose: int = 1) -> Any:
     class Reporter:
@@ -58,29 +62,12 @@ def infer_output_style(verbose: int = 1) -> Any:
 
         def success(self, output_style_prompt: str) -> None:
             if verbose >= 1:
-                panel = Panel(
-                    Text(output_style_prompt),
-                    title="Successfully inferred output style",
-                    title_align="left",
-                    border_style="green",
-                    width=PANEL_WIDTH,
-                    padding=(1, 2),
+                display_tool_description(
+                    console,
+                    output_style_prompt,
+                    "Successfully inferred output style",
+                    "green",
                 )
-
-                # Capture the panel as rendered text with ANSI styles
-                with console.capture() as capture:
-                    console.print(panel)
-
-                # Retrieve the rendered string (with ANSI)
-                rendered_panel = capture.get()
-
-                # Prefix each line with '│ ', preserving ANSI styles
-                prefixed_output = "\n".join(
-                    f"│ {line}" for line in rendered_panel.splitlines()
-                )
-
-                # Print the prefixed output (will include colors)
-                console.print(prefixed_output, highlight=False)
                 console.print(Text(""))
 
     try:
@@ -177,8 +164,8 @@ def baseline_performance(verbose: int = 1) -> Any:
     class Reporter:
         def set_score(self, s: float) -> None:
             if verbose >= 1:
-                console.print(
-                    Text(f"\r  Baseline score was: {s:.4f}.\n", style="green")
+                display_text_block(
+                    console, f"\r  Baseline score was: {s:.4f}.\n", style="green"
                 )
 
     # Use our log suppression context manager and yield the reporter
@@ -284,21 +271,6 @@ def start_evolutionary_algo(verbose: int = 1) -> Any:
             finally:
                 if verbose >= 1:
                     console.print("")
-
-
-def display_error(error_message: str, verbose: int = 1) -> None:
-    if verbose >= 1:
-        console.print(Text("│   ").append(Text(error_message, style="dim red")))
-
-
-def display_success(message: str, verbose: int = 1) -> None:
-    if verbose >= 1:
-        console.print(Text("│   ").append(Text(message, style="dim green")))
-
-
-def display_message(message: str, verbose: int = 1) -> None:
-    if verbose >= 1:
-        console.print(Text("│   ").append(Text(message, style="dim")))
 
 
 def end_gen(

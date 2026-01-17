@@ -443,7 +443,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 # Step 3. Identify potential improvements
                 if not prompt_scores:
-                    logger.warning("No prompts were successfully evaluated in this round")
+                    logger.warning(
+                        "No prompts were successfully evaluated in this round"
+                    )
                     break
 
                 prompt_scores.sort(key=lambda x: x[1], reverse=True)
@@ -458,7 +460,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                     # For single prompt optimization, extract the ChatPrompt from dict
                     if isinstance(best_candidate_this_round, dict):
-                        best_candidate_chat = list(best_candidate_this_round.values())[0]
+                        best_candidate_chat = list(best_candidate_this_round.values())[
+                            0
+                        ]
                     else:
                         best_candidate_chat = cast(
                             chat_prompt.ChatPrompt, best_candidate_this_round
@@ -510,7 +514,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         id=f"round{round_num}_cand",
                         metrics={"selection_score": cand_score},
                     )
-                    self.finish_candidate(
+                    self.post_candidate(
                         cand_prompt,
                         score=cand_score,
                         trial_index=trial_index,
@@ -518,7 +522,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         extras={"round_num": round_num},
                     )
                 # Flush round metadata/candidates
-                self.finish_round(
+                self.post_round(
                     round_handle=round_handle,
                     best_score=best_cand_score_avg,
                     best_candidate=best_candidate_this_round,

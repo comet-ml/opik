@@ -1,169 +1,21 @@
 from contextlib import contextmanager
-from typing import Any, Literal
+from typing import Any
 from collections.abc import Iterator
 
 from rich.panel import Panel
 from rich.text import Text
 
 from ...api_objects import chat_prompt
-from ...utils.reporting import (  # noqa: F401
-    convert_tqdm_to_rich,
-    display_configuration,
-    display_header,
-    display_messages,
-    display_result,
-    get_console,
-    suppress_opik_logs,
-    safe_percentage_change,
+from ...utils.reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
+from ...utils.display import display_messages, display_text_block
+from .display_utils import (
+    compute_message_diff_order,
+    display_optimized_prompt_diff as _display_optimized_prompt_diff,
 )
 from .types import MessageDiffItem
 
 PANEL_WIDTH = 90
 console = get_console()
-
-
-def _content_to_string(content: str | list[dict[str, Any]]) -> str:
-    """
-    Convert message content to string representation for diff display.
-    Handles both string content and multimodal content parts.
-
-    Args:
-        content: Message content, either a string or a list of content parts
-
-    Returns:
-        String representation of the content
-    """
-    if isinstance(content, str):
-        return content
-
-    # Handle multimodal content (list of parts)
-    parts: list[str] = []
-    for part in content:
-        part_type = part.get("type")
-        if part_type == "text":
-            text_content = part.get("text", "")
-            if text_content:
-                parts.append(f"[text] {text_content}")
-        elif part_type == "image_url":
-            image_url_data = part.get("image_url", {})
-            url = (
-                image_url_data.get("url", "")
-                if isinstance(image_url_data, dict)
-                else ""
-            )
-            if url:
-                # Truncate long URLs or base64 data
-                if url.startswith("data:image"):
-                    if "," in url:
-                        base64_part = url.split(",", 1)[1]
-                        preview = (
-                            base64_part[:20] + "..."
-                            if len(base64_part) > 20
-                            else base64_part
-                        )
-                        parts.append(f"[image_url] data:image/...;base64,{preview}")
-                    else:
-                        parts.append(f"[image_url] {url[:50]}...")
-                else:
-                    display_url = url[:80] + "..." if len(url) > 80 else url
-                    parts.append(f"[image_url] {display_url}")
-            else:
-                parts.append("[image_url] <no URL>")
-
-    return "\n".join(parts) if parts else "(empty content)"
-
-
-def compute_message_diff_order(
-    initial_messages: list[dict[str, str]],
-    optimized_messages: list[dict[str, str]],
-) -> list[MessageDiffItem]:
-    """
-    Compute the diff between initial and optimized messages, returning them in optimized message order.
-
-    This function groups messages by role and compares them to determine what changed.
-    The returned list maintains the order of roles as they appear in the optimized messages.
-
-    Args:
-        initial_messages: List of initial message dictionaries with 'role' and 'content' keys
-        optimized_messages: List of optimized message dictionaries with 'role' and 'content' keys
-
-    Returns:
-        List of MessageDiffItem objects in the order roles appear in optimized_messages,
-        followed by any removed roles that only existed in initial_messages.
-    """
-
-    def group_by_role(
-        messages: list[dict[str, str]],
-    ) -> dict[str, list[tuple[int, str]]]:
-        """Group messages by role, storing (index, content) tuples."""
-        groups: dict[str, list[tuple[int, str]]] = {}
-        for idx, msg in enumerate(messages):
-            role = msg.get("role", "message")
-            content = msg.get("content", "")
-            if role not in groups:
-                groups[role] = []
-            groups[role].append((idx, content))
-        return groups
-
-    initial_by_role = group_by_role(initial_messages)
-    optimized_by_role = group_by_role(optimized_messages)
-
-    # Get all unique roles maintaining order from optimized messages
-    all_roles = []
-    seen_roles = set()
-    for msg in optimized_messages:
-        role = msg.get("role", "message")
-        if role not in seen_roles:
-            all_roles.append(role)
-            seen_roles.add(role)
-    # Add any roles that were in initial but not in optimized (removed roles)
-    for msg in initial_messages:
-        role = msg.get("role", "message")
-        if role not in seen_roles:
-            all_roles.append(role)
-            seen_roles.add(role)
-
-    # Build diff items for each role
-    diff_items: list[MessageDiffItem] = []
-    for role in all_roles:
-        initial_content = (
-            initial_by_role[role][0][1] if role in initial_by_role else None
-        )
-        optimized_content = (
-            optimized_by_role[role][0][1] if role in optimized_by_role else None
-        )
-
-        if initial_content is None and optimized_content is not None:
-            change_type: Literal["added", "removed", "unchanged", "changed"] = "added"
-        elif initial_content is not None and optimized_content is None:
-            change_type = "removed"
-        else:
-            # Normalize content to strings for comparison to handle both string and multimodal content
-            initial_str = (
-                _content_to_string(initial_content)
-                if initial_content is not None
-                else ""
-            )
-            optimized_str = (
-                _content_to_string(optimized_content)
-                if optimized_content is not None
-                else ""
-            )
-            if initial_str == optimized_str:
-                change_type = "unchanged"
-            else:
-                change_type = "changed"
-
-        diff_items.append(
-            MessageDiffItem(
-                role=role,
-                change_type=change_type,
-                initial_content=initial_content,
-                optimized_content=optimized_content,
-            )
-        )
-
-    return diff_items
 
 
 def display_retry_attempt(
@@ -174,13 +26,10 @@ def display_retry_attempt(
 ) -> None:
     """Display retry attempt information."""
     if verbose >= 1:
-        console.print(
-            Text("│    ").append(
-                Text(
-                    f"Retry attempt {attempt + 1}/{max_attempts} for failure mode '{failure_mode_name}' (no improvement observed)",
-                    style="yellow",
-                )
-            )
+        display_text_block(
+            console,
+            f"│    Retry attempt {attempt + 1}/{max_attempts} for failure mode '{failure_mode_name}' (no improvement observed)",
+            style="yellow",
         )
 
 
@@ -192,56 +41,51 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
     class Reporter:
         def failed_to_generate(self, num_prompts: int, error: str) -> None:
             if verbose >= 1:
-                console.print(
-                    Text(
-                        f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}",
-                        style="red",
-                    )
+                display_text_block(
+                    console,
+                    f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}",
+                    style="red",
                 )
-                console.print(Text("│"))
+                display_text_block(console, "│")
 
         def round_start(self, round_number: int) -> None:
             if verbose >= 1:
-                console.print(
-                    Text(f"│ - Starting round {round_number + 1} of {max_rounds}")
+                display_text_block(
+                    console, f"│ - Starting round {round_number + 1} of {max_rounds}"
                 )
 
         def round_end(self, round_number: int, score: float, best_score: float) -> None:
             if verbose >= 1:
-                console.print(
-                    Text(f"│    Completed round {round_number + 1} of {max_rounds}")
+                display_text_block(
+                    console, f"│    Completed round {round_number + 1} of {max_rounds}"
                 )
                 if best_score == 0 and score == 0:
-                    console.print(
-                        Text(
-                            "│    No improvement in this round - score is 0",
-                            style="yellow",
-                        )
+                    display_text_block(
+                        console,
+                        "│    No improvement in this round - score is 0",
+                        style="yellow",
                     )
                 elif best_score == 0:
-                    console.print(
-                        Text(
-                            f"│    Found a new best performing prompt: {score:.4f}",
-                            style="green",
-                        )
+                    display_text_block(
+                        console,
+                        f"│    Found a new best performing prompt: {score:.4f}",
+                        style="green",
                     )
                 elif score > best_score:
                     perc_change = (score - best_score) / best_score
-                    console.print(
-                        Text(
-                            f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})",
-                            style="green",
-                        )
+                    display_text_block(
+                        console,
+                        f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})",
+                        style="green",
                     )
                 elif score <= best_score:
-                    console.print(
-                        Text(
-                            "│    No improvement in this round",
-                            style="red",
-                        )
+                    display_text_block(
+                        console,
+                        "│    No improvement in this round",
+                        style="red",
                     )
 
-                console.print(Text("│"))
+                display_text_block(console, "│")
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -269,7 +113,7 @@ def display_evaluation(
     """
     # Entry point
     if verbose >= 1:
-        console.print(Text(f"{indent}{message}"))
+        display_text_block(console, f"{indent}{message}")
 
     # Create a simple object with a method to set the score
     class Reporter:
@@ -280,15 +124,12 @@ def display_evaluation(
 
                 if baseline_score is None:
                     # This is the baseline evaluation
-                    console.print(
-                        Text(score_indent).append(
-                            Text(
-                                f"Baseline score was: {s:.4f}.",
-                                style="green",
-                            )
-                        )
+                    display_text_block(
+                        console,
+                        f"{score_indent}Baseline score was: {s:.4f}.",
+                        style="green",
                     )
-                    console.print(Text("│"))
+                    display_text_block(console, "│")
                 else:
                     # This is an improved prompt evaluation - show comparison
                     if s > baseline_score:
@@ -297,13 +138,10 @@ def display_evaluation(
                             if baseline_score > 0
                             else 0
                         )
-                        console.print(
-                            Text(score_indent).append(
-                                Text(
-                                    f"Score for updated prompt: {s:.4f} (+{improvement_pct:.1f}%)",
-                                    style="green bold",
-                                )
-                            )
+                        display_text_block(
+                            console,
+                            f"{score_indent}Score for updated prompt: {s:.4f} (+{improvement_pct:.1f}%)",
+                            style="green bold",
                         )
                     elif s < baseline_score:
                         decline_pct = (
@@ -311,24 +149,18 @@ def display_evaluation(
                             if baseline_score > 0
                             else 0
                         )
-                        console.print(
-                            Text(score_indent).append(
-                                Text(
-                                    f"Score for updated prompt: {s:.4f} (-{decline_pct:.1f}%)",
-                                    style="red",
-                                )
-                            )
+                        display_text_block(
+                            console,
+                            f"{score_indent}Score for updated prompt: {s:.4f} (-{decline_pct:.1f}%)",
+                            style="red",
                         )
                     else:
-                        console.print(
-                            Text(score_indent).append(
-                                Text(
-                                    f"Score for updated prompt: {s:.4f} (no change)",
-                                    style="yellow",
-                                )
-                            )
+                        display_text_block(
+                            console,
+                            f"{score_indent}Score for updated prompt: {s:.4f} (no change)",
+                            style="yellow",
                         )
-                    console.print(Text("│"))
+                    display_text_block(console, "│")
 
     # Use our log suppression context manager and yield the reporter
     # Adjust progress bar indentation based on indent style
@@ -343,8 +175,8 @@ def display_evaluation(
 
 def display_optimization_start_message(verbose: int = 1) -> None:
     if verbose >= 1:
-        console.print(Text("> Starting the optimization run"))
-        console.print(Text("│"))
+        display_text_block(console, "> Starting the optimization run")
+        display_text_block(console, "│")
 
 
 class CandidateGenerationReporter:
@@ -354,25 +186,12 @@ class CandidateGenerationReporter:
 
     def set_generated_prompts(self) -> None:
         summary = f" ({self.selection_summary})" if self.selection_summary else ""
-        console.print(
-            Text(
-                f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
-                style="dim",
-            )
+        display_text_block(
+            console,
+            f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
+            style="dim",
         )
-        console.print(Text("│"))
-
-
-def display_tool_description(description: str, label: str, color: str) -> None:
-    if not description.strip():
-        return
-    console.print(
-        Panel(
-            description.strip(),
-            title=label,
-            border_style=color,
-        )
-    )
+        display_text_block(console, "│")
 
 
 @contextmanager
@@ -380,12 +199,13 @@ def display_candidate_generation_report(
     num_prompts: int, verbose: int = 1, selection_summary: str | None = None
 ) -> Iterator[CandidateGenerationReporter]:
     if verbose >= 1:
-        console.print(
-            Text(f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:")
+        display_text_block(
+            console,
+            f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:",
         )
         if selection_summary:
-            console.print(
-                Text(f"│      Evaluation settings: {selection_summary}", style="dim")
+            display_text_block(
+                console, f"│      Evaluation settings: {selection_summary}", style="dim"
             )
 
     try:
@@ -406,60 +226,53 @@ def display_prompt_candidate_scoring_report(
             self, candidate_count: int, prompt: chat_prompt.ChatPrompt
         ) -> None:
             if verbose >= 1:
-                console.print(
-                    Text(f"│       Evaluating candidate prompt {candidate_count + 1}:")
+                display_text_block(
+                    console,
+                    f"│       Evaluating candidate prompt {candidate_count + 1}:",
                 )
                 if selection_summary:
-                    console.print(
-                        Text(
-                            f"│            Evaluation settings: {selection_summary}",
-                            style="dim",
-                        )
+                    display_text_block(
+                        console,
+                        f"│            Evaluation settings: {selection_summary}",
+                        style="dim",
                     )
                 display_messages(prompt.get_messages(), "│            ")
 
         def set_final_score(self, best_score: float, score: float) -> None:
             if verbose >= 1:
                 if best_score == 0 and score > 0:
-                    console.print(
-                        Text(
-                            f"│             Evaluation score: {score:.4f}",
-                            style="green",
-                        )
+                    display_text_block(
+                        console, f"│             Evaluation score: {score:.4f}", "green"
                     )
                 elif best_score == 0 and score == 0:
-                    console.print(
-                        Text(
-                            f"│            Evaluation score: {score:.4f}",
-                            style="dim yellow",
-                        )
+                    display_text_block(
+                        console,
+                        f"│            Evaluation score: {score:.4f}",
+                        "dim yellow",
                     )
                 elif score > best_score:
                     perc_change = (score - best_score) / best_score
-                    console.print(
-                        Text(
-                            f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
-                            style="green",
-                        )
+                    display_text_block(
+                        console,
+                        f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
+                        "green",
                     )
                 elif score < best_score:
                     perc_change = (score - best_score) / best_score
-                    console.print(
-                        Text(
-                            f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
-                            style="red",
-                        )
+                    display_text_block(
+                        console,
+                        f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
+                        "red",
                     )
                 else:
-                    console.print(
-                        Text(
-                            f"│            Evaluation score: {score:.4f}",
-                            style="dim yellow",
-                        )
+                    display_text_block(
+                        console,
+                        f"│            Evaluation score: {score:.4f}",
+                        "dim yellow",
                     )
 
-                console.print(Text("│   "))
-                console.print(Text("│   "))
+                display_text_block(console, "│   ")
+                display_text_block(console, "│   ")
 
     try:
         with suppress_opik_logs():
@@ -473,8 +286,8 @@ def display_prompt_candidate_scoring_report(
 def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterator[Any]:
     """Context manager to display progress for a single optimization round."""
     if verbose >= 1:
-        console.print(Text("│"))
-        console.print(Text("│"))
+        display_text_block(console, "│")
+        display_text_block(console, "│")
         console.print(
             Text("│ ").append(Text(f"Round {round_index}", style="bold cyan"))
         )
@@ -500,7 +313,7 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
                             )
                         )
                     )
-                console.print(Text("│"))
+                display_text_block(console, "│")
 
     try:
         yield Reporter()
@@ -512,7 +325,7 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
 def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
     """Context manager to display progress during root cause analysis with batch tracking."""
     if verbose >= 1:
-        console.print(Text("│   "))
+        display_text_block(console, "│   ")
         console.print(
             Text("│   ").append(
                 Text("Analyzing root cause of failed evaluation items", style="cyan")
@@ -530,7 +343,7 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
                         )
                     )
                 )
-                console.print(Text("│   "))
+                display_text_block(console, "│   ")
 
     try:
         with suppress_opik_logs():
@@ -591,7 +404,7 @@ def display_hierarchical_synthesis(
 
     # Print the prefixed output (will include colors)
     console.print(prefixed_output, highlight=False)
-    console.print(Text("│"))
+    display_text_block(console, "│")
 
 
 def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
@@ -621,7 +434,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
 
     # Print the prefixed output (will include colors)
     console.print(prefixed_output, highlight=False)
-    console.print(Text("│"))
+    display_text_block(console, "│")
 
     for idx, failure_mode in enumerate(failure_modes, 1):
         # Create content for this failure mode
@@ -664,8 +477,8 @@ def display_prompt_improvement(
 ) -> Iterator[Any]:
     """Context manager to display progress while generating improved prompt."""
     if verbose >= 1:
-        console.print(Text("│"))
-        console.print(Text("│   "))
+        display_text_block(console, "│")
+        display_text_block(console, "│   ")
         console.print(
             Text("│   ").append(
                 Text(f"Addressing: {failure_mode_name}", style="bold cyan")
@@ -701,7 +514,7 @@ def display_prompt_improvement(
 
                 # Print the prefixed output (will include colors)
                 console.print(prefixed_output, highlight=False)
-                console.print(Text("│   "))
+                display_text_block(console, "│   ")
 
     try:
         with suppress_opik_logs():
@@ -749,148 +562,12 @@ def display_optimized_prompt_diff(
     prompt_name: str | None = None,
 ) -> None:
     """Display git-style diff of prompt changes."""
-    import difflib
-
-    if verbose < 1:
-        return
-
-    console.print(Text("│"))
-    console.print(Text("│"))
-
-    # Display prompt name if provided
-    if prompt_name:
-        console.print(
-            Text("│ ").append(
-                Text(f"> Optimization Results for '{prompt_name}'", style="bold green")
-            )
-        )
-    else:
-        console.print(
-            Text("│ ").append(Text("> Optimization Results", style="bold green"))
-        )
-    console.print(Text("│"))
-
-    # Check if prompt is unchanged
-    if initial_messages == optimized_messages:
-        console.print(Text("│   ").append(Text("Prompt unchanged", style="dim")))
-        console.print(Text("│"))
-        return
-
-    # Show score improvement
-    if best_score > initial_score:
-        perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
-        if has_percentage:
-            console.print(
-                Text("│   ").append(
-                    Text(
-                        f"Prompt improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
-                        style="green",
-                    )
-                )
-            )
-        else:
-            console.print(
-                Text("│   ").append(
-                    Text(
-                        f"Prompt improved from {initial_score:.4f} to {best_score:.4f}",
-                        style="green",
-                    )
-                )
-            )
-    else:
-        console.print(
-            Text("│   ").append(
-                Text(f"No improvement found (score: {best_score:.4f})", style="yellow")
-            )
-        )
-
-    console.print(Text("│"))
-    console.print(Text("│   ").append(Text("Prompt Changes:", style="cyan")))
-    console.print(Text("│"))
-
-    # Compute diff items using the extracted function
-    diff_items = compute_message_diff_order(initial_messages, optimized_messages)
-
-    # Display each diff item
-    for item in diff_items:
-        if item.change_type == "added":
-            # Role was added
-            console.print(
-                Text("│     ").append(Text(f"{item.role}: (added)", style="green bold"))
-            )
-            assert item.optimized_content is not None
-            optimized_str = _content_to_string(item.optimized_content)
-            for line in optimized_str.splitlines():
-                console.print(Text("│       ").append(Text(f"+{line}", style="green")))
-            console.print(Text("│"))
-        elif item.change_type == "removed":
-            # Role was removed
-            console.print(
-                Text("│     ").append(Text(f"{item.role}: (removed)", style="red bold"))
-            )
-            assert item.initial_content is not None
-            initial_str = _content_to_string(item.initial_content)
-            for line in initial_str.splitlines():
-                console.print(Text("│       ").append(Text(f"-{line}", style="red")))
-            console.print(Text("│"))
-        elif item.change_type == "unchanged":
-            # No changes
-            console.print(
-                Text("│     ").append(Text(f"{item.role}: (unchanged)", style="dim"))
-            )
-        else:  # changed
-            # Content changed - show diff
-            console.print(
-                Text("│     ").append(
-                    Text(f"{item.role}: (changed)", style="cyan bold")
-                )
-            )
-
-            assert item.initial_content is not None
-            assert item.optimized_content is not None
-
-            # Convert content to strings for diffing
-            initial_str = _content_to_string(item.initial_content)
-            optimized_str = _content_to_string(item.optimized_content)
-
-            # Generate unified diff
-            diff_lines = list(
-                difflib.unified_diff(
-                    initial_str.splitlines(keepends=False),
-                    optimized_str.splitlines(keepends=False),
-                    lineterm="",
-                    n=3,  # 3 lines of context
-                )
-            )
-
-            # Check if there are actual diff lines (more than just the header)
-            if len(diff_lines) > 3:
-                # Create diff content
-                diff_content = Text()
-                for line in diff_lines[3:]:  # Skip first 3 lines (---, +++, @@)
-                    if line.startswith("+"):
-                        diff_content.append("│       " + line + "\n", style="green")
-                    elif line.startswith("-"):
-                        diff_content.append("│       " + line + "\n", style="red")
-                    elif line.startswith("@@"):
-                        diff_content.append("│       " + line + "\n", style="cyan dim")
-                    else:
-                        # Context line
-                        diff_content.append("│       " + line + "\n", style="dim")
-
-                console.print(diff_content)
-            elif initial_str != optimized_str:
-                # Content changed but diff is empty (might be whitespace or formatting)
-                # Show both versions for clarity
-                console.print(
-                    Text("│       ").append(
-                        Text("(content changed but diff unavailable)", style="dim")
-                    )
-                )
-                console.print(
-                    Text("│       ").append(Text(f"-{initial_str}", style="red"))
-                )
-                console.print(
-                    Text("│       ").append(Text(f"+{optimized_str}", style="green"))
-                )
-            console.print(Text("│"))
+    _display_optimized_prompt_diff(
+        console,
+        initial_messages,
+        optimized_messages,
+        initial_score,
+        best_score,
+        verbose=verbose,
+        prompt_name=prompt_name,
+    )

@@ -15,19 +15,16 @@ from rich.progress import (
     MofNCompleteColumn,
 )
 
-from ...utils.reporting import (  # noqa: F401
-    display_configuration,
-    display_header,
-    display_result,
-    get_console,
-    convert_tqdm_to_rich,
-    suppress_opik_logs,
+from ...utils.reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
+from ...utils.display import (
+    display_text_block,
+    format_prompt_snippet,
 )
-from ...utils.display import format_prompt_snippet
 
 console = get_console()
 
 
+# FIXME: Move to a pareto util/extension
 def _format_pareto_note(note: str) -> str:
     try:
         data = json.loads(note)
@@ -153,7 +150,7 @@ class RichGEPAOptimizerLogger:
 
                     # Add separator when starting a new iteration (except iteration 0)
                     if iteration > 0 and iteration != self.current_iteration:
-                        console.print("│")
+                        display_text_block(console, "│")
 
                     self.current_iteration = iteration
                     self._last_raw_message = first
@@ -166,8 +163,10 @@ class RichGEPAOptimizerLogger:
                     if "Base program full valset score" in first:
                         # Extract score
                         score_match = first.split(":")[-1].strip()
-                        console.print(
-                            f"│ Baseline evaluation: {score_match}", style="bold"
+                        display_text_block(
+                            console,
+                            f"│ Baseline evaluation: {score_match}",
+                            style="bold",
                         )
                         return
                     elif "Selected program" in first:
@@ -178,13 +177,18 @@ class RichGEPAOptimizerLogger:
                             score_info = (
                                 parts_info[2].strip() if len(parts_info) > 2 else ""
                             )
-                            console.print(
+                            display_text_block(
+                                console,
                                 f"│ Trial {iteration}: {program_info}, score: {score_info}",
                                 style="bold cyan",
                             )
                         else:
-                            console.print(f"│ Trial {iteration}", style="bold cyan")
-                        console.print("│ ├─ Testing new prompt variant...")
+                            display_text_block(
+                                console, f"│ Trial {iteration}", style="bold cyan"
+                            )
+                        display_text_block(
+                            console, "│ ├─ Testing new prompt variant..."
+                        )
                         return
                 except Exception:
                     pass
@@ -203,19 +207,25 @@ class RichGEPAOptimizerLogger:
         if "Proposed new text" in first and "system_prompt:" in first:
             _, _, rest = first.partition("system_prompt:")
             snippet = format_prompt_snippet(rest, max_length=100)
-            console.print(f"│ │  Proposed: {snippet}", style="dim")
+            display_text_block(console, f"│ │  Proposed: {snippet}", style="dim")
             self._last_raw_message = first
             return
 
         # Format subsample evaluation results
         if "New subsample score" in first and "is not better than" in first:
-            console.print("│ └─ Rejected - no improvement", style="dim yellow")
-            console.print("│")  # Add spacing after rejected trials
+            display_text_block(
+                console, "│ └─ Rejected - no improvement", style="dim yellow"
+            )
+            display_text_block(console, "│")  # Add spacing after rejected trials
             self._last_raw_message = first
             return
 
         elif "New subsample score" in first and "is better than" in first:
-            console.print("│ ├─ Promising! Running full validation...", style="green")
+            display_text_block(
+                console,
+                "│ ├─ Promising! Running full validation...",
+                style="green",
+            )
             self._last_raw_message = first
             return
 
@@ -225,9 +235,11 @@ class RichGEPAOptimizerLogger:
             parts = first.split(":")
             if len(parts) >= 2:
                 score = parts[-1].strip()
-                console.print(f"│ ├─ Validation complete: {score}", style="bold green")
+                display_text_block(
+                    console, f"│ ├─ Validation complete: {score}", style="bold green"
+                )
             else:
-                console.print("│ ├─ Validation complete", style="green")
+                display_text_block(console, "│ ├─ Validation complete", style="green")
             self._last_raw_message = first
             return
 
@@ -236,7 +248,9 @@ class RichGEPAOptimizerLogger:
             parts = first.split(":")
             if len(parts) >= 2:
                 score = parts[-1].strip()
-                console.print(f"│   Best train_val score: {score}", style="cyan")
+                display_text_block(
+                    console, f"│   Best train_val score: {score}", style="cyan"
+                )
                 self._last_raw_message = first
             return
 
@@ -250,8 +264,12 @@ class RichGEPAOptimizerLogger:
                 score = parts[-1].strip()
                 key = ("new_best", score)
                 if self._last_best_message != key:
-                    console.print(f"│ └─ New best: {score} ✓", style="bold green")
-                    console.print("│")  # Add spacing after successful trials
+                    display_text_block(
+                        console, f"│ └─ New best: {score} ✓", style="bold green"
+                    )
+                    display_text_block(
+                        console, "│"
+                    )  # Add spacing after successful trials
                     self._last_best_message = key
                     self._last_raw_message = first
             return
@@ -259,18 +277,23 @@ class RichGEPAOptimizerLogger:
         if self.verbose >= 2:
             if "New valset pareto front scores" in first:
                 note = first.split(":", 1)[-1].strip()
-                console.print(
+                display_text_block(
+                    console,
                     f"│   Pareto front scores updated: {_format_pareto_note(note)}",
                     style="cyan",
                 )
                 self._last_raw_message = first
                 return
             if "Updated valset pareto front programs" in first:
-                console.print("│   Pareto front programs updated", style="cyan")
+                display_text_block(
+                    console, "│   Pareto front programs updated", style="cyan"
+                )
                 self._last_raw_message = first
                 return
             if "New program is on the linear pareto front" in first:
-                console.print("│   Candidate added to Pareto front", style="cyan")
+                display_text_block(
+                    console, "│   Candidate added to Pareto front", style="cyan"
+                )
                 self._last_raw_message = first
                 return
 
@@ -285,19 +308,19 @@ class RichGEPAOptimizerLogger:
 
         # Default: print with standard prefix only if not already handled
         if first:
-            console.print(f"│ {first}", style="dim")
+            display_text_block(console, f"│ {first}", style="dim")
             self._last_raw_message = first
 
 
 @contextmanager
 def baseline_evaluation(verbose: int = 1) -> Any:
     if verbose >= 1:
-        console.print("> Establishing baseline performance (seed prompt)")
+        display_text_block(console, "> Establishing baseline performance (seed prompt)")
 
     class Reporter:
         def set_score(self, s: float) -> None:
             if verbose >= 1:
-                console.print(f"  Baseline score: {s:.4f}")
+                display_text_block(console, f"  Baseline score: {s:.4f}")
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
@@ -307,7 +330,7 @@ def baseline_evaluation(verbose: int = 1) -> Any:
 @contextmanager
 def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
     if verbose >= 1:
-        console.print("> Starting GEPA optimization")
+        display_text_block(console, "> Starting GEPA optimization")
 
     class Reporter:
         progress: Progress | None = None
@@ -315,7 +338,7 @@ def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
 
         def info(self, message: str) -> None:
             if verbose >= 1:
-                console.print(f"│   {message}")
+                display_text_block(console, f"│   {message}")
 
     with suppress_opik_logs():
         try:
@@ -343,7 +366,7 @@ def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
                     # Mark as complete before stopping
                     Reporter.progress.update(Reporter.task_id, completed=max_trials)
                     Reporter.progress.stop()
-                console.print("")
+                display_text_block(console, "")
 
 
 def display_candidate_scores(
