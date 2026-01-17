@@ -3,14 +3,10 @@ import json
 import pytest
 from pytest import MonkeyPatch
 
-from opik_optimizer.utils import (
-    format_prompt,
-    json_to_dict,
-    validate_prompt,
-    get_random_seed,
-    setup_logging,
-    get_optimization_run_url_by_id,
-)
+from opik_optimizer.utils import json_to_dict, get_random_seed
+from opik_optimizer.utils.display.format import format_prompt
+from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
+from opik_optimizer.utils.logging import setup_logging
 
 
 def test_format_prompt() -> None:
@@ -31,20 +27,6 @@ def test_format_prompt() -> None:
     assert "Missing required key in prompt: 'name'" in str(exc_info.value)
 
 
-def test_validate_prompt() -> None:
-    # Test valid prompt
-    assert validate_prompt("Hello World!") is True
-
-    # Test empty prompt
-    assert validate_prompt("") is False
-
-    # Test prompt with only whitespace
-    assert validate_prompt("   ") is False
-
-    # Test prompt with newlines
-    assert validate_prompt("Hello\nWorld") is True
-
-
 def test_get_random_seed() -> None:
     # Test that seed is an integer
     seed = get_random_seed()
@@ -61,14 +43,14 @@ def test_get_random_seed() -> None:
 
 def test_setup_logging() -> None:
     # Test that setup_logging doesn't raise any errors
-    setup_logging()
+    setup_logging(level="INFO", force=True)
 
     # Test with custom log level
-    setup_logging(log_level="DEBUG")
+    setup_logging(level="DEBUG", force=True)
 
     # Test with invalid log level
     with pytest.raises(ValueError):
-        setup_logging(log_level="INVALID")
+        setup_logging(level="INVALID", force=True)
 
 
 def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
@@ -248,18 +230,18 @@ class TestEnsureEndingSlash:
 
     def test_adds_slash_when_missing(self) -> None:
         """Should add trailing slash when missing."""
-        from opik_optimizer.utils.core import ensure_ending_slash
+        from opik_optimizer.utils.reporting import ensure_ending_slash
 
         assert ensure_ending_slash("http://example.com") == "http://example.com/"
 
     def test_does_not_duplicate_slash(self) -> None:
         """Should not duplicate trailing slash."""
-        from opik_optimizer.utils.core import ensure_ending_slash
+        from opik_optimizer.utils.reporting import ensure_ending_slash
 
         assert ensure_ending_slash("http://example.com/") == "http://example.com/"
 
     def test_handles_multiple_trailing_slashes(self) -> None:
         """Should handle multiple trailing slashes."""
-        from opik_optimizer.utils.core import ensure_ending_slash
+        from opik_optimizer.utils.reporting import ensure_ending_slash
 
         assert ensure_ending_slash("http://example.com///") == "http://example.com/"

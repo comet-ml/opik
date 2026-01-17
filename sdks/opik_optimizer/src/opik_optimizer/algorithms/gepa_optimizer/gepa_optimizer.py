@@ -9,9 +9,7 @@ from ...utils.reporting import (
 )
 from ...api_objects import chat_prompt
 from ...api_objects.types import rebuild_content_with_new_text
-from ...utils import (
-    unique_ordered_by_key,
-)
+from ...utils.candidate import unique_ordered_by_key
 from ...utils.prompt_library import PromptOverrides
 from . import helpers, reporting as gepa_reporting
 from . import prompts as gepa_prompts

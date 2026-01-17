@@ -7,12 +7,97 @@ from typing import Any
 import rich.text
 
 
+def _extract_url_from_part(part: dict[str, Any], field_name: str) -> str:
+    """
+    Extract URL from a content part.
+
+    Args:
+        part: Content part dictionary.
+        field_name: Name of the field containing URL data (e.g., "image_url", "audio_url").
+
+    Returns:
+        Extracted URL string, or empty string if not found.
+    """
+    url_data = part.get(field_name, {})
+    return url_data.get("url", "") if isinstance(url_data, dict) else ""
+
+
+def _format_url_for_rich_display(
+    url: str, part_type: str, data_prefix: str
+) -> rich.text.Text:
+    """
+    Format a URL for Rich display.
+
+    Args:
+        url: URL to format.
+        part_type: Type of content part (e.g., "image_url", "audio_url").
+        data_prefix: Data URL prefix (e.g., "data:image", "data:audio").
+
+    Returns:
+        Formatted Text object for Rich display.
+    """
+    if not url:
+        return rich.text.Text(
+            f"{part_type}:\n  | <no URL>", overflow="fold", style="dim"
+        )
+
+    if url.startswith(data_prefix):
+        if "," in url:
+            base64_part = url.split(",", 1)[1]
+            preview = base64_part[:10] + "..." if len(base64_part) > 10 else base64_part
+            return rich.text.Text(
+                f"{part_type}:\n  | {preview}",
+                overflow="fold",
+                style="dim",
+            )
+        else:
+            return rich.text.Text(
+                f"{part_type}:\n  | {url[:50]}...",
+                overflow="fold",
+                style="dim",
+            )
+    else:
+        display_url = url[:80] + "..." if len(url) > 80 else url
+        return rich.text.Text(
+            f"{part_type}:\n  | {display_url}",
+            overflow="fold",
+            style="dim",
+        )
+
+
+def _format_url_for_string(url: str, part_type: str, data_prefix: str) -> str:
+    """
+    Format a URL for string representation.
+
+    Args:
+        url: URL to format.
+        part_type: Type of content part (e.g., "image_url", "audio_url").
+        data_prefix: Data URL prefix (e.g., "data:image", "data:audio").
+
+    Returns:
+        Formatted string representation.
+    """
+    if not url:
+        return f"[{part_type}] <no URL>"
+
+    if url.startswith(data_prefix):
+        if "," in url:
+            base64_part = url.split(",", 1)[1]
+            preview = base64_part[:20] + "..." if len(base64_part) > 20 else base64_part
+            return f"[{part_type}] {data_prefix}/...;base64,{preview}"
+        else:
+            return f"[{part_type}] {url[:50]}..."
+    else:
+        display_url = url[:80] + "..." if len(url) > 80 else url
+        return f"[{part_type}] {display_url}"
+
+
 def format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Text:
     """
     Format message content for display, handling string and multimodal content.
 
     Args:
-        content: Message content, either a string or a list of text/image parts.
+        content: Message content, either a string or a list of text/image/audio/video parts.
 
     Returns:
         Text object ready for Rich display.
@@ -34,51 +119,20 @@ def format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Tex
                     rich.text.Text("\n".join(formatted_lines), overflow="fold")
                 )
         elif part_type == "image_url":
-            image_url_data = part.get("image_url", {})
-            url = (
-                image_url_data.get("url", "")
-                if isinstance(image_url_data, dict)
-                else ""
+            url = _extract_url_from_part(part, "image_url")
+            formatted_parts.append(
+                _format_url_for_rich_display(url, "image_url", "data:image")
             )
-            if url:
-                if url.startswith("data:image"):
-                    if "," in url:
-                        base64_part = url.split(",", 1)[1]
-                        preview = (
-                            base64_part[:10] + "..."
-                            if len(base64_part) > 10
-                            else base64_part
-                        )
-                        formatted_parts.append(
-                            rich.text.Text(
-                                f"image_url:\n  | {preview}",
-                                overflow="fold",
-                                style="dim",
-                            )
-                        )
-                    else:
-                        formatted_parts.append(
-                            rich.text.Text(
-                                f"image_url:\n  | {url[:50]}...",
-                                overflow="fold",
-                                style="dim",
-                            )
-                        )
-                else:
-                    display_url = url[:80] + "..." if len(url) > 80 else url
-                    formatted_parts.append(
-                        rich.text.Text(
-                            f"image_url:\n  | {display_url}",
-                            overflow="fold",
-                            style="dim",
-                        )
-                    )
-            else:
-                formatted_parts.append(
-                    rich.text.Text(
-                        "image_url:\n  | <no URL>", overflow="fold", style="dim"
-                    )
-                )
+        elif part_type == "audio_url":
+            url = _extract_url_from_part(part, "audio_url")
+            formatted_parts.append(
+                _format_url_for_rich_display(url, "audio_url", "data:audio")
+            )
+        elif part_type == "video_url":
+            url = _extract_url_from_part(part, "video_url")
+            formatted_parts.append(
+                _format_url_for_rich_display(url, "video_url", "data:video")
+            )
 
     if not formatted_parts:
         return rich.text.Text("(empty content)", style="dim")
@@ -112,28 +166,13 @@ def content_to_string(content: str | list[dict[str, Any]]) -> str:
             if text_content:
                 parts.append(f"[text] {text_content}")
         elif part_type == "image_url":
-            image_url_data = part.get("image_url", {})
-            url = (
-                image_url_data.get("url", "")
-                if isinstance(image_url_data, dict)
-                else ""
-            )
-            if url:
-                if url.startswith("data:image"):
-                    if "," in url:
-                        base64_part = url.split(",", 1)[1]
-                        preview = (
-                            base64_part[:20] + "..."
-                            if len(base64_part) > 20
-                            else base64_part
-                        )
-                        parts.append(f"[image_url] data:image/...;base64,{preview}")
-                    else:
-                        parts.append(f"[image_url] {url[:50]}...")
-                else:
-                    display_url = url[:80] + "..." if len(url) > 80 else url
-                    parts.append(f"[image_url] {display_url}")
-            else:
-                parts.append("[image_url] <no URL>")
+            url = _extract_url_from_part(part, "image_url")
+            parts.append(_format_url_for_string(url, "image_url", "data:image"))
+        elif part_type == "audio_url":
+            url = _extract_url_from_part(part, "audio_url")
+            parts.append(_format_url_for_string(url, "audio_url", "data:audio"))
+        elif part_type == "video_url":
+            url = _extract_url_from_part(part, "video_url")
+            parts.append(_format_url_for_string(url, "video_url", "data:video"))
 
     return "\n".join(parts) if parts else "(empty content)"

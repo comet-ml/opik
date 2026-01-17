@@ -114,7 +114,11 @@ class OptimizationRunDisplay:
         coerced_score = score
         best_score = context.current_best_score
 
-        prefix = f"Trial {context.trials_completed}"
+        max_trials = getattr(context, "max_trials", None)
+        if isinstance(max_trials, int) and max_trials > 0:
+            prefix = f"Trial {context.trials_completed}/{max_trials}"
+        else:
+            prefix = f"Trial {context.trials_completed}"
         if not math.isfinite(coerced_score) or (
             best_score is not None and not math.isfinite(best_score)
         ):

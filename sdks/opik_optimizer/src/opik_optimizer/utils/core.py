@@ -1,24 +1,16 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import Any, Final, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import ast
-import base64
 import json
 import logging
-import os
 import random
-import urllib.parse
-
-
-import opik
-import opik.config
 
 
 if TYPE_CHECKING:
     pass
 
-ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
 
 
@@ -92,29 +84,6 @@ def _convert_literals_to_json_compatible(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
-
-
-def ensure_ending_slash(url: str) -> str:
-    return url.rstrip("/") + "/"
-
-
-def get_optimization_run_url_by_id(
-    dataset_id: str | None, optimization_id: str | None
-) -> str:
-    if dataset_id is None or optimization_id is None:
-        raise ValueError(
-            "Cannot create a new run link without a dataset_id and optimization_id."
-        )
-
-    opik_config = opik.config.get_from_user_inputs()
-    url_override = opik_config.url_override
-    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-
-    run_path = urllib.parse.quote(
-        f"v1/session/redirect/optimizations/?optimization_id={optimization_id}&dataset_id={dataset_id}&path={encoded_opik_url}",
-        safe=ALLOWED_URL_CHARACTERS,
-    )
-    return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
 # Deprecated functions

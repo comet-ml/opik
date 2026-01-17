@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, cast
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -14,7 +13,7 @@ import rich.table
 import rich.text
 
 from ...api_objects import chat_prompt
-from ..core import get_optimization_run_url_by_id
+from ..reporting import get_optimization_run_url_by_id
 from .format import (
     format_float,
     format_tool_summary,
@@ -42,6 +41,33 @@ def display_messages(messages: list[dict[str, Any]], prefix: str = "") -> None:
         formatted_content = _format_message_content(content)
         role = msg.get("role", "message")
 
+        console = get_console()
+        if isinstance(content, str) and "<!-- FEW-SHOT EXAMPLES -->" in content:
+            if role == "system":
+                before, after = content.split("<!-- FEW-SHOT EXAMPLES -->", 1)
+                before_text = _format_message_content(before.strip())
+                after_text = rich.text.Text(after.strip())
+                for title, body in (
+                    ("system", before_text),
+                    ("few-shot examples", after_text),
+                ):
+                    panel = rich.panel.Panel(
+                        body,
+                        title=title,
+                        title_align="left",
+                        border_style="dim",
+                        width=DEFAULT_PANEL_WIDTH,
+                        padding=(1, 2),
+                    )
+                    with console.capture() as capture:
+                        console.print(panel)
+                    rendered_panel = capture.get()
+                    for line in rendered_panel.splitlines():
+                        console.print(
+                            rich.text.Text(prefix) + rich.text.Text.from_ansi(line)
+                        )
+                continue
+
         panel = rich.panel.Panel(
             formatted_content,
             title=role,
@@ -51,39 +77,12 @@ def display_messages(messages: list[dict[str, Any]], prefix: str = "") -> None:
             padding=(1, 2),
         )
 
-        console = get_console()
         with console.capture() as capture:
             console.print(panel)
 
         rendered_panel = capture.get()
         for line in rendered_panel.splitlines():
             console.print(rich.text.Text(prefix) + rich.text.Text.from_ansi(line))
-
-
-def _format_tool_panel(tool: dict[str, Any]) -> rich.panel.Panel:
-    function_block = tool.get("function", {})
-    name = function_block.get("name") or tool.get("name", "unknown_tool")
-    description = function_block.get("description", "")
-    parameters = function_block.get("parameters", {})
-
-    body_lines: list[str] = []
-    if description:
-        body_lines.append(description)
-    if parameters:
-        formatted_schema = json.dumps(parameters, indent=2, sort_keys=True)
-        body_lines.append("\nSchema:\n" + formatted_schema)
-
-    content = rich.text.Text(
-        "\n".join(body_lines) if body_lines else "(no metadata)", overflow="fold"
-    )
-    return rich.panel.Panel(
-        content,
-        title=f"tool: {name}",
-        title_align="left",
-        border_style="cyan",
-        width=DEFAULT_PANEL_WIDTH,
-        padding=(1, 2),
-    )
 
 
 def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None:
@@ -91,16 +90,30 @@ def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None
     if not tools:
         return
 
-    console = get_console()
-    console.print(rich.text.Text(f"{prefix}Tools registered:\n", style="bold"))
+    tool_text = rich.text.Text()
     for tool in tools:
-        panel = _format_tool_panel(tool)
-        with console.capture() as capture:
-            console.print(panel)
-        rendered_panel = capture.get()
-        for line in rendered_panel.splitlines():
-            console.print(rich.text.Text(prefix) + rich.text.Text.from_ansi(line))
-    console.print("")
+        summary = format_tool_summary(tool)
+        name, sep, rest = summary.partition(":")
+        if sep:
+            tool_text.append(name.strip(), style="cyan")
+            tool_text.append(": ")
+            tool_text.append(rest.strip(), style="dim")
+        else:
+            tool_text.append(summary.strip(), style="dim")
+        tool_text.append("\n")
+
+    panel = rich.panel.Panel(
+        tool_text,
+        title="Tools",
+        title_align="left",
+        border_style="dim",
+        width=DEFAULT_PANEL_WIDTH,
+        padding=(0, 2),
+    )
+    if prefix:
+        display_renderable_with_prefix(panel, prefix=prefix)
+    else:
+        display_renderable(panel)
 
 
 def _display_chat_prompt_messages_and_tools(
@@ -125,9 +138,33 @@ def _display_chat_prompt_messages_and_tools(
     messages = chat_p.get_messages()
     for msg in messages:
         content_value: str | list[dict[str, Any]] = msg.get("content", "")
-        formatted_content = _format_message_content(content_value)
         role = msg.get("role", "message")
 
+        if (
+            isinstance(content_value, str)
+            and "<!-- FEW-SHOT EXAMPLES -->" in content_value
+            and role == "system"
+        ):
+            before, after = content_value.split("<!-- FEW-SHOT EXAMPLES -->", 1)
+            before_text = _format_message_content(before.strip())
+            after_text = rich.text.Text(after.strip())
+            for title, body in (
+                ("system", before_text),
+                ("few-shot examples", after_text),
+            ):
+                items.append(
+                    rich.panel.Panel(
+                        body,
+                        title=title,
+                        title_align="left",
+                        border_style="dim",
+                        width=DEFAULT_PANEL_WIDTH,
+                        padding=(1, 2),
+                    )
+                )
+            continue
+
+        formatted_content = _format_message_content(content_value)
         items.append(
             rich.panel.Panel(
                 formatted_content,
@@ -140,15 +177,25 @@ def _display_chat_prompt_messages_and_tools(
         )
 
     if chat_p.tools:
-        tool_summary_lines = ["Tools:"]
+        tool_text = rich.text.Text()
         for tool in chat_p.tools:
-            tool_summary_lines.append(format_tool_summary(tool))
+            summary = format_tool_summary(tool)
+            name, sep, rest = summary.partition(":")
+            if sep:
+                tool_text.append(name.strip(), style="cyan")
+                tool_text.append(": ")
+                tool_text.append(rest.strip(), style="dim")
+            else:
+                tool_text.append(summary.strip(), style="dim")
+            tool_text.append("\n")
         items.append(
             rich.panel.Panel(
-                rich.text.Text("\n".join(tool_summary_lines), style="dim cyan"),
+                tool_text,
+                title="Tools",
+                title_align="left",
                 border_style="dim",
                 width=DEFAULT_PANEL_WIDTH,
-                padding=(1, 2),
+                padding=(0, 2),
             )
         )
 

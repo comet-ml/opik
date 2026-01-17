@@ -15,6 +15,26 @@ def format_float(value: Any, digits: int = 6) -> str:
     return str(value)
 
 
+def format_prompt(prompt: str, **kwargs: Any) -> str:
+    """
+    Format a prompt string with the given keyword arguments.
+
+    Args:
+        prompt: The prompt string to format
+        **kwargs: Keyword arguments to format into the prompt
+
+    Returns:
+        str: The formatted prompt string
+
+    Raises:
+        ValueError: If any required keys are missing from kwargs
+    """
+    try:
+        return prompt.format(**kwargs)
+    except KeyError as e:
+        raise ValueError(f"Missing required key in prompt: {e}")
+
+
 def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     """
     Normalize whitespace in a prompt snippet and truncate it for compact display.

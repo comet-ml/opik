@@ -712,8 +712,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
         )
 
-        logger.info(
-            f"Generated few-shot prompt template with placeholder: {self.get_prompt('example_placeholder')}"
+        logger.debug(
+            "Generated few-shot prompt template (placeholder=%s)",
+            self.get_prompt("example_placeholder"),
         )
 
         return self._run_bayesian_optimization(

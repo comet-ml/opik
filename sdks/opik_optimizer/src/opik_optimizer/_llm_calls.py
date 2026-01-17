@@ -519,10 +519,6 @@ def call_model(
     tracked_completion = track_completion(project_name=effective_project_name)(
         litellm.completion
     )
-    logger.debug(
-        f"call_model: model={model} project={effective_project_name} "
-        f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
-    )
     response = tracked_completion(
         model=model,
         messages=messages,
@@ -532,8 +528,16 @@ def call_model(
     )
 
     choices = getattr(response, "choices", None)
+    choices_count = len(choices) if isinstance(choices, list) else "unknown"
+    missing_metadata = not bool(final_params_for_litellm.get("metadata"))
+    metadata_note = " metadata=missing" if missing_metadata else ""
     logger.debug(
-        f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+        "call_model: model=%s project=%s n=%s choices=%s%s",
+        model,
+        effective_project_name,
+        final_params_for_litellm.get("n"),
+        choices_count,
+        metadata_note,
     )
     wants_all = return_all
     return _parse_response(response, response_model, wants_all)

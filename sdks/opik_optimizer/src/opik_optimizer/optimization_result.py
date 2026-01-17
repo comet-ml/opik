@@ -565,8 +565,8 @@ class OptimizationResult(pydantic.BaseModel):
                 )
             self.details["stop_reason_details"] = stop_details
 
-    # FIXME: Move to display/reporting utils
     def get_run_link(self) -> str:
+        """Get the URL to view this optimization run in the Opik dashboard."""
         return get_optimization_run_url_by_id(
             optimization_id=self.optimization_id, dataset_id=self.dataset_id
         )
@@ -684,15 +684,25 @@ class OptimizationResult(pydantic.BaseModel):
 
     def display(self) -> None:
         """
-        Displays the OptimizationResult using rich formatting
+        Display the OptimizationResult using rich formatting.
+
+        Shows the optimization result with rich formatting and includes
+        a link to view the run in the Opik dashboard if available.
         """
         console = get_console()
         console.print(self)
         # Gracefully handle cases where optimization tracking isn't available
         if self.dataset_id and self.optimization_id:
             try:
-                print("Optimization run link:", self.get_run_link())
+                run_link = self.get_run_link()
+                console.print(f"Optimization run link: {run_link}")
             except Exception:
-                print("Optimization run link: No optimization run link available")
+                console.print(
+                    "Optimization run link: No optimization run link available",
+                    style="dim",
+                )
         else:
-            print("Optimization run link: No optimization run link available")
+            console.print(
+                "Optimization run link: No optimization run link available",
+                style="dim",
+            )

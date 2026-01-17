@@ -4,6 +4,7 @@ from . import terminal as terminal  # re-export module for monkeypatch/test acce
 from .format import (
     build_plaintext_summary,
     format_float,
+    format_prompt,
     format_prompt_for_plaintext,
     format_prompt_snippet,
     format_tool_summary,
@@ -34,6 +35,7 @@ __all__ = [
     "terminal",
     "build_plaintext_summary",
     "format_float",
+    "format_prompt",
     "format_prompt_for_plaintext",
     "format_prompt_snippet",
     "format_tool_summary",
