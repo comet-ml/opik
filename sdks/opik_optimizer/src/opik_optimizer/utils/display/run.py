@@ -3,13 +3,48 @@
 from __future__ import annotations
 
 import math
-from typing import Any, ContextManager, TYPE_CHECKING
+from typing import Any, ContextManager, Protocol, TYPE_CHECKING
 
-from ..api_objects import chat_prompt
+from ...api_objects import chat_prompt
 
 if TYPE_CHECKING:
-    from ..base_optimizer import OptimizationContext
-from . import display as display_utils
+    from ...base_optimizer import OptimizationContext
+from .format import summarize_selection_policy
+from . import terminal as display_terminal
+
+
+class RunDisplay(Protocol):
+    """Protocol for run-level display handlers."""
+
+    def show_header(self, *, algorithm: str, optimization_id: str | None) -> None: ...
+
+    def show_configuration(
+        self,
+        *,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        optimizer_config: dict[str, Any],
+    ) -> None: ...
+
+    def baseline_evaluation(
+        self, context: OptimizationContext
+    ) -> ContextManager[Any]: ...
+
+    def evaluation_progress(
+        self,
+        *,
+        context: OptimizationContext,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        score: float,
+        display_info: dict[str, Any] | None = None,
+    ) -> None: ...
+
+    def show_final_result(
+        self,
+        *,
+        initial_score: float,
+        best_score: float,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+    ) -> None: ...
 
 
 class OptimizationRunDisplay:
@@ -19,7 +54,7 @@ class OptimizationRunDisplay:
         self._verbose = verbose
 
     def show_header(self, *, algorithm: str, optimization_id: str | None) -> None:
-        display_utils.display_header(
+        display_terminal.display_header(
             algorithm=algorithm,
             optimization_id=optimization_id,
             verbose=self._verbose,
@@ -31,7 +66,7 @@ class OptimizationRunDisplay:
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         optimizer_config: dict[str, Any],
     ) -> None:
-        display_utils.display_configuration(
+        display_terminal.display_configuration(
             messages=prompt,
             optimizer_config=optimizer_config,
             verbose=self._verbose,
@@ -44,8 +79,8 @@ class OptimizationRunDisplay:
             context.validation_dataset is not None
             and context.evaluation_dataset is context.validation_dataset
         )
-        selection_summary = display_utils.summarize_selection_policy(context.prompts)
-        return display_utils.display_evaluation(
+        selection_summary = summarize_selection_policy(context.prompts)
+        return display_terminal.display_evaluation(
             verbose=self._verbose,
             dataset_name=dataset_name,
             is_validation=is_validation,
@@ -77,7 +112,7 @@ class OptimizationRunDisplay:
             style = "red"
 
         info = display_info or self._build_evaluation_display_info(context)
-        display_utils.display_evaluation_progress(
+        display_terminal.display_evaluation_progress(
             prefix=prefix,
             score_text=(
                 f"{coerced_score:.4f}"
@@ -118,7 +153,7 @@ class OptimizationRunDisplay:
         best_score: float,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
     ) -> None:
-        display_utils.display_result(
+        display_terminal.display_result(
             initial_score=initial_score,
             best_score=best_score,
             prompt=prompt,

@@ -21,7 +21,7 @@ from opik import Dataset, opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from . import task_evaluator, helpers
-from .utils import display_run
+from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
@@ -157,6 +157,7 @@ class BaseOptimizer(ABC):
         skip_perfect_score: bool = True,
         perfect_score: float = 0.95,
         prompt_overrides: PromptOverrides = None,
+        display: RunDisplay | None = None,
     ) -> None:
         """
         Base class for optimizers.
@@ -178,6 +179,7 @@ class BaseOptimizer(ABC):
            prompt_overrides: Optional dict or callable to customize internal prompts.
                Dict: {"prompt_key": "new_template"} to override specific prompts.
                Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
+           display: Optional display handler for run output (used for testing or alternate renderers).
         """
         self.model = model
         self.model_parameters = model_parameters or {}
@@ -210,6 +212,7 @@ class BaseOptimizer(ABC):
         self._rounds_completed: int = 0
         self._reporter: Any | None = None
         self._last_candidate_entry: dict[str, Any] | None = None
+        self._display: RunDisplay = display or OptimizationRunDisplay(verbose=verbose)
 
         # Current optimization context (set during optimize_prompt, used by evaluate())
         self.__context: OptimizationContext | None = None
@@ -556,7 +559,7 @@ class BaseOptimizer(ABC):
             The baseline score
         """
         if not hasattr(self, "_display"):
-            self._display = display_run.OptimizationRunDisplay(verbose=self.verbose)
+            self._display = OptimizationRunDisplay(verbose=self.verbose)
         with self._display.baseline_evaluation(context) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=context.prompts,
@@ -648,7 +651,7 @@ class BaseOptimizer(ABC):
     ) -> None:
         """Display progress after each evaluation."""
         if not hasattr(self, "_display"):
-            self._display = display_run.OptimizationRunDisplay(verbose=self.verbose)
+            self._display = OptimizationRunDisplay(verbose=self.verbose)
         self._display.evaluation_progress(
             context=context,
             prompts=prompts,
@@ -1384,7 +1387,7 @@ class BaseOptimizer(ABC):
         )
 
         # Base class handles ALL display - optimizers should not call reporting
-        self._display = display_run.OptimizationRunDisplay(verbose=self.verbose)
+        self._display = OptimizationRunDisplay(verbose=self.verbose)
         self._display.show_header(
             algorithm=self.__class__.__name__,
             optimization_id=context.optimization_id,

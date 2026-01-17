@@ -334,9 +334,11 @@ def disable_rate_limiting(monkeypatch: pytest.MonkeyPatch):
     def passthrough_factory():
         return passthrough_decorator
 
-    monkeypatch.setattr("opik_optimizer._throttle.rate_limited", passthrough_factory)
     monkeypatch.setattr(
-        "opik_optimizer._throttle.rate_limited_async", passthrough_factory
+        "opik_optimizer.utils.throttle.rate_limited", passthrough_factory
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.utils.throttle.rate_limited_async", passthrough_factory
     )
 
 
