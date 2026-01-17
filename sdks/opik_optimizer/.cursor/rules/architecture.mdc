@@ -10,10 +10,10 @@ The optimizer SDK layers iterative search loops on top of Opik's evaluation stac
 ## Key Components
 
 - `BaseOptimizer` (`base_optimizer.py`): shared lifecycle hooks, LiteLLM cache bootstrap, rate limiting, Opik optimisation tracking, history management (`OptimizationRound`), and `OptimizationResult` construction.
-- `OptimizableAgent` (`optimizable_agent.py`): wraps LiteLLM agents, attaches the active optimizer, throttles `_llm_complete`, and pushes optimisation ids into Opik spans via `opik_context`. Treat this class as the boundary for provider-specific behaviour.
+- `OptimizableAgent` (`agents/optimizable_agent.py`): wraps LiteLLM agents, attaches the active optimizer, throttles `_llm_complete`, and pushes optimisation ids into Opik spans via `opik_context`. Treat this class as the boundary for provider-specific behaviour.
 - `task_evaluator.evaluate` (`task_evaluator.py`): funnels evaluations through `opik.evaluation.evaluator`, handling sampling, threading, multi-metric objectives, and optimisation id tagging.
 - `OptimizationResult` (`optimization_result.py`): normalised result object containing final prompt, score, metadata, baseline metrics, LiteLLM/tool counters, and helpers for chaining optimizers.
-- Support modules (`optimization_config/`, `_throttle.py`, `cache_config.py`, `reporting_utils.py`, `logging_config.py`, `multi_metric_objective.py`) provide prompt structures, rate limiting, caching, console output, logging setup, and multi-metric aggregation.
+- Support modules (`optimization_config/`, `utils/throttle.py`, `cache_config.py`, `utils/display/`, `utils/logging.py`, `multi_metric_objective.py`, `utils/dataset.py`) provide prompt structures, rate limiting, caching, console output, logging setup, dataset slicing/streaming, and multi-metric aggregation.
 
 ## Package Layout
 
@@ -33,8 +33,8 @@ Reference `algorithms/template_optimizer/` for the complete standardized structu
 1. `optimize_prompt` (or `optimize_mcp`) validates inputs with `_validate_optimization_inputs`, seeds counters, and may start an Opik optimisation run (`self.opik_client.create_optimization`) storing the id on `self.current_optimization_id`.
 2. Subclasses generate candidate prompts or parameter sets via helper modules (mutation ops, prompt planners, MCP workflows).
 3. Candidate scoring flows `_evaluate_prompt` -> `evaluate_prompt` -> `task_evaluator.evaluate`. The evaluator enforces sampling, threading, LiteLLM throttling, and attaches optimisation ids using `opik_context.update_current_trace`.
-4. Progress reporting runs through `reporting_utils` context managers while `_add_to_history` captures `OptimizationRound` snapshots.
-5. The run returns an `OptimizationResult` built by the subclass or helper, including baseline metrics, final scores, metadata, and LiteLLM/tool counters.
+4. Progress reporting runs through `utils/display` while `OptimizationHistoryState` captures round/trial snapshots.
+5. The run returns an `OptimizationResult` built by the subclass or helper, including baseline metrics, final scores, metadata, and LiteLLM/tool counters. History is normalized via `OptimizationHistoryState` and exposed on the result.
 
 Keep iteration logic free of side effects beyond the explicit history, reporting, and Opik telemetry work so optimizations remain resumable and testable.
 
@@ -71,7 +71,7 @@ class BaseOptimizer:
 - Production code must not import from `tests/`.
 - Optimizer packages may import from `base_optimizer`, shared utilities, and siblings within the same package. Avoid reaching into unrelated optimizer packages.
 - Provider glue belongs in `integrations/` and must guard imports so the default install stays lightweight.
-- `datasets/` exposes deterministic sample datasets for demos/tests; omit benchmark-only assets from runtime packages. Pay attention to the dataset name suffixes (`_train`, `_validation`, `_test`, and `_sample`) to ensure the dataset name is unique.
+- `datasets/` exposes deterministic sample datasets for demos/tests; omit benchmark-only assets from runtime packages. Pay attention to the dataset name suffixes (`_train`, `_validation`, `_test`, and `_sample`) to ensure the dataset name is unique. Use `utils/dataset.py` helpers for slice/streaming to avoid full materialization.
 
 ## Caching, Throttling, and Telemetry
 

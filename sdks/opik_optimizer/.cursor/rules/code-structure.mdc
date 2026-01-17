@@ -10,7 +10,7 @@ Keep modules small, explicit, and aligned with the optimizer architecture so con
 ## Imports
 
 - Order imports as: standard library -> third-party -> Opik/Opik Optimizer modules.
-- Use absolute imports when referencing other packages inside `opik_optimizer` (`from opik_optimizer.optimization_config import chat_prompt`). Reserve relative imports for local siblings within the same package.
+- Use absolute imports when referencing other packages inside `opik_optimizer` (`from opik_optimizer.api_objects import chat_prompt`). Reserve relative imports for local siblings within the same package.
 - Guard optional dependencies (for example, `gepa`, `langgraph`, `torch`) inside functions or `try/except ImportError` blocks so the base install works without extras.
 
 ## Standardized Algorithm Structure
@@ -77,7 +77,8 @@ See `src/opik_optimizer/algorithms/template_optimizer/` for a complete working t
 src/opik_optimizer/
 ├── base_optimizer.py
 ├── optimization_result.py
-├── optimizable_agent.py
+├── agents/
+│   └── optimizable_agent.py
 ├── optimization_config/
 ├── datasets/
 ├── utils/
@@ -113,7 +114,7 @@ src/opik_optimizer/
 
 - Avoid work at import time beyond constant definition and lightweight configuration (`initialize_cache()` is triggered inside `BaseOptimizer`, not at module load).
 - Store configurable defaults as uppercase constants near the top of the module (for example, `DEFAULT_POPULATION_SIZE`).
-- When you need mutable shared state (caches, counters), encapsulate it in a dedicated module (`cache_config`, `_throttle`) rather than scattering globals.
+- When you need mutable shared state (caches, counters), encapsulate it in a dedicated module (`cache_config`, `utils/throttle.py`) rather than scattering globals.
 
 ## Typing and Data Structures
 
