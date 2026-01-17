@@ -1,6 +1,7 @@
 import React from "react";
 import { Span, Trace } from "@/types/traces";
-import { useProcessedInputData } from "@/hooks/useProcessedInputData";
+import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
+import { MediaProvider } from "@/components/shared/SyntaxHighlighter/llmMessages";
 import {
   Accordion,
   AccordionContent,
@@ -23,20 +24,41 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   isLoading,
   search,
 }) => {
-  const { media, formattedData } = useProcessedInputData(data.input);
+  // Use unified media hook to fetch all media and get transformed data
+  const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
   const hasError = Boolean(data.error_info);
 
   return (
-    <Accordion
-      type="multiple"
-      className="w-full"
-      defaultValue={["attachments", "error", "input", "output", "events"]}
-    >
-      <AttachmentsList data={data} media={media} />
-      {hasError && (
-        <AccordionItem className="group" value="error" disabled={isLoading}>
-          <AccordionTrigger>Error</AccordionTrigger>
+    <MediaProvider media={media}>
+      <Accordion
+        type="multiple"
+        className="w-full"
+        defaultValue={["attachments", "error", "input", "output", "events"]}
+      >
+        <AttachmentsList media={media} />
+        {hasError && (
+          <AccordionItem className="group" value="error" disabled={isLoading}>
+            <AccordionTrigger>Error</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              {isLoading ? (
+                <Loader />
+              ) : (
+                <SyntaxHighlighter
+                  data={data.error_info!}
+                  preserveKey="syntax-highlighter-trace-sidebar-error"
+                  withSearch
+                  search={search}
+                />
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        )}
+        <AccordionItem className="group" value="input" disabled={isLoading}>
+          <AccordionTrigger>Input</AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"
@@ -45,55 +67,37 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
               <Loader />
             ) : (
               <SyntaxHighlighter
-                data={data.error_info!}
-                preserveKey="syntax-highlighter-trace-sidebar-error"
-                withSearch
+                data={transformedInput}
+                prettifyConfig={{ fieldType: "input" }}
+                preserveKey="syntax-highlighter-trace-sidebar-input"
                 search={search}
+                withSearch
               />
             )}
           </AccordionContent>
         </AccordionItem>
-      )}
-      <AccordionItem className="group" value="input" disabled={isLoading}>
-        <AccordionTrigger>Input</AccordionTrigger>
-        <AccordionContent
-          forceMount
-          className="group-data-[state=closed]:hidden"
-        >
-          {isLoading ? (
-            <Loader />
-          ) : (
-            <SyntaxHighlighter
-              data={formattedData as object}
-              prettifyConfig={{ fieldType: "input" }}
-              preserveKey="syntax-highlighter-trace-sidebar-input"
-              search={search}
-              withSearch
-            />
-          )}
-        </AccordionContent>
-      </AccordionItem>
-      <AccordionItem className="group" value="output" disabled={isLoading}>
-        <AccordionTrigger>Output</AccordionTrigger>
-        <AccordionContent
-          forceMount
-          className="group-data-[state=closed]:hidden"
-        >
-          {isLoading ? (
-            <Loader />
-          ) : (
-            <SyntaxHighlighter
-              data={data.output}
-              prettifyConfig={{ fieldType: "output" }}
-              preserveKey="syntax-highlighter-trace-sidebar-output"
-              search={search}
-              withSearch
-            />
-          )}
-        </AccordionContent>
-      </AccordionItem>
-      <EventsList data={data} isLoading={isLoading} search={search} />
-    </Accordion>
+        <AccordionItem className="group" value="output" disabled={isLoading}>
+          <AccordionTrigger>Output</AccordionTrigger>
+          <AccordionContent
+            forceMount
+            className="group-data-[state=closed]:hidden"
+          >
+            {isLoading ? (
+              <Loader />
+            ) : (
+              <SyntaxHighlighter
+                data={transformedOutput}
+                prettifyConfig={{ fieldType: "output" }}
+                preserveKey="syntax-highlighter-trace-sidebar-output"
+                search={search}
+                withSearch
+              />
+            )}
+          </AccordionContent>
+        </AccordionItem>
+        <EventsList data={data} isLoading={isLoading} search={search} />
+      </Accordion>
+    </MediaProvider>
   );
 };
 
