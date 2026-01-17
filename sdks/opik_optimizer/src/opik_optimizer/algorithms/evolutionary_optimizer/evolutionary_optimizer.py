@@ -840,7 +840,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
 
                     # History logging for this transition
-                    candidate_entries: list[dict[str, Any]] = []
+                    round_candidate_entries: list[dict[str, Any]] = []
                     start_trials = context.trials_completed
                     posted_idx = 0
                     for ind in deap_population:
@@ -848,9 +848,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             continue
                         candidate_prompts = self._individual_to_prompts(ind)
                         primary_score = ind.fitness.values[0]
-                        metrics: dict[str, Any] | None = None
+                        cand_metrics: dict[str, Any] | None = None
                         if self.enable_moo and len(ind.fitness.values) > 1:
-                            metrics = {
+                            cand_metrics = {
                                 "primary": ind.fitness.values[0],
                                 "length": ind.fitness.values[1],
                             }
@@ -858,14 +858,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             prompt_or_payload=candidate_prompts,
                             score=primary_score,
                             id=f"gen{generation_idx}_ind{posted_idx}",
-                            metrics=metrics,
+                            metrics=cand_metrics,
                         )
-                        candidate_entries.append(entry)
+                        round_candidate_entries.append(entry)
                         self.post_candidate(
                             candidate_prompts,
                             score=primary_score,
                             trial_index=start_trials + posted_idx + 1,
-                            metrics=metrics,
+                            metrics=cand_metrics,
                             round_handle=round_handle,
                         )
                         posted_idx += 1
@@ -895,7 +895,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         best_score=best_primary_score_overall,
                         best_candidate=best_prompts_overall,
                         stop_reason=context.finish_reason,
-                        candidates=candidate_entries,
+                        candidates=round_candidate_entries,
                         pareto_front=pareto_front,
                         selection_meta=selection_meta,
                         extras={
