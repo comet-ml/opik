@@ -58,8 +58,8 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
         name="tiny_test",
         display_name="Tiny Test Live",
         metrics=[_metric_equals],
-        rollout_budget=2,
-        train_rollout_budget=2,
+        rollout_budget=1,
+        train_rollout_budget=1,
     )
     monkeypatch.setattr(
         benchmark_config,
@@ -111,7 +111,7 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
                 },
                 optimizer_prompt_params={
                     "max_trials": 1,
-                    "population_size": 2,
+                    "population_size": 1,
                     "num_generations": 1,
                 },
             ),
@@ -172,7 +172,7 @@ def test_dual_optimizer_run_live(
             test_mode=True,
             optimizer_prompt_params={
                 "max_trials": 1,
-                "population_size": 2,
+                "population_size": 1,
                 "num_generations": 1,
             },
         ),

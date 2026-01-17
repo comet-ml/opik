@@ -9,7 +9,7 @@ import copy
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
 from opik.opik_context import update_current_trace
-from ..constants import resolve_project_name
+from ..constants import resolve_project_name, tool_call_max_iterations
 from ..utils import throttle as _throttle
 from ..utils.logging import debug_tool_call
 
@@ -180,7 +180,9 @@ class OptimizableAgent(ABC):
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
             count = 0
-            while count < 20:
+            # honour system-wide max tool call loop
+            max_iterations = tool_call_max_iterations()
+            while count < max_iterations:
                 count += 1
                 response = self._llm_complete(
                     self.model, all_messages, self.prompt.tools, seed

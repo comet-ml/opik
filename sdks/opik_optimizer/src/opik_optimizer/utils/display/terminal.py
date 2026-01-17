@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, cast
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -93,11 +94,12 @@ def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None
         return
 
     tool_text = rich.text.Text()
+    tool_text.append("\n")
     for tool in tools:
         summary = format_tool_summary(tool)
         name, sep, rest = summary.partition(":")
         if sep:
-            tool_text.append(name.strip(), style="cyan")
+            tool_text.append(name.strip())
             tool_text.append(": ")
             tool_text.append(rest.strip(), style="dim")
         else:
@@ -180,11 +182,12 @@ def _display_chat_prompt_messages_and_tools(
 
     if chat_p.tools:
         tool_text = rich.text.Text()
+        tool_text.append("\n")
         for tool in chat_p.tools:
             summary = format_tool_summary(tool)
             name, sep, rest = summary.partition(":")
             if sep:
-                tool_text.append(name.strip(), style="cyan")
+                tool_text.append(name.strip())
                 tool_text.append(": ")
                 tool_text.append(rest.strip(), style="dim")
             else:
@@ -424,6 +427,25 @@ def display_evaluation_progress(
 def render_rich_result(result: Any) -> rich.panel.Panel:
     """Create a rich Panel for the final optimization result."""
     model_name = result.details.get("model", "[dim]N/A[/dim]")
+    model_params = result.details.get("model_parameters") or {}
+    params_parts: list[str] = []
+    if isinstance(model_params, dict):
+        for key in (
+            "temperature",
+            "top_p",
+            "max_tokens",
+            "frequency_penalty",
+            "presence_penalty",
+        ):
+            value = model_params.get(key)
+            if isinstance(value, float):
+                params_parts.append(f"{key}={value:.2f}")
+            elif value is not None:
+                params_parts.append(f"{key}={value}")
+    elif isinstance(result.details.get("temperature"), (int, float)):
+        params_parts.append(f"temperature={result.details.get('temperature'):.2f}")
+    if params_parts:
+        model_name = f"{model_name} ({', '.join(params_parts)})"
     trials_completed = result.details.get("trials_completed")
     stop_reason = result.details.get("stop_reason")
     rounds_ran = (
@@ -460,7 +482,6 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     display_trials = (
         str(trials_completed) if isinstance(trials_completed, int) else str(rounds_ran)
     )
-    table.add_row("Trials Completed:", display_trials)
     improvement_display = "N/A"
     if isinstance(result.initial_score, (int, float)):
         improvement_value, has_percentage = safe_percentage_change(
@@ -469,10 +490,59 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
         if has_percentage and improvement_value is not None:
             improvement_display = f"{improvement_value:.2%}"
     stop_display = stop_reason or "completed"
-    table.add_row(
-        "Key metrics:",
-        f"Trials: {display_trials} | Best: {final_score_str} | Δ: {improvement_display} | Stop: {stop_display}",
+    stop_display = {
+        "max_trials": "Budget",
+        "perfect_score": "Perfect",
+        "completed": "Completed",
+        "no_improvement": "No improvement",
+        "error": "Error",
+        "cancelled": "Cancelled",
+    }.get(stop_display, stop_display)
+    candidates_count = sum(
+        len(entry.get("candidates") or []) for entry in (result.history or [])
     )
+    llm_calls = result.llm_calls
+    llm_tools = result.llm_calls_tools
+    counter_bits = []
+    counter_bits.append(f"Rounds: {rounds_ran}")
+    counter_bits.append(f"Candidates: {candidates_count}")
+    if isinstance(llm_calls, int):
+        counter_bits.append(f"LLM: {llm_calls}")
+    if isinstance(llm_tools, int):
+        counter_bits.append(f"Tools: {llm_tools}")
+    delta_text = rich.text.Text(improvement_display)
+    if improvement_display.startswith("-"):
+        delta_text.stylize("bold red")
+    elif improvement_display not in ("N/A", "0.00%"):
+        delta_text.stylize("bold green")
+    key_metrics = rich.text.Text(f"Best: {final_score_str} | Δ: ")
+    key_metrics.append(delta_text)
+    key_metrics.append(f" | Stop: {stop_display}")
+    table.add_row("Key metrics:", key_metrics)
+    table.add_row(
+        "Statistics:",
+        f"Trials: {display_trials} | Rounds: {rounds_ran} | Candidates: {candidates_count}",
+    )
+    best_candidate_id = None
+    for entry in result.history or []:
+        candidates = entry.get("candidates") or []
+        for cand in candidates:
+            if cand.get("score") == result.score and cand.get("id"):
+                best_candidate_id = cand.get("id")
+                break
+        if best_candidate_id:
+            break
+    if best_candidate_id:
+        table.add_row("Best candidate:", str(best_candidate_id))
+    if (llm_calls is not None or llm_tools is not None) and logging.getLogger(
+        "opik_optimizer"
+    ).isEnabledFor(logging.DEBUG):
+        counters = []
+        if isinstance(llm_calls, int):
+            counters.append(f"LLM Calls: {llm_calls}")
+        if isinstance(llm_tools, int):
+            counters.append(f"Tool Calls: {llm_tools}")
+        table.add_row("Counters:", " | ".join(counters))
     table.add_row(
         "Best prompt summary:",
         _summarize_prompt_structure(result.prompt),
@@ -619,7 +689,10 @@ def _summarize_prompt_structure(
                 _, after = content.split("<!-- FEW-SHOT EXAMPLES -->", 1)
                 shots = after.count("\nQ:") or after.count("\n Q:") or after.count("Q:")
                 break
-        parts = ["system", f"{shots} shots" if shots else "no shots", "user"]
+        parts = ["system"]
+        if shots:
+            parts.append(f"{shots} shots")
+        parts.append("user")
         if has_tools:
             parts.append("tools")
         return " + ".join(parts)

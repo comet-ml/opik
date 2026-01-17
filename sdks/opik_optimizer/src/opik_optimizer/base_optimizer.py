@@ -6,6 +6,7 @@ import copy
 import inspect
 import logging
 import time
+import json
 from abc import ABC
 import random
 import math
@@ -654,15 +655,13 @@ class BaseOptimizer(ABC):
         # Record trial and update counters
         coerced_score = self._coerce_score(score)
         context.trials_completed += 1
-        if (
-            context.current_best_score is None
-            or coerced_score > context.current_best_score
-        ):
+        prev_best_score = context.current_best_score
+        if prev_best_score is None or coerced_score > prev_best_score:
             context.current_best_score = coerced_score
             context.current_best_prompt = prompts
 
         # Call display hook
-        self._on_evaluation(context, prompts, coerced_score)
+        self._on_evaluation(context, prompts, coerced_score, prev_best_score)
         debug_log(
             "evaluation_complete",
             trials_completed=context.trials_completed,
@@ -680,6 +679,7 @@ class BaseOptimizer(ABC):
         context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         score: float,
+        prev_best_score: float | None = None,
     ) -> None:
         """Display progress after each evaluation."""
         if not hasattr(self, "_display"):
@@ -688,6 +688,7 @@ class BaseOptimizer(ABC):
             context=context,
             prompts=prompts,
             score=self._coerce_score(score),
+            display_info={"prev_best_score": prev_best_score},
         )
 
     def post_optimization(
@@ -812,11 +813,13 @@ class BaseOptimizer(ABC):
             "initial_score": context.baseline_score,
             "model": self.model,
             "temperature": self.model_parameters.get("temperature"),
+            "model_parameters": dict(self.model_parameters),
             "trials_completed": context.trials_completed,
             "rounds_completed": getattr(self, "_current_round", 0) + 1,
             "finish_reason": finish_reason,
             "stopped_early": stopped_early,
             "stop_reason": finish_reason,
+            "verbose": self.verbose,
         }
 
         # Merge in optimizer-specific metadata
@@ -1573,6 +1576,26 @@ class BaseOptimizer(ABC):
                 trials_completed=context.trials_completed,
                 stop_reason=context.finish_reason,
             )
+            debug_logger = logging.getLogger("opik_optimizer.debug")
+            if debug_logger.isEnabledFor(logging.DEBUG):
+                try:
+                    details_text = json.dumps(
+                        result.details, default=str, indent=2, sort_keys=True
+                    )
+                    history_text = json.dumps(
+                        self._history_builder.get_entries(),
+                        default=str,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    debug_logger.debug("final_state details=\n%s", details_text)
+                    debug_logger.debug("final_state history=\n%s", history_text)
+                except Exception:
+                    debug_logger.debug(
+                        "final_state details=%r history=%r",
+                        result.details,
+                        self._history_builder.get_entries(),
+                    )
             return result
         except Exception as e:
             logger.error(f"Optimization failed: {e}")

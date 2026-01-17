@@ -11,6 +11,8 @@ from ....api_objects import chat_prompt
 from .... import _llm_calls
 from ....utils.helpers import json_to_dict
 from ....utils.prompt_library import PromptLibrary
+from ....utils.logging import compact_debug_text
+from ....utils.text import normalize_llm_text
 
 
 logger = logging.getLogger(__name__)
@@ -144,9 +146,18 @@ def initialize_population(
                     if isinstance(response_content, list)
                     else [response_content]
                 )
-                logger.debug(
-                    "Raw LLM response for fresh start prompts: %s", response_items
-                )
+                response_items = [
+                    normalize_llm_text(item) if isinstance(item, str) else item
+                    for item in response_items
+                ]
+                if logger.isEnabledFor(logging.DEBUG):
+                    cleaned = [
+                        compact_debug_text(item) if isinstance(item, str) else item
+                        for item in response_items
+                    ]
+                    logger.debug(
+                        "Raw LLM response for fresh start prompts: %s", cleaned
+                    )
 
                 # Collect prompt lists from each n-choice response to expand candidates.
                 parsed_prompts: list[list[dict[str, Any]]] = []
@@ -162,6 +173,13 @@ def initialize_population(
 
                 if parsed_prompts:
                     prompts_to_use = parsed_prompts[:num_fresh_starts]
+                    if logger.isEnabledFor(logging.DEBUG):
+                        for idx, prompt_messages in enumerate(prompts_to_use):
+                            logger.debug(
+                                "fresh_start_prompt[%s]: %s",
+                                idx,
+                                compact_debug_text(json.dumps(prompt_messages)),
+                            )
                     population.extend(
                         [
                             chat_prompt.ChatPrompt(
@@ -225,12 +243,21 @@ def initialize_population(
                     if isinstance(response_content_variations, list)
                     else [response_content_variations]
                 )
-                logger.debug(
-                    "Raw response for population variations: %s", response_items
-                )
+                response_items = [
+                    normalize_llm_text(item) if isinstance(item, str) else item
+                    for item in response_items
+                ]
+                if logger.isEnabledFor(logging.DEBUG):
+                    cleaned = [
+                        compact_debug_text(item) if isinstance(item, str) else item
+                        for item in response_items
+                    ]
+                    logger.debug("Raw response for population variations: %s", cleaned)
                 generated_prompts_variations: list[list[dict[str, Any]]] = []
                 for response_item in response_items:
-                    json_response_variations = json.loads(response_item)
+                    json_response_variations = json.loads(
+                        normalize_llm_text(response_item)
+                    )
                     generated_prompts_variations.extend(
                         [
                             p["prompt"]
@@ -243,6 +270,15 @@ def initialize_population(
                     init_pop_report.success_variations(
                         len(generated_prompts_variations)
                     )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        for idx, prompt_messages in enumerate(
+                            generated_prompts_variations
+                        ):
+                            logger.debug(
+                                "variation_prompt[%s]: %s",
+                                idx,
+                                compact_debug_text(json.dumps(prompt_messages)),
+                            )
                     population.extend(
                         [
                             chat_prompt.ChatPrompt(

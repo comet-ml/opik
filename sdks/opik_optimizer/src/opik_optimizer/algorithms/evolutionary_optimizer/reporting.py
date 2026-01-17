@@ -82,7 +82,7 @@ def initializing_population(verbose: int = 1) -> Any:
         def success_variations(self, num_variations: int) -> None:
             if verbose >= 1:
                 display_text_block(
-                    f"│       Successfully generated {num_variations - 1} variations of the initial prompt.",
+                    f"│       Successfully generated {num_variations} variations of the initial prompt.",
                     style="dim green",
                 )
                 display_text_block("│")
@@ -90,7 +90,7 @@ def initializing_population(verbose: int = 1) -> Any:
         def failed_variations(self, num_variations: int, error: str) -> None:
             if verbose >= 1:
                 display_text_block(
-                    f"│       Failed to generate {num_variations - 1} variations of the initial prompt: {error}",
+                    f"│       Failed to generate {num_variations} variations of the initial prompt: {error}",
                     style="dim red",
                 )
                 display_text_block("│")

@@ -15,6 +15,7 @@ from ..constants import (
     OPIK_OPTIMIZER_NO_BANNER_ENV,
     DEFAULT_TOOL_DEBUG_CLIP,
     DEFAULT_TOOL_DEBUG_PREFIX,
+    DEFAULT_DEBUG_TEXT_CLIP,
 )
 
 DEFAULT_LOG_FORMAT = "%(message)s"
@@ -94,7 +95,6 @@ def setup_logging(
     logging.getLogger("opik_optimizer").setLevel(target_level)
     # Align root logger too so module loggers inherit the env level.
     logging.getLogger().setLevel(target_level)
-    logging.getLogger("opik_optimizer").setLevel(target_level)
 
     # Set levels for noisy libraries to WARNING even when we run at DEBUG.
     for name in (
@@ -178,6 +178,14 @@ def debug_log(event: str, **fields: Any) -> None:
             continue
         parts.append(f"{key}={_format_debug_value(value)}")
     logger.debug(" ".join(parts))
+
+
+def compact_debug_text(text: str, *, limit: int = DEFAULT_DEBUG_TEXT_CLIP) -> str:
+    """Collapse whitespace and clip long debug strings."""
+    normalized = " ".join(text.split())
+    if limit > 0 and len(normalized) > limit:
+        return normalized[:limit] + "..."
+    return normalized
 
 
 def debug_tool_call(

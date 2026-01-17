@@ -25,6 +25,8 @@ from ..types import (
     AgentBundleCandidate,
 )
 from ....utils import display as display_utils
+from ....utils.logging import compact_debug_text
+from ....utils.text import normalize_llm_text
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 
@@ -258,7 +260,16 @@ def generate_candidate_prompts(
                 project_name=project_name,
             )
             contents = content if isinstance(content, list) else [content]
-            logger.debug("Raw response from reasoning model: %s", contents)
+            contents = [
+                normalize_llm_text(item) if isinstance(item, str) else item
+                for item in contents
+            ]
+            if logger.isEnabledFor(logging.DEBUG):
+                cleaned = [
+                    compact_debug_text(item) if isinstance(item, str) else item
+                    for item in contents
+                ]
+                logger.debug("Raw response from reasoning model: %s", cleaned)
 
             valid_prompts: list[chat_prompt.ChatPrompt] = []
             metric_name = metric.__name__
@@ -268,14 +279,16 @@ def generate_candidate_prompts(
                 json_result = None
                 try:
                     # Try direct JSON parsing
-                    json_result = json.loads(content_item)
+                    json_result = json.loads(normalize_llm_text(content_item))
                 except json.JSONDecodeError:
                     import re
 
                     json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
                     if json_match:
                         try:
-                            json_result = json.loads(json_match.group())
+                            json_result = json.loads(
+                                normalize_llm_text(json_match.group())
+                            )
                         except json.JSONDecodeError as e:
                             raise ValueError(
                                 f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
@@ -683,9 +696,13 @@ def generate_synthesis_prompts(
                             messages = prompt_payload
                         elif isinstance(prompt_payload, str) and prompt_payload:
                             try:
-                                messages = json.loads(prompt_payload)
+                                messages = json.loads(
+                                    normalize_llm_text(prompt_payload)
+                                )
                             except json.JSONDecodeError:
-                                messages = ast.literal_eval(prompt_payload)
+                                messages = ast.literal_eval(
+                                    normalize_llm_text(prompt_payload)
+                                )
                         if isinstance(messages, list):
                             top_prompts_with_scores.append((messages, score, reasoning))
                     except Exception:
@@ -750,14 +767,16 @@ def generate_synthesis_prompts(
                 # Parse JSON response
                 json_result = None
                 try:
-                    json_result = json.loads(content_item)
+                    json_result = json.loads(normalize_llm_text(content_item))
                 except json.JSONDecodeError:
                     import re
 
                     json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
                     if json_match:
                         try:
-                            json_result = json.loads(json_match.group())
+                            json_result = json.loads(
+                                normalize_llm_text(json_match.group())
+                            )
                         except json.JSONDecodeError as e:
                             raise ValueError(
                                 f"Could not parse synthesis JSON: {e} - received: {json_match.group()}"

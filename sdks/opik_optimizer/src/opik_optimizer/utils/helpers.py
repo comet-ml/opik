@@ -43,7 +43,6 @@ def json_to_dict(json_str: str) -> Any:
             try:
                 literal_result = ast.literal_eval(cleaned_json_string)
             except (ValueError, SyntaxError):
-                logger.debug("Failed to parse JSON string: %s", json_str)
                 raise json_error
 
             normalized = _convert_literals_to_json_compatible(literal_result)

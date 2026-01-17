@@ -1163,7 +1163,7 @@ class TestToolUseFlag:
     def test_evaluate_prompt_passes_allow_tool_use(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        optimizer = ConcreteOptimizer()
+        optimizer = ConcreteOptimizer(model="gpt-4")
         agent = _ToolFlagAgent()
         dataset = make_mock_dataset()
 
@@ -1185,7 +1185,7 @@ class TestToolUseFlag:
         )
 
     def test_setup_optimization_sets_allow_tool_use(self) -> None:
-        optimizer = ConcreteOptimizer()
+        optimizer = ConcreteOptimizer(model="gpt-4")
         dataset = make_mock_dataset()
         prompt = ChatPrompt(system="Test", user="Query")
         context = optimizer._setup_optimization(

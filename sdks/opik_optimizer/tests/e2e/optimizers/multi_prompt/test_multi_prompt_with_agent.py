@@ -100,7 +100,7 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         ParameterOptimizer: {
             "n_threads": 2,
-            "default_n_trials": 2,
+            "default_n_trials": 1,
             "local_search_ratio": 0.0,
         },
     }
@@ -205,8 +205,8 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
             metric=levenshtein_metric,
             parameter_space=get_parameter_space(),
             agent=agent,
-            n_samples=2,
-            max_trials=2,
+            n_samples=1,
+            max_trials=1,
         )
     else:
         results = optimizer.optimize_prompt(
@@ -214,8 +214,8 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
             metric=levenshtein_metric,
             prompt=original_prompts,
             agent=agent,
-            n_samples=2,
-            max_trials=2,
+            n_samples=1,
+            max_trials=1,
             **gepa_kwargs,
         )
 

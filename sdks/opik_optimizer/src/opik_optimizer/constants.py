@@ -17,18 +17,31 @@ OPTIMIZATION_RESULT_SCHEMA_VERSION = "v1"
 # Display/console output controls
 OPIK_OPTIMIZER_NO_BANNER_ENV = "OPIK_OPTIMIZER_NO_BANNER"
 OPIK_OPTIMIZATION_STUDIO_ENV = "OPIK_OPTIMIZATION_STUDIO"
+OPIK_OPTIMIZER_TOOL_CALL_MAX_ITERATIONS_ENV = "OPIK_OPTIMIZER_TOOL_CALL_MAX_ITERATIONS"
 
 # Display Defaults
 DEFAULT_DISPLAY_PREFIX = "│ "
 DEFAULT_PANEL_WIDTH = 70
 DEFAULT_TOOL_DEBUG_PREFIX = "🔧 "
 DEFAULT_TOOL_DEBUG_CLIP = 200
+DEFAULT_DEBUG_TEXT_CLIP = 300
 
 
 def is_optimization_studio() -> bool:
     """Return whether optimization output should be studio-friendly."""
     value = os.getenv(OPIK_OPTIMIZATION_STUDIO_ENV, "").strip().lower()
     return value in {"1", "true", "yes", "on"}
+
+
+def tool_call_max_iterations(default: int = 20) -> int:
+    """Return max tool-calling loop iterations."""
+    value = os.getenv(OPIK_OPTIMIZER_TOOL_CALL_MAX_ITERATIONS_ENV, "").strip()
+    if not value:
+        return default
+    try:
+        return max(1, int(value))
+    except ValueError:
+        return default
 
 
 def resolve_project_name(project_name: str | None = None) -> str:

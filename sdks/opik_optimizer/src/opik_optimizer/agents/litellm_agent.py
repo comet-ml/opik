@@ -19,6 +19,7 @@ from opik.integrations.litellm import track_completion
 from . import optimizable_agent
 from ..constants import resolve_project_name
 from ..utils.logging import debug_tool_call
+from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
 
 
@@ -143,7 +144,9 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
             count = 0
-            while count < 20:
+            # honour system-wide max tool call loop
+            max_iterations = tool_call_max_iterations()
+            while count < max_iterations:
                 count += 1
                 response = self._llm_complete(
                     model=prompt.model,

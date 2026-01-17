@@ -389,7 +389,7 @@ class GepaOptimizer(BaseOptimizer):
                     self.post_candidate(
                         prompt_variants,
                         score=score,
-                        trial_index=context.trials_completed,
+                        trial_index=context.trials_completed + 1,
                         metrics=candidate_entry.get("metrics"),
                         extras={
                             "components": components,
@@ -397,6 +397,7 @@ class GepaOptimizer(BaseOptimizer):
                         },
                         round_handle=round_handle,
                     )
+                    context.trials_completed += 1
                     debug_log(
                         "candidate_end",
                         candidate_index=idx,

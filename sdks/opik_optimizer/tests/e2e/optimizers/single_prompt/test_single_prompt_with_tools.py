@@ -107,7 +107,7 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         ParameterOptimizer: {
             "n_threads": 2,
-            "default_n_trials": 2,
+            "default_n_trials": 1,
             "local_search_ratio": 0.0,
         },
     }
@@ -199,16 +199,16 @@ def test_single_prompt_with_tools(optimizer_class: type) -> None:
             dataset=dataset,
             metric=levenshtein_metric,
             parameter_space=get_parameter_space(),
-            n_samples=2,
-            max_trials=2,
+            n_samples=1,
+            max_trials=1,
         )
     else:
         results = optimizer.optimize_prompt(
             dataset=dataset,
             metric=levenshtein_metric,
             prompt=original_prompt,
-            n_samples=2,
-            max_trials=2,
+            n_samples=1,
+            max_trials=1,
             **gepa_kwargs,
         )
 

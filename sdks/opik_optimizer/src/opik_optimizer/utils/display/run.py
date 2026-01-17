@@ -113,26 +113,40 @@ class OptimizationRunDisplay:
 
         coerced_score = score
         best_score = context.current_best_score
+        prev_best = None
+        if display_info is not None:
+            prev_best = display_info.get("prev_best_score")
 
         max_trials = getattr(context, "max_trials", None)
         if isinstance(max_trials, int) and max_trials > 0:
             prefix = f"Trial {context.trials_completed}/{max_trials}"
         else:
             prefix = f"Trial {context.trials_completed}"
-        if not math.isfinite(coerced_score) or (
-            best_score is not None and not math.isfinite(best_score)
-        ):
+        score_label = ""
+        compare_score = prev_best if isinstance(prev_best, (int, float)) else best_score
+        if not math.isfinite(coerced_score):
             style = "yellow"
-        elif best_score is None or coerced_score >= best_score:
+        elif isinstance(compare_score, (int, float)):
+            delta = coerced_score - compare_score
+            if abs(delta) < 1e-12:
+                style = "yellow"
+                score_label = " ▸ [Δ 0.0000 vs best | no improvement]"
+            elif delta > 0:
+                style = "green"
+                score_label = f" ▲ [Δ +{delta:.4f} vs best | improved]"
+            else:
+                style = "red"
+                score_label = f" ▼ [Δ {delta:.4f} vs best | no improvement]"
+        elif best_score is None:
             style = "green"
         else:
-            style = "red"
+            style = "yellow"
 
         info = display_info or self._build_evaluation_display_info(context)
         display_terminal.display_evaluation_progress(
             prefix=prefix,
             score_text=(
-                f"{coerced_score:.4f}"
+                f"{coerced_score:.4f}{score_label}"
                 if math.isfinite(coerced_score)
                 else "non-finite score"
             ),

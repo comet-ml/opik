@@ -245,7 +245,9 @@ class PromptHallOfFame:
         try:
             from ....utils.helpers import json_to_dict
 
-            parsed = json_to_dict(response)
+            from ....utils.text import normalize_llm_text
+
+            parsed = json_to_dict(normalize_llm_text(response))
             patterns = []
             for item in parsed.get("patterns", []):
                 if isinstance(item, dict):
