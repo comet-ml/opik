@@ -4,7 +4,7 @@ import pytest
 import copy
 from unittest.mock import MagicMock, patch
 
-from opik_optimizer.utils.colbert import (
+from opik_optimizer.utils.tools.colbert import (
     ColBERTv2,
     dotdict,
     colbertv2_get_request,
@@ -86,7 +86,9 @@ class TestColbertv2GetRequest:
             ]
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -117,7 +119,9 @@ class TestColbertv2GetRequest:
             "message": "Internal server error",
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -138,7 +142,9 @@ class TestColbertv2GetRequest:
         }
         mock_response_success = {"topk": [{"text": "Result", "score": 0.9}]}
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj_error = MagicMock()
             mock_response_obj_error.json.return_value = mock_response_error
@@ -152,7 +158,7 @@ class TestColbertv2GetRequest:
             ]
             mock_session_cls.return_value = mock_session
 
-            with patch("opik_optimizer.utils.colbert.time.sleep"):
+            with patch("opik_optimizer.utils.tools.colbert.time.sleep"):
                 results = colbertv2_get_request(
                     url="http://localhost:8000/search",
                     query="test query",
@@ -164,7 +170,9 @@ class TestColbertv2GetRequest:
     def test_handles_unexpected_response_format(self) -> None:
         mock_response = {"unexpected_key": "value"}
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -181,12 +189,14 @@ class TestColbertv2GetRequest:
     def test_handles_request_exception(self) -> None:
         import requests
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_session.get.side_effect = requests.RequestException("Network error")
             mock_session_cls.return_value = mock_session
 
-            with patch("opik_optimizer.utils.colbert.time.sleep"):
+            with patch("opik_optimizer.utils.tools.colbert.time.sleep"):
                 with pytest.raises(Exception, match="ColBERTv2 request failed"):
                     colbertv2_get_request(
                         url="http://localhost:8000/search",
@@ -207,7 +217,9 @@ class TestColbertv2PostRequest:
             ]
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -229,7 +241,9 @@ class TestColbertv2PostRequest:
             "message": "Bad request",
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -249,14 +263,16 @@ class TestColbertv2PostRequest:
             "message": "Connection refused",
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response_error
             mock_session.post.return_value = mock_response_obj
             mock_session_cls.return_value = mock_session
 
-            with patch("opik_optimizer.utils.colbert.time.sleep"):
+            with patch("opik_optimizer.utils.tools.colbert.time.sleep"):
                 with pytest.raises(Exception, match="ColBERTv2 server error"):
                     colbertv2_post_request(
                         url="http://localhost:8000/search",
@@ -290,7 +306,9 @@ class TestColBERTv2Class:
             ]
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -310,7 +328,9 @@ class TestColBERTv2Class:
             ]
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -331,7 +351,9 @@ class TestColBERTv2Class:
             ]
         }
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response
@@ -347,7 +369,9 @@ class TestColBERTv2Class:
     def test_call_with_custom_max_retries(self) -> None:
         mock_response = {"topk": [{"text": "Result", "score": 0.9}]}
 
-        with patch("opik_optimizer.utils.colbert.requests.Session") as mock_session_cls:
+        with patch(
+            "opik_optimizer.utils.tools.colbert.requests.Session"
+        ) as mock_session_cls:
             mock_session = MagicMock()
             mock_response_obj = MagicMock()
             mock_response_obj.json.return_value = mock_response

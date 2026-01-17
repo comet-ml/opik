@@ -824,6 +824,45 @@ def display_prefixed_block(
     console.print(rich.text.Text(rendered, style=style), highlight=False)
 
 
+def display_renderable(renderable: rich.console.RenderableType) -> None:
+    """Render a Rich object directly to the console."""
+    console = get_console()
+    console.print(renderable)
+
+
+def display_renderable_with_prefix(
+    renderable: rich.console.RenderableType,
+    *,
+    prefix: str = "│ ",
+) -> None:
+    """Render a Rich object and reprint it with a prefix on each line."""
+    console = get_console()
+    with console.capture() as capture:
+        console.print(renderable)
+    rendered = capture.get()
+    display_prefixed_block(rendered.splitlines(), prefix=prefix)
+
+
+def display_key_value_block(
+    title: str,
+    items: dict[str, Any],
+    *,
+    prefix: str = "│ ",
+    title_style: str = "dim",
+    float_precision: int = 6,
+) -> None:
+    """Display a title followed by key/value lines using a prefixed block."""
+    if not items:
+        return
+    lines = [title]
+    for key, value in items.items():
+        formatted = (
+            f"{value:.{float_precision}f}" if isinstance(value, float) else str(value)
+        )
+        lines.append(f"  {key}: {formatted}")
+    display_prefixed_block(lines, prefix=prefix, style=title_style)
+
+
 def display_error(error_message: str, verbose: int = 1) -> None:
     """Display an error message with a standard prefix."""
     if verbose >= 1:

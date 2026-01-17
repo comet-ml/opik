@@ -9,7 +9,10 @@ from ...utils.reporting import (  # noqa: F401
     get_console,
     suppress_opik_logs,
 )
-from ...utils.display import display_text_block, display_prefixed_block
+from ...utils.display import (
+    display_text_block,
+    display_key_value_block,
+)
 
 
 @contextmanager
@@ -55,7 +58,7 @@ def display_trial_evaluation(
     """Context manager to display a single trial evaluation with parameters."""
 
     if verbose >= 1:
-        get_console().print("")
+        display_text_block("")
         display_text_block(
             f"│ Trial {trial_number + 1}/{total_trials} ({stage} search)",
             style="cyan bold",
@@ -67,11 +70,12 @@ def display_trial_evaluation(
 
         # Display parameters being tested
         if parameters:
-            lines = ["Testing parameters:"]
-            for key, value in parameters.items():
-                formatted_value = f"{value:.6f}" if isinstance(value, float) else str(value)
-                lines.append(f"  {key}: {formatted_value}")
-            display_prefixed_block(lines, prefix="│ ", style="dim")
+            display_key_value_block(
+                "Testing parameters:",
+                parameters,
+                prefix="│ ",
+                title_style="dim",
+            )
 
     class Reporter:
         def set_score(self, s: float, is_best: bool = False) -> None:

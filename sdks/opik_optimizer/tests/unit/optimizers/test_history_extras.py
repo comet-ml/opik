@@ -75,4 +75,4 @@ def test_selection_meta_and_pareto_defaults() -> None:
     assert entry["extra"]["selection_meta"]["policy"] == "test"
     assert entry["extra"]["pareto_front"][0]["id"] == "c1"
     assert entry.get("dataset_split") == "train"
-    assert entry["trials"][0]["candidate"].get("id", "").startswith("auto_")
+    assert entry["trials"][0].get("candidate_id", "").startswith("auto_")

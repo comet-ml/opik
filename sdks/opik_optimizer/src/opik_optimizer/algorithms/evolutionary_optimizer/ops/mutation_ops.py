@@ -4,6 +4,8 @@ import copy
 import json
 import logging
 import random
+import sys
+import types
 
 from deap import creator as _creator
 
@@ -15,12 +17,18 @@ from ....api_objects.types import (
 )
 from .... import utils, _llm_calls
 from .. import helpers
-from ....utils.display import display_error, display_success
+from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
 
 
 logger = logging.getLogger(__name__)
 creator = _creator
+
+_reporting_module: Any = types.ModuleType(__name__ + ".reporting")
+_reporting_module.display_error = display_error
+_reporting_module.display_success = display_success
+sys.modules[_reporting_module.__name__] = _reporting_module
+reporting = _reporting_module
 
 
 def _get_synonym(
@@ -319,7 +327,7 @@ def _semantic_mutation(
             model_parameters=prompt.model_kwargs,
         )
     except Exception as e:
-        display_error(
+        reporting.display_error(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
             verbose=verbose,
         )
@@ -461,7 +469,7 @@ def deap_mutation(
                     model_parameters=model_parameters,
                     prompts=prompts,
                 )
-                display_success(
+                reporting.display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by randomizing words (word-level mutation).",
                     verbose=verbose,
                 )
@@ -472,7 +480,7 @@ def deap_mutation(
                     model_parameters=model_parameters,
                     prompts=prompts,
                 )
-                display_success(
+                reporting.display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
                     verbose=verbose,
                 )
@@ -486,7 +494,7 @@ def deap_mutation(
                     output_style_guidance=output_style_guidance,
                     prompts=prompts,
                 )
-                display_success(
+                reporting.display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited using an LLM (semantic mutation).",
                     verbose=verbose,
                 )

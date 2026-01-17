@@ -2,6 +2,7 @@ from io import StringIO
 from typing import TYPE_CHECKING
 
 from rich.panel import Panel
+from rich.text import Text
 
 if TYPE_CHECKING:
     from ...api_objects.chat_prompt import ChatPrompt
@@ -24,7 +25,9 @@ def display_few_shot_prompt_template(
     if verbose < 1:
         return
 
-    display_text_block("> Let's add a placeholder for few-shot examples in the messages:")
+    display_text_block(
+        "> Let's add a placeholder for few-shot examples in the messages:"
+    )
     display_text_block("│    Created the prompt template:\n│", style="dim yellow")
 
     # Display all prompts with placeholders

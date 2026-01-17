@@ -21,7 +21,7 @@ from opik import Dataset, opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from . import task_evaluator, helpers
-from .utils import display as display_utils
+from .utils import display_run
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
@@ -555,9 +555,9 @@ class BaseOptimizer(ABC):
         Returns:
             The baseline score
         """
-        with display_utils.display_evaluation(
-            verbose=self.verbose
-        ) as baseline_reporter:
+        if not hasattr(self, "_display"):
+            self._display = display_run.OptimizationRunDisplay(verbose=self.verbose)
+        with self._display.baseline_evaluation(context) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=context.prompts,
                 dataset=context.evaluation_dataset,
@@ -640,39 +640,6 @@ class BaseOptimizer(ABC):
         self._should_stop_context(context)
         return coerced_score
 
-    def get_evaluation_display_info(self) -> dict[str, Any]:
-        """
-        Return additional display info for evaluation progress.
-
-        Override this method to provide optimizer-specific display context such as:
-        - dataset_name: Name of the dataset being used for evaluation
-        - dataset_type: Type of dataset ("training" or "validation")
-        - evaluation_settings: Description of evaluation settings
-
-        The base implementation returns dataset info from the context,
-        automatically detecting if validation dataset is being used.
-
-        Returns:
-            Dict with display info keys: dataset_name, dataset_type, evaluation_settings
-        """
-        context = self._context
-        dataset = context.evaluation_dataset
-        dataset_name = getattr(dataset, "name", None)
-
-        # Determine if we're using validation or training dataset
-        is_validation = (
-            context.validation_dataset is not None
-            and context.evaluation_dataset is context.validation_dataset
-        )
-        dataset_type = "validation" if is_validation else "training"
-        context.dataset_split = dataset_type
-
-        return {
-            "dataset_name": dataset_name,
-            "dataset_type": dataset_type,
-            "evaluation_settings": None,
-        }
-
     def _on_evaluation(
         self,
         context: OptimizationContext,
@@ -680,35 +647,12 @@ class BaseOptimizer(ABC):
         score: float,
     ) -> None:
         """Display progress after each evaluation."""
-        if self.verbose < 1:
-            return
-
-        coerced_score = self._coerce_score(score)
-        best_score = context.current_best_score
-
-        prefix = f"Trial {context.trials_completed}"
-        if not math.isfinite(coerced_score) or (
-            best_score is not None and not math.isfinite(best_score)
-        ):
-            style = "yellow"
-        elif best_score is None or coerced_score >= best_score:
-            style = "green"
-        else:
-            style = "red"
-
-        display_utils.display_evaluation_progress(
-            prefix=prefix,
-            score_text=(
-                f"{coerced_score:.4f}"
-                if math.isfinite(coerced_score)
-                else "non-finite score"
-            ),
-            style=style,
+        if not hasattr(self, "_display"):
+            self._display = display_run.OptimizationRunDisplay(verbose=self.verbose)
+        self._display.evaluation_progress(
+            context=context,
             prompts=prompts,
-            verbose=self.verbose,
-            dataset_name=None,
-            dataset_type=None,
-            evaluation_settings=None,
+            score=self._coerce_score(score),
         )
 
     def post_optimization(
@@ -1371,63 +1315,6 @@ class BaseOptimizer(ABC):
         """
         pass
 
-    def _display_header(self, optimization_id: str | None = None) -> None:
-        """Display optimization header with algorithm name and run link."""
-        display_utils.display_header(
-            algorithm=self.__class__.__name__,
-            optimization_id=optimization_id,
-            verbose=self.verbose,
-        )
-
-    def _display_configuration(
-        self,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        context: OptimizationContext,
-    ) -> None:
-        """Display optimization configuration using optimizer-specific config."""
-        display_utils.display_configuration(
-            messages=prompt,
-            optimizer_config=self.get_config(context),
-            verbose=self.verbose,
-        )
-
-    def _display_baseline_evaluation(
-        self,
-        context: OptimizationContext,
-    ) -> Any:
-        """
-        Return baseline evaluation context manager for display.
-
-        Returns context manager that can be used with 'with' statement.
-        """
-        dataset = context.evaluation_dataset
-        dataset_name = getattr(dataset, "name", None)
-        is_validation = (
-            context.validation_dataset is not None
-            and context.evaluation_dataset is context.validation_dataset
-        )
-        selection_summary = display_utils.summarize_selection_policy(context.prompts)
-        return display_utils.display_evaluation(
-            verbose=self.verbose,
-            dataset_name=dataset_name,
-            is_validation=is_validation,
-            selection_summary=selection_summary,
-        )
-
-    def _display_final_result(
-        self,
-        initial_score: float,
-        best_score: float,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-    ) -> None:
-        """Display final optimization result."""
-        display_utils.display_result(
-            initial_score=initial_score,
-            best_score=best_score,
-            prompt=prompt,
-            verbose=self.verbose,
-        )
-
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
@@ -1497,7 +1384,11 @@ class BaseOptimizer(ABC):
         )
 
         # Base class handles ALL display - optimizers should not call reporting
-        self._display_header(context.optimization_id)
+        self._display = display_run.OptimizationRunDisplay(verbose=self.verbose)
+        self._display.show_header(
+            algorithm=self.__class__.__name__,
+            optimization_id=context.optimization_id,
+        )
 
         # Determine the prompt to display (single or dict)
         display_prompt = (
@@ -1505,7 +1396,10 @@ class BaseOptimizer(ABC):
             if context.is_single_prompt_optimization
             else context.prompts
         )
-        self._display_configuration(display_prompt, context)
+        self._display.show_configuration(
+            prompt=display_prompt,
+            optimizer_config=self.get_config(context),
+        )
 
         # Allow subclasses to perform pre-optimization setup (e.g., set self.agent)
         # Subclasses should NOT do any display here
@@ -1537,7 +1431,7 @@ class BaseOptimizer(ABC):
             )
 
             # Display early stop result
-            self._display_final_result(
+            self._display.show_final_result(
                 initial_score=baseline_score,
                 best_score=baseline_score,
                 prompt=early_result_prompt,
@@ -1608,7 +1502,7 @@ class BaseOptimizer(ABC):
                 initial_prompts=context.initial_prompts,
                 is_single_prompt_optimization=context.is_single_prompt_optimization,
             )
-            self._display_final_result(
+            self._display.show_final_result(
                 initial_score=result.initial_score
                 if result.initial_score is not None
                 else baseline_score,

@@ -19,6 +19,7 @@ from ...utils.reporting import convert_tqdm_to_rich, get_console, suppress_opik_
 from ...utils.display import (
     display_text_block,
     format_prompt_snippet,
+    display_renderable,
 )
 
 
@@ -377,7 +378,7 @@ def display_candidate_scores(
             _format_score(row.get("opik_score")),
         )
 
-    get_console().print(table)
+    display_renderable(table)
 
 
 def display_selected_candidate(
@@ -422,7 +423,7 @@ def display_selected_candidate(
         subtitle=subtitle,
         subtitle_align="left",
     )
-    get_console().print(panel)
+    display_renderable(panel)
 
 
 def _format_score(value: Any) -> str:

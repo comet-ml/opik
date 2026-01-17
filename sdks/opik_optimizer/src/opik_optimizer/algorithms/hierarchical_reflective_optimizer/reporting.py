@@ -6,8 +6,12 @@ from rich.panel import Panel
 from rich.text import Text
 
 from ...api_objects import chat_prompt
-from ...utils.reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
-from ...utils.display import display_messages, display_text_block
+from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
+from ...utils.display import (
+    display_messages,
+    display_text_block,
+    display_renderable_with_prefix,
+)
 from .display_utils import (
     compute_message_diff_order,  # noqa: F401
     display_optimized_prompt_diff as _display_optimized_prompt_diff,
@@ -275,30 +279,20 @@ def display_optimization_iteration(round_index: int, verbose: int = 1) -> Iterat
     if verbose >= 1:
         display_text_block("│")
         display_text_block("│")
-        get_console().print(
-            Text("│ ").append(Text(f"Round {round_index}", style="bold cyan"))
-        )
+        display_text_block(f"│ Round {round_index}", style="bold cyan")
 
     class Reporter:
         def iteration_complete(self, best_score: float, improved: bool) -> None:
             if verbose >= 1:
                 if improved:
-                    get_console().print(
-                        Text("│ ").append(
-                            Text(
-                                f"Round {round_index} complete - New best score: {best_score:.4f}",
-                                style="green",
-                            )
-                        )
+                    display_text_block(
+                        f"│ Round {round_index} complete - New best score: {best_score:.4f}",
+                        style="green",
                     )
                 else:
-                    get_console().print(
-                        Text("│ ").append(
-                            Text(
-                                f"Round {round_index} complete - No improvement (best: {best_score:.4f})",
-                                style="yellow",
-                            )
-                        )
+                    display_text_block(
+                        f"│ Round {round_index} complete - No improvement (best: {best_score:.4f})",
+                        style="yellow",
                     )
                 display_text_block("│")
 
@@ -313,22 +307,17 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
     """Context manager to display progress during root cause analysis with batch tracking."""
     if verbose >= 1:
         display_text_block("│   ")
-        get_console().print(
-            Text("│   ").append(
-                Text("Analyzing root cause of failed evaluation items", style="cyan")
-            )
+        display_text_block(
+            "│   Analyzing root cause of failed evaluation items",
+            style="cyan",
         )
 
     class Reporter:
         def set_completed(self, total_test_cases: int, num_batches: int) -> None:
             if verbose >= 1:
-                get_console().print(
-                    Text("│   ").append(
-                        Text(
-                            f"Analyzed {total_test_cases} test cases across {num_batches} batches",
-                            style="green",
-                        )
-                    )
+                display_text_block(
+                    f"│   Analyzed {total_test_cases} test cases across {num_batches} batches",
+                    style="green",
                 )
                 display_text_block("│   ")
 
@@ -344,9 +333,7 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
 def display_batch_synthesis(num_batches: int, verbose: int = 1) -> Iterator[Any]:
     """Context manager to display message during batch synthesis."""
     if verbose >= 1:
-        get_console().print(
-            Text("│   ").append(Text("Synthesizing failure modes", style="cyan"))
-        )
+        display_text_block("│   Synthesizing failure modes", style="cyan")
 
     class Reporter:
         def set_completed(self, _num_unified_modes: int) -> None:
@@ -381,16 +368,7 @@ def display_hierarchical_synthesis(
     )
 
     # Capture the panel as rendered text with ANSI styles and prefix each line
-    with get_console().capture() as capture:
-        get_console().print(panel)
-
-    rendered_panel = capture.get()
-
-    # Prefix each line with '│ ', preserving ANSI styles
-    prefixed_output = "\n".join(f"│ {line}" for line in rendered_panel.splitlines())
-
-    # Print the prefixed output (will include colors)
-    get_console().print(prefixed_output, highlight=False)
+    display_renderable_with_prefix(panel, prefix="│ ")
     display_text_block("│")
 
 
@@ -411,16 +389,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
         width=PANEL_WIDTH,
     )
 
-    with get_console().capture() as capture:
-        get_console().print(header_panel)
-
-    rendered_header = capture.get()
-
-    # Prefix each line with '│   ', preserving ANSI styles
-    prefixed_output = "\n".join(f"│   {line}" for line in rendered_header.splitlines())
-
-    # Print the prefixed output (will include colors)
-    get_console().print(prefixed_output, highlight=False)
+    display_renderable_with_prefix(header_panel, prefix="│   ")
     display_text_block("│")
 
     for idx, failure_mode in enumerate(failure_modes, 1):
@@ -440,22 +409,10 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
             width=PANEL_WIDTH,
         )
 
-        # Capture and prefix each line
-        with get_console().capture() as capture:
-            get_console().print(panel)
-
-        rendered_panel = capture.get()
-
-        # Prefix each line with '│   ', preserving ANSI styles
-        prefixed_output = "\n".join(
-            f"│   {line}" for line in rendered_panel.splitlines()
-        )
-
-        # Print the prefixed output (will include colors)
-        get_console().print(prefixed_output, highlight=False)
+        display_renderable_with_prefix(panel, prefix="│   ")
 
         if idx < len(failure_modes):
-            get_console().print("│")
+            display_text_block("│")
 
 
 @contextmanager
@@ -466,10 +423,9 @@ def display_prompt_improvement(
     if verbose >= 1:
         display_text_block("│")
         display_text_block("│   ")
-        get_console().print(
-            Text("│   ").append(
-                Text(f"Addressing: {failure_mode_name}", style="bold cyan")
-            )
+        display_text_block(
+            f"│   Addressing: {failure_mode_name}",
+            style="bold cyan",
         )
 
     class Reporter:
@@ -488,19 +444,7 @@ def display_prompt_improvement(
                     padding=(0, 1),
                 )
 
-                # Capture and prefix each line
-                with get_console().capture() as capture:
-                    get_console().print(panel)
-
-                rendered_panel = capture.get()
-
-                # Prefix each line with '│     ', preserving ANSI styles
-                prefixed_output = "\n".join(
-                    f"│     {line}" for line in rendered_panel.splitlines()
-                )
-
-                # Print the prefixed output (will include colors)
-                get_console().print(prefixed_output, highlight=False)
+                display_renderable_with_prefix(panel, prefix="│     ")
                 display_text_block("│   ")
 
     try:
@@ -521,22 +465,14 @@ def display_iteration_improvement(
         return
 
     if improvement > 0:
-        get_console().print(
-            Text("│   ").append(
-                Text(
-                    f"✓ Improvement: {improvement:.2%} (from {best_score:.4f} to {current_score:.4f})",
-                    style="green bold",
-                )
-            )
+        display_text_block(
+            f"│   ✓ Improvement: {improvement:.2%} (from {best_score:.4f} to {current_score:.4f})",
+            style="green bold",
         )
     else:
-        get_console().print(
-            Text("│   ").append(
-                Text(
-                    f"✗ No improvement: {improvement:.2%} (score: {current_score:.4f}, best: {best_score:.4f})",
-                    style="yellow",
-                )
-            )
+        display_text_block(
+            f"│   ✗ No improvement: {improvement:.2%} (score: {current_score:.4f}, best: {best_score:.4f})",
+            style="yellow",
         )
 
 

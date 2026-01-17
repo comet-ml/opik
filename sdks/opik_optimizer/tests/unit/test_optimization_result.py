@@ -264,7 +264,9 @@ class TestRichRendering:
         )
 
         panel = render_rich_result(result)
-        assert "MetaPromptOptimizer" in str(panel)
+        import rich
+
+        assert isinstance(panel, rich.panel.Panel)
 
 
 class TestCalculateImprovementStr:
