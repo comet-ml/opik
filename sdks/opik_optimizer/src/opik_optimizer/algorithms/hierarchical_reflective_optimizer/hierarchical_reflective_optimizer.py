@@ -536,7 +536,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     )
                 finally:
                     self._clear_reporter()
-                self._clear_reporter()
 
             # Display synthesis results
             reporting.display_hierarchical_synthesis(

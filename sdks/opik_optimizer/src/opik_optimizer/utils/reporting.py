@@ -14,6 +14,7 @@ from rich.text import Text
 from .core import get_optimization_run_url_by_id
 from ..api_objects import chat_prompt
 from .candidate_selection import DEFAULT_SELECTION_POLICY
+from .display import display_text_block
 
 PANEL_WIDTH = 70
 
@@ -480,7 +481,7 @@ def display_result(
         return
 
     console = get_console()
-    console.print(Text("\n> Optimization complete\n"))
+    display_text_block(console, "\n> Optimization complete\n")
 
     content: list[RenderableType] = []
 
@@ -559,7 +560,7 @@ def display_configuration(
         return
 
     console = get_console()
-    console.print(Text("> Let's optimize the prompt:\n"))
+    display_text_block(console, "> Let's optimize the prompt:\n")
 
     # Handle different message formats
     if messages is None:
@@ -594,11 +595,13 @@ def display_configuration(
         selection_summary = summarize_selection_policy(messages)
 
     # Panel for configuration
-    console.print(
-        Text(f"\nUsing {optimizer_config['optimizer']} with the parameters: ")
+    display_text_block(
+        console, f"\nUsing {optimizer_config['optimizer']} with the parameters: "
     )
     if selection_summary:
-        console.print(Text(f"  - evaluation: {selection_summary}", style="dim"))
+        display_text_block(
+            console, f"  - evaluation: {selection_summary}", style="dim"
+        )
 
     for key, value in optimizer_config.items():
         if key == "optimizer":  # Already displayed in the introductory text
@@ -608,7 +611,7 @@ def display_configuration(
         )
         console.print(parameter_text)
 
-    console.print("\n")
+    display_text_block(console, "\n")
 
 
 @contextmanager
@@ -635,28 +638,28 @@ def display_evaluation(
     console = get_console()
 
     if verbose >= 1:
-        console.print(Text(f"> {message}"))
+        display_text_block(console, f"> {message}")
         if dataset_name:
             dataset_type = "validation" if is_validation else "training"
-            console.print(
-                Text(
-                    f"  Using {dataset_type} dataset: {dataset_name}",
-                    style="dim",
-                )
+            display_text_block(
+                console,
+                f"  Using {dataset_type} dataset: {dataset_name}",
+                style="dim",
             )
         if selection_summary:
-            console.print(
-                Text(
-                    f"  Evaluation settings: {selection_summary}",
-                    style="dim",
-                )
+            display_text_block(
+                console,
+                f"  Evaluation settings: {selection_summary}",
+                style="dim",
             )
 
     class Reporter:
         def set_score(self, score: float) -> None:
             if verbose >= 1:
-                console.print(
-                    Text(f"\r  Baseline score was: {score:.4f}.\n", style="green")
+                display_text_block(
+                    console,
+                    f"\r  Baseline score was: {score:.4f}.\n",
+                    style="green",
                 )
 
     with suppress_opik_logs():
@@ -696,29 +699,30 @@ def display_evaluation_progress(
     console = get_console()
 
     # Display prefix
-    console.print(Text(f"│    {prefix}:"))
+    display_text_block(console, f"│    {prefix}:")
 
     # Display evaluation settings if provided
     if evaluation_settings:
-        console.print(
-            Text(f"│         Evaluation settings: {evaluation_settings}", style="dim")
+        display_text_block(
+            console,
+            f"│         Evaluation settings: {evaluation_settings}",
+            style="dim",
         )
 
     # Display dataset info if provided
     if dataset_name:
         ds_type = dataset_type or "training"
-        console.print(
-            Text(
-                f"│         (using {ds_type} dataset: {dataset_name} for ranking)",
-                style="dim",
-            )
+        display_text_block(
+            console,
+            f"│         (using {ds_type} dataset: {dataset_name} for ranking)",
+            style="dim",
         )
 
     # Display prompts
     for name, prompt in prompts.items():
-        console.print(Text(f"│         {name}:"))
+        display_text_block(console, f"│         {name}:")
         display_messages(prompt.get_messages(), "│         ")
 
     # Display score
-    console.print(Text(f"│         Score: {score_text}", style=style))
-    console.print(Text("│"))
+    display_text_block(console, f"│         Score: {score_text}", style=style)
+    display_text_block(console, "│")
