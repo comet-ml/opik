@@ -1,5 +1,59 @@
 """Facade for display utilities (format + rich rendering)."""
 
-from . import terminal as display_terminal  # re-export module for monkeypatch/test access
-from .format import *  # noqa: F401,F403
-from .terminal import *  # noqa: F401,F403
+from . import terminal as terminal  # re-export module for monkeypatch/test access
+from .format import (
+    build_plaintext_summary,
+    format_float,
+    format_prompt_for_plaintext,
+    format_prompt_snippet,
+    format_tool_summary,
+    safe_percentage_change,
+    summarize_selection_policy,
+)
+from .terminal import (
+    DEFAULT_PANEL_WIDTH,
+    display_configuration,
+    display_error,
+    display_evaluation,
+    display_evaluation_progress,
+    display_header,
+    display_key_value_block,
+    display_message,
+    display_messages,
+    display_prefixed_block,
+    display_renderable,
+    display_renderable_with_prefix,
+    display_result,
+    display_success,
+    display_text_block,
+    display_tool_description,
+    render_rich_result,
+)
+
+__all__ = [
+    "terminal",
+    "build_plaintext_summary",
+    "format_float",
+    "format_prompt_for_plaintext",
+    "format_prompt_snippet",
+    "format_tool_summary",
+    "safe_percentage_change",
+    "summarize_selection_policy",
+    "DEFAULT_PANEL_WIDTH",
+    "display_configuration",
+    "display_error",
+    "display_evaluation",
+    "display_evaluation_progress",
+    "display_header",
+    "display_key_value_block",
+    "display_message",
+    "display_messages",
+    "display_prefixed_block",
+    "display_renderable",
+    "display_renderable_with_prefix",
+    "display_result",
+    "display_success",
+    "display_text_block",
+    "display_tool_description",
+    "render_rich_result",
+]

@@ -77,6 +77,38 @@ class ConcreteOptimizer(BaseOptimizer):
         return {"test_param": "test_value", "count": 42}
 
 
+class _DisplaySpy:
+    def __init__(self) -> None:
+        self.header_calls: list[tuple[str, str | None]] = []
+
+    def show_header(self, *, algorithm: str, optimization_id: str | None) -> None:
+        self.header_calls.append((algorithm, optimization_id))
+
+    def show_configuration(self, *, prompt, optimizer_config) -> None:
+        pass
+
+    def baseline_evaluation(self, context) -> Any:
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _cm():
+            class Reporter:
+                def set_score(self, score: float) -> None:
+                    pass
+
+            yield Reporter()
+
+        return _cm()
+
+    def evaluation_progress(
+        self, *, context, prompts, score, display_info=None
+    ) -> None:
+        pass
+
+    def show_final_result(self, *, initial_score, best_score, prompt) -> None:
+        pass
+
+
 class TestValidateOptimizationInputs:
     """Tests for _validate_optimization_inputs method."""
 
@@ -792,6 +824,53 @@ def test_on_evaluation_handles_non_finite_scores(
 
     assert captured["style"] == "yellow"
     assert captured["score_text"] == "non-finite score"
+
+
+def test_optimize_prompt_uses_injected_display(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    spy = _DisplaySpy()
+    optimizer._display = spy
+
+    mock_dataset = MagicMock()
+    mock_metric = MagicMock(__name__="metric")
+
+    def fake_setup(*args, **kwargs):
+        return OptimizationContext(
+            prompts={"main": simple_chat_prompt},
+            initial_prompts={"main": simple_chat_prompt},
+            is_single_prompt_optimization=True,
+            dataset=mock_dataset,
+            evaluation_dataset=mock_dataset,
+            validation_dataset=None,
+            metric=mock_metric,
+            agent=MagicMock(),
+            optimization=None,
+            optimization_id=None,
+            experiment_config=None,
+            n_samples=None,
+            max_trials=1,
+            project_name="Test",
+            baseline_score=None,
+        )
+
+    monkeypatch.setattr(optimizer, "_setup_optimization", fake_setup)
+    monkeypatch.setattr(optimizer, "_calculate_baseline", lambda _ctx: 0.1)
+    monkeypatch.setattr(optimizer, "_should_skip_optimization", lambda _score: True)
+    monkeypatch.setattr(optimizer, "_build_early_result", lambda **kwargs: MagicMock())
+    monkeypatch.setattr(
+        optimizer, "_finalize_optimization", lambda *args, **kwargs: None
+    )
+
+    optimizer.optimize_prompt(
+        prompt=simple_chat_prompt,
+        dataset=mock_dataset,
+        metric=mock_metric,
+        max_trials=1,
+    )
+
+    assert spy.header_calls, "Injected display handler should be used"
 
 
 def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:

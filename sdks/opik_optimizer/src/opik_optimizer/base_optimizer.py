@@ -1387,7 +1387,8 @@ class BaseOptimizer(ABC):
         )
 
         # Base class handles ALL display - optimizers should not call reporting
-        self._display = OptimizationRunDisplay(verbose=self.verbose)
+        if self._display is None:
+            self._display = OptimizationRunDisplay(verbose=self.verbose)
         self._display.show_header(
             algorithm=self.__class__.__name__,
             optimization_id=context.optimization_id,

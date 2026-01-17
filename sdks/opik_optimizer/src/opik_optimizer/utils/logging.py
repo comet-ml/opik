@@ -5,6 +5,8 @@ import os
 from rich.console import Console
 from rich.logging import RichHandler
 
+from ..constants import OPIK_OPTIMIZER_NO_BANNER_ENV
+
 DEFAULT_LOG_FORMAT = "%(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -109,7 +111,7 @@ def setup_logging(
     _configured_level = target_level
 
     # Skip banner for scripts/non-interactive contexts
-    show_banner = os.getenv("OPIK_OPTIMIZER_NO_BANNER", "").lower() not in (
+    show_banner = os.getenv(OPIK_OPTIMIZER_NO_BANNER_ENV, "").lower() not in (
         "1",
         "true",
         "yes",

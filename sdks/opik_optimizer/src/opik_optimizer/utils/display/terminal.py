@@ -16,10 +16,7 @@ import rich.text
 from ...api_objects import chat_prompt
 from ..core import get_optimization_run_url_by_id
 from .format import (
-    build_plaintext_summary,
     format_float,
-    format_prompt_for_plaintext,
-    format_prompt_snippet,
     format_tool_summary,
     safe_percentage_change,
     summarize_selection_policy,

@@ -14,6 +14,9 @@ MAX_EVAL_THREADS = 64
 # Schema and Types
 OPTIMIZATION_RESULT_SCHEMA_VERSION = "v1"
 
+# Display/console output controls
+OPIK_OPTIMIZER_NO_BANNER_ENV = "OPIK_OPTIMIZER_NO_BANNER"
+
 
 def resolve_project_name(project_name: str | None = None) -> str:
     """

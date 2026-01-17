@@ -21,6 +21,12 @@ from typing import Any
 
 from opik import Dataset
 from opik_optimizer import ChatPrompt
+from opik_optimizer.constants import OPIK_OPTIMIZER_NO_BANNER_ENV
+
+
+@pytest.fixture(autouse=True)
+def _disable_display_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
 
 
 # ============================================================
