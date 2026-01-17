@@ -78,27 +78,33 @@ def setup_logging(
         show_path=False,
     )
 
+    base_level = target_level if target_level >= logging.WARNING else logging.WARNING
     logging.basicConfig(
-        level=target_level,
+        level=base_level,
         format=format_string,
         datefmt=date_format,
         handlers=[console_handler],
         force=True,
     )
-
     logging.getLogger("opik_optimizer").setLevel(target_level)
     # Align root logger too so module loggers inherit the env level.
     logging.getLogger().setLevel(target_level)
     logging.getLogger("opik_optimizer").setLevel(target_level)
 
-    # Set levels for noisy libraries like LiteLLM and httpx
-    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("requests").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("dspy").setLevel(logging.WARNING)
-    logging.getLogger("optuna").setLevel(logging.WARNING)
-    logging.getLogger("filelock").setLevel(logging.WARNING)
+    # Set levels for noisy libraries to WARNING even when we run at DEBUG.
+    for name in (
+        "LiteLLM",
+        "urllib3",
+        "requests",
+        "httpx",
+        "httpcore",
+        "openai",
+        "dspy",
+        "optuna",
+        "filelock",
+        "asyncio",
+    ):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
     # Align Hugging Face/datasets logging style
     for name in ("datasets", "huggingface_hub"):

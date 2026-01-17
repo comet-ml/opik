@@ -21,7 +21,7 @@ def json_to_dict(json_str: str) -> Any:
         json_str: String to parse as JSON
 
     Returns:
-        Parsed dictionary/list/value, or None if completely unparseable
+        Parsed dictionary/list/value, or None if completely unparsable
     """
     cleaned_json_string = json_str.strip()
 
