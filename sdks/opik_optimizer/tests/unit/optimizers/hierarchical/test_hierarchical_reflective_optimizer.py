@@ -37,30 +37,47 @@ def _mock_experiment_result(score: float) -> MagicMock:
 
 
 class TestHierarchicalReflectiveOptimizerInit:
-    def test_initialization_with_defaults(self) -> None:
-        optimizer = HierarchicalReflectiveOptimizer(model="openai/gpt-4o")
-        assert optimizer.model == "openai/gpt-4o"
-        assert optimizer.n_threads == 12
-        assert optimizer.max_parallel_batches == 5
-        assert optimizer.batch_size == 25
-        assert optimizer.verbose == 1
-        assert optimizer.seed == 42
-
-    def test_initialization_with_custom_params(self) -> None:
-        optimizer = HierarchicalReflectiveOptimizer(
-            model="openai/gpt-4o-mini",
-            n_threads=8,
-            max_parallel_batches=3,
-            batch_size=10,
-            verbose=0,
-            seed=123,
-        )
-        assert optimizer.model == "openai/gpt-4o-mini"
-        assert optimizer.n_threads == 8
-        assert optimizer.max_parallel_batches == 3
-        assert optimizer.batch_size == 10
-        assert optimizer.verbose == 0
-        assert optimizer.seed == 123
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            (
+                {"model": "openai/gpt-4o"},
+                {
+                    "model": "openai/gpt-4o",
+                    "n_threads": 12,
+                    "max_parallel_batches": 5,
+                    "batch_size": 25,
+                    "verbose": 1,
+                    "seed": 42,
+                },
+            ),
+            (
+                {
+                    "model": "openai/gpt-4o-mini",
+                    "n_threads": 8,
+                    "max_parallel_batches": 3,
+                    "batch_size": 10,
+                    "verbose": 0,
+                    "seed": 123,
+                },
+                {
+                    "model": "openai/gpt-4o-mini",
+                    "n_threads": 8,
+                    "max_parallel_batches": 3,
+                    "batch_size": 10,
+                    "verbose": 0,
+                    "seed": 123,
+                },
+            ),
+        ],
+    )
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
+        """Test optimizer initialization with defaults and custom params."""
+        optimizer = HierarchicalReflectiveOptimizer(**kwargs)
+        for key, value in expected.items():
+            assert getattr(optimizer, key) == value
 
     def test_get_optimizer_metadata(self) -> None:
         optimizer = HierarchicalReflectiveOptimizer(

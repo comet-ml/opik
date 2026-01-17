@@ -23,20 +23,23 @@ def _make_dataset() -> MagicMock:
 
 
 class TestGepaOptimizerInit:
-    def test_initialization_with_defaults(self) -> None:
-        optimizer = GepaOptimizer(model="gpt-4o")
-        assert optimizer.model == "gpt-4o"
-        assert optimizer.seed == 42
-
-    def test_initialization_with_custom_params(self) -> None:
-        optimizer = GepaOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=123,
-        )
-        assert optimizer.model == "gpt-4o-mini"
-        assert optimizer.verbose == 0
-        assert optimizer.seed == 123
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
+            (
+                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
+                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
+            ),
+        ],
+    )
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
+        """Test optimizer initialization with defaults and custom params."""
+        optimizer = GepaOptimizer(**kwargs)
+        for key, value in expected.items():
+            assert getattr(optimizer, key) == value
 
 
 class TestGepaOptimizerOptimizePrompt:

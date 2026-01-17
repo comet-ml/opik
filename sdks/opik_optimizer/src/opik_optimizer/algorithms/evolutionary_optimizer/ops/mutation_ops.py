@@ -15,7 +15,8 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
-from .... import utils, _llm_calls
+from .... import _llm_calls
+from ....utils.helpers import json_to_dict
 from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
@@ -313,7 +314,7 @@ def _semantic_mutation(
                 else:
                     messages = [response_item]
             else:
-                messages = utils.json_to_dict(response_item.strip())
+                messages = json_to_dict(response_item.strip())
         except Exception as parse_exc:
             raise RuntimeError(
                 "Error parsing semantic mutation response as JSON. "
@@ -377,7 +378,7 @@ def _radical_innovation_mutation(
         )
         logger.info(f"Radical innovation LLM result (truncated): {response_item[:200]}")
         try:
-            new_messages = utils.json_to_dict(response_item)
+            new_messages = json_to_dict(response_item)
         except Exception as parse_exc:
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."

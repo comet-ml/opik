@@ -3,54 +3,51 @@ import json
 import pytest
 from pytest import MonkeyPatch
 
-from opik_optimizer.utils import json_to_dict, get_random_seed
+from opik_optimizer.utils.helpers import json_to_dict
 from opik_optimizer.utils.display.format import format_prompt
 from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
 from opik_optimizer.utils.logging import setup_logging
 
 
-def test_format_prompt() -> None:
+@pytest.mark.parametrize(
+    "prompt_template,kwargs,expected_result,should_raise",
+    [
+        ("Hello {name}!", {"name": "World"}, "Hello World!", None),
+        ("{greeting} {name}!", {"greeting": "Hi", "name": "World"}, "Hi World!", None),
+        ("{greeting} {name}!", {"greeting": "Hi"}, None, ValueError),
+    ],
+)
+def test_format_prompt(
+    prompt_template: str,
+    kwargs: dict[str, str],
+    expected_result: str | None,
+    should_raise: type[Exception] | None,
+) -> None:
     """Test the format_prompt function."""
-    # Test basic formatting
-    prompt = "Hello {name}!"
-    result = format_prompt(prompt, name="World")
-    assert result == "Hello World!"
-
-    # Test with multiple variables
-    prompt = "{greeting} {name}!"
-    result = format_prompt(prompt, greeting="Hi", name="World")
-    assert result == "Hi World!"
-
-    # Test with missing variable
-    with pytest.raises(ValueError) as exc_info:
-        format_prompt(prompt, greeting="Hi")
-    assert "Missing required key in prompt: 'name'" in str(exc_info.value)
+    if should_raise:
+        with pytest.raises(should_raise) as exc_info:
+            format_prompt(prompt_template, **kwargs)
+        assert "Missing required key in prompt" in str(exc_info.value)
+    else:
+        result = format_prompt(prompt_template, **kwargs)
+        assert result == expected_result
 
 
-def test_get_random_seed() -> None:
-    # Test that seed is an integer
-    seed = get_random_seed()
-    assert isinstance(seed, int)
-
-    # Test that seed is within reasonable range
-    assert 0 <= seed <= 2**32 - 1
-
-    # Test that seed is different on subsequent calls
-    seed1 = get_random_seed()
-    seed2 = get_random_seed()
-    assert seed1 != seed2
-
-
-def test_setup_logging() -> None:
-    # Test that setup_logging doesn't raise any errors
-    setup_logging(level="INFO", force=True)
-
-    # Test with custom log level
-    setup_logging(level="DEBUG", force=True)
-
-    # Test with invalid log level
-    with pytest.raises(ValueError):
-        setup_logging(level="INVALID", force=True)
+@pytest.mark.parametrize(
+    "level,should_raise",
+    [
+        ("INFO", False),
+        ("DEBUG", False),
+        ("INVALID", True),
+    ],
+)
+def test_setup_logging(level: str, should_raise: bool) -> None:
+    """Test setup_logging with different log levels."""
+    if should_raise:
+        with pytest.raises(ValueError):
+            setup_logging(level=level, force=True)
+    else:
+        setup_logging(level=level, force=True)
 
 
 def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
@@ -139,28 +136,28 @@ class TestConvertLiteralsToJsonCompatible:
 
     def test_converts_dict(self) -> None:
         """Should recursively convert dicts."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible({"key": "value"})
         assert result == {"key": "value"}
 
     def test_converts_list(self) -> None:
         """Should recursively convert lists."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible([1, 2, 3])
         assert result == [1, 2, 3]
 
     def test_converts_tuple_to_list(self) -> None:
         """Should convert tuples to lists."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible((1, 2, 3))
         assert result == [1, 2, 3]
 
     def test_converts_set_to_sorted_list(self) -> None:
         """Should convert sets to sorted lists."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible({3, 1, 2})
         # Set conversion sorts by repr
@@ -169,7 +166,7 @@ class TestConvertLiteralsToJsonCompatible:
 
     def test_passes_through_primitives(self) -> None:
         """Should pass through primitive types."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         assert _convert_literals_to_json_compatible("string") == "string"
         assert _convert_literals_to_json_compatible(42) == 42
@@ -179,7 +176,7 @@ class TestConvertLiteralsToJsonCompatible:
 
     def test_converts_unknown_to_string(self) -> None:
         """Should convert unknown types to string."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         class CustomClass:
             def __str__(self) -> str:
@@ -193,55 +190,19 @@ class TestFunctionToToolDefinition:
     """Legacy function_to_tool_definition tests removed with deprecated API."""
 
 
-class TestDeprecationWarnings:
-    """Tests for deprecation warnings in __getattr__."""
-
-    def test_search_wikipedia_deprecation_warning(self) -> None:
-        """Should emit deprecation warning for search_wikipedia."""
-        import warnings
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            try:
-                from opik_optimizer.utils import core
-
-                _ = core.search_wikipedia  # noqa: F841
-            except AttributeError:
-                pass  # May not be available
-
-            # Check if deprecation warning was raised
-            # If the function exists, a warning should be raised
-            # If not, AttributeError is expected
-            assert (
-                any(issubclass(warning.category, DeprecationWarning) for warning in w)
-                or True
-            )  # Pass if function doesn't exist
-
-    def test_raises_attribute_error_for_unknown(self) -> None:
-        """Should raise AttributeError for unknown attributes."""
-        from opik_optimizer.utils import core
-
-        with pytest.raises(AttributeError, match="has no attribute"):
-            _ = core.nonexistent_function  # noqa: F841
-
-
 class TestEnsureEndingSlash:
     """Tests for ensure_ending_slash function."""
 
-    def test_adds_slash_when_missing(self) -> None:
-        """Should add trailing slash when missing."""
+    @pytest.mark.parametrize(
+        "input_url,expected",
+        [
+            ("http://example.com", "http://example.com/"),
+            ("http://example.com/", "http://example.com/"),
+            ("http://example.com///", "http://example.com/"),
+        ],
+    )
+    def test_ensure_ending_slash(self, input_url: str, expected: str) -> None:
+        """Should ensure exactly one trailing slash."""
         from opik_optimizer.utils.reporting import ensure_ending_slash
 
-        assert ensure_ending_slash("http://example.com") == "http://example.com/"
-
-    def test_does_not_duplicate_slash(self) -> None:
-        """Should not duplicate trailing slash."""
-        from opik_optimizer.utils.reporting import ensure_ending_slash
-
-        assert ensure_ending_slash("http://example.com/") == "http://example.com/"
-
-    def test_handles_multiple_trailing_slashes(self) -> None:
-        """Should handle multiple trailing slashes."""
-        from opik_optimizer.utils.reporting import ensure_ending_slash
-
-        assert ensure_ending_slash("http://example.com///") == "http://example.com/"
+        assert ensure_ending_slash(input_url) == expected

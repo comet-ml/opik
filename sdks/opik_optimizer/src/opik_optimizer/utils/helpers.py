@@ -1,31 +1,28 @@
-"""Utility functions and constants for the optimizer package."""
+"""Helper utility functions for JSON parsing and data conversion."""
 
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 import ast
 import json
 import logging
-import random
-
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
 
-def get_random_seed() -> int:
+def json_to_dict(json_str: str) -> Any:
     """
-    Get a random seed for reproducibility.
+    Parse a JSON string, handling code blocks and Python literals.
+
+    Attempts to parse JSON, falling back to Python literal evaluation if needed.
+    Handles code blocks (```json and ```) and converts Python literals
+    (tuples, sets) to JSON-compatible structures.
+
+    Args:
+        json_str: String to parse as JSON
 
     Returns:
-        int: A random seed
+        Parsed dictionary/list/value, or None if completely unparseable
     """
-
-    return random.randint(0, 2**32 - 1)
-
-
-def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
     try:
@@ -84,31 +81,3 @@ def _convert_literals_to_json_compatible(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
-
-
-# Deprecated functions
-def __getattr__(name: str) -> Any:
-    """Provide backward compatibility for moved Wikipedia functions."""
-    if name == "search_wikipedia":
-        import warnings
-        from .tools.wikipedia import search_wikipedia
-
-        warnings.warn(
-            "Importing search_wikipedia from opik_optimizer.utils.core is deprecated. "
-            "Use: from opik_optimizer.utils.tools.wikipedia import search_wikipedia",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return search_wikipedia
-    elif name == "_search_wikipedia_api":
-        import warnings
-        from .tools.wikipedia import _search_wikipedia_api
-
-        warnings.warn(
-            "_search_wikipedia_api is internal and has moved. "
-            "Use: from opik_optimizer.utils.tools.wikipedia import search_wikipedia",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _search_wikipedia_api
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

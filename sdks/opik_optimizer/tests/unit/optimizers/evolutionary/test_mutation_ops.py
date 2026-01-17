@@ -4,6 +4,7 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
 import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer.api_objects.types import Content
+from tests.unit.test_helpers import make_fake_llm_call
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -14,10 +15,9 @@ class TestGetSynonym:
     def test_returns_synonym_from_llm(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            return "quick"
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model", make_fake_llm_call("quick")
+        )
 
         result = mutation_ops._get_synonym(
             word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
@@ -27,10 +27,10 @@ class TestGetSynonym:
     def test_returns_original_word_on_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            raise Exception("API error")
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(raises=Exception("API error")),
+        )
 
         result = mutation_ops._get_synonym(
             word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
@@ -40,10 +40,9 @@ class TestGetSynonym:
     def test_strips_whitespace_from_response(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            return "  quick  \n"
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model", make_fake_llm_call("  quick  \n")
+        )
 
         result = mutation_ops._get_synonym(
             word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
@@ -57,10 +56,9 @@ class TestModifyPhrase:
     def test_returns_modified_phrase_from_llm(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            return "rapidly"
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model", make_fake_llm_call("rapidly")
+        )
 
         result = mutation_ops._modify_phrase(
             phrase="quickly", model="gpt-4", model_parameters={}, prompts=evo_prompts
@@ -70,10 +68,10 @@ class TestModifyPhrase:
     def test_returns_original_phrase_on_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            raise Exception("API error")
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(raises=Exception("API error")),
+        )
 
         result = mutation_ops._modify_phrase(
             phrase="quickly", model="gpt-4", model_parameters={}, prompts=evo_prompts
@@ -370,10 +368,12 @@ class TestRadicalInnovationMutation:
     def test_returns_new_prompt_on_success(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            return '[{"role": "system", "content": "New innovative prompt"}, {"role": "user", "content": "{input}"}]'
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(
+                '[{"role": "system", "content": "New innovative prompt"}, {"role": "user", "content": "{input}"}]'
+            ),
+        )
 
         prompt = ChatPrompt(system="Original", user="Question")
         initial_prompt = ChatPrompt(system="Initial", user="Task")
@@ -394,10 +394,10 @@ class TestRadicalInnovationMutation:
     def test_returns_original_on_parse_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            return "Not valid JSON at all"
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call("Not valid JSON at all"),
+        )
 
         prompt = ChatPrompt(system="Original", user="Question")
         initial_prompt = ChatPrompt(system="Initial", user="Task")
@@ -417,10 +417,10 @@ class TestRadicalInnovationMutation:
     def test_returns_original_on_llm_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        def fake_call_model(**kwargs: Any) -> str:
-            raise Exception("LLM API error")
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(raises=Exception("LLM API error")),
+        )
 
         prompt = ChatPrompt(system="Original", user="Question")
         initial_prompt = ChatPrompt(system="Initial", user="Task")
@@ -485,10 +485,10 @@ class TestSemanticMutation:
             lambda seq: "rephrase",
         )
 
-        def fake_call_model(**kwargs: Any) -> str:
-            raise Exception("LLM error")
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(raises=Exception("LLM error")),
+        )
 
         captured: dict[str, Any] = {}
 
@@ -546,10 +546,12 @@ class TestDeapMutation:
             lambda seq: seq[0] if seq else "rephrase",
         )
 
-        def fake_call_model(**kwargs: Any) -> str:
-            return '[{"role": "system", "content": "Mutated"}, {"role": "user", "content": "Question"}]'
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(
+                '[{"role": "system", "content": "Mutated"}, {"role": "user", "content": "Question"}]'
+            ),
+        )
 
         def fake_display_success(message: str, verbose: int = 1) -> None:
             pass

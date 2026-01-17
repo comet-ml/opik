@@ -1,5 +1,4 @@
 import importlib.metadata
-import logging
 import os
 import warnings
 

@@ -12,7 +12,7 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
 from .utils import throttle as _throttle
-from . import utils as _utils
+from .utils.helpers import json_to_dict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -332,7 +332,7 @@ def _parse_response(
             return response_model.model_validate_json(content)
         except PydanticValidationError as exc:
             try:
-                cleaned = _utils.json_to_dict(content)
+                cleaned = json_to_dict(content)
                 if cleaned is not None:
                     return response_model.model_validate(cleaned)
             except (
@@ -387,7 +387,7 @@ def _parse_response_list(
             parsed.append(response_model.model_validate_json(content))
         except PydanticValidationError as exc:
             try:
-                cleaned = _utils.json_to_dict(content)
+                cleaned = json_to_dict(content)
                 if cleaned is not None:
                     parsed.append(response_model.model_validate(cleaned))
                     continue

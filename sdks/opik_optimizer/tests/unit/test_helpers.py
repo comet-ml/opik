@@ -286,3 +286,49 @@ def make_optimization_result(
     if initial_score is not None:
         result["initial_score"] = initial_score
     return result
+
+
+def make_fake_llm_call(
+    response: str | list[str] | None = None,
+    *,
+    raises: Exception | None = None,
+    side_effect: Callable[..., str] | list[str] | None = None,
+) -> Callable[..., str]:
+    """
+    Create a fake call_model function for testing.
+
+    Args:
+        response: Static response string or list of responses
+        raises: Exception to raise when called
+        side_effect: Callable that returns response based on kwargs, or list of responses
+
+    Returns:
+        Fake call_model function
+    """
+    if raises:
+
+        def fake(**kwargs: Any) -> str:
+            raise raises
+
+        return fake
+
+    if side_effect:
+        if callable(side_effect):
+            return side_effect
+        # List of responses - return next one each time
+        call_count = {"n": 0}
+
+        def fake(**kwargs: Any) -> str:
+            idx = call_count["n"] % len(side_effect)
+            call_count["n"] += 1
+            return side_effect[idx]
+
+        return fake
+
+    # Default: return static response
+    if response is None:
+        response = "test response"
+    if isinstance(response, list):
+        # Return first response if list provided
+        return lambda **kwargs: response[0]
+    return lambda **kwargs: response

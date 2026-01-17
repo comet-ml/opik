@@ -9,8 +9,7 @@ from contextlib import contextmanager
 
 import pydantic
 import rich.panel
-from .utils.reporting import get_console
-from .utils.core import get_optimization_run_url_by_id
+from .utils.reporting import get_console, get_optimization_run_url_by_id
 from .utils.display import (
     format_prompt_for_plaintext,
     build_plaintext_summary,
@@ -19,6 +18,7 @@ from .utils.display import (
 
 from .api_objects import chat_prompt
 from .constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
+from .utils.logging import debug_log
 
 
 from .utils.time import now_iso

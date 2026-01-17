@@ -243,7 +243,7 @@ class PromptHallOfFame:
     def _parse_pattern_response(self, response: str) -> list[str]:
         """Parse LLM response into pattern list"""
         try:
-            from ....utils.core import json_to_dict
+            from ....utils.helpers import json_to_dict
 
             parsed = json_to_dict(response)
             patterns = []

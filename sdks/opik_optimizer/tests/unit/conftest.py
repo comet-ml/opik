@@ -21,10 +21,11 @@ from typing import Any
 
 import pytest
 from opik import Dataset
-from opik_optimizer import ChatPrompt
 from opik_optimizer.constants import OPIK_OPTIMIZER_NO_BANNER_ENV
 
 os.environ.setdefault(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
+
+from opik_optimizer import ChatPrompt
 
 
 @pytest.fixture(autouse=True)

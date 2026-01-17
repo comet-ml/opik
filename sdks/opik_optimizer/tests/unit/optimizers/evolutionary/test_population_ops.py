@@ -10,6 +10,7 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import 
     initialize_population,
     should_restart_population,
 )
+from tests.unit.test_helpers import make_fake_llm_call
 
 
 class TestInitializePopulation:
@@ -128,10 +129,10 @@ class TestInitializePopulation:
             lambda verbose: mock_context,
         )
 
-        def fake_call_model(**kwargs: object) -> str:
-            raise Exception("LLM API error")
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call(raises=Exception("LLM API error")),
+        )
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
 
@@ -164,10 +165,10 @@ class TestInitializePopulation:
             lambda verbose: mock_context,
         )
 
-        def fake_call_model(**kwargs: object) -> str:
-            return "This is not valid JSON"
-
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr(
+            "opik_optimizer._llm_calls.call_model",
+            make_fake_llm_call("This is not valid JSON"),
+        )
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
 

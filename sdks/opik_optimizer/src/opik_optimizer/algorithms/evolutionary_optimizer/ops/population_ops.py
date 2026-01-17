@@ -8,7 +8,8 @@ from deap import creator as _creator
 
 from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
-from .... import utils, _llm_calls
+from .... import _llm_calls
+from ....utils.helpers import json_to_dict
 from ....utils.prompt_library import PromptLibrary
 
 
@@ -150,7 +151,7 @@ def initialize_population(
                 # Collect prompt lists from each n-choice response to expand candidates.
                 parsed_prompts: list[list[dict[str, Any]]] = []
                 for response_item in response_items:
-                    fresh_prompts = utils.json_to_dict(response_item)
+                    fresh_prompts = json_to_dict(response_item)
                     if isinstance(fresh_prompts, list):
                         if all(isinstance(p, dict) for p in fresh_prompts) and all(
                             p.get("role") is not None for p in fresh_prompts

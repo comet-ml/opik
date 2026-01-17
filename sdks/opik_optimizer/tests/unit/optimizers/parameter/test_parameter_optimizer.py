@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 import pytest
 from optuna.trial import TrialState
 
-from opik import Dataset
 from opik_optimizer import ChatPrompt, ParameterOptimizer
 from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
@@ -32,20 +31,23 @@ def _make_dataset() -> MagicMock:
 
 
 class TestParameterOptimizerInit:
-    def test_initialization_with_defaults(self) -> None:
-        optimizer = ParameterOptimizer(model="gpt-4o")
-        assert optimizer.model == "gpt-4o"
-        assert optimizer.seed == 42
-
-    def test_initialization_with_custom_params(self) -> None:
-        optimizer = ParameterOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=123,
-        )
-        assert optimizer.model == "gpt-4o-mini"
-        assert optimizer.verbose == 0
-        assert optimizer.seed == 123
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
+            (
+                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
+                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
+            ),
+        ],
+    )
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
+        """Test optimizer initialization with defaults and custom params."""
+        optimizer = ParameterOptimizer(**kwargs)
+        for key, value in expected.items():
+            assert getattr(optimizer, key) == value
 
 
 class TestParameterOptimizerOptimizePrompt:
@@ -559,10 +561,11 @@ class TestReporterLifecycle:
     def test_sets_and_clears_reporter_during_trial(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        dataset = MagicMock(spec=Dataset)
-        dataset.name = "train"
-        dataset.id = "ds-1"
-        dataset.get_items.return_value = [{"id": "1", "question": "Q1", "answer": "A1"}]
+        dataset = make_mock_dataset(
+            [{"id": "1", "question": "Q1", "answer": "A1"}],
+            name="train",
+            dataset_id="ds-1",
+        )
 
         prompt = ChatPrompt(name="p", system="Test")
 

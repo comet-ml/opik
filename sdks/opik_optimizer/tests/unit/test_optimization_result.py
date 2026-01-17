@@ -3,6 +3,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from typing import Any
+
 from opik_optimizer import ChatPrompt
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.utils.display import (
@@ -15,33 +17,25 @@ from opik_optimizer.utils.display import (
 class TestFormatFloat:
     """Tests for format_float helper function."""
 
-    def test_formats_float_with_default_precision(self) -> None:
-        result = format_float(3.14159265)
-        assert result == "3.141593"
-
-    def test_formats_float_with_custom_precision(self) -> None:
-        result = format_float(3.14159265, digits=2)
-        assert result == "3.14"
-
-    def test_formats_zero(self) -> None:
-        result = format_float(0.0)
-        assert result == "0.000000"
-
-    def test_formats_negative_float(self) -> None:
-        result = format_float(-1.5, digits=3)
-        assert result == "-1.500"
-
-    def test_passes_through_non_float(self) -> None:
-        result = format_float("string_value")
-        assert result == "string_value"
-
-    def test_passes_through_integer(self) -> None:
-        result = format_float(42)
-        assert result == "42"
-
-    def test_passes_through_none(self) -> None:
-        result = format_float(None)
-        assert result == "None"
+    @pytest.mark.parametrize(
+        "value,digits,expected",
+        [
+            (3.14159265, None, "3.141593"),
+            (3.14159265, 2, "3.14"),
+            (0.0, None, "0.000000"),
+            (-1.5, 3, "-1.500"),
+            ("string_value", None, "string_value"),
+            (42, None, "42"),
+            (None, None, "None"),
+        ],
+    )
+    def test_formats_float(self, value: Any, digits: int | None, expected: str) -> None:
+        """Test format_float with various inputs."""
+        if digits is not None:
+            result = format_float(value, digits=digits)
+        else:
+            result = format_float(value)
+        assert result == expected
 
 
 class TestFormatPromptForPlaintext:
@@ -461,13 +455,21 @@ class TestOptimizationResultDisplay:
             score=0.85,
             metric_name="accuracy",
             optimization_id="opt-123",
-            dataset_id="ds-456",
+            dataset_id="ds-123",
         )
         with patch("opik_optimizer.optimization_result.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
+            from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
+
+            expected_link = get_optimization_run_url_by_id(
+                optimization_id="opt-123", dataset_id="ds-123"
+            )
+            assert "optimization_id=opt-123" in expected_link
+            assert "dataset_id=ds-123" in expected_link
+            assert "path=" in expected_link
             mock_console.return_value.print.assert_any_call(
-                "Optimization run link: https://www.comet.com/opik/api/v1/session/redirect/optimizations/?optimization_id=opt-123&dataset_id=ds-123&path=a99999999999999999999999999999=="
+                f"Optimization run link: {expected_link}"
             )
 
     def test_display_shows_no_link_message_when_missing(

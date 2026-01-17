@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.base_optimizer import AlgorithmResult
+from tests.unit.test_helpers import make_mock_dataset
 
 if TYPE_CHECKING:
     pass
@@ -223,12 +224,12 @@ class TestMidOptimizationEarlyStop:
         """Optimizer should stop when perfect score is reached mid-optimization."""
         # Use the centralized mock_opik_client fixture
         mock_opik_client()
-        from opik import Dataset
 
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         # Create optimizer with low perfect_score threshold
         optimizer = SimpleOptimizer(perfect_score=0.75, skip_perfect_score=True)
@@ -268,12 +269,12 @@ class TestMidOptimizationEarlyStop:
     ):
         """Optimizer should complete all rounds when no early stop condition is met."""
         mock_opik_client()
-        from opik import Dataset
 
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         # Create optimizer with high perfect_score threshold (won't be reached)
         optimizer = SimpleOptimizer(perfect_score=0.99, skip_perfect_score=True)
@@ -303,12 +304,12 @@ class TestMidOptimizationEarlyStop:
     ):
         """finish_reason should be set to 'completed' on normal completion."""
         mock_opik_client()
-        from opik import Dataset
 
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         optimizer = SimpleOptimizer(perfect_score=0.99, skip_perfect_score=False)
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
@@ -354,12 +355,12 @@ class TestBaselineEarlyStop:
         """Early stop at baseline should set stop_reason to 'baseline_score_met_threshold'."""
         # Use the centralized mock_opik_client fixture
         mock_opik_client()
-        from opik import Dataset
 
-        mock_ds = MagicMock(spec=Dataset)
-        mock_ds.name = "test-dataset"
-        mock_ds.id = "ds-123"
-        mock_ds.get_items.return_value = [{"id": "1", "input": "test"}]
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
 
         optimizer = SimpleOptimizer(perfect_score=0.9, skip_perfect_score=True)
         # Baseline score of 0.95 exceeds perfect_score of 0.9

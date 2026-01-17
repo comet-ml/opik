@@ -28,24 +28,35 @@ def _make_dataset() -> MagicMock:
 
 
 class TestFewShotBayesianOptimizerInit:
-    def test_initialization_with_defaults(self) -> None:
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o")
-        assert optimizer.model == "gpt-4o"
-        assert optimizer.seed == 42
-
-    def test_initialization_with_custom_params(self) -> None:
-        optimizer = FewShotBayesianOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=123,
-            min_examples=1,
-            max_examples=5,
-        )
-        assert optimizer.model == "gpt-4o-mini"
-        assert optimizer.verbose == 0
-        assert optimizer.seed == 123
-        assert optimizer.min_examples == 1
-        assert optimizer.max_examples == 5
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
+            (
+                {
+                    "model": "gpt-4o-mini",
+                    "verbose": 0,
+                    "seed": 123,
+                    "min_examples": 1,
+                    "max_examples": 5,
+                },
+                {
+                    "model": "gpt-4o-mini",
+                    "verbose": 0,
+                    "seed": 123,
+                    "min_examples": 1,
+                    "max_examples": 5,
+                },
+            ),
+        ],
+    )
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
+        """Test optimizer initialization with defaults and custom params."""
+        optimizer = FewShotBayesianOptimizer(**kwargs)
+        for key, value in expected.items():
+            assert getattr(optimizer, key) == value
 
 
 class TestFewShotBayesianOptimizerOptimizePrompt:

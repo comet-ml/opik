@@ -85,6 +85,8 @@ def setup_logging(
         handlers=[console_handler],
         force=True,
     )
+
+    logging.getLogger("opik_optimizer").setLevel(target_level)
     # Align root logger too so module loggers inherit the env level.
     logging.getLogger().setLevel(target_level)
     logging.getLogger("opik_optimizer").setLevel(target_level)
