@@ -412,3 +412,84 @@ def test_extraction__various_file_types__all_extracted(
         entity_id=trace_id,
         expected_sizes=expected_sizes,
     )
+
+
+def test_extraction__backend_reinjects_extracted_attachments(
+    opik_client: opik.Opik,
+):
+    """Test that backend reinjects extracted attachments."""
+    trace_id = id_helpers.generate_id()
+    span_id = id_helpers.generate_id()
+
+    # Create a trace with end_time and base64-encoded images in input
+    trace_input = {
+        "image1": _create_base64_url("image/png", constants.PNG_BASE64),
+        "text": "regular text field",
+    }
+    trace = opik_client.trace(
+        id=trace_id,
+        name="test-trace-backend_reinjects_extracted_attachments",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input=trace_input,
+        end_time=datetime_helpers.local_timestamp(),
+    )
+
+    # Create a span with end_time and attachments
+    span_input = {
+        "image": _create_base64_url("image/png", constants.PNG_BASE64),
+    }
+    trace.span(
+        id=span_id,
+        name="test-span--backend_reinjects_extracted_attachments",
+        input=span_input,
+        end_time=datetime_helpers.local_timestamp(),
+    )
+
+    opik_client.flush()
+
+    #
+    # Verify attachments were extracted and uploaded for trace and span
+    #
+    expected_sizes = [
+        len(base64.b64decode(constants.PNG_BASE64)),
+    ]
+    verifiers.verify_auto_extracted_attachments(
+        opik_client=opik_client,
+        entity_type="trace",
+        entity_id=trace_id,
+        expected_sizes=expected_sizes,
+    )
+
+    expected_sizes = [
+        len(base64.b64decode(constants.PNG_BASE64)),
+    ]
+    verifiers.verify_auto_extracted_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span_id,
+        expected_sizes=expected_sizes,
+    )
+
+    #
+    # Verify trace and span returned by backend has extracted attachments injected back into
+    #
+
+    # Verify trace
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name="test-trace-backend_reinjects_extracted_attachments",
+        input=trace_input,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    # Verify span
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span_id,
+        parent_span_id=None,
+        trace_id=trace_id,
+        name="test-span--backend_reinjects_extracted_attachments",
+        input=span_input,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )

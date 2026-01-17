@@ -233,7 +233,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Attachments larger than this size will be extracted from inputs/outputs of spans/traces and uploaded to the Opik backend.
     """
 
-    is_attachment_extraction_active: bool = False
+    is_attachment_extraction_active: bool = True
     """
     If set to True, attachments larger than `min_base64_embedded_attachment_size` will be extracted from spans/traces and uploaded to the Opik backend.
     """
