@@ -73,6 +73,35 @@ import static java.util.stream.Collectors.toSet;
 @Slf4j
 class ExperimentDAO {
 
+    private static final String PROJECT_ID_FILTER = """
+            <if(project_id)>
+            AND id IN (
+                SELECT DISTINCT experiment_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND trace_id IN (
+                    SELECT id FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    LIMIT 1 BY id
+                )
+            )
+            <endif>
+            """;
+
+    private static final String PROJECT_DELETED_FILTER = """
+            <if(project_deleted)>
+            AND id IN (
+                SELECT DISTINCT ei.experiment_id
+                FROM experiment_items ei
+                LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                WHERE ei.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+                HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+            )
+            <endif>
+            """;
+
     /**
      * The query validates if already exists with this id. Failing if so.
      * That way only insert is allowed, but not update.
@@ -166,29 +195,8 @@ class ExperimentDAO {
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                <if(project_id)>
-                AND id IN (
-                    SELECT DISTINCT experiment_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (
-                        SELECT id FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        LIMIT 1 BY id
-                    )
-                )
-                <endif>
-                <if(project_deleted)>
-                AND id IN (
-                    SELECT DISTINCT ei.experiment_id
-                    FROM experiment_items ei
-                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
-                    WHERE ei.workspace_id = :workspace_id
-                    GROUP BY ei.experiment_id
-                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
-                )
-                <endif>
+                %1$s
+                %2$s
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -498,7 +506,7 @@ class ExperimentDAO {
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """;
+            """.formatted(PROJECT_ID_FILTER, PROJECT_DELETED_FILTER);
 
     private static final String FIND_COUNT = """
             WITH experiments_initial AS (
@@ -513,29 +521,8 @@ class ExperimentDAO {
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                <if(project_id)>
-                AND id IN (
-                    SELECT DISTINCT experiment_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (
-                        SELECT id FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        LIMIT 1 BY id
-                    )
-                )
-                <endif>
-                <if(project_deleted)>
-                AND id IN (
-                    SELECT DISTINCT ei.experiment_id
-                    FROM experiment_items ei
-                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
-                    WHERE ei.workspace_id = :workspace_id
-                    GROUP BY ei.experiment_id
-                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
-                )
-                <endif>
+                %1$s
+                %2$s
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -673,7 +660,7 @@ class ExperimentDAO {
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """;
+            """.formatted(PROJECT_ID_FILTER, PROJECT_DELETED_FILTER);
 
     private static final String FIND_GROUPS = """
             WITH experiments_filtered AS (
@@ -689,19 +676,7 @@ class ExperimentDAO {
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
-                <if(project_id)>
-                AND id IN (
-                    SELECT DISTINCT experiment_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (
-                        SELECT id FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        LIMIT 1 BY id
-                    )
-                )
-                <endif>
+                %s
             ), experiment_projects AS (
                 SELECT
                     experiment_id,
@@ -728,7 +703,7 @@ class ExperimentDAO {
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """;
+            """.formatted(PROJECT_ID_FILTER);
 
     private static final String FIND_GROUPS_AGGREGATIONS = """
             WITH experiments_final AS (
