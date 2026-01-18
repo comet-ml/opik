@@ -57,10 +57,11 @@ public class ExperimentsTestUtils {
      *
      * @param groups the grouping criteria
      * @param experiments the list of experiments to group
+     * @param projectMap map of project IDs to Project objects for enrichment (use Map.of() if not needed)
      * @return the expected group response
      */
     public static ExperimentGroupResponse buildExpectedGroupResponse(List<GroupBy> groups,
-            List<Experiment> experiments) {
+            List<Experiment> experiments, Map<UUID, Project> projectMap) {
         // Explode experiments by LIST fields (like arrayJoin in ClickHouse)
         // Each experiment with LIST fields will appear in multiple groups
         List<ExperimentWithGroupValues> explodedExperiments = explodeExperimentsByListFields(experiments, groups);
@@ -89,10 +90,10 @@ public class ExperimentsTestUtils {
 
         // Build enrichment info (dataset and project mapping)
         Map<UUID, Dataset> datasetMap = getDatasetMapFromExperiments(experiments);
-        Map<UUID, Project> projectMap = getProjectMapFromExperiments(experiments);
+        Map<UUID, Project> resolvedProjectMap = getProjectMapFromExperiments(experiments, projectMap);
         var enrichInfoHolder = ExperimentGroupEnrichInfoHolder.builder()
                 .datasetMap(datasetMap)
-                .projectMap(projectMap)
+                .projectMap(resolvedProjectMap)
                 .build();
 
         // Build the nested response structure using the production builder
@@ -104,13 +105,22 @@ public class ExperimentsTestUtils {
      * Build expected ExperimentGroupAggregationsResponse for testing.
      * This function groups experiments and calculates aggregations based on the provided criteria.
      * Uses the actual production ExperimentResponseBuilder class to ensure consistency between test and production code.
+     *
+     * @param groups the grouping criteria
+     * @param experiments the list of experiments
+     * @param experimentToItems mapping from experiment ID to its experiment items
+     * @param traceToSpans mapping from trace ID to its spans
+     * @param traces the list of traces
+     * @param projectMap map of project IDs to Project objects for enrichment (use Map.of() if not needed)
+     * @return the expected group aggregations response
      */
     public static ExperimentGroupAggregationsResponse buildExpectedGroupAggregationsResponse(
             List<GroupBy> groups,
             List<Experiment> experiments,
             Map<UUID, List<ExperimentItem>> experimentToItems,
             Map<UUID, List<Span>> traceToSpans,
-            List<Trace> traces) {
+            List<Trace> traces,
+            Map<UUID, Project> projectMap) {
 
         // Explode experiments by LIST fields (like arrayJoin in ClickHouse)
         // Each experiment with LIST fields will appear in multiple groups
@@ -142,10 +152,10 @@ public class ExperimentsTestUtils {
 
         // Build enrichment info (dataset and project mapping)
         Map<UUID, Dataset> datasetMap = getDatasetMapFromExperiments(experiments);
-        Map<UUID, Project> projectMap = getProjectMapFromExperiments(experiments);
+        Map<UUID, Project> resolvedProjectMap = getProjectMapFromExperiments(experiments, projectMap);
         var enrichInfoHolder = ExperimentGroupEnrichInfoHolder.builder()
                 .datasetMap(datasetMap)
-                .projectMap(projectMap)
+                .projectMap(resolvedProjectMap)
                 .build();
 
         // Build the nested response structure using the production builder
@@ -385,17 +395,29 @@ public class ExperimentsTestUtils {
 
     /**
      * Build project mapping from experiments for enrichment.
-     * Extracts unique project IDs from experiments and creates Project objects.
+     * If a projectMap is provided, uses the real project names from it.
+     * Otherwise, falls back to placeholder names.
+     *
+     * @param experiments the list of experiments to extract project IDs from
+     * @param projectMap optional map of project IDs to Project objects with real names
+     * @return map of project IDs to Project objects for enrichment
      */
-    private Map<UUID, Project> getProjectMapFromExperiments(List<Experiment> experiments) {
+    private static Map<UUID, Project> getProjectMapFromExperiments(List<Experiment> experiments,
+            Map<UUID, Project> projectMap) {
         return experiments.stream()
                 .filter(exp -> exp.projectId() != null)
                 .collect(Collectors.toMap(
                         Experiment::projectId,
-                        exp -> Project.builder()
-                                .id(exp.projectId())
-                                .name("project-" + exp.projectId()) // Use a placeholder name
-                                .build(),
+                        exp -> {
+                            // Use project from provided map if available, otherwise create placeholder
+                            if (projectMap != null && projectMap.containsKey(exp.projectId())) {
+                                return projectMap.get(exp.projectId());
+                            }
+                            return Project.builder()
+                                    .id(exp.projectId())
+                                    .name("project-" + exp.projectId())
+                                    .build();
+                        },
                         (existing, replacement) -> existing // Keep first one in case of duplicates
                 ));
     }

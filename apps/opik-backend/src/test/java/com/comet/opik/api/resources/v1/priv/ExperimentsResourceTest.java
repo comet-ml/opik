@@ -2884,13 +2884,17 @@ class ExperimentsResourceTest {
                             .toList()
                     : allExperiments;
 
+            var projectMap = projects.stream()
+                    .collect(Collectors.toMap(Project::id, Function.identity()));
+
             // Build expected response
             var expectedResponse = ExperimentsTestUtils.buildExpectedGroupAggregationsResponse(
                     groups,
                     expectedExperiments,
                     experimentToItems,
                     traceToSpans,
-                    tracesAll);
+                    tracesAll,
+                    projectMap);
 
             assertThat(response)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
@@ -3133,9 +3137,13 @@ class ExperimentsResourceTest {
                     groups,
                     Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 200);
 
+            var projectMap = projects.stream()
+                    .collect(Collectors.toMap(Project::id, Function.identity()));
+
             var expectedResponse = ExperimentsTestUtils.buildExpectedGroupResponse(
                     groups,
-                    allExperiments);
+                    allExperiments,
+                    projectMap);
             assertThat(response).isEqualTo(expectedResponse);
         }
 
@@ -3196,7 +3204,8 @@ class ExperimentsResourceTest {
 
             var expectedResponse = ExperimentsTestUtils.buildExpectedGroupResponse(
                     groups,
-                    expectedExperiments);
+                    expectedExperiments,
+                    Map.of());
             assertThat(response).isEqualTo(expectedResponse);
         }
 
@@ -3249,7 +3258,8 @@ class ExperimentsResourceTest {
 
             var expectedResponse = ExperimentsTestUtils.buildExpectedGroupResponse(
                     groups,
-                    allExperiments);
+                    allExperiments,
+                    Map.of());
             assertThat(response).isEqualTo(expectedResponse);
         }
 
