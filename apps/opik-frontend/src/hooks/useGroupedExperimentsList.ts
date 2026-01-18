@@ -28,7 +28,7 @@ import {
   DEFAULT_ITEMS_PER_GROUP,
   GROUP_ID_SEPARATOR,
   GROUP_ROW_TYPE,
-  DELETED_DATASET_LABEL,
+  DELETED_ENTITY_LABEL,
 } from "@/constants/groups";
 import { FlattenGroup, Groups } from "@/types/groups";
 import { createFilter } from "@/lib/filters";
@@ -134,8 +134,8 @@ const buildGroupPath = (
     const labelA = currentGroupsMap[a].label ?? a;
     const labelB = currentGroupsMap[b].label ?? b;
 
-    const isEmptyOrDeletedA = labelA === "" || labelA === DELETED_DATASET_LABEL;
-    const isEmptyOrDeletedB = labelB === "" || labelB === DELETED_DATASET_LABEL;
+    const isEmptyOrDeletedA = labelA === "" || labelA === DELETED_ENTITY_LABEL;
+    const isEmptyOrDeletedB = labelB === "" || labelB === DELETED_ENTITY_LABEL;
 
     if (isEmptyOrDeletedA && !isEmptyOrDeletedB) return 1; // A goes to the end
     if (!isEmptyOrDeletedA && isEmptyOrDeletedB) return -1; // B goes to the end
@@ -150,7 +150,10 @@ const buildGroupPath = (
     if (orderMap) {
       const orderA = orderMap[a] ?? Number.MAX_SAFE_INTEGER;
       const orderB = orderMap[b] ?? Number.MAX_SAFE_INTEGER;
-      return orderA - orderB;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      // Fall through to label comparison when tied (items beyond MAX_ENTITIES_FOR_SORTING)
     }
 
     if (currentGroup.direction === SORT_DIRECTION.ASC) {
