@@ -150,6 +150,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.ExperimentsTestUtils.getQuantities;
@@ -2870,7 +2871,14 @@ class ExperimentsResourceTest {
                                     .build(),
                             (Function<Experiment, Predicate<Experiment>>) experiment -> exp -> exp.tags() != null
                                     && exp.tags()
-                                            .contains(experiment.tags().stream().sorted().findFirst().orElse(""))));
+                                            .contains(experiment.tags().stream().sorted().findFirst().orElse(""))),
+                    // Test grouping by PROJECT_ID without filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.STRING).build()),
+                            null, null),
+                    // Test grouping by PROJECT_ID with DATASET_ID, no filter
+                    Arguments.of(false, List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build()),
+                            null, null));
         }
 
         @ParameterizedTest
@@ -2893,7 +2901,10 @@ class ExperimentsResourceTest {
                             GroupBy.builder().field(METADATA).key("model[0].year").type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
                     Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())),
+                    // PROJECT_ID with invalid type should fail
+                    Arguments.of(List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.LIST).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.DICTIONARY).build())));
         }
 
         @Test
@@ -3152,7 +3163,10 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.LIST).build())),
                     Arguments.of(List.of(GroupBy.builder().field(METADATA).type(FieldType.DICTIONARY).build())),
                     Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DICTIONARY).build())),
-                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())));
+                    Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.DATE_TIME).build())),
+                    // PROJECT_ID with invalid type should fail
+                    Arguments.of(List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.LIST).build())),
+                    Arguments.of(List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.DICTIONARY).build())));
         }
 
         private Stream<Arguments> groupExperiments() {
@@ -3171,7 +3185,12 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build())),
                     // Test grouping by TAGS with DATASET_ID
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
-                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build())));
+                            GroupBy.builder().field(TAGS).type(FieldType.LIST).build())),
+                    // Test grouping by PROJECT_ID
+                    Arguments.of(List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.STRING).build())),
+                    // Test grouping by PROJECT_ID with DATASET_ID
+                    Arguments.of(List.of(GroupBy.builder().field(PROJECT_ID).type(FieldType.STRING).build(),
+                            GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build())));
         }
 
         private Stream<Arguments> groupExperimentsWithFilter() {
