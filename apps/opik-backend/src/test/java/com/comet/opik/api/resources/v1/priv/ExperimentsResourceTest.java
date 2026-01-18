@@ -2773,8 +2773,13 @@ class ExperimentsResourceTest {
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
 
             // Create projects for PROJECT_ID grouping tests
-            var projects = PodamFactoryUtils.manufacturePojoList(podamFactory, Project.class);
-            projects.forEach(project -> projectResourceClient.createProject(project, apiKey, workspaceName));
+            // We need to capture the actual IDs assigned by the backend, not the PODAM-generated IDs
+            var projects = PodamFactoryUtils.manufacturePojoList(podamFactory, Project.class).stream()
+                    .map(project -> {
+                        UUID actualId = projectResourceClient.createProject(project, apiKey, workspaceName);
+                        return project.toBuilder().id(actualId).build();
+                    })
+                    .toList();
 
             Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
             List<Trace> tracesAll = new ArrayList<>();
@@ -3086,8 +3091,13 @@ class ExperimentsResourceTest {
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
 
             // Create projects for PROJECT_ID grouping tests
-            var projects = PodamFactoryUtils.manufacturePojoList(podamFactory, Project.class);
-            projects.forEach(project -> projectResourceClient.createProject(project, apiKey, workspaceName));
+            // We need to capture the actual IDs assigned by the backend, not the PODAM-generated IDs
+            var projects = PodamFactoryUtils.manufacturePojoList(podamFactory, Project.class).stream()
+                    .map(project -> {
+                        UUID actualId = projectResourceClient.createProject(project, apiKey, workspaceName);
+                        return project.toBuilder().id(actualId).build();
+                    })
+                    .toList();
 
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
