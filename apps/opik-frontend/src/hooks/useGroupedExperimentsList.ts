@@ -30,7 +30,7 @@ import {
   GROUP_ROW_TYPE,
   DELETED_ENTITY_LABEL,
 } from "@/constants/groups";
-import { FlattenGroup, Groups } from "@/types/groups";
+import { FlattenGroup, Group, Groups } from "@/types/groups";
 import { createFilter } from "@/lib/filters";
 import {
   buildRowId,
@@ -489,7 +489,7 @@ export default function useGroupedExperimentsList(
   }, [flattenDeepestGroups, params.expandedMap]);
 
   const experimentsResponses = useQueries({
-    queries: expandedGroups.map(({ id, filters }) => {
+    queries: expandedGroups.map(({ id, filters, rowGroupData }) => {
       // Combine top-level filters with group-specific filters
       const combinedFilters = [...(params.filters ?? []), ...filters];
 
@@ -501,14 +501,21 @@ export default function useGroupedExperimentsList(
         (f) => f.field !== COLUMN_PROJECT_ID,
       );
 
-      // Check if project filter value is valid or represents deleted/orphan projects
+      // Check if this is an orphan project by looking at the label in rowGroupData
+      // The backend returns "__DELETED" as the label for orphan/deleted entities
+      const projectMetaKey = buildGroupFieldNameForMeta({
+        field: COLUMN_PROJECT_ID,
+      } as Group);
+      const projectMeta = rowGroupData[projectMetaKey] as
+        | { value: string; label?: string }
+        | undefined;
+      const isOrphanProject = projectMeta?.label === DELETED_ENTITY_LABEL;
+
       const projectIdValue = projectFilter?.value as string | undefined;
-      const isInvalidProjectId =
-        !projectIdValue?.trim() || projectIdValue.includes("\u0000");
       const validProjectId =
-        projectFilter && !isInvalidProjectId ? projectIdValue : undefined;
-      // If there's a project filter but the value is invalid, it means we're filtering for orphan experiments
-      const projectDeleted = projectFilter && isInvalidProjectId;
+        projectFilter && !isOrphanProject ? projectIdValue : undefined;
+      // If there's a project filter but it's for an orphan project, use projectDeleted flag
+      const projectDeleted = projectFilter && isOrphanProject;
 
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,

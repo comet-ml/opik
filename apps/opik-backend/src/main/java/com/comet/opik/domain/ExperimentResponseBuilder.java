@@ -30,13 +30,15 @@ import java.util.stream.IntStream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 public class ExperimentResponseBuilder {
 
     private static final String DELETED_ENTITY = "__DELETED";
 
     private static boolean isValidUUID(String value) {
-        if (value == null || value.trim().isEmpty() || value.contains("\u0000")) {
+        if (value == null || value.trim().isEmpty()
+                || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(value)) {
             return false;
         }
         try {

@@ -60,6 +60,7 @@ import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -336,7 +337,7 @@ public class ExperimentService {
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(StringUtils::isNotBlank)
-                .filter(s -> !s.contains("\u0000")) // Filter out strings with null bytes
+                .filter(s -> !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(s))
                 .map(UUID::fromString)
                 .collect(Collectors.toSet());
     }
