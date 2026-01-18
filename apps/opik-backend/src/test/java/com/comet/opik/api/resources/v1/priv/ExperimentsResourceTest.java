@@ -2772,6 +2772,10 @@ class ExperimentsResourceTest {
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
 
+            // Create projects for PROJECT_ID grouping tests
+            var projects = PodamFactoryUtils.manufacturePojoList(podamFactory, Project.class);
+            projects.forEach(project -> projectResourceClient.createProject(project, apiKey, workspaceName));
+
             Map<UUID, List<ExperimentItem>> experimentToItems = new HashMap<>();
             List<Trace> tracesAll = new ArrayList<>();
             Map<UUID, List<Span>> traceToSpans = new HashMap<>();
@@ -2783,23 +2787,38 @@ class ExperimentsResourceTest {
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
                 PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
+                // Assign a random project to each experiment for PROJECT_ID grouping
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
-                        .map(experiment -> experiment.toBuilder()
-                                .datasetId(dataset.id())
-                                .datasetName(dataset.name())
-                                .promptVersion(versionLink)
-                                .promptVersions(List.of(versionLink))
-                                .metadata(JsonUtils
-                                        .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
-                                .tags(tagsList.get(random.nextInt(tagsList.size())))
-                                .build())
+                        .map(experiment -> {
+                            var project = projects.get(random.nextInt(projects.size()));
+                            return experiment.toBuilder()
+                                    .datasetId(dataset.id())
+                                    .datasetName(dataset.name())
+                                    .promptVersion(versionLink)
+                                    .promptVersions(List.of(versionLink))
+                                    .metadata(JsonUtils
+                                            .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
+                                    .tags(tagsList.get(random.nextInt(tagsList.size())))
+                                    .projectId(project.id())
+                                    .build();
+                        })
                         .toList();
                 experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
 
                 // Create traces with different durations and setup spans with cost
+                // Link traces to the same project as their experiment
                 var traces = IntStream.range(0, 10)
-                        .mapToObj(i -> createTraceWithDuration(random.nextInt(300)))
+                        .mapToObj(i -> {
+                            var experiment = experiments.get(i % experiments.size());
+                            var project = projects.stream()
+                                    .filter(p -> p.id().equals(experiment.projectId()))
+                                    .findFirst()
+                                    .orElseThrow();
+                            return createTraceWithDuration(random.nextInt(300)).toBuilder()
+                                    .projectName(project.name())
+                                    .build();
+                        })
                         .toList();
                 tracesAll.addAll(traces);
                 traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -3062,6 +3081,10 @@ class ExperimentsResourceTest {
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class));
 
+            // Create projects for PROJECT_ID grouping tests
+            var projects = PodamFactoryUtils.manufacturePojoList(podamFactory, Project.class);
+            projects.forEach(project -> projectResourceClient.createProject(project, apiKey, workspaceName));
+
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -3076,9 +3099,32 @@ class ExperimentsResourceTest {
                                                         .formatted(random.nextBoolean() ? "2024" : "2025") +
                                                         "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
                                 .tags(tagsList.get(random.nextInt(tagsList.size())))
+                                // Assign a random project to each experiment for PROJECT_ID grouping
+                                .projectId(projects.get(random.nextInt(projects.size())).id())
                                 .build())
                         .toList();
-                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+
+                // Create experiments and link them to projects via traces and experiment items
+                experiments.forEach(experiment -> {
+                    createAndAssert(experiment, apiKey, workspaceName);
+
+                    // Create a trace linked to the experiment's project
+                    var project = projects.stream()
+                            .filter(p -> p.id().equals(experiment.projectId()))
+                            .findFirst()
+                            .orElseThrow();
+                    var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(project.name())
+                            .build();
+                    traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+                    // Create experiment item linking experiment to trace
+                    var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .traceId(trace.id())
+                            .build();
+                    createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+                });
 
                 return experiments.stream();
             }).toList();
