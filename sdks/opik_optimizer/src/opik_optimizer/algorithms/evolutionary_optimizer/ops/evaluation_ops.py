@@ -35,12 +35,27 @@ def evaluate_prompt(
     if tools is not None:
         new_prompt.tools = copy.deepcopy(tools)
 
+    sampling_plan = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples,
+        dataset_item_ids=dataset_item_ids,
+        phase="trial",
+        seed_override=getattr(optimizer, "seed", None),
+    )
+    dataset_item_ids = sampling_plan.dataset_item_ids
+    effective_n_samples = (
+        None if dataset_item_ids is not None else sampling_plan.nb_samples
+    )
+
     configuration_updates = helpers.drop_none(
         {
             "n_samples_for_eval": (
-                len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                len(dataset_item_ids)
+                if dataset_item_ids is not None
+                else effective_n_samples
             ),
             "total_dataset_items": total_items,
+            "sampling_mode": sampling_plan.mode,
         }
     )
     evaluation_details = helpers.drop_none(
@@ -139,9 +154,11 @@ def evaluate_prompt(
         evaluated_task=llm_task,
         num_threads=optimizer.n_threads,
         project_name=optimizer.project_name,
-        n_samples=n_samples if dataset_item_ids is None else None,
+        n_samples=effective_n_samples if dataset_item_ids is None else None,
         experiment_config=experiment_config,
         optimization_id=optimization_id,
         verbose=verbose,
+        # FIXME(opik-sdk): for inner-loop fitness on minibatches, prefer
+        # evaluate_on_dict_items when available to skip experiment setup.
     )
     return score
