@@ -505,6 +505,7 @@ export default function useGroupedExperimentsList(
       const combinedFilters = [...(params.filters ?? []), ...filters];
 
       // Extract project_id from combined filters and pass it as a separate parameter
+      // (project_id requires a special SQL query with joins)
       const projectFilter = combinedFilters.find(
         (f) => f.field === COLUMN_PROJECT_ID,
       );
@@ -512,29 +513,22 @@ export default function useGroupedExperimentsList(
         (f) => f.field !== COLUMN_PROJECT_ID,
       );
 
-      // Check if this is an orphan project by looking at the label in rowGroupData
-      // The backend returns "__DELETED" as the label for orphan/deleted entities
-      // Find the project group from the groups array to build the correct metadata key
+      // Check if this is an orphan project (deleted project) by looking at the group metadata
+      // The backend returns "__DELETED" as both the key and label for orphan entities
       const projectGroup = groups.find((g) => g.field === COLUMN_PROJECT_ID);
       const projectMeta = projectGroup
         ? (rowGroupData[buildGroupFieldNameForMeta(projectGroup)] as
             | { value: string; label?: string }
             | undefined)
         : undefined;
-      // Check both the label AND the value for __DELETED (value is __DELETED after backend change)
       const isOrphanProject =
-        projectMeta?.label === DELETED_ENTITY_LABEL ||
-        projectMeta?.value === DELETED_ENTITY_LABEL;
+        projectMeta?.value === DELETED_ENTITY_LABEL ||
+        projectMeta?.label === DELETED_ENTITY_LABEL;
 
-      // Get project ID from filter (if filtering) or from group metadata (if grouping)
+      // Get project ID - prefer filter value, fall back to group metadata value
       const projectIdValue = (projectFilter?.value ?? projectMeta?.value) as
         | string
         | undefined;
-      // Don't send projectId if it's an orphan project
-      const validProjectId =
-        projectIdValue && !isOrphanProject ? projectIdValue : undefined;
-      // Set projectDeleted if we have a project group/filter AND it's an orphan
-      const projectDeleted = (projectFilter || projectMeta) && isOrphanProject;
 
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
@@ -542,8 +536,9 @@ export default function useGroupedExperimentsList(
         sorting: params.sorting,
         search: params.search,
         promptId: params.promptId,
-        projectId: validProjectId,
-        projectDeleted,
+        // Don't send projectId if it's an orphan project, use projectDeleted flag instead
+        projectId: isOrphanProject ? undefined : projectIdValue,
+        projectDeleted: isOrphanProject || undefined,
         page: 1,
         size: extractPageSize(id, params.groupLimit),
       };
