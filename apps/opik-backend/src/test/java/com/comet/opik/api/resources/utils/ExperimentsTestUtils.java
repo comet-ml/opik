@@ -41,6 +41,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 
 @UtilityClass
@@ -483,11 +484,15 @@ public class ExperimentsTestUtils {
     /**
      * Extract a single field value from an experiment based on a GroupBy criterion.
      * Note: This should not be called for LIST fields when they are being exploded.
+     * Note: PROJECT_ID returns empty string since project_id is not directly on Experiment
+     * (it's derived from traces via experiment_items). Tests using PROJECT_ID grouping
+     * need to set up proper project-trace-experiment associations.
      */
     private static String extractFieldValue(Experiment experiment, GroupBy group) {
         return switch (group.field()) {
             case DATASET_ID -> experiment.datasetId().toString();
             case METADATA -> extractFromJsonMetadata(experiment.metadata(), group.key());
+            case PROJECT_ID -> ""; // project_id is not directly on Experiment; derived from traces
             case TAGS -> throw new IllegalArgumentException(
                     "TAGS field should be handled by explodeExperimentsByListFields, not extractFieldValue");
             default -> throw new IllegalArgumentException("Unsupported grouping field: " + group.field());

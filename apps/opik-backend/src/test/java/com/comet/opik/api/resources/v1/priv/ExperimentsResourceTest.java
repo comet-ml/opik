@@ -1688,12 +1688,13 @@ class ExperimentsResourceTest {
                     .build();
             var experiment2Id = experimentResourceClient.create(experiment2, apiKey, workspaceName);
 
-            // Create traces linked to different projects
+            // Create traces linked to different projects using projectName (not projectId)
+            // The backend resolves projectName to projectId
             var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(project1Id)
+                    .projectName(project1.name())
                     .build();
             var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(project2Id)
+                    .projectName(project2.name())
                     .build();
 
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
