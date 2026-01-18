@@ -1658,6 +1658,83 @@ class ExperimentsResourceTest {
         }
 
         @Test
+        @DisplayName("when filtering by project_id, then return only experiments with traces in that project")
+        void findByProjectId() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create two projects
+            var project1 = podamFactory.manufacturePojo(Project.class);
+            var project1Id = projectResourceClient.createProject(project1, apiKey, workspaceName);
+
+            var project2 = podamFactory.manufacturePojo(Project.class);
+            var project2Id = projectResourceClient.createProject(project2, apiKey, workspaceName);
+
+            // Create a dataset for the experiments
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            // Create two experiments
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .build();
+            var experiment1Id = experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .build();
+            var experiment2Id = experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            // Create traces linked to different projects
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project1Id)
+                    .build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project2Id)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
+
+            // Create experiment items linking experiments to traces
+            var experimentItem1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment1Id)
+                    .traceId(trace1.id())
+                    .build();
+            var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment2Id)
+                    .traceId(trace2.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2)), apiKey, workspaceName);
+
+            // Filter by project1 - should only return experiment1
+            var response1 = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, null, project1Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(response1.content()).hasSize(1);
+            assertThat(response1.content().get(0).id()).isEqualTo(experiment1Id);
+
+            // Filter by project2 - should only return experiment2
+            var response2 = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, null, project2Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(response2.content()).hasSize(1);
+            assertThat(response2.content().get(0).id()).isEqualTo(experiment2Id);
+
+            // No project filter - should return both experiments
+            var responseAll = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(responseAll.content()).hasSize(2);
+        }
+
+        @Test
         void findAllAndCalculateFeedbackAvg() {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
