@@ -187,7 +187,7 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
                 <if(types)> AND type IN :types <endif>
-                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(name)> AND ilike(name, CONCAT('%%', :name, '%%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(id)> AND id = :id <endif>
                 <if(ids_list)> AND id IN :ids_list <endif>
@@ -516,7 +516,7 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
                 <if(types)> AND type IN :types <endif>
-                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(name)> AND ilike(name, CONCAT('%%', :name, '%%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
@@ -674,7 +674,7 @@ class ExperimentDAO {
                 FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(types)> AND type IN :types <endif>
-                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(name)> AND ilike(name, CONCAT('%%', :name, '%%')) <endif>
                 <if(filters)> AND <filters> <endif>
                 %s
             ), experiment_projects AS (
