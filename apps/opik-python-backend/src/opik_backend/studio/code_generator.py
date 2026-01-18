@@ -18,6 +18,15 @@ from .types import OptimizationConfig, OptimizationJobContext
 
 logger = logging.getLogger(__name__)
 
+# Map metric types to their classes and score method signatures
+# Format: (class_name, score_param1, score_param2)
+METRIC_CLASS_MAP = {
+    "equals": ("Equals", "reference", "output"),
+    "levenshtein_ratio": ("LevenshteinRatio", "reference", "output"),
+    "geval": ("GEval", "input", "output"),
+    "json_schema_validator": ("StructuredOutputCompliance", "output", "schema"),
+}
+
 # Code templates for different execution contexts
 USER_CODE_TEMPLATE = """import warnings
 # Suppress Pydantic serialization warnings
@@ -388,20 +397,11 @@ class MetricCodeGenerator:
         # We need to look at the actual metric classes used by the builders
         metric_params = config.metric_params or {}
 
-        # Map metric types to their classes and score method signatures
-        # This is a simplified approach - in practice, we'd introspect the builder
-        metric_class_map = {
-            "equals": ("Equals", "reference", "output"),
-            "levenshtein_ratio": ("LevenshteinRatio", "reference", "output"),
-            "geval": ("GEval", "input", "output"),
-            "json_schema_validator": ("StructuredOutputCompliance", "output", "schema"),
-        }
-
-        if metric_type not in metric_class_map:
+        if metric_type not in METRIC_CLASS_MAP:
             # Generic fallback
             return cls._generate_generic_metric(metric_type, config)
 
-        class_name, score_param1, score_param2 = metric_class_map[metric_type]
+        class_name, score_param1, score_param2 = METRIC_CLASS_MAP[metric_type]
 
         # Build metric instantiation parameters
         # For GEval, we need task_introduction and evaluation_criteria
@@ -523,13 +523,12 @@ class OptimizationCodeGenerator:
 
         # Get metric class name for import
         metric_type = config.metric_type.lower()
-        metric_class_map = {
-            "equals": "Equals",
-            "levenshtein_ratio": "LevenshteinRatio",
-            "geval": "GEval",
-            "json_schema_validator": "StructuredOutputCompliance",
-        }
-        metric_class_name = metric_class_map.get(metric_type, "BaseMetric")
+        if metric_type in METRIC_CLASS_MAP:
+            metric_class_name = METRIC_CLASS_MAP[metric_type][
+                0
+            ]  # Extract class name from tuple
+        else:
+            metric_class_name = "BaseMetric"
 
         # Generate optimizer instantiation code
         optimizer_code = OptimizerCodeGenerator.generate(optimizer_type, config)
