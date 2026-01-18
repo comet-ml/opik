@@ -98,14 +98,13 @@ def generate_code():
         logger.error(
             f"Error generating code: {error_msg}\n{error_traceback}", exc_info=True
         )
-        # Return detailed error message in response
+        # Return generic error message in response to avoid leaking internal details
         from flask import jsonify
 
         return (
             jsonify(
                 {
-                    "error": f"Error generating code: {error_msg}",
-                    "type": type(e).__name__,
+                    "error": "Internal server error while generating code.",
                 }
             ),
             500,
