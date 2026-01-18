@@ -18,8 +18,19 @@ def _convert_template_syntax(text: str) -> str:
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
     """
+    # Limit input length to prevent ReDoS attacks
+    # Template variables are expected to be short (typically < 100 chars)
+    if len(text) > 10000:
+        raise ValueError("Input text too long for template syntax conversion")
+    
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
-    return re.sub(r'\{\{\s*([^}]+?)\s*\}\}', r'{\1}', text)
+    # Use a safer pattern that reduces backtracking:
+    # - Match {{ followed by optional leading whitespace
+    # - Capture variable name starting with non-whitespace, allowing spaces inside
+    # - Match optional trailing whitespace and }}
+    # This pattern reduces ambiguity by ensuring the variable name starts with
+    # a non-whitespace character, preventing excessive backtracking
+    return re.sub(r'\{\{\s*([^}\s][^}]*?)\s*\}\}', r'{\1}', text)
 
 
 @dataclass
