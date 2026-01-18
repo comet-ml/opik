@@ -30,11 +30,7 @@ const OptimizationsNewHeader: React.FC<OptimizationsNewHeaderProps> = ({
           <Button variant="outline" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            onClick={onSubmit}
-            disabled={isDisabled}
-          >
+          <Button size="sm" onClick={onSubmit} disabled={isDisabled}>
             {isSubmitting ? "Starting..." : "Optimize prompt"}
           </Button>
           <TooltipWrapper content="Download optimization code as Python file">
