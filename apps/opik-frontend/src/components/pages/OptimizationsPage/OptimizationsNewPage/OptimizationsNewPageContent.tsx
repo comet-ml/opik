@@ -24,6 +24,7 @@ const OptimizationsNewPageContent: React.FC = () => {
     handleModelChange,
     handleSubmit,
     handleCancel,
+    handleDownload,
     handleNameChange,
     getFirstMetricParamsError,
   } = useOptimizationsNewFormHandlers();
@@ -35,6 +36,7 @@ const OptimizationsNewPageContent: React.FC = () => {
         isFormValid={form.formState.isValid}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
+        onDownload={handleDownload}
       />
 
       <div className="flex gap-6">

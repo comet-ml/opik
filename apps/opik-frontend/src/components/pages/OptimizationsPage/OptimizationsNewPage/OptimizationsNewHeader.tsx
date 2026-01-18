@@ -1,13 +1,16 @@
 import React from "react";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type OptimizationsNewHeaderProps = {
   isSubmitting: boolean;
   isFormValid: boolean;
   onSubmit: () => void;
   onCancel: () => void;
+  onDownload: () => void;
 };
 
 const OptimizationsNewHeader: React.FC<OptimizationsNewHeaderProps> = ({
@@ -15,7 +18,10 @@ const OptimizationsNewHeader: React.FC<OptimizationsNewHeaderProps> = ({
   isFormValid,
   onSubmit,
   onCancel,
+  onDownload,
 }) => {
+  const isDisabled = isSubmitting || !isFormValid;
+
   return (
     <>
       <div className="mb-2 flex items-center justify-between">
@@ -24,13 +30,19 @@ const OptimizationsNewHeader: React.FC<OptimizationsNewHeaderProps> = ({
           <Button variant="outline" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            onClick={onSubmit}
-            disabled={isSubmitting || !isFormValid}
-          >
+          <Button size="sm" onClick={onSubmit} disabled={isDisabled}>
             {isSubmitting ? "Starting..." : "Optimize prompt"}
           </Button>
+          <TooltipWrapper content="Download optimization code as Python file">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDownload}
+              disabled={isDisabled}
+            >
+              <Download className="size-4" />
+            </Button>
+          </TooltipWrapper>
         </div>
       </div>
       <ExplainerDescription

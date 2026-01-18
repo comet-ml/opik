@@ -6,6 +6,7 @@ import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
+import useOptimizationCodeDownload from "@/api/optimizations/useOptimizationCodeDownload";
 import { OptimizationConfigFormType } from "@/components/pages-shared/optimizations/OptimizationConfigForm/schema";
 import { convertFormDataToStudioConfig } from "@/components/pages-shared/optimizations/OptimizationConfigForm/schema";
 import {
@@ -33,6 +34,7 @@ export const useOptimizationsNewFormHandlers = () => {
   const navigate = useNavigate();
   const { setLastSessionRunId } = useLastOptimizationRun();
   const { mutateAsync: createOptimization } = useOptimizationCreateMutation();
+  const { downloadCode } = useOptimizationCodeDownload();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
@@ -238,6 +240,28 @@ export const useOptimizationsNewFormHandlers = () => {
     });
   }, [navigate, workspaceName]);
 
+  const handleDownload = useCallback(async () => {
+    const isValid = await form.trigger();
+    if (!isValid) return;
+
+    const formData = form.getValues();
+    const selectedDs = datasets.find((ds) => ds.id === formData.datasetId);
+    const datasetNameValue = selectedDs?.name || "";
+
+    if (!datasetNameValue) return;
+
+    try {
+      const studioConfig = convertFormDataToStudioConfig(
+        formData,
+        datasetNameValue,
+      );
+
+      await downloadCode(studioConfig, formData.name);
+    } catch (error) {
+      // Error handling is done in the hook
+    }
+  }, [form, datasets, downloadCode]);
+
   const handleNameChange = useCallback(
     (value: string) => {
       form.setValue("name", value);
@@ -278,6 +302,7 @@ export const useOptimizationsNewFormHandlers = () => {
     handleModelChange,
     handleSubmit,
     handleCancel,
+    handleDownload,
     handleNameChange,
     getFirstMetricParamsError,
   };

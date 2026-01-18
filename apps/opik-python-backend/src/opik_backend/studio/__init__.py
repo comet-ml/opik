@@ -8,6 +8,7 @@ This module contains all the logic specific to Optimization Studio:
 - Helper functions (helpers.py)
 - Metric factory (metrics.py)
 - Optimizer factory (optimizers.py)
+- Code generator (code_generator.py)
 """
 
 from .config import (
@@ -36,7 +37,12 @@ from .helpers import (
     load_and_validate_dataset,
     run_optimization,
 )
-from .cancellation import CancellationHandle, CancellationMonitor, get_cancellation_monitor
+from .cancellation import (
+    CancellationHandle,
+    CancellationMonitor,
+    get_cancellation_monitor,
+)
+from .code_generator import OptimizationCodeGenerator
 
 __all__ = [
     # Config
@@ -64,6 +70,8 @@ __all__ = [
     # Factories
     "MetricFactory",
     "OptimizerFactory",
+    # Code Generation
+    "OptimizationCodeGenerator",
     # Helpers
     "initialize_opik_client",
     "load_and_validate_dataset",
@@ -73,4 +81,3 @@ __all__ = [
     "CancellationMonitor",
     "get_cancellation_monitor",
 ]
-
