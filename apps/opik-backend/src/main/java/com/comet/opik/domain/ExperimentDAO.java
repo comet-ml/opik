@@ -712,7 +712,7 @@ class ExperimentDAO {
                 FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(types)> AND type IN :types <endif>
-                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(name)> AND ilike(name, CONCAT('%%', :name, '%%')) <endif>
                 <if(filters)> AND <filters> <endif>
             ), experiment_items_final AS (
                 SELECT
