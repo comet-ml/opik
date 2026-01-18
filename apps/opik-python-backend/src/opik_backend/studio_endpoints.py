@@ -57,6 +57,10 @@ def generate_code():
         abort(405, "Method not allowed")
 
     try:
+        max_request_size_bytes = 1 * 1024 * 1024  # 1 MB limit for JSON body
+        if request.content_length is not None and request.content_length > max_request_size_bytes:
+            abort(413, "Request body too large")
+
         config_dict = request.get_json(force=True)
 
         if not config_dict:
