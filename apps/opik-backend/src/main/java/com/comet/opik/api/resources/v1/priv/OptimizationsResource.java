@@ -231,7 +231,7 @@ public class OptimizationsResource {
     }
 
     @POST
-    @Path("/studio/generate-code")
+    @Path("/studio/code")
     @Produces(MediaType.TEXT_PLAIN)
     @Consumes(MediaType.APPLICATION_JSON)
     @Operation(operationId = "generateOptimizationCode", summary = "Generate Python code for optimization", description = "Generate Python code from optimization configuration for user download", responses = {
