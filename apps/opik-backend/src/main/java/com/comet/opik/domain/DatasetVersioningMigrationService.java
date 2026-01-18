@@ -196,12 +196,45 @@ public class DatasetVersioningMigrationService {
     }
 
     private Mono<Void> migrateDataset(UUID datasetId) {
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
+        return Mono.fromCallable(() -> {
+            // Fetch workspace ID first, then get full dataset info
+            return template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetDAO.class);
 
-            return migrateSingleDataset(datasetId, workspaceId, userName);
-        });
+                // First get workspace ID
+                var workspaceIdOpt = dao.findWorkspaceIdByDatasetId(datasetId);
+                if (workspaceIdOpt.isEmpty()) {
+                    // Dataset doesn't exist in MySQL (orphaned data in ClickHouse)
+                    log.warn("Dataset '{}' not found in MySQL - skipping migration (orphaned data in ClickHouse)",
+                            datasetId);
+                    return null;
+                }
+
+                String workspaceId = workspaceIdOpt.get();
+
+                // Now get full dataset with workspace ID
+                var dataset = dao.findById(datasetId, workspaceId);
+                if (dataset.isEmpty()) {
+                    log.warn("Dataset '{}' not found in workspace '{}' - skipping migration",
+                            datasetId, workspaceId);
+                    return null;
+                }
+
+                return new DatasetInfo(dataset.get().createdBy(), workspaceId);
+            });
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(datasetInfo -> {
+                    if (datasetInfo == null) {
+                        // Skip orphaned datasets
+                        return Mono.empty();
+                    }
+
+                    return migrateSingleDataset(datasetId, datasetInfo.workspaceId(), datasetInfo.userName());
+                });
+    }
+
+    private record DatasetInfo(String userName, String workspaceId) {
     }
 
     private Mono<Void> ensureVersion1Exists(UUID datasetId, UUID versionId, String workspaceId, String userName) {
