@@ -1,9 +1,11 @@
 """Flask endpoints for Optimization Studio."""
 
+import traceback
 import logging
 from uuid import uuid4
 
-from flask import request, abort, Blueprint, Response
+from flask import request, abort, Blueprint, Response, jsonify
+
 from werkzeug.exceptions import HTTPException
 
 from opik_backend.studio import (
@@ -91,21 +93,10 @@ def generate_code():
         logger.error(f"Invalid configuration: {e}", exc_info=True)
         abort(400, f"Invalid configuration: {e}")
     except Exception as e:
-        import traceback
-
         error_traceback = traceback.format_exc()
         error_msg = f"{type(e).__name__}: {str(e)}"
         logger.error(
             f"Error generating code: {error_msg}\n{error_traceback}", exc_info=True
         )
-        # Return generic error message in response to avoid leaking internal details
-        from flask import jsonify
-
-        return (
-            jsonify(
-                {
-                    "error": "Internal server error while generating code.",
-                }
-            ),
-            500,
-        )
+        # Return generic error response without exposing internal details
+        return jsonify({"error": "Internal server error"}), 500
