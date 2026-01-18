@@ -30,7 +30,7 @@ import {
   GROUP_ROW_TYPE,
   DELETED_ENTITY_LABEL,
 } from "@/constants/groups";
-import { FlattenGroup, Group, Groups } from "@/types/groups";
+import { FlattenGroup, Groups } from "@/types/groups";
 import { createFilter } from "@/lib/filters";
 import {
   buildRowId,
@@ -514,21 +514,25 @@ export default function useGroupedExperimentsList(
 
       // Check if this is an orphan project by looking at the label in rowGroupData
       // The backend returns "__DELETED" as the label for orphan/deleted entities
-      const projectMetaKey = buildGroupFieldNameForMeta({
-        field: COLUMN_PROJECT_ID,
-      } as Group);
-      const projectMeta = rowGroupData[projectMetaKey] as
-        | { value: string; label?: string }
-        | undefined;
+      // Find the project group from the groups array to build the correct metadata key
+      const projectGroup = groups.find((g) => g.field === COLUMN_PROJECT_ID);
+      const projectMeta = projectGroup
+        ? (rowGroupData[buildGroupFieldNameForMeta(projectGroup)] as
+            | { value: string; label?: string }
+            | undefined)
+        : undefined;
       // Check both the label AND the value for __DELETED (value is __DELETED after backend change)
       const isOrphanProject =
         projectMeta?.label === DELETED_ENTITY_LABEL ||
         projectMeta?.value === DELETED_ENTITY_LABEL;
 
-      const projectIdValue = projectFilter?.value as string | undefined;
+      // Get project ID from filter (if filtering) or from group metadata (if grouping)
+      const projectIdValue = (projectFilter?.value ?? projectMeta?.value) as
+        | string
+        | undefined;
       // Don't send projectId if it's an orphan project
       const validProjectId =
-        projectFilter && !isOrphanProject ? projectIdValue : undefined;
+        projectIdValue && !isOrphanProject ? projectIdValue : undefined;
       // Set projectDeleted if we have a project group/filter AND it's an orphan
       const projectDeleted = (projectFilter || projectMeta) && isOrphanProject;
 
