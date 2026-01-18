@@ -341,15 +341,25 @@ export default function useGroupedExperimentsList(
 
   // Extract project_id from filters and pass it as a separate parameter
   // because project_id filtering requires a special SQL query (join with traces)
-  const { projectId, filtersWithoutProjectId } = useMemo(() => {
+  const { projectId, projectDeleted, filtersWithoutProjectId } = useMemo(() => {
     const projectFilter = params.filters?.find(
       (f) => f.field === COLUMN_PROJECT_ID,
     );
     const otherFilters = params.filters?.filter(
       (f) => f.field !== COLUMN_PROJECT_ID,
     );
+
+    const projectIdValue = projectFilter?.value as string | undefined;
+
+    // Check if this is an orphan project filter by looking at the label
+    // The backend returns "__DELETED" as the label for orphan/deleted projects
+    const isOrphanProjectFilter =
+      projectFilter &&
+      (projectIdValue === "" || projectIdValue === DELETED_ENTITY_LABEL);
+
     return {
-      projectId: projectFilter?.value as string | undefined,
+      projectId: isOrphanProjectFilter ? undefined : projectIdValue,
+      projectDeleted: isOrphanProjectFilter ? true : undefined,
       filtersWithoutProjectId: otherFilters,
     };
   }, [params.filters]);
@@ -437,6 +447,7 @@ export default function useGroupedExperimentsList(
       search: params.search,
       promptId: params.promptId,
       projectId,
+      projectDeleted,
       page: params.page,
       size: params.size,
     },
