@@ -16,12 +16,22 @@ def _convert_template_syntax(text: str) -> str:
 
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
+
+    Raises:
+        ValueError: If the input text exceeds the maximum allowed length (1MB)
+
+    Note:
+        Each prompt message content is limited to 1MB to prevent DoS attacks.
+        This limit applies to the entire message content, not individual template variables.
     """
-    # Limit input length to prevent DoS attacks
-    # Template variables are expected to be short (typically < 100 chars)
-    MAX_TEMPLATE_SYNTAX_LENGTH = 10000
-    if len(text) > MAX_TEMPLATE_SYNTAX_LENGTH:
-        raise ValueError("Input text too long for template syntax conversion")
+    # 1MB is a reasonable limit for prompt messages while preventing abuse
+    MAX_MESSAGE_LENGTH = 1_048_576  # 1MB in characters
+    if len(text) > MAX_MESSAGE_LENGTH:
+        raise ValueError(
+            f"Prompt message content exceeds maximum length of {MAX_MESSAGE_LENGTH:,} characters "
+            f"({len(text):,} characters provided). Please reduce the message length."
+        )
+
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
     # Use simple string operations instead of regex for better performance and security
     result = []
@@ -125,7 +135,8 @@ class OptimizationConfig:
 
         Raises:
             KeyError: If required fields are missing
-            ValueError: If metrics list is empty
+            ValueError: If metrics list is empty, or if any prompt message content
+                        exceeds the maximum length of 1MB per message
         """
         # Extract metric config (use first metric for now)
         metric_config_list = config["evaluation"]["metrics"]
