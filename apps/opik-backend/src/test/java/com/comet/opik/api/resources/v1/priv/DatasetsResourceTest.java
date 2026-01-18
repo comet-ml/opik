@@ -7272,38 +7272,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when workspace size exceeds limit, then dynamic sorting is disabled and sortableBy is empty")
-        void findDatasetItemsWithExperimentItems__whenWorkspaceExceedsSize__thenDynamicSortingDisabled() {
-            /*
-             * Note: This test verifies the workspace size protection mechanism.
-             *
-             * The protection works as follows:
-             * 1. WorkspaceMetadataService calculates workspace size based on spans data
-             * 2. If workspace size exceeds maxSizeToAllowSorting, dynamic sorting is disabled
-             * 3. The API strips sortableBy fields and ignores sorting parameters
-             *
-             * Test configuration (config-test.yml):
-             *   workspaceSettings.maxSizeToAllowSorting: -1 (unlimited for tests)
-             *
-             * In production:
-             *   - maxSizeToAllowSorting is set to a reasonable limit (e.g., 100 GB)
-             *   - Large workspaces automatically disable dynamic sorting
-             *   - This prevents expensive ClickHouse queries on large datasets
-             *
-             * The workspace metadata check is implemented in:
-             *   - ScopeMetadata.canUseDynamicSorting()
-             *   - DatasetsResource.findDatasetItemsWithExperimentItems() (lines 440-446, 464-470)
-             *
-             * To test this scenario in a real environment:
-             *   1. Set maxSizeToAllowSorting to a low value (e.g., 0.1 GB)
-             *   2. Insert enough spans data to exceed the threshold
-             *   3. Verify sortableBy is empty in API response
-             *   4. Verify sorting parameters are ignored
-             *
-             * This test documents the protection mechanism. The actual workspace size
-             * calculation and threshold logic is tested in WorkspaceMetadataService tests.
-             */
-
+        @DisplayName("dynamic sorting is always enabled for dataset items with experiment items")
+        void findDatasetItemsWithExperimentItems__dynamicSortingEnabled() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -7315,8 +7285,7 @@ class DatasetsResourceTest {
 
             String projectName = GENERATOR.generate().toString();
 
-            // Create multiple traces and spans to generate workspace data
-            // This simulates a workspace with meaningful data for size calculation
+            // Create multiple traces
             List<Trace> traces = IntStream.range(0, 10)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
@@ -7394,23 +7363,9 @@ class DatasetsResourceTest {
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
                 assertThat(actualPage.content()).isNotEmpty();
 
-                // With current test configuration (maxSizeToAllowSorting: -1),
-                // dynamic sorting is always enabled, so sortableBy should be present
+                // Dynamic sorting is always enabled, sortableBy should be present
                 assertThat(actualPage.sortableBy()).isNotNull();
                 assertThat(actualPage.sortableBy()).isNotEmpty();
-
-                /*
-                 * If this test were run with maxSizeToAllowSorting set to 0:
-                 *   assertThat(actualPage.sortableBy()).isEmpty();
-                 *
-                 * And the data would NOT be sorted by the requested field.
-                 *
-                 * The protection mechanism is:
-                 *   1. Resource fetches ScopeMetadata
-                 *   2. Checks canUseDynamicSorting()
-                 *   3. If false: clears sorting fields and strips sortableBy from response
-                 *   4. Frontend receives empty sortableBy and knows sorting is unavailable
-                 */
             }
         }
     }

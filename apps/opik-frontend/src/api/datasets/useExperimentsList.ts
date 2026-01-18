@@ -23,6 +23,7 @@ export type UseExperimentsListParams = {
   page: number;
   size: number;
   queryKey?: string;
+  experimentIds?: string[];
 };
 
 export type UseExperimentsListResponse = {
@@ -46,6 +47,7 @@ export const getExperimentsList = async (
     search,
     size,
     page,
+    experimentIds,
   }: UseExperimentsListParams,
 ) => {
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
@@ -60,6 +62,7 @@ export const getExperimentsList = async (
       ...(projectId && { project_id: projectId }),
       ...(optimizationId && { optimization_id: optimizationId }),
       ...(types && { types: JSON.stringify(types) }),
+      ...(experimentIds && { experiment_ids: JSON.stringify(experimentIds) }),
       size,
       page,
     },

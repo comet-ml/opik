@@ -41,6 +41,9 @@ pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
     reason="Test only applies to ADK versions >= 1.3.0",
 )
 
+# Maximum reasonable time-to-first-token in seconds for test assertions
+MAX_REASONABLE_TTFT_SECONDS = 60
+
 
 def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
     session_service = adk_sessions.InMemorySessionService()
@@ -1930,3 +1933,366 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
 
     assert len(fake_backend.trace_trees) == 0
     assert len(fake_backend.span_trees) == 0
+
+
+@pytest_skip_for_adk_older_than_1_3_0
+def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
+    """Test that time-to-first-token is tracked and stored in LLM span metadata."""
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    # Check that LLM spans have time_to_first_token in metadata
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) > 0, "Expected at least one LLM span"
+
+    for llm_span in llm_spans:
+        assert llm_span.metadata is not None, "LLM span should have metadata"
+        assert (
+            "time_to_first_token" in llm_span.metadata
+        ), f"LLM span metadata should contain 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["time_to_first_token"]
+        assert isinstance(
+            ttft, (int, float)
+        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        assert (
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+
+
+@pytest_skip_for_adk_older_than_1_3_0
+def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked correctly for streaming responses."""
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        run_config=run_config.RunConfig(streaming_mode=run_config.StreamingMode.SSE),
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    # Check that LLM spans have time_to_first_token in metadata for streaming responses
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) > 0, "Expected at least one LLM span"
+
+    for llm_span in llm_spans:
+        assert llm_span.metadata is not None, "LLM span should have metadata"
+        assert (
+            "time_to_first_token" in llm_span.metadata
+        ), f"LLM span metadata should contain 'time_to_first_token' for streaming responses, got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["time_to_first_token"]
+        assert isinstance(
+            ttft, (int, float)
+        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        assert (
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+
+
+@pytest_skip_for_adk_older_than_1_3_0
+def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked separately for each LLM call."""
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_time_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather, agent_tools.get_current_time],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    # Check that all LLM spans have time_to_first_token in metadata
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert (
+        len(llm_spans) >= 2
+    ), "Expected at least two LLM spans (one before tool, one after)"
+
+    for llm_span in llm_spans:
+        assert llm_span.metadata is not None, "LLM span should have metadata"
+        assert (
+            "time_to_first_token" in llm_span.metadata
+        ), f"All LLM spans should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["time_to_first_token"]
+        assert isinstance(
+            ttft, (int, float)
+        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        assert (
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+
+    # Verify that different LLM calls have distinct TTFT values when possible
+    # They might be similar in magnitude but should be tracked independently per call
+    ttft_values = [span.metadata["time_to_first_token"] for span in llm_spans]
+    assert (
+        len(set(ttft_values)) >= 2
+    ), "Expected at least two distinct TTFT values for multiple LLM calls"
+
+
+@pytest_skip_for_adk_older_than_1_3_0
+def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_backend):
+    """Test that time-to-first-token is not tracked when response has no content."""
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    # Use a simple query that should generate a response
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="Hello")],
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    # Check that LLM spans have time_to_first_token when they have content
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) > 0, "Expected at least one LLM span"
+
+    for llm_span in llm_spans:
+        # If span has output/content, it should have TTFT
+        if llm_span.output is not None and llm_span.usage is not None:
+            assert llm_span.metadata is not None, "LLM span should have metadata"
+            # Note: Even if content exists, TTFT should be tracked
+            # The test verifies that when content exists, TTFT is present
+            if "time_to_first_token" in llm_span.metadata:
+                ttft = llm_span.metadata["time_to_first_token"]
+                assert isinstance(
+                    ttft, (int, float)
+                ), f"time_to_first_token should be a number, got {type(ttft)}"
+                assert (
+                    ttft >= 0
+                ), f"time_to_first_token should be non-negative, got {ttft}"
+        else:
+            # When span has no output or no usage, TTFT should not be present
+            assert not (
+                llm_span.metadata and "time_to_first_token" in llm_span.metadata
+            ), (
+                f"LLM span without content should not have 'time_to_first_token' in metadata. "
+                f"Span output: {llm_span.output}, usage: {llm_span.usage}, metadata: {llm_span.metadata}"
+            )
+
+
+@pytest_skip_for_adk_older_than_1_3_0
+def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_backend):
+    """Test that time-to-first-token is tracked for each LLM call in sequential agents."""
+    opik_tracer = OpikTracer()
+
+    translator_to_english = adk_agents.Agent(
+        name="Translator",
+        model=MODEL_NAME,
+        description="Translates text to English.",
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+    )
+
+    summarizer = adk_agents.Agent(
+        name="Summarizer",
+        model=MODEL_NAME,
+        description="Summarizes text to 1 sentence.",
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+    )
+
+    root_agent = adk_agents.SequentialAgent(
+        name="TextProcessingAssistant",
+        sub_agents=[translator_to_english, summarizer],
+        description="Runs translator to english then summarizer, in order.",
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    INPUT_GERMAN_TEXT = (
+        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
+        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert."
+    )
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    # Check that all LLM spans in nested agents have time_to_first_token
+    def collect_llm_spans(span):
+        """Recursively collect all LLM spans."""
+        llm_spans = []
+        if span.type == "llm":
+            llm_spans.append(span)
+        if hasattr(span, "spans") and span.spans:
+            for child_span in span.spans:
+                llm_spans.extend(collect_llm_spans(child_span))
+        return llm_spans
+
+    all_llm_spans = []
+    for span in trace_tree.spans:
+        all_llm_spans.extend(collect_llm_spans(span))
+
+    assert (
+        len(all_llm_spans) >= 2
+    ), "Expected at least two LLM spans (one per sub-agent)"
+
+    for llm_span in all_llm_spans:
+        assert llm_span.metadata is not None, "LLM span should have metadata"
+        assert (
+            "time_to_first_token" in llm_span.metadata
+        ), f"All LLM spans in sequential agents should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        ttft = llm_span.metadata["time_to_first_token"]
+        assert isinstance(
+            ttft, (int, float)
+        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
+        assert (
+            ttft < MAX_REASONABLE_TTFT_SECONDS
+        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"

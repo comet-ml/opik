@@ -79,6 +79,12 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             self._span_to_feedback_scores: Dict[
                 str, List[models.FeedbackScoreModel]
             ] = collections.defaultdict(list)
+            self._trace_to_attachments: Dict[str, List[models.AttachmentModel]] = (
+                collections.defaultdict(list)
+            )
+            self._span_to_attachments: Dict[str, List[models.AttachmentModel]] = (
+                collections.defaultdict(list)
+            )
             self._experiment_items: List[models.ExperimentItemModel] = []
 
     def is_active(self) -> bool:
@@ -113,6 +119,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
             for trace in self._trace_trees:
                 trace.feedback_scores = self._trace_to_feedback_scores[trace.id]
+                trace.attachments = self._trace_to_attachments[trace.id] or None
 
             self._trace_trees.sort(key=lambda x: x.start_time)
             return self._trace_trees
@@ -178,6 +185,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             for span_id in all_span_ids:
                 span = self._span_observations[span_id]
                 span.feedback_scores = self._span_to_feedback_scores[span_id]
+                span.attachments = self._span_to_attachments[span_id] or None
 
             self._span_trees.sort(key=lambda x: x.start_time)
 
@@ -356,6 +364,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             messages.CreateTraceBatchMessage: self._handle_create_traces_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._handle_create_experiment_items_batch_message,  # type: ignore
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
+            messages.CreateAttachmentMessage: self._handle_create_attachment_message,  # type: ignore
         }
 
     def _handle_create_trace_message(
@@ -555,6 +564,25 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 dataset_item_id=experiment_item_message.dataset_item_id,
             )
             self._experiment_items.append(experiment_item)
+
+    def _handle_create_attachment_message(
+        self, message: messages.CreateAttachmentMessage
+    ) -> None:
+        """Handle attachment messages by adding them to the appropriate span or trace.
+
+        Attachments are stored in temporary dictionaries and will be connected to their
+        spans/traces when the trace trees are built, similar to how feedback scores work.
+        """
+        attachment_model = models.AttachmentModel(
+            file_path=message.file_path,
+            file_name=message.file_name,
+            content_type=message.mime_type,
+        )
+
+        if message.entity_type == "span":
+            self._span_to_attachments[message.entity_id].append(attachment_model)
+        elif message.entity_type == "trace":
+            self._trace_to_attachments[message.entity_id].append(attachment_model)
 
     def _noop_handler(self, message: messages.BaseMessage) -> None:
         # just ignore the message

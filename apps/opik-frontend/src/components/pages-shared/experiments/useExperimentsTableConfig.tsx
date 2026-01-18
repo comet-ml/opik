@@ -19,10 +19,9 @@ import {
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
-  AggregatedFeedbackScore,
   SCORE_TYPE_FEEDBACK,
-  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
+import { getExperimentScore, RowWithScores } from "./scoresUtils";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
   buildGroupFieldName,
@@ -149,49 +148,23 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    const getScoreByName = (
-      scores: AggregatedFeedbackScore[] | undefined,
-      scoreName: string,
-    ) => scores?.find((f) => f.name === scoreName);
-
     return [
       ...dynamicScoresColumns.map(
         ({ label, id, columnType, type: scoreType }) => {
           const actualType = scoreType || SCORE_TYPE_FEEDBACK;
-          const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
 
-          // Extract conditional values
-          const displayLabel = isExperimentScore ? label : `${label} (avg)`;
-          const scoresKey = isExperimentScore
-            ? "experiment_scores"
-            : "feedback_scores";
-
-          // Common fields
           const columnData: ColumnData<T> = {
             id,
-            label: displayLabel,
+            label,
             type: columnType,
             scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) => {
-              const rowWithScores = row as T & {
-                feedback_scores?: AggregatedFeedbackScore[];
-                experiment_scores?: AggregatedFeedbackScore[];
-              };
-              const scores = rowWithScores[scoresKey];
-              return getScoreByName(scores, label);
-            },
+            accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
             customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) => {
-                const aggWithScores = aggregation as ExperimentsAggregations & {
-                  feedback_scores?: AggregatedFeedbackScore[];
-                  experiment_scores?: AggregatedFeedbackScore[];
-                };
-                const scores = aggWithScores[scoresKey];
-                return getScoreByName(scores, label)?.value;
-              },
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                getExperimentScore(id, aggregation)?.value,
             },
           };
 

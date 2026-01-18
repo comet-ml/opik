@@ -12,7 +12,8 @@ const FeedbackScoreHeader = <TData,>(
 ) => {
   const { column } = context;
   const { header, custom } = column.columnDef.meta ?? {};
-  const { colorMap, feedbackKey } = (custom ?? {}) as FeedbackScoreCustomMeta;
+  const { colorMap, feedbackKey, prefixIcon } = (custom ??
+    {}) as FeedbackScoreCustomMeta;
 
   // Use color from colorMap if available, otherwise fall back to default
   const color =
@@ -31,6 +32,7 @@ const FeedbackScoreHeader = <TData,>(
       className={className}
       onClick={onClickHandler}
     >
+      {prefixIcon}
       <div
         className="mr-0.5 size-2 shrink-0 rounded-[2px] bg-[--color-bg]"
         style={{ "--color-bg": color } as React.CSSProperties}
