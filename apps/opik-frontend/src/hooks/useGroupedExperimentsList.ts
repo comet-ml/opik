@@ -352,10 +352,8 @@ export default function useGroupedExperimentsList(
     const projectIdValue = projectFilter?.value as string | undefined;
 
     // Check if this is an orphan project filter
-    // The backend returns "__DELETED" as the key for orphan/deleted projects
-    const isOrphanProjectFilter =
-      projectFilter &&
-      (projectIdValue === "" || projectIdValue === DELETED_ENTITY_LABEL);
+    // For orphan projects, the backend returns empty string as the group key
+    const isOrphanProjectFilter = projectFilter && projectIdValue === "";
 
     return {
       projectId: isOrphanProjectFilter ? undefined : projectIdValue,
@@ -514,16 +512,14 @@ export default function useGroupedExperimentsList(
       );
 
       // Check if this is an orphan project (deleted project) by looking at the group metadata
-      // The backend returns "__DELETED" as both the key and label for orphan entities
+      // The backend returns "__DELETED" as the label for orphan entities
       const projectGroup = groups.find((g) => g.field === COLUMN_PROJECT_ID);
       const projectMeta = projectGroup
         ? (rowGroupData[buildGroupFieldNameForMeta(projectGroup)] as
             | { value: string; label?: string }
             | undefined)
         : undefined;
-      const isOrphanProject =
-        projectMeta?.value === DELETED_ENTITY_LABEL ||
-        projectMeta?.label === DELETED_ENTITY_LABEL;
+      const isOrphanProject = projectMeta?.label === DELETED_ENTITY_LABEL;
 
       // Get project ID - prefer filter value, fall back to group metadata value
       const projectIdValue = (projectFilter?.value ?? projectMeta?.value) as
