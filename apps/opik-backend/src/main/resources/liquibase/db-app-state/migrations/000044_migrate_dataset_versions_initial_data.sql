@@ -42,7 +42,7 @@ WHERE d.id NOT IN (
     WHERE tag = 'latest'
 );
 
---rollback empty
+--rollback -- empty
 --rollback -- Note: Initial dataset version and 'latest' tag backfill is irreversible and cannot be safely rolled back.
 --rollback -- Manual cleanup required if rollback is necessary.
 

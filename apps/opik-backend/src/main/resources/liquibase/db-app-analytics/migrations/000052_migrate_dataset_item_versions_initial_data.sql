@@ -53,6 +53,6 @@ WHERE dataset_id NOT IN (
     FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
 );
 
---rollback empty
+--rollback -- empty
 --rollback -- Note: Backfilled version-1 snapshots cannot be safely rolled back. Manual cleanup required if needed.
 
