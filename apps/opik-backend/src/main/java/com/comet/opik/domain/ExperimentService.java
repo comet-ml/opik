@@ -50,6 +50,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -303,21 +304,27 @@ public class ExperimentService {
         Set<UUID> datasetIds = extractUuidsFromGroupValues(allGroupValues, groups, DATASET_ID);
         Set<UUID> projectIds = extractUuidsFromGroupValues(allGroupValues, groups, PROJECT_ID);
 
-        Mono<Map<UUID, Dataset>> datasetsMono = Mono
-                .fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(this::getDatasetMap);
+        Mono<Map<UUID, Dataset>> datasetsMono = loadEntityMap(
+                () -> datasetService.findByIds(datasetIds, workspaceId),
+                this::getDatasetMap);
 
-        Mono<Map<UUID, Project>> projectsMono = Mono
-                .fromCallable(() -> projectService.findByIds(workspaceId, projectIds))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(this::getProjectMap);
+        Mono<Map<UUID, Project>> projectsMono = loadEntityMap(
+                () -> projectService.findByIds(workspaceId, projectIds),
+                this::getProjectMap);
 
         return Mono.zip(datasetsMono, projectsMono)
                 .map(tuple -> ExperimentGroupEnrichInfoHolder.builder()
                         .datasetMap(tuple.getT1())
                         .projectMap(tuple.getT2())
                         .build());
+    }
+
+    private <T, R> Mono<Map<UUID, R>> loadEntityMap(
+            Callable<List<T>> serviceCall,
+            Function<List<T>, Map<UUID, R>> mapper) {
+        return Mono.fromCallable(serviceCall)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(mapper);
     }
 
     private Set<UUID> extractUuidsFromGroupValues(List<List<String>> allGroupValues, List<GroupBy> groups,
