@@ -19,9 +19,9 @@ def _convert_template_syntax(text: str) -> str:
     """
     # Limit input length to prevent DoS attacks
     # Template variables are expected to be short (typically < 100 chars)
-    if len(text) > 10000:
+    MAX_TEMPLATE_SYNTAX_LENGTH = 10000
+    if len(text) > MAX_TEMPLATE_SYNTAX_LENGTH:
         raise ValueError("Input text too long for template syntax conversion")
-
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
     # Use simple string operations instead of regex for better performance and security
     result = []
