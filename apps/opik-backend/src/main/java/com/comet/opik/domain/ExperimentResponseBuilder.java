@@ -49,6 +49,29 @@ public class ExperimentResponseBuilder {
         }
     }
 
+    /**
+     * Helper record to hold the resolved label and map key for a grouping value.
+     */
+    private record GroupingLabelAndKey(String label, String mapKey) {
+    }
+
+    /**
+     * Determines the label and map key for a grouping value.
+     * Uses __DELETED as the key when the entity is deleted (label equals __DELETED),
+     * allowing the frontend to detect orphan entities without checking for null bytes.
+     *
+     * @param groupingValue the raw grouping value from the database
+     * @param group the GroupBy criteria
+     * @param enrichInfoHolder holder containing dataset and project maps for enrichment
+     * @return a record containing the resolved label and the map key to use
+     */
+    private GroupingLabelAndKey determineGroupingLabelAndKey(String groupingValue, GroupBy group,
+            ExperimentGroupEnrichInfoHolder enrichInfoHolder) {
+        String label = resolveLabel(groupingValue, group, enrichInfoHolder);
+        String mapKey = DELETED_ENTITY.equals(label) ? DELETED_ENTITY : groupingValue;
+        return new GroupingLabelAndKey(label, mapKey);
+    }
+
     public ExperimentGroupResponse buildGroupResponse(List<ExperimentGroupItem> groupItems,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
         var contentMap = new HashMap<String, ExperimentGroupResponse.GroupContent>();
@@ -105,26 +128,22 @@ public class ExperimentResponseBuilder {
         }
 
         GroupBy currentGroup = groups.get(depth);
-        String label = resolveLabel(groupingValue, currentGroup, enrichInfoHolder);
-
-        // Use __DELETED as the key when the entity is deleted (label is __DELETED)
-        // This allows the frontend to detect orphan entities without checking for null bytes
-        String mapKey = DELETED_ENTITY.equals(label) ? DELETED_ENTITY : groupingValue;
+        var labelAndKey = determineGroupingLabelAndKey(groupingValue, currentGroup, enrichInfoHolder);
 
         GroupContentWithAggregations currentLevel = parentLevel.computeIfAbsent(
-                mapKey,
+                labelAndKey.mapKey(),
                 key -> {
                     // For leaf nodes (last level), include actual aggregation data
                     if (depth == item.groupValues().size() - 1) {
                         return GroupContentWithAggregations.builder()
-                                .label(label)
+                                .label(labelAndKey.label())
                                 .aggregations(buildAggregationData(item))
                                 .groups(Map.of())
                                 .build();
                     } else {
                         // For intermediate nodes, initialize with empty aggregations
                         return GroupContentWithAggregations.builder()
-                                .label(label)
+                                .label(labelAndKey.label())
                                 .aggregations(AggregationData.builder()
                                         .experimentCount(0L)
                                         .traceCount(0L)
@@ -342,27 +361,18 @@ public class ExperimentResponseBuilder {
         }
 
         GroupBy currentGroup = groups.get(depth);
-        String label = resolveLabel(groupingValue, currentGroup, enrichInfoHolder);
-
-        // Use __DELETED as the key when the entity is deleted (label is __DELETED)
-        // This allows the frontend to detect orphan entities without checking for null bytes
-        String mapKey = DELETED_ENTITY.equals(label) ? DELETED_ENTITY : groupingValue;
+        var labelAndKey = determineGroupingLabelAndKey(groupingValue, currentGroup, enrichInfoHolder);
 
         ExperimentGroupResponse.GroupContent currentLevel = parentLevel.computeIfAbsent(
-                mapKey,
+                labelAndKey.mapKey(),
                 // We have to enrich with the dataset name if it's for dataset
-                key -> buildGroupNode(
-                        groupingValue,
-                        enrichInfoHolder,
-                        currentGroup));
+                key -> buildGroupNode(labelAndKey.label(), groupingValue));
 
         // Recursively build nested groups
         buildNestedGroups(currentLevel.groups(), groupValues, depth + 1, enrichInfoHolder, groups);
     }
 
-    private ExperimentGroupResponse.GroupContent buildGroupNode(String groupingValue,
-            ExperimentGroupEnrichInfoHolder enrichInfoHolder, GroupBy group) {
-        String label = resolveLabel(groupingValue, group, enrichInfoHolder);
+    private ExperimentGroupResponse.GroupContent buildGroupNode(String label, String groupingValue) {
         return ExperimentGroupResponse.GroupContent.builder()
                 .label(label.equals(groupingValue) ? null : label)
                 .groups(new HashMap<>())
