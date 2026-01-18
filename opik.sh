@@ -150,6 +150,7 @@ get_system_info() {
 }
 
 get_docker_compose_cmd() {
+  # Detect which docker compose command is available
   local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
@@ -164,9 +165,17 @@ get_docker_compose_cmd() {
   elif [[ "$LOCAL_BE" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be.yaml"
     cmd="$cmd --profile local-be"
+    # Always include port mapping override for local development
+    if [[ "$PORT_MAPPING" != "true" ]]; then
+      cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
+    fi
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be-fe.yaml"
     cmd="$cmd --profile local-be-fe"
+    # Always include port mapping override for local development
+    if [[ "$PORT_MAPPING" != "true" ]]; then
+      cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
+    fi
   else
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"
