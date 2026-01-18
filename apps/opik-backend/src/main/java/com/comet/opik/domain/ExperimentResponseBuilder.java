@@ -107,8 +107,12 @@ public class ExperimentResponseBuilder {
         GroupBy currentGroup = groups.get(depth);
         String label = resolveLabel(groupingValue, currentGroup, enrichInfoHolder);
 
+        // Use __DELETED as the key when the entity is deleted (label is __DELETED)
+        // This allows the frontend to detect orphan entities without checking for null bytes
+        String mapKey = DELETED_ENTITY.equals(label) ? DELETED_ENTITY : groupingValue;
+
         GroupContentWithAggregations currentLevel = parentLevel.computeIfAbsent(
-                groupingValue,
+                mapKey,
                 key -> {
                     // For leaf nodes (last level), include actual aggregation data
                     if (depth == item.groupValues().size() - 1) {
