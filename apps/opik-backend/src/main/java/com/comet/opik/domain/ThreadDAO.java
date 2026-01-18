@@ -129,7 +129,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'thread'
                   AND workspace_id = :workspace_id
-                  AND project_id IN :project_id
                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 UNION ALL
                 SELECT
@@ -149,7 +148,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
-                   AND project_id IN :project_id
                    AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
              ),
              feedback_scores_with_ranking AS (
