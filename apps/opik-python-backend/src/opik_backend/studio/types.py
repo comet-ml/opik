@@ -1,6 +1,5 @@
 """Data types and context objects for Optimization Studio."""
 
-import re
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from uuid import UUID
@@ -18,22 +17,38 @@ def _convert_template_syntax(text: str) -> str:
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
     """
-    # Limit input length to prevent ReDoS attacks
+    # Limit input length to prevent DoS attacks
     # Template variables are expected to be short (typically < 100 chars)
     if len(text) > 10000:
         raise ValueError("Input text too long for template syntax conversion")
 
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
-    # Use a regex pattern that avoids backtracking by matching content greedily
-    # and then trimming whitespace in the replacement function.
-    # The pattern \{\{([^}]+)\}\} is safe because [^}]+ is greedy and unambiguous.
-    def replace_braces(match):
-        content = match.group(1).strip()  # Trim whitespace from captured content
-        return f"{{{content}}}"
+    # Use simple string operations instead of regex for better performance and security
+    result = []
+    i = 0
+    while i < len(text):
+        # Look for opening double braces
+        if i < len(text) - 1 and text[i] == "{" and text[i + 1] == "{":
+            # Find the matching closing double braces
+            j = i + 2
+            while j < len(text) - 1:
+                if text[j] == "}" and text[j + 1] == "}":
+                    # Extract content between braces and trim whitespace
+                    content = text[i + 2 : j].strip()
+                    # Replace with single braces
+                    result.append(f"{{{content}}}")
+                    i = j + 2
+                    break
+                j += 1
+            else:
+                # No matching closing braces found, keep original characters
+                result.append(text[i])
+                i += 1
+        else:
+            result.append(text[i])
+            i += 1
 
-    # Pattern matches {{ followed by one or more non-} characters, then }}
-    # This avoids backtracking because [^}]+ is greedy and unambiguous
-    return re.sub(r"\{\{([^}]+)\}\}", replace_braces, text)
+    return "".join(result)
 
 
 @dataclass

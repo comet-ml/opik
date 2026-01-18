@@ -243,15 +243,10 @@ public class OptimizationsResource {
     public Response generateCode(
             @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationStudioConfig.class))) @NotNull @Valid OptimizationStudioConfig studioConfig) {
         log.info("Generating code for optimization configuration");
-        try {
-            var code = optimizationStudioService.generateCode(studioConfig);
-            log.info("Generated code successfully");
-            return Response.ok(code)
-                    .header("Content-Disposition", "attachment; filename=\"optimization.py\"")
-                    .build();
-        } catch (Exception e) {
-            log.error("Error generating code: {}", e.getMessage(), e);
-            throw e;
-        }
+        var code = optimizationStudioService.generateCode(studioConfig);
+        log.info("Generated code successfully");
+        return Response.ok(code)
+                .header("Content-Disposition", "attachment; filename=\"optimization.py\"")
+                .build();
     }
 }

@@ -30,9 +30,11 @@ def internal_server_error(exception: HTTPException):
     return build_error_response(exception, 500)
 
 
-@studio.route("/generate-code", methods=["POST"])
+@studio.route("/code", methods=["POST"])
 def generate_code():
     """Generate Python code for optimization configuration.
+
+    POST /v1/private/studio/code
 
     Accepts OptimizationStudioConfig format and returns generated Python code
     using the user download template (for_user_download=True).
