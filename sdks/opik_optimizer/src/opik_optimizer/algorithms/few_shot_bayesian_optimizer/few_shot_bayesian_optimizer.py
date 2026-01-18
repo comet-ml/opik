@@ -408,6 +408,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         is_single_prompt_optimization: bool = False,
     ) -> AlgorithmResult:
+        if agent is None:
             raise ValueError(
                 "FewShotBayesianOptimizer requires an agent for optimization."
             )

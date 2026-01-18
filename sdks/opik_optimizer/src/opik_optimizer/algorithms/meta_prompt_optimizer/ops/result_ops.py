@@ -27,7 +27,7 @@ def create_result(
     initial_prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     best_score: float,
     initial_score: float,
-    rounds: Sequence[OptimizationRound | dict[str, Any]],
+    rounds: Sequence[OptimizationRound],
     trials_requested: int | None,
     trials_completed: int | None,
     dataset_id: str | None,
@@ -43,9 +43,10 @@ def create_result(
     """
     Build an AlgorithmResult for meta-prompt flows (legacy helper).
     """
+    rounds_payload = [round_data.to_dict() for round_data in rounds]
     details = {
-        "rounds": rounds,
-        "total_rounds": len(rounds),
+        "rounds": rounds_payload,
+        "total_rounds": len(rounds_payload),
         "metric_name": metric.__name__,
         "model": model,
         "temperature": temperature,

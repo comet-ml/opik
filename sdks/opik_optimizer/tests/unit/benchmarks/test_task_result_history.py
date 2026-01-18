@@ -12,7 +12,7 @@ def test_task_result_accepts_rounds_history() -> None:
         "optimizer_name": "optimizer",
         "model_name": "model",
         "timestamp_start": 0.0,
-        "status": "success",
+        "status": "Success",
         "optimization_history": {"rounds": []},
     }
     result = TaskResult.model_validate(payload)
@@ -26,7 +26,7 @@ def test_task_result_rejects_steps_history() -> None:
         "optimizer_name": "optimizer",
         "model_name": "model",
         "timestamp_start": 0.0,
-        "status": "success",
+        "status": "Success",
         "optimization_history": {"steps": []},
     }
     with pytest.raises(ValueError):

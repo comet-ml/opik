@@ -358,6 +358,46 @@ class TestEvolutionaryOptimizerEarlyStop:
         # Verify that evaluate_prompt was called during optimization
         assert evaluation_count[0] > 1  # At least baseline + some evaluations
 
+    def test_initial_population_records_round(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Initial population should record a round with candidate entries."""
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
+        optimizer = EvolutionaryOptimizer(
+            model="gpt-4o",
+            skip_perfect_score=False,
+            population_size=2,
+            num_generations=1,
+            enable_moo=False,
+        )
+
+        def fake_evaluate(**_kwargs: Any) -> float:
+            return 0.6
+
+        monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+        monkeypatch.setattr(
+            population_ops,
+            "initialize_population",
+            lambda **kwargs: [ChatPrompt(system="s", user="u")]
+            * optimizer.population_size,
+        )
+
+        prompt = ChatPrompt(system="test", user="{question}")
+        result = optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=make_simple_metric(),
+            max_trials=10,
+        )
+
+        assert result.history
+        candidates = result.history[0].get("candidates") or []
+        assert len(candidates) >= 1
+        if len(candidates) == 1:
+            assert candidates[0].get("id") == "fallback"
+
 
 def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:
     """EvolutionaryOptimizer should evaluate against the validation dataset when supplied."""

@@ -29,7 +29,13 @@ from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
 )
 from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
 from opik_optimizer import optimization_result
-from opik_optimizer.optimization_result import OptimizerCandidate, OptimizationResult
+from opik_optimizer.optimization_result import (
+    OptimizerCandidate,
+    OptimizationResult,
+    OptimizationRound,
+    OptimizationTrial,
+)
+from tests.unit.test_helpers import make_optimization_context
 from opik_optimizer.base_optimizer import AlgorithmResult, BaseOptimizer
 
 
@@ -48,6 +54,47 @@ def _assert_trial_indices(history: list[dict[str, Any]]) -> None:
             if idx is not None:
                 seen.append(idx)
     assert seen == sorted(seen)
+
+
+def test_algorithm_result_accepts_typed_rounds(
+    simple_chat_prompt: Any,
+    mock_dataset: Any,
+) -> None:
+    dataset = mock_dataset(
+        [{"id": "1", "question": "Q1", "answer": "A1"}],
+        name="test-dataset",
+        dataset_id="ds-1",
+    )
+
+    def metric_fn(*_args: Any) -> float:
+        return 0.1
+
+    metric_fn.__name__ = "metric_fn"
+    context = make_optimization_context(
+        simple_chat_prompt,
+        dataset=dataset,
+        metric=metric_fn,
+        agent=MagicMock(),
+    )
+    trial = OptimizationTrial(trial_index=None, score=0.1, candidate="candidate")
+    round_entry = OptimizationRound(round_index=0, trials=[trial], best_score=0.1)
+    algo_result = AlgorithmResult(
+        best_prompts=context.prompts,
+        best_score=0.1,
+        history=[round_entry],
+    )
+
+    class DummyOptimizer(BaseOptimizer):
+        def get_config(self, context: Any) -> dict[str, Any]:
+            return {}
+
+        def get_optimizer_metadata(self) -> dict[str, Any]:
+            return {}
+
+    optimizer = DummyOptimizer(model="gpt-4")
+    result = optimizer._build_final_result(algo_result, context)
+    assert result.history
+    assert result.history[0]["round_index"] == 0
 
 
 @pytest.mark.parametrize(

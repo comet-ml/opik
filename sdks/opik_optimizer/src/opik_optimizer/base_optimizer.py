@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, cast, overload, Literal
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 import copy
 import inspect
 import logging
@@ -33,6 +33,7 @@ from .constants import (
 from .optimization_result import (
     OptimizationHistoryState,
     OptimizationResult,
+    OptimizationRound,
     build_candidate_entry,
 )
 from .utils.logging import debug_log
@@ -135,7 +136,7 @@ class AlgorithmResult:
 
     best_prompts: dict[str, chat_prompt.ChatPrompt]
     best_score: float
-    history: list[dict[str, Any]] = field(default_factory=list)
+    history: Sequence[dict[str, Any] | OptimizationRound] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -494,6 +495,8 @@ class BaseOptimizer(ABC):
 
         # Validate n_samples against dataset size
         total_items = len(dataset.get_items())
+        if total_items == 0:
+            raise ValueError("dataset is empty")
         if n_samples is not None and n_samples > total_items:
             logger.warning(
                 f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
@@ -837,6 +840,27 @@ class BaseOptimizer(ABC):
             if not history_entries:
                 history_entries = self._history_builder.get_entries()
         else:
+            history_entries = self._history_builder.get_entries()
+
+        if not history_entries:
+            # Ensure a minimal round/trial is recorded when optimizers skip history logging.
+            fallback_round = self.begin_round()
+            self.record_candidate_entry(
+                prompt_or_payload=result_prompt,
+                score=algorithm_result.best_score,
+                id="fallback",
+            )
+            self.post_candidate(
+                result_prompt,
+                score=algorithm_result.best_score,
+                round_handle=fallback_round,
+            )
+            self.post_round(
+                fallback_round,
+                best_score=algorithm_result.best_score,
+                best_prompt=result_prompt,
+                stop_reason=finish_reason,
+            )
             history_entries = self._history_builder.get_entries()
 
         return OptimizationResult(
@@ -1628,6 +1652,10 @@ class BaseOptimizer(ABC):
         the normalized entries.
         """
         return self._history_builder.get_entries()
+
+    def get_history_rounds(self) -> list[OptimizationRound]:
+        """Get typed history rounds captured by the builder."""
+        return self._history_builder.get_rounds()
 
     # --- History hook wrappers (candidate-first) ---
     def begin_round(self, **extras: Any) -> Any:

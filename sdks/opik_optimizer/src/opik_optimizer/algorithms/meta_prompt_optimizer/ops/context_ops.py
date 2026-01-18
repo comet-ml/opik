@@ -12,10 +12,11 @@ import re
 
 import opik
 from ....api_objects.types import MetricFunction
-from ....optimization_result import OptimizationRound
+from ....optimization_result import OptimizationRound, round_payload
 from .. import prompts as meta_prompts
 
 logger = logging.getLogger(__name__)
+
 
 # Constants for adaptive context fitting
 DEFAULT_MAX_VALUE_LENGTH = 2000  # Initial truncation limit for field values
@@ -230,7 +231,7 @@ def get_task_context(
 
 
 def build_history_context(
-    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
+    previous_rounds: Sequence[OptimizationRound],
     hall_of_fame: Any | None = None,
     pretty_mode: bool = True,
     top_prompts_per_round: int = DEFAULT_TOP_PROMPTS_PER_RECENT_ROUND,
@@ -301,22 +302,15 @@ def build_history_context(
             "- DO NOT generate similar variations of recent low-scoring prompts\n\n"
         )
         for round_data in reversed(rounds_list[-3:]):
-            if not isinstance(round_data, dict):
-                try:
-                    round_data = round_data.to_dict()  # type: ignore[attr-defined]
-                except Exception:
-                    continue
-
-            round_index = round_data.get("round_index", 0)
-            best_score = round_data.get("best_score", float("nan"))
+            payload = round_payload(round_data)
+            round_index = payload.get("round_index", 0)
+            best_score = payload.get("best_score", float("nan"))
             context += f"\nRound {round_index + 1}:\n"
             context += f"Best score this round: {best_score:.4f}\n"
             context += "Top prompts generated:\n"
 
             generated = (
-                round_data.get("generated_prompts")
-                or round_data.get("candidates")
-                or []
+                payload.get("generated_prompts") or payload.get("candidates") or []
             )
             sorted_generated = sorted(
                 generated,

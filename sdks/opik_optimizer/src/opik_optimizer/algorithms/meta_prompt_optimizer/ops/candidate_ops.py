@@ -16,7 +16,6 @@ import random
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 from .... import _llm_calls
-from ....optimization_result import OptimizationRound
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import (
@@ -27,6 +26,7 @@ from ..types import (
 from ....utils import display as display_utils
 from ....utils.logging import compact_debug_text
 from ....utils.text import normalize_llm_text
+from ....optimization_result import OptimizationRound, round_payload
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
 
@@ -140,7 +140,7 @@ def generate_candidate_prompts(
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
     round_num: int,
-    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
@@ -416,7 +416,7 @@ def generate_agent_bundle_candidates(
     current_prompts: dict[str, chat_prompt.ChatPrompt],
     best_score: float,
     round_num: int,
-    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
@@ -604,7 +604,7 @@ def generate_synthesis_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
-    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -673,12 +673,7 @@ def generate_synthesis_prompts(
             logger.warning("Hall of Fame empty - using recent rounds for synthesis")
             # Collect best prompts from recent rounds
             for round_data in reversed(previous_rounds_list[-5:]):
-                if not isinstance(round_data, dict):
-                    try:
-                        round_data = round_data.to_dict()  # type: ignore[attr-defined]
-                    except Exception:
-                        continue
-                generated = round_data.get("generated_prompts", [])
+                generated = round_payload(round_data).get("generated_prompts", [])
                 sorted_generated = sorted(
                     generated,
                     key=lambda p: p.get("score", -float("inf")),
@@ -871,7 +866,7 @@ def generate_round_candidates(
     best_prompts: dict[str, chat_prompt.ChatPrompt],
     best_score: float,
     round_num: int,
-    previous_rounds: Sequence[OptimizationRound | dict[str, Any]],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     prompts_this_round: int,
     build_history_context_fn: Callable,

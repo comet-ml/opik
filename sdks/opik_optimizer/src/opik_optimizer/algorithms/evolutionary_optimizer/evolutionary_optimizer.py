@@ -1021,9 +1021,31 @@ class EvolutionaryOptimizer(BaseOptimizer):
         if all_final_tools:
             metadata["final_tools"] = all_final_tools
 
+        # Fallback state for histtory
+        history_entries = self.get_history_entries()
+        if not history_entries:
+            fallback_round = self.begin_round()
+            self.record_candidate_entry(
+                prompt_or_payload=final_best_prompts,
+                score=final_primary_score,
+                id="final_best",
+            )
+            self.post_candidate(
+                final_best_prompts,
+                score=final_primary_score,
+                round_handle=fallback_round,
+            )
+            self.post_round(
+                fallback_round,
+                best_score=final_primary_score,
+                best_prompt=final_best_prompts,
+                stop_reason=context.finish_reason,
+            )
+            history_entries = self.get_history_entries()
+
         return AlgorithmResult(
             best_prompts=final_best_prompts,
             best_score=final_primary_score,
-            history=self.get_history_entries(),
+            history=history_entries,
             metadata=metadata,
         )

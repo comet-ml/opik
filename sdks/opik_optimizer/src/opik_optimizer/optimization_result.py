@@ -136,6 +136,13 @@ class OptimizationRound:
         }
 
 
+def round_payload(round_data: OptimizationRound | dict[str, Any]) -> dict[str, Any]:
+    """Return a dict payload for a round entry (typed or plain dict)."""
+    if isinstance(round_data, OptimizationRound):
+        return round_data.to_dict()
+    return dict(round_data)
+
+
 class OptimizationHistoryState:
     """
     Stateful history manager with explicit start/record/end lifecycle.
@@ -451,6 +458,10 @@ class OptimizationHistoryState:
             self._merge_round(entry)
         self._open_rounds.clear()
         return [entry.to_dict() for entry in self.entries]
+
+    def get_rounds(self) -> list[OptimizationRound]:
+        """Return the typed round entries accumulated so far."""
+        return list(self.entries)
 
     def clear(self) -> None:
         self.entries.clear()

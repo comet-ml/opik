@@ -1186,6 +1186,29 @@ class TestToolUseFlag:
             allow_tool_use=True,
         )
 
+    def test_evaluate_prompt_defaults_tool_use(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        optimizer = ConcreteOptimizer(model="gpt-4")
+        agent = _ToolFlagAgent()
+        dataset = make_mock_dataset()
+
+        def assert_output(output: dict[str, Any]) -> None:
+            assert agent.last_allow_tool_use is True
+
+        monkeypatch.setattr(
+            "opik_optimizer.task_evaluator.evaluate",
+            make_fake_evaluator(assert_output=assert_output),
+        )
+
+        prompt = ChatPrompt(system="Test", user="Query")
+        optimizer.evaluate_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=lambda *_: 1.0,
+            agent=agent,
+        )
+
     def test_setup_optimization_sets_allow_tool_use(self) -> None:
         optimizer = ConcreteOptimizer(model="gpt-4")
         dataset = make_mock_dataset()
@@ -1785,6 +1808,48 @@ class TestDefaultOptimizePrompt:
         assert result.details["trials_completed"] == 3
         assert len(result.history) == 1
         assert result.details["custom_field"] == "test_value"
+
+    def test_history_fallback_when_optimizer_returns_empty(
+        self,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric,
+        monkeypatch,
+    ) -> None:
+        """Base should emit a fallback history entry when optimizer returns none."""
+        mock_opik_client()
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
+
+        class EmptyHistoryOptimizer(BaseOptimizer):
+            def run_optimization(self, context: OptimizationContext):
+                return AlgorithmResult(
+                    best_prompts=context.prompts,
+                    best_score=0.5,
+                    history=[],
+                    metadata={},
+                )
+
+            def get_config(self, context: OptimizationContext):
+                return {"optimizer": "EmptyHistoryOptimizer"}
+
+            def get_optimizer_metadata(self):
+                return {}
+
+        optimizer = EmptyHistoryOptimizer(model="gpt-4")
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
+
+        result = optimizer.optimize_prompt(
+            prompt=simple_chat_prompt,
+            dataset=mock_ds,
+            metric=mock_metric,
+            max_trials=1,
+        )
+
+        assert result.history
 
 
 # ============================================================

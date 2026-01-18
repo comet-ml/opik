@@ -14,6 +14,7 @@ from ...utils import throttle as _throttle
 from ...utils.logging import debug_log
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame
+from ...optimization_result import OptimizationRound
 
 # Import ops modules
 from .ops import candidate_ops, context_ops, result_ops
@@ -328,7 +329,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_prompts=best_prompts,
                     best_score=best_score,
                     round_num=round_num,
-                    previous_rounds=self.get_history_entries(),
+                    previous_rounds=self.get_history_rounds(),
                     metric=metric,
                     prompts_this_round=prompts_this_round,
                     build_history_context_fn=self._build_history_context,
@@ -470,7 +471,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             # finish_reason, stopped_early, stop_reason are handled by base class
             self._clear_reporter()
 
-        history = self.get_history_entries()
+        history = self.get_history_rounds()
 
         return AlgorithmResult(
             best_prompts=best_prompts
@@ -498,7 +499,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             extract_metric_understanding=self.extract_metric_understanding,
         )
 
-    def _build_history_context(self, previous_rounds: Sequence[dict[str, Any]]) -> str:
+    def _build_history_context(
+        self, previous_rounds: Sequence[OptimizationRound]
+    ) -> str:
         """Build context from Hall of Fame and previous optimization rounds."""
         top_prompts_to_show = max(
             self.prompts_per_round, self.synthesis_prompts_per_round
