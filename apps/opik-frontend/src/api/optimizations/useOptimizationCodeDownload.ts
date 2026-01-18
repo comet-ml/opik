@@ -8,7 +8,7 @@ import { OPTIMIZATIONS_REST_ENDPOINT } from "@/api/api";
 /**
  * Sanitizes a filename to be safe for file systems.
  * Converts to lowercase, replaces spaces with underscores, and removes unsafe characters.
- * 
+ *
  * @param name - The name to sanitize
  * @returns A safe filename
  */
@@ -24,7 +24,7 @@ function sanitizeFilename(name: string | undefined | null): string {
   sanitized = sanitized.replace(/\s+/g, "_");
 
   // Remove unsafe characters: / \ : * ? " < > |
-  sanitized = sanitized.replace(/[\/\\:*?"<>|]/g, "");
+  sanitized = sanitized.replace(/[/\\:*?"<>|]/g, "");
 
   // Remove leading/trailing dots and spaces
   sanitized = sanitized.replace(/^\.+|\.+$/g, "").trim();
@@ -39,21 +39,24 @@ function sanitizeFilename(name: string | undefined | null): string {
 
 /**
  * Hook to download optimization code as a Python file.
- * 
+ *
  * @returns Function to trigger code download
  */
 export default function useOptimizationCodeDownload() {
   const { toast } = useToast();
 
   const downloadCode = useCallback(
-    async (config: OptimizationStudioConfig, optimizationName?: string | null) => {
+    async (
+      config: OptimizationStudioConfig,
+      optimizationName?: string | null,
+    ) => {
       try {
         const response = await api.post<string>(
           `${OPTIMIZATIONS_REST_ENDPOINT}studio/generate-code`,
           config,
           {
             responseType: "text",
-          }
+          },
         );
 
         // Sanitize the optimization name for the filename
@@ -65,12 +68,13 @@ export default function useOptimizationCodeDownload() {
           type: "text/plain;charset=utf-8",
         });
         FileSaver.saveAs(blob, filename);
-      } catch (error: any) {
+      } catch (error: unknown) {
         const errorMessage =
-          error?.response?.data?.message ||
-          error?.message ||
+          (error as { response?: { data?: { message?: string } } })?.response
+            ?.data?.message ||
+          (error as { message?: string })?.message ||
           "Failed to generate optimization code";
-        
+
         toast({
           title: "Download failed",
           description: errorMessage,
@@ -79,7 +83,7 @@ export default function useOptimizationCodeDownload() {
         throw error;
       }
     },
-    [toast]
+    [toast],
   );
 
   return { downloadCode };

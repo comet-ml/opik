@@ -30,6 +30,9 @@ from opik_backend.studio import (
     CancellationHandle,
     JobMessageParseError,
     OptimizationCodeGenerator,
+    OptimizationError,
+    InvalidOptimizerError,
+    InvalidMetricError,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,12 +157,38 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
             str(context.optimization_id), on_cancelled=on_cancelled
         ) as cancellation_handle:
 
-            # Parse config for code generation
-            config = OptimizationConfig.from_dict(job_message.get("config", {}))
+            # Parse config for code generation and generate code
+            # Wrap in try/except to catch validation errors before optimization starts
+            try:
+                config = OptimizationConfig.from_dict(job_message.get("config", {}))
 
-            # Generate Python code from configuration
-            logger.info(f"Generating optimization code for {context.optimization_id}")
-            generated_code = OptimizationCodeGenerator.generate(config, context)
+                # Generate Python code from configuration
+                logger.info(f"Generating optimization code for {context.optimization_id}")
+                generated_code = OptimizationCodeGenerator.generate(config, context)
+            except (OptimizationError, KeyError, ValueError) as e:
+                # Configuration validation failed - log error and return failure result
+                error_msg = str(e)
+                logger.error(
+                    f"Configuration validation failed for {context.optimization_id}: {error_msg}"
+                )
+                log_collector.emit(
+                    {"message": f"Configuration validation failed: {error_msg}"}
+                )
+
+                # Ensure log collector is closed before returning
+                try:
+                    log_collector.close()
+                except Exception as close_error:
+                    logger.warning(
+                        f"Error closing log collector after validation failure: {close_error}"
+                    )
+
+                # Return error result - cancellation handle will auto-unregister on exit
+                return {
+                    "status": "error",
+                    "optimization_id": str(context.optimization_id),
+                    "error": error_msg,
+                }
 
             # Write generated code to temporary file
             temp_file = None
