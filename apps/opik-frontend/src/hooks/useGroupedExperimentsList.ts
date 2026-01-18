@@ -351,8 +351,8 @@ export default function useGroupedExperimentsList(
 
     const projectIdValue = projectFilter?.value as string | undefined;
 
-    // Check if this is an orphan project filter by looking at the label
-    // The backend returns "__DELETED" as the label for orphan/deleted projects
+    // Check if this is an orphan project filter
+    // The backend returns "__DELETED" as the key for orphan/deleted projects
     const isOrphanProjectFilter =
       projectFilter &&
       (projectIdValue === "" || projectIdValue === DELETED_ENTITY_LABEL);
@@ -520,13 +520,17 @@ export default function useGroupedExperimentsList(
       const projectMeta = rowGroupData[projectMetaKey] as
         | { value: string; label?: string }
         | undefined;
-      const isOrphanProject = projectMeta?.label === DELETED_ENTITY_LABEL;
+      // Check both the label AND the value for __DELETED (value is __DELETED after backend change)
+      const isOrphanProject =
+        projectMeta?.label === DELETED_ENTITY_LABEL ||
+        projectMeta?.value === DELETED_ENTITY_LABEL;
 
       const projectIdValue = projectFilter?.value as string | undefined;
+      // Don't send projectId if it's an orphan project
       const validProjectId =
         projectFilter && !isOrphanProject ? projectIdValue : undefined;
-      // If there's a project filter but it's for an orphan project, use projectDeleted flag
-      const projectDeleted = projectFilter && isOrphanProject;
+      // Set projectDeleted if we have a project group/filter AND it's an orphan
+      const projectDeleted = (projectFilter || projectMeta) && isOrphanProject;
 
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,

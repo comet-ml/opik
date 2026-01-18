@@ -341,13 +341,20 @@ public class ExperimentResponseBuilder {
             return;
         }
 
+        GroupBy currentGroup = groups.get(depth);
+        String label = resolveLabel(groupingValue, currentGroup, enrichInfoHolder);
+
+        // Use __DELETED as the key when the entity is deleted (label is __DELETED)
+        // This allows the frontend to detect orphan entities without checking for null bytes
+        String mapKey = DELETED_ENTITY.equals(label) ? DELETED_ENTITY : groupingValue;
+
         ExperimentGroupResponse.GroupContent currentLevel = parentLevel.computeIfAbsent(
-                groupingValue,
+                mapKey,
                 // We have to enrich with the dataset name if it's for dataset
                 key -> buildGroupNode(
-                        key,
+                        groupingValue,
                         enrichInfoHolder,
-                        groups.get(depth)));
+                        currentGroup));
 
         // Recursively build nested groups
         buildNestedGroups(currentLevel.groups(), groupValues, depth + 1, enrichInfoHolder, groups);
