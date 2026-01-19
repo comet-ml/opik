@@ -11,13 +11,18 @@ import { OnChangeFn } from "@/types/shared";
 import ExperimentDataset from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/ExperimentDataset";
 
 interface DataTabProps {
-  data: DatasetItem["data"] | undefined;
+  data?: DatasetItem["data"];
   experimentItems: ExperimentItem[];
   openTrace: OnChangeFn<string>;
+  datasetItemId?: string;
 }
 
-const DataTab = ({ data, experimentItems, openTrace }: DataTabProps) => {
-  const datasetItemId = experimentItems?.[0]?.dataset_item_id;
+const DataTab = ({
+  data,
+  experimentItems,
+  openTrace,
+  datasetItemId,
+}: DataTabProps) => {
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>

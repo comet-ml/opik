@@ -25,8 +25,8 @@ import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 const COLLAPSE_KEYS_BUTTON_WIDTH = 340;
 
 interface ExperimentDatasetProps {
-  data: DatasetItem["data"] | undefined;
-  datasetItemId: string | undefined;
+  data?: DatasetItem["data"];
+  datasetItemId?: string;
 }
 
 const SELECTED_DATA_SET_ITEM_KEYS =
