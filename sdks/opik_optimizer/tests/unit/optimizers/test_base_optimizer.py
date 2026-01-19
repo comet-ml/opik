@@ -1084,6 +1084,52 @@ def test_post_trial_not_called_by_evaluate(
     assert optimizer.post_trial_called is False
 
 
+def test_post_round_infers_stop_reason_with_context(simple_chat_prompt) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    dataset = make_mock_dataset()
+    metric = MagicMock()
+    agent = MagicMock()
+    context = make_optimization_context(
+        simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        max_trials=1,
+    )
+    context.should_stop = True
+    context.finish_reason = "max_trials"
+
+    round_handle = optimizer.pre_round(context)
+    optimizer.post_round(round_handle, context=context)
+
+    entries = optimizer.get_history_entries()
+    assert entries[-1]["stop_reason"] == "max_trials"
+    assert entries[-1]["stopped"] is True
+
+
+def test_post_round_defaults_without_context(simple_chat_prompt) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    dataset = make_mock_dataset()
+    metric = MagicMock()
+    agent = MagicMock()
+    context = make_optimization_context(
+        simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        max_trials=1,
+    )
+    context.should_stop = True
+    context.finish_reason = "max_trials"
+
+    round_handle = optimizer.pre_round(context)
+    optimizer.post_round(round_handle)
+
+    entries = optimizer.get_history_entries()
+    assert entries[-1]["stop_reason"] == "completed"
+    assert entries[-1]["stopped"] is False
+
+
 class TestCleanup:
     """Tests for cleanup method."""
 

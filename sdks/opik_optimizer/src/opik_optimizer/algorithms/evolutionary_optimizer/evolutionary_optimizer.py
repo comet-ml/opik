@@ -725,6 +725,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         self.post_round(
             round_handle,
+            context=context,
             best_score=best_primary_score_overall,
             best_prompt=best_prompts_overall,
             dataset_split=context.dataset_split
@@ -882,6 +883,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         }
                     self.post_round(
                         round_handle=round_handle,
+                        context=context,
                         best_score=best_primary_score_overall,
                         best_candidate=best_prompts_overall,
                         stop_reason=context.finish_reason,
@@ -1034,6 +1036,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
             self.post_round(
                 fallback_round,
+                context=context,
                 best_score=final_primary_score,
                 best_prompt=final_best_prompts,
                 stop_reason=context.finish_reason,

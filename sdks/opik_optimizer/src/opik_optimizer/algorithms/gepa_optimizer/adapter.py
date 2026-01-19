@@ -135,9 +135,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         )
         self._optimizer.post_round(
             round_handle,
+            context=self._context,
             best_score=score,
             best_prompt=prompt_variants,
-            context=self._context,
         )
 
     def _rebuild_prompts_from_candidate(

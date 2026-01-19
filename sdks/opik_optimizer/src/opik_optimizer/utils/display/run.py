@@ -130,7 +130,7 @@ class OptimizationRunDisplay:
             delta = coerced_score - compare_score
             if abs(delta) < 1e-12:
                 style = "yellow"
-                score_label = " ▸ [Δ 0.0000 vs best | no improvement]"
+                score_label = " ▸ [no improvement]"
             elif delta > 0:
                 style = "green"
                 score_label = f" ▲ [Δ +{delta:.4f} vs best | improved]"

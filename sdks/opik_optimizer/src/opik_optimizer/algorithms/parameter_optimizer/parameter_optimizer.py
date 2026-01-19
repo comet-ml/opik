@@ -342,6 +342,7 @@ class ParameterOptimizer(BaseOptimizer):
             )
             self.post_round(
                 baseline_round,
+                context=context,
                 best_score=baseline_score,
                 best_candidate=base_prompts
                 if not is_single_prompt_optimization
@@ -437,6 +438,7 @@ class ParameterOptimizer(BaseOptimizer):
         )
         self.post_round(
             baseline_round,
+            context=context,
             best_score=baseline_score,
             best_candidate=base_prompts
             if not is_single_prompt_optimization
@@ -719,6 +721,7 @@ class ParameterOptimizer(BaseOptimizer):
             )
             self.post_round(
                 round_handle=round_handle,
+                context=context,
                 stop_reason=context.finish_reason,
             )
 

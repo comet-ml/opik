@@ -673,6 +673,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             self.post_round(
                 round_handle,
+                context=context,
                 stop_reason=context.finish_reason,
             )
 

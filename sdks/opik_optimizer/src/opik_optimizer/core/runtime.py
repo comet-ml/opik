@@ -147,6 +147,7 @@ def _record_fallback_history(
     )
     optimizer.post_round(
         fallback_round,
+        context=context,
         best_score=score,
         best_prompt=result_prompt,
         stop_reason=finish_reason,
@@ -344,6 +345,7 @@ def record_baseline_history(
     )
     optimizer.post_round(
         baseline_round,
+        context=context,
         best_score=score,
         best_prompt=prompt,
         stop_reason=stop_reason if isinstance(stop_reason, str) else None,

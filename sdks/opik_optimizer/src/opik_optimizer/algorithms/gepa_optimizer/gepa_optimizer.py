@@ -412,6 +412,7 @@ class GepaOptimizer(BaseOptimizer):
                     )
                     self.post_round(
                         round_handle,
+                        context=context,
                         stop_reason=context.finish_reason
                         if context.should_stop
                         else None,

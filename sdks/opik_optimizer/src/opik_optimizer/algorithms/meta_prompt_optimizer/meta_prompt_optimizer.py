@@ -441,6 +441,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Flush round metadata/candidates
                 self.post_round(
                     round_handle=round_handle,
+                    context=context,
                     best_score=best_cand_score_avg,
                     best_candidate=best_candidate_this_round,
                     stop_reason=context.finish_reason if context.should_stop else None,

@@ -713,6 +713,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
             self.post_round(
                 round_handle=round_handle,
+                context=context,
                 best_score=best_score,
                 best_candidate=best_prompts,
                 stop_reason=context.finish_reason if context.should_stop else None,
