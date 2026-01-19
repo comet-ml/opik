@@ -17,4 +17,5 @@ export interface FindExperimentsRequest {
     promptId?: string;
     sorting?: string;
     filters?: string;
+    experimentIds?: string;
 }

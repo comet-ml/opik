@@ -56,6 +56,7 @@ class ExperimentsClient:
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -83,6 +84,8 @@ class ExperimentsClient:
 
         filters : typing.Optional[str]
 
+        experiment_ids : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -108,6 +111,7 @@ class ExperimentsClient:
             prompt_id=prompt_id,
             sorting=sorting,
             filters=filters,
+            experiment_ids=experiment_ids,
             request_options=request_options,
         )
         return _response.data
@@ -668,6 +672,7 @@ class AsyncExperimentsClient:
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -694,6 +699,8 @@ class AsyncExperimentsClient:
         sorting : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        experiment_ids : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -723,6 +730,7 @@ class AsyncExperimentsClient:
             prompt_id=prompt_id,
             sorting=sorting,
             filters=filters,
+            experiment_ids=experiment_ids,
             request_options=request_options,
         )
         return _response.data

@@ -2210,6 +2210,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: experiment_ids
+        in: query
+        schema:
+          type: string
+          description: Filter experiments by a list of experiment IDs
       responses:
         "200":
           description: Experiments resource

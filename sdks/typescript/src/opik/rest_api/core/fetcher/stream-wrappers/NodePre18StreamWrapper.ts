@@ -19,8 +19,8 @@ export class NodePre18StreamWrapper implements StreamWrapper<Writable, Buffer> {
     }
 
     public pipe(dest: Writable): Writable {
-        const result = this.readableStream.pipe(dest as any);
-        return result as Writable;
+        this.readableStream.pipe(dest);
+        return dest;
     }
 
     public pipeTo(dest: Writable): Writable {

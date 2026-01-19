@@ -55,6 +55,7 @@ class RawExperimentsClient:
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ExperimentPagePublic]:
         """
@@ -82,6 +83,8 @@ class RawExperimentsClient:
 
         filters : typing.Optional[str]
 
+        experiment_ids : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -104,6 +107,7 @@ class RawExperimentsClient:
                 "prompt_id": prompt_id,
                 "sorting": sorting,
                 "filters": filters,
+                "experiment_ids": experiment_ids,
             },
             request_options=request_options,
         )
@@ -984,6 +988,7 @@ class AsyncRawExperimentsClient:
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ExperimentPagePublic]:
         """
@@ -1011,6 +1016,8 @@ class AsyncRawExperimentsClient:
 
         filters : typing.Optional[str]
 
+        experiment_ids : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1033,6 +1040,7 @@ class AsyncRawExperimentsClient:
                 "prompt_id": prompt_id,
                 "sorting": sorting,
                 "filters": filters,
+                "experiment_ids": experiment_ids,
             },
             request_options=request_options,
         )
