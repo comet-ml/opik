@@ -86,6 +86,19 @@ export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   REFERENCE_KEY: "",
 };
 
+export const DEFAULT_CODE_METRIC_CONFIGS = {
+  CODE: `def evaluation_metric(dataset_item, llm_output):
+    # Add your evaluation logic here
+    # dataset_item: dict with input data and expected values
+    # llm_output: string with the LLM response
+    
+    return ScoreResult(
+        name="my_metric",
+        value=1.0,  # Score between 0.0 and 1.0
+        reason="Evaluation reason"
+    )`,
+};
+
 export const OPTIMIZATION_MESSAGE_TYPE_OPTIONS = [
   {
     label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
@@ -134,6 +147,11 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
     value: METRIC_TYPE.LEVENSHTEIN,
     label: "Levenshtein",
     description: "Measures edit distance between output and expected text.",
+  },
+  {
+    value: METRIC_TYPE.CODE,
+    label: "Code",
+    description: "Runs custom Python code to evaluate outputs.",
   },
 ];
 
@@ -398,12 +416,54 @@ Output valid JSON only.`,
       evaluation: {
         metrics: [
           {
-            type: METRIC_TYPE.G_EVAL,
+            type: METRIC_TYPE.CODE,
             parameters: {
-              task_introduction:
-                "You are evaluating a customer support message classifier. The system analyzes incoming customer messages and outputs a JSON object with 'intent' (containing 'primary' category and 'confidence' score) and 'urgency' level. The dataset provides 'expected_intent' and 'expected_urgency' as ground truth labels for each message.",
-              evaluation_criteria:
-                "Score based on: 1) Intent accuracy - the 'intent.primary' field should match 'expected_intent' from the dataset (question, complaint, request, feedback, or other). Pay attention to sarcasm and indirect phrasing. 2) Urgency accuracy - the 'urgency' field should match 'expected_urgency' (critical for time-sensitive blockers, high for significant issues, medium for moderate concerns, low for minor feedback). 3) Confidence calibration - confidence scores should be lower for ambiguous messages. 4) Valid JSON output format.",
+              code: `def evaluation_metric(dataset_item, llm_output):
+    try:
+        # Parse the LLM output
+        output = llm_output.strip()
+        if output.startswith("${"```"}"):
+            output = output.split("${"```"}")[1]
+            if output.startswith("json"):
+                output = output[4:]
+        result = json.loads(output)
+
+        # Extract predictions
+        predicted_intent = result.get("intent", {}).get("primary", "").lower()
+        predicted_urgency = result.get("urgency", "").lower()
+
+        # Get expected values
+        expected_intent = dataset_item.get("expected_intent", "").lower()
+        expected_urgency = dataset_item.get("expected_urgency", "").lower()
+
+        # Score: 0.6 for intent, 0.4 for urgency
+        score = 0.0
+        reasons = []
+
+        if predicted_intent == expected_intent:
+            score += 0.6
+            reasons.append(f"Intent correct: {predicted_intent}")
+        else:
+            reasons.append(f"Intent wrong: expected '{expected_intent}', got '{predicted_intent}'")
+
+        if predicted_urgency == expected_urgency:
+            score += 0.4
+            reasons.append(f"Urgency correct: {predicted_urgency}")
+        else:
+            reasons.append(f"Urgency wrong: expected '{expected_urgency}', got '{predicted_urgency}'")
+
+        return ScoreResult(
+            name="intent_accuracy",
+            value=score,
+            reason="; ".join(reasons)
+        )
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        return ScoreResult(
+            name="intent_accuracy",
+            value=0.0,
+            reason=f"Failed to parse output: {str(e)}"
+        )`,
             },
           },
         ],

@@ -76,8 +76,6 @@ import { getOptimizerLabel } from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -173,9 +171,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const isOptimizationStudioEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
+  const isOptimizationStudioEnabled = true;
+  // const isOptimizationStudioEnabled = useIsFeatureEnabled(
+  //   FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  // );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",

@@ -13,6 +13,7 @@ import {
   DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS,
   DEFAULT_G_EVAL_METRIC_CONFIGS,
   DEFAULT_LEVENSHTEIN_METRIC_CONFIGS,
+  DEFAULT_CODE_METRIC_CONFIGS,
   OPTIMIZER_OPTIONS,
 } from "@/constants/optimizations";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
@@ -116,6 +117,10 @@ export const getDefaultMetricConfig = (
       return {
         case_sensitive: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.CASE_SENSITIVE,
         reference_key: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.REFERENCE_KEY,
+      };
+    case METRIC_TYPE.CODE:
+      return {
+        code: DEFAULT_CODE_METRIC_CONFIGS.CODE,
       };
     default:
       return {};

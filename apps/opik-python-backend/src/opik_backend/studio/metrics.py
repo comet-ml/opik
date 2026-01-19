@@ -213,3 +213,113 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     metric_fn.__name__ = "json_schema_validator"
     return metric_fn
 
+
+@MetricFactory.register("code")
+def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
+    """Build a custom code metric function.
+    
+    Executes user-provided Python code to evaluate outputs.
+    Supports two patterns:
+    
+    1. Function pattern (optimizer-style):
+       def my_metric(dataset_item, llm_output):
+           return ScoreResult(name="...", value=0.5)
+    
+    2. Class pattern (BaseMetric-style, same as automations):
+       class MyMetric(BaseMetric):
+           def score(self, output, **kwargs):
+               return ScoreResult(name="...", value=0.5)
+    
+    Args:
+        params: Metric parameters
+            - code (str): Python code containing the metric function or class
+        model: LLM model (not used for this metric)
+        
+    Returns:
+        Metric function with signature (dataset_item, llm_output) -> ScoreResult
+        
+    Raises:
+        InvalidMetricError: If code is missing or invalid
+    """
+    from types import ModuleType, FunctionType
+    import uuid
+    import inspect
+    from opik.evaluation.metrics.score_result import ScoreResult
+    from opik.evaluation.metrics import BaseMetric
+    
+    code = params.get("code")
+    if not code:
+        raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
+    
+    # Create a module to execute the code
+    module = ModuleType(str(uuid.uuid4()))
+    
+    # Pre-import commonly used modules in the metric code's namespace
+    module.__dict__["json"] = __import__("json")
+    module.__dict__["ScoreResult"] = ScoreResult
+    module.__dict__["BaseMetric"] = BaseMetric
+    
+    # Track what was in the namespace before exec
+    pre_exec_names = set(module.__dict__.keys())
+    
+    try:
+        exec(code, module.__dict__)
+    except Exception as e:
+        raise InvalidMetricError("code", f"Invalid Python code: {e}")
+    
+    # Find the metric - look for either a function or a BaseMetric class
+    # These are new names that appeared after exec
+    new_names = set(module.__dict__.keys()) - pre_exec_names
+    
+    metric_fn = None
+    metric_class = None
+    
+    for name in new_names:
+        obj = module.__dict__[name]
+        
+        # Check for BaseMetric subclass (class pattern - same as automations)
+        if inspect.isclass(obj) and issubclass(obj, BaseMetric) and obj is not BaseMetric:
+            metric_class = obj
+            break
+        
+        # Check for function pattern
+        if isinstance(obj, FunctionType) and not name.startswith("_"):
+            # Check function signature - should accept at least 2 arguments
+            try:
+                sig = inspect.signature(obj)
+                params_list = list(sig.parameters.keys())
+                if len(params_list) >= 2:
+                    metric_fn = obj
+                    # Don't break - prefer class pattern if both exist
+            except (ValueError, TypeError):
+                # Can't inspect signature, skip this function
+                continue
+    
+    # If we found a BaseMetric class, wrap it to match the optimizer signature
+    if metric_class is not None:
+        metric_instance = metric_class()
+        
+        def wrapped_class_metric(dataset_item, llm_output):
+            # BaseMetric.score expects output as first arg and kwargs for the rest
+            return metric_instance.score(output=llm_output, **dataset_item)
+        
+        wrapped_class_metric.__name__ = "code_metric"
+        return wrapped_class_metric
+    
+    # If we found a function, wrap it
+    if metric_fn is not None:
+        original_fn = metric_fn
+        
+        def wrapped_fn_metric(dataset_item, llm_output):
+            return original_fn(dataset_item, llm_output)
+        
+        wrapped_fn_metric.__name__ = "code_metric"
+        return wrapped_fn_metric
+    
+    raise InvalidMetricError(
+        "code", 
+        "Code must define either:\n"
+        "1. A function: def my_metric(dataset_item, llm_output) -> ScoreResult\n"
+        "2. A class: class MyMetric(BaseMetric) with a score() method"
+    )
+
