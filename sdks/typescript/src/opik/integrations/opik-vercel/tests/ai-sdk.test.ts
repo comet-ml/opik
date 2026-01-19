@@ -203,4 +203,213 @@ describe("Opik - Vercel AI SDK integration", () => {
       ],
     });
   });
+
+  it("generateText with threadId from constructor", async () => {
+    const input = "Hello, test!";
+    const output = "Hello, world!";
+    const traceName = "trace-with-thread-id";
+    const threadId = "thread-123";
+
+    // Important! Reset SDK
+    trace.disable();
+
+    // Create new client and SDK with threadId
+    const clientWithThreadId = new Opik({
+      projectName: "opik-sdk-typescript",
+    });
+    const sdkWithThreadId = new NodeSDK({
+      traceExporter: new OpikExporter({ client: clientWithThreadId, threadId }),
+      instrumentations: [getNodeAutoInstrumentations()],
+    });
+
+    const createTracesSpyWithThreadId = vi
+      .spyOn(clientWithThreadId.api.traces, "createTraces")
+      .mockImplementation(mockAPIFunction as never);
+
+    const createSpansSpyWithThreadId = vi
+      .spyOn(clientWithThreadId.api.spans, "createSpans")
+      .mockImplementation(mockAPIFunction as never);
+
+    sdkWithThreadId.start();
+
+    await generateText({
+      model: new MockLanguageModelV3({
+        doGenerate: {
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: undefined, reasoning: undefined },
+          },
+          content: [{ type: "text", text: output }],
+          warnings: [],
+        },
+      }),
+      prompt: input,
+      experimental_telemetry: OpikExporter.getSettings({
+        name: traceName,
+      }),
+    });
+
+    await sdkWithThreadId.shutdown();
+
+    expect(createTracesSpyWithThreadId).toHaveBeenCalledTimes(1);
+    expect(createSpansSpyWithThreadId).toHaveBeenCalledTimes(1);
+    expect(createTracesSpyWithThreadId.mock.calls[0][0]).toMatchObject({
+      traces: [
+        {
+          input: {
+            prompt: input,
+          },
+          metadata: {},
+          name: traceName,
+          output: { text: output },
+          projectName: "opik-sdk-typescript",
+          threadId: threadId,
+          usage: {
+            completion_tokens: 20,
+            prompt_tokens: 10,
+            total_tokens: 30,
+          },
+        },
+      ],
+    });
+
+    createTracesSpyWithThreadId.mockRestore();
+    createSpansSpyWithThreadId.mockRestore();
+  });
+
+  it("generateText with threadId from telemetry metadata", async () => {
+    const input = "Hello, test!";
+    const output = "Hello, world!";
+    const traceName = "trace-with-thread-id-metadata";
+    const threadId = "thread-456";
+
+    sdk.start();
+
+    await generateText({
+      model: new MockLanguageModelV3({
+        doGenerate: {
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: undefined, reasoning: undefined },
+          },
+          content: [{ type: "text", text: output }],
+          warnings: [],
+        },
+      }),
+      prompt: input,
+      experimental_telemetry: OpikExporter.getSettings({
+        name: traceName,
+        metadata: {
+          threadId: threadId,
+        },
+      }),
+    });
+
+    await sdk.shutdown();
+
+    expect(createTracesSpy).toHaveBeenCalled();
+    const lastCall = createTracesSpy.mock.calls[createTracesSpy.mock.calls.length - 1];
+    expect(lastCall[0]).toMatchObject({
+      traces: [
+        {
+          input: {
+            prompt: input,
+          },
+          metadata: {},
+          name: traceName,
+          output: { text: output },
+          projectName: "opik-sdk-typescript",
+          threadId: threadId,
+          usage: {
+            completion_tokens: 20,
+            prompt_tokens: 10,
+            total_tokens: 30,
+          },
+        },
+      ],
+    });
+  });
+
+  it("generateText with threadId from telemetry metadata overrides constructor threadId", async () => {
+    const input = "Hello, test!";
+    const output = "Hello, world!";
+    const traceName = "trace-with-thread-id-override";
+    const constructorThreadId = "thread-constructor";
+    const metadataThreadId = "thread-metadata";
+
+    // Important! Reset SDK
+    trace.disable();
+
+    // Create new client and SDK with threadId in constructor
+    const clientWithThreadId = new Opik({
+      projectName: "opik-sdk-typescript",
+    });
+    const sdkWithThreadId = new NodeSDK({
+      traceExporter: new OpikExporter({
+        client: clientWithThreadId,
+        threadId: constructorThreadId,
+      }),
+      instrumentations: [getNodeAutoInstrumentations()],
+    });
+
+    const createTracesSpyWithThreadId = vi
+      .spyOn(clientWithThreadId.api.traces, "createTraces")
+      .mockImplementation(mockAPIFunction as never);
+
+    const createSpansSpyWithThreadId = vi
+      .spyOn(clientWithThreadId.api.spans, "createSpans")
+      .mockImplementation(mockAPIFunction as never);
+
+    sdkWithThreadId.start();
+
+    await generateText({
+      model: new MockLanguageModelV3({
+        doGenerate: {
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: undefined, reasoning: undefined },
+          },
+          content: [{ type: "text", text: output }],
+          warnings: [],
+        },
+      }),
+      prompt: input,
+      experimental_telemetry: OpikExporter.getSettings({
+        name: traceName,
+        metadata: {
+          threadId: metadataThreadId,
+        },
+      }),
+    });
+
+    await sdkWithThreadId.shutdown();
+
+    expect(createTracesSpyWithThreadId).toHaveBeenCalledTimes(1);
+    expect(createSpansSpyWithThreadId).toHaveBeenCalledTimes(1);
+    expect(createTracesSpyWithThreadId.mock.calls[0][0]).toMatchObject({
+      traces: [
+        {
+          input: {
+            prompt: input,
+          },
+          metadata: {},
+          name: traceName,
+          output: { text: output },
+          projectName: "opik-sdk-typescript",
+          threadId: metadataThreadId, // Should use metadata threadId, not constructor
+          usage: {
+            completion_tokens: 20,
+            prompt_tokens: 10,
+            total_tokens: 30,
+          },
+        },
+      ],
+    });
+
+    createTracesSpyWithThreadId.mockRestore();
+    createSpansSpyWithThreadId.mockRestore();
+  });
 });

@@ -25,6 +25,7 @@ type OpikExporterOptions = {
   client?: Opik;
   tags?: string[];
   metadata?: Record<string, AttributeValue>;
+  threadId?: string;
 };
 
 const aiSDKClient = new Opik();
@@ -37,15 +38,18 @@ export class OpikExporter implements SpanExporter {
   private readonly client: Opik;
   private readonly tags: string[];
   private readonly metadata: Record<string, AttributeValue>;
+  private readonly threadId?: string;
 
   constructor({
     client = aiSDKClient,
     tags = [],
     metadata = {},
+    threadId,
   }: OpikExporterOptions = {}) {
     this.client = client;
     this.tags = [...tags];
     this.metadata = { ...metadata };
+    this.threadId = threadId;
   }
 
   private getSpanInput = (otelSpan: ReadableSpan): Record<string, unknown> => {
@@ -157,6 +161,18 @@ export class OpikExporter implements SpanExporter {
     return usage;
   };
 
+  private getThreadId = (otelSpan: ReadableSpan): string | undefined => {
+    const { attributes } = otelSpan;
+
+    // Check for threadId in telemetry metadata
+    if (attributes["ai.telemetry.metadata.threadId"] != null) {
+      return attributes["ai.telemetry.metadata.threadId"]?.toString();
+    }
+
+    // Fallback to constructor-provided threadId
+    return this.threadId;
+  };
+
   processSpan = ({
     otelSpan,
     parentSpan,
@@ -225,6 +241,7 @@ export class OpikExporter implements SpanExporter {
         metadata: { ...this.getSpanMetadata(rootOtelSpan), ...this.metadata },
         tags: this.tags,
         usage: this.getSpanUsage(rootOtelSpan),
+        threadId: this.getThreadId(rootOtelSpan),
       });
 
       this.traces.set(otelTraceId, trace);
