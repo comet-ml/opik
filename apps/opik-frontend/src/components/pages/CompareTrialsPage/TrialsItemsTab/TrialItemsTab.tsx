@@ -41,7 +41,6 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
-import { Optimization } from "@/types/optimizations";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import {
   convertColumnDataToColumn,
@@ -106,7 +105,6 @@ export type TrialItemsTabProps = {
   datasetId: string;
   experimentsIds: string[];
   experiments?: Experiment[];
-  optimization?: Optimization;
 };
 
 const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
@@ -114,7 +112,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   datasetId,
   experimentsIds = [],
   experiments,
-  optimization,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -338,6 +335,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         )
         : {};
 
+    // Get score value from the first experiment (same as CompareTrialsDetails)
+    const firstExperiment = experiments?.[0];
+
     // Create column for each feedback score
     return sortedScoreNames.map((scoreName) => ({
       id: `score_${scoreName}`,
@@ -349,12 +349,12 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         experimentsIds,
         feedbackKey: scoreName,
         colorMap,
-        scoreValue: optimization?.feedback_scores?.find(
+        scoreValue: firstExperiment?.feedback_scores?.find(
           (s) => s.name === scoreName,
         )?.value,
       },
     })) as ColumnData<ExperimentsCompare>[];
-  }, [experiments, experimentsIds, objectiveName, optimization?.feedback_scores]);
+  }, [experiments, experimentsIds, objectiveName]);
 
   // Auto-select all score columns when they become available
   useEffect(() => {

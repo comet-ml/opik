@@ -98,7 +98,6 @@ const CompareTrialsPage: React.FunctionComponent = () => {
             datasetId={datasetId}
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
-            optimization={optimization}
           />
         </TabsContent>
         <TabsContent value="config">
