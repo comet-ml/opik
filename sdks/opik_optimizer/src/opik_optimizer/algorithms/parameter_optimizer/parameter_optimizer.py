@@ -13,7 +13,8 @@ from optuna.trial import Trial, TrialState
 
 from opik import Dataset
 
-from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResult
+from ...base_optimizer import BaseOptimizer
+from ...core.state import OptimizationContext, AlgorithmResult
 from ...core.results import OptimizationResult
 from ...agents import OptimizableAgent
 from ...agents import LiteLLMAgent

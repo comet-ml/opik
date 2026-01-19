@@ -2,7 +2,8 @@ import logging
 from typing import Any, cast
 
 
-from ...base_optimizer import AlgorithmResult, BaseOptimizer, OptimizationContext
+from ...base_optimizer import BaseOptimizer
+from ...core.state import AlgorithmResult, OptimizationContext
 from ...utils.reporting import (
     convert_tqdm_to_rich,
     suppress_opik_logs,

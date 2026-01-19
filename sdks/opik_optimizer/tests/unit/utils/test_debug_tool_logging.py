@@ -1,9 +1,13 @@
 import logging
 
+import pytest
+
 from opik_optimizer.utils.logging import debug_tool_call
 
 
-def test_debug_tool_call_redacts_secrets(caplog) -> None:
+def test_debug_tool_call_redacts_secrets(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="opik_optimizer.debug")
     debug_tool_call(
         tool_name="search",

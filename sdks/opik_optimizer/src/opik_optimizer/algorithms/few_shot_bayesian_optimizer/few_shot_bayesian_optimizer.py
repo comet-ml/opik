@@ -14,7 +14,7 @@ from opik import Dataset, opik_context
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
-from ...base_optimizer import OptimizationContext, AlgorithmResult
+from ...core.state import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent

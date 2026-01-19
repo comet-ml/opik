@@ -1772,9 +1772,9 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         seed: int | None = None,
-        return_evaluation_result: Literal[False] = False,
+        return_evaluation_result: Literal[True] = True,
         allow_tool_use: bool | None = None,
-    ) -> float: ...
+    ) -> EvaluationResult: ...
 
     @overload
     def evaluate_prompt(
@@ -1789,9 +1789,9 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         seed: int | None = None,
-        return_evaluation_result: Literal[True] = True,
+        return_evaluation_result: Literal[False] = False,
         allow_tool_use: bool | None = None,
-    ) -> EvaluationResult: ...
+    ) -> float: ...
 
     def evaluate_prompt(
         self,

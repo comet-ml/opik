@@ -5,7 +5,8 @@ from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
 from ...core import llm_calls as _llm_calls
-from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResult
+from ...base_optimizer import BaseOptimizer
+from ...core.state import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
@@ -190,6 +191,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_threads=self.n_threads,
             return_evaluation_result=True,
         )
+        if not isinstance(evaluation_result, EvaluationResult):
+            raise TypeError("Expected EvaluationResult from evaluate_prompt.")
         scores = [x.score_results[0].value for x in evaluation_result.test_results]
         if scores:
             score = sum(scores) / len(scores)
