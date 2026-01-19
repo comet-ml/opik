@@ -10,6 +10,9 @@ metadata:
     {{- end }}
     {{- include "opik.clickhouse.labels" . | nindent 4 }}
 spec:
+  {{- if not (empty .Values.clickhouse.namespaceDomainPattern) }}
+  namespaceDomainPattern: {{ .Values.clickhouse.namespaceDomainPattern | quote }}
+  {{- end }}
   configuration:
     users:
       {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
