@@ -76,7 +76,7 @@ const getFormDefaults = (
   config?: BaseDashboardConfig | null,
 ): DashboardConfigFormData => ({
   projectId: config?.projectIds?.[0] || "",
-  experimentIds: config?.experimentIds || [],
+  experimentIds: config?.experimentIds.slice() || [],
   experimentDataSource:
     config?.experimentDataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
   experimentFilters: config?.experimentFilters?.slice() ?? [],
