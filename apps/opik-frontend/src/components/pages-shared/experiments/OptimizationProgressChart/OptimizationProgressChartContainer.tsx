@@ -120,8 +120,9 @@ const OptimizationProgressChartContainer: React.FC<
   return (
     <Card className="h-[224px] min-w-[400px] flex-auto">
       <CardHeader className="space-y-0.5 px-4 pt-3">
-        <CardTitle className="comet-body-s-accented">
+        <CardTitle className="comet-body-s-accented flex items-center gap-2">
           Optimization progress
+          {isInProgress && !noData && <Spinner size="xs" />}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-3">{renderContent()}</CardContent>

@@ -2,6 +2,7 @@ import React from "react";
 import { RotateCw, X } from "lucide-react";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useNavigate } from "@tanstack/react-router";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { STATUS_TO_VARIANT_MAP } from "@/constants/experiments";
@@ -29,11 +30,10 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
   const { mutate: stopOptimization, isPending: isStoppingOptimization } =
     useOptimizationStopMutation();
 
-  const canStop =
-    isStudioOptimization &&
-    optimizationId &&
-    status &&
-    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+  const isInProgress =
+    status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+
+  const canStop = isStudioOptimization && optimizationId && isInProgress;
 
   const handleStop = () => {
     if (!optimizationId) return;

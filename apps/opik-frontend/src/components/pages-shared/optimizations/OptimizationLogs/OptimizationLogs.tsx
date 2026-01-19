@@ -169,7 +169,10 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
                 <Clock className="size-3.5 text-muted-slate" />
               </TooltipWrapper>
             )}
+            {isInProgress && logContent && <Spinner size="xs" />}
+
           </div>
+
           <div className="flex items-center gap-1">
             {logContent && (
               <TooltipWrapper
