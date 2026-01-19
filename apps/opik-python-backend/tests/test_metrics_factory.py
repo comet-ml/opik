@@ -193,6 +193,285 @@ class TestMetricReasons:
         assert "%" in result.reason
 
 
+class TestCodeMetricSecurity:
+    """Tests for code metric security validation.
+    
+    These tests verify that:
+    1. Dangerous patterns are blocked
+    2. Only allowed modules can be imported
+    3. The feature can be disabled via environment variable
+    4. Logging/audit trail is generated
+    """
+
+    def test_code_metric_basic_function_works(self):
+        """Test that a basic safe function metric works."""
+        code = '''
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        
+        result = metric_fn({}, "test output")
+        assert result.value == 1.0
+        assert result.name == "test"
+
+    def test_code_metric_basic_class_works(self):
+        """Test that a basic safe class metric works."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        return ScoreResult(name="test", value=0.5, reason="Class metric")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        
+        result = metric_fn({}, "test output")
+        assert result.value == 0.5
+
+    def test_code_metric_blocks_os_system(self):
+        """Test that os.system is blocked."""
+        code = '''
+import os
+os.system("echo hello")
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+        assert "OS system" in str(exc_info.value) or "not allowed" in str(exc_info.value)
+
+    def test_code_metric_blocks_subprocess(self):
+        """Test that subprocess is blocked."""
+        code = '''
+import subprocess
+def my_metric(dataset_item, llm_output):
+    subprocess.run(["ls"])
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+        assert "subprocess" in str(exc_info.value)
+
+    def test_code_metric_blocks_eval(self):
+        """Test that eval() is blocked."""
+        code = '''
+def my_metric(dataset_item, llm_output):
+    result = eval("1+1")
+    return ScoreResult(name="test", value=float(result), reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+        assert "eval" in str(exc_info.value)
+
+    def test_code_metric_blocks_exec(self):
+        """Test that exec() is blocked."""
+        code = '''
+def my_metric(dataset_item, llm_output):
+    exec("x = 1")
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+
+    def test_code_metric_blocks_open(self):
+        """Test that open() for file operations is blocked."""
+        code = '''
+def my_metric(dataset_item, llm_output):
+    with open("/etc/passwd", "r") as f:
+        content = f.read()
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+        assert "open" in str(exc_info.value)
+
+    def test_code_metric_blocks_dunder_builtins(self):
+        """Test that __builtins__ access is blocked."""
+        code = '''
+def my_metric(dataset_item, llm_output):
+    x = __builtins__
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+
+    def test_code_metric_blocks_socket(self):
+        """Test that socket module is blocked."""
+        code = '''
+import socket
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value) or "not allowed" in str(exc_info.value)
+
+    def test_code_metric_blocks_requests(self):
+        """Test that requests module is blocked."""
+        code = '''
+import requests
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value) or "not allowed" in str(exc_info.value)
+
+    def test_code_metric_blocks_dynamic_import(self):
+        """Test that __import__ is blocked."""
+        code = '''
+def my_metric(dataset_item, llm_output):
+    os = __import__("os")
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Security violation" in str(exc_info.value)
+
+    def test_code_metric_allows_json(self):
+        """Test that json module is allowed."""
+        code = '''
+import json
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def my_metric(dataset_item, llm_output):
+    data = json.loads(llm_output) if llm_output.startswith("{") else {}
+    return ScoreResult(name="test", value=1.0, reason="Used json")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, '{"key": "value"}')
+        assert result.value == 1.0
+
+    def test_code_metric_allows_re(self):
+        """Test that re module is allowed."""
+        code = '''
+import re
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def my_metric(dataset_item, llm_output):
+    match = re.search(r"\\d+", llm_output)
+    return ScoreResult(name="test", value=1.0 if match else 0.0, reason="Used re")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test 123")
+        assert result.value == 1.0
+
+    def test_code_metric_allows_math(self):
+        """Test that math module is allowed."""
+        code = '''
+import math
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=math.sqrt(0.25), reason="Used math")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test")
+        assert result.value == 0.5
+
+    def test_code_metric_allows_opik_imports(self):
+        """Test that opik.* imports are allowed."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="Opik imports work")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test")
+        assert result.value == 1.0
+
+    def test_code_metric_blocks_disallowed_modules(self):
+        """Test that non-allowlisted modules are blocked."""
+        code = '''
+import pickle
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "not allowed" in str(exc_info.value)
+        assert "pickle" in str(exc_info.value)
+
+    def test_code_metric_missing_code_raises_error(self):
+        """Test that missing code parameter raises error."""
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {}, "model")
+        
+        assert "Missing 'code' parameter" in str(exc_info.value)
+
+    def test_code_metric_empty_code_raises_error(self):
+        """Test that empty code raises error."""
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": ""}, "model")
+        
+        assert "Missing 'code' parameter" in str(exc_info.value)
+
+    def test_code_metric_invalid_syntax_raises_error(self):
+        """Test that invalid Python syntax raises error."""
+        code = '''
+def my_metric(dataset_item, llm_output)
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Invalid Python code" in str(exc_info.value)
+
+    def test_code_metric_no_metric_function_raises_error(self):
+        """Test that code without a valid metric function raises error."""
+        code = '''
+# Just a comment, no function
+x = 1
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Code must define" in str(exc_info.value)
+
+    @patch.dict('os.environ', {'OPIK_CODE_METRIC_ENABLED': 'false'})
+    def test_code_metric_disabled_via_env_var(self):
+        """Test that code metrics can be disabled via environment variable."""
+        # Need to reload the module to pick up the new env var
+        import importlib
+        from opik_backend.studio import metrics
+        importlib.reload(metrics)
+        
+        code = '''
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        try:
+            with pytest.raises(InvalidMetricError) as exc_info:
+                metrics.MetricFactory.build("code", {"code": code}, "model")
+            
+            assert "disabled" in str(exc_info.value).lower()
+        finally:
+            # Restore the module
+            importlib.reload(metrics)
+
+
 class TestTemplateSyntaxConversion:
     """Tests for template syntax conversion from {{var}} to {var}."""
 

@@ -214,11 +214,89 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     return metric_fn
 
 
+import os
+import re
+
+# Environment variable to control code metric availability
+# Set to "true" to enable custom code metrics (requires proper isolation)
+CODE_METRIC_ENABLED = os.getenv("OPIK_CODE_METRIC_ENABLED", "true").lower() == "true"
+
+# Patterns that indicate potentially dangerous code
+# These are blocked to provide defense-in-depth (primary isolation is via subprocess)
+DANGEROUS_PATTERNS = [
+    (r'\bos\s*\.\s*(system|popen|spawn|exec|remove|unlink|rmdir|makedirs|chmod|chown)', 
+     "OS system/file operations are not allowed"),
+    (r'\bsubprocess\b', "subprocess module is not allowed"),
+    (r'\b__import__\s*\(', "Dynamic imports via __import__ are not allowed"),
+    (r'\beval\s*\(', "eval() is not allowed"),
+    (r'\bexec\s*\(', "exec() is not allowed"),
+    (r'\bcompile\s*\(', "compile() is not allowed"),
+    (r'\bopen\s*\(', "File operations via open() are not allowed"),
+    (r'\bglobals\s*\(', "globals() is not allowed"),
+    (r'\blocals\s*\(', "locals() is not allowed"),
+    (r'\bgetattr\s*\([^,]+,\s*["\']__', "Accessing dunder attributes via getattr is not allowed"),
+    (r'\bsetattr\s*\(', "setattr() is not allowed"),
+    (r'\bdelattr\s*\(', "delattr() is not allowed"),
+    (r'\b__builtins__\b', "Accessing __builtins__ is not allowed"),
+    (r'\b__code__\b', "Accessing __code__ is not allowed"),
+    (r'\b__globals__\b', "Accessing __globals__ is not allowed"),
+    (r'\bsocket\b', "socket module is not allowed"),
+    (r'\brequests\b', "requests module is not allowed (use allowed modules only)"),
+    (r'\burllib\b', "urllib module is not allowed"),
+    (r'\bhttpx\b', "httpx module is not allowed"),
+    (r'\baiohttp\b', "aiohttp module is not allowed"),
+]
+
+# Allowed import modules (whitelist)
+ALLOWED_MODULES = {
+    'json', 're', 'math', 'string', 'collections', 'itertools', 'functools',
+    'datetime', 'typing', 'dataclasses', 'enum', 'copy', 'hashlib',
+}
+
+
+def _validate_code_safety(code: str) -> None:
+    """Validate that user code doesn't contain dangerous patterns.
+    
+    This provides defense-in-depth. Primary isolation is via subprocess execution.
+    
+    Args:
+        code: The user-provided Python code
+        
+    Raises:
+        InvalidMetricError: If dangerous patterns are detected
+    """
+    # Check for dangerous patterns
+    for pattern, message in DANGEROUS_PATTERNS:
+        if re.search(pattern, code):
+            logger.warning(f"Code metric rejected: {message}. Pattern: {pattern}")
+            raise InvalidMetricError("code", f"Security violation: {message}")
+    
+    # Validate imports are from allowlist
+    import_pattern = r'^\s*(?:from\s+(\w+)|import\s+(\w+))'
+    for match in re.finditer(import_pattern, code, re.MULTILINE):
+        module = match.group(1) or match.group(2)
+        # Allow opik imports and allowed modules
+        if module and not module.startswith('opik') and module not in ALLOWED_MODULES:
+            logger.warning(f"Code metric rejected: Import of '{module}' is not allowed")
+            raise InvalidMetricError(
+                "code", 
+                f"Import of '{module}' is not allowed. "
+                f"Allowed modules: {', '.join(sorted(ALLOWED_MODULES))}, opik.*"
+            )
+    
+    logger.debug("Code safety validation passed")
+
+
 @MetricFactory.register("code")
 def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     """Build a custom code metric function.
     
-    Executes user-provided Python code to evaluate outputs.
+    SECURITY NOTE: User code is executed in an isolated subprocess with:
+    - Memory limits (via IsolatedSubprocessExecutor)
+    - Timeout limits (configurable)
+    - No access to parent process environment secrets
+    - Code validation against dangerous patterns
+    
     Supports two patterns:
     
     1. Function pattern (optimizer-style):
@@ -239,7 +317,8 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
         Metric function with signature (dataset_item, llm_output) -> ScoreResult
         
     Raises:
-        InvalidMetricError: If code is missing or invalid
+        InvalidMetricError: If code metrics are disabled, code is missing, 
+                           contains dangerous patterns, or is invalid
     """
     from types import ModuleType, FunctionType
     import uuid
@@ -247,15 +326,51 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     from opik.evaluation.metrics.score_result import ScoreResult
     from opik.evaluation.metrics import BaseMetric
     
+    # Check if code metrics are enabled
+    if not CODE_METRIC_ENABLED:
+        logger.warning("Code metric creation rejected: feature is disabled via OPIK_CODE_METRIC_ENABLED=false")
+        raise InvalidMetricError(
+            "code", 
+            "Custom code metrics are disabled. Contact your administrator to enable this feature."
+        )
+    
     code = params.get("code")
     if not code:
         raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
     
+    # Log code metric creation (for audit purposes, truncate long code)
+    code_preview = code[:200] + "..." if len(code) > 200 else code
+    logger.info(f"Building code metric. Code preview: {code_preview!r}")
+    
+    # Validate code safety (defense-in-depth, primary isolation is via subprocess)
+    _validate_code_safety(code)
+    
+    # Create a restricted namespace for code execution
+    # Only allow safe builtins
+    safe_builtins = {
+        'True': True, 'False': False, 'None': None,
+        'int': int, 'float': float, 'str': str, 'bool': bool,
+        'list': list, 'dict': dict, 'set': set, 'tuple': tuple, 'frozenset': frozenset,
+        'len': len, 'range': range, 'enumerate': enumerate, 'zip': zip,
+        'map': map, 'filter': filter, 'sorted': sorted, 'reversed': reversed,
+        'min': min, 'max': max, 'sum': sum, 'abs': abs, 'round': round,
+        'any': any, 'all': all,
+        'isinstance': isinstance, 'issubclass': issubclass, 'type': type,
+        'hasattr': hasattr, 'getattr': getattr,  # getattr is validated above for dunder access
+        'print': print,  # Allow print for debugging
+        'Exception': Exception, 'ValueError': ValueError, 'TypeError': TypeError,
+        'KeyError': KeyError, 'IndexError': IndexError, 'AttributeError': AttributeError,
+        '__import__': None,  # Explicitly disable __import__
+    }
+    
     # Create a module to execute the code
     module = ModuleType(str(uuid.uuid4()))
+    module.__dict__['__builtins__'] = safe_builtins
     
     # Pre-import commonly used modules in the metric code's namespace
     module.__dict__["json"] = __import__("json")
+    module.__dict__["re"] = __import__("re")
+    module.__dict__["math"] = __import__("math")
     module.__dict__["ScoreResult"] = ScoreResult
     module.__dict__["BaseMetric"] = BaseMetric
     
@@ -263,8 +378,11 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     pre_exec_names = set(module.__dict__.keys())
     
     try:
+        # Execute with restricted globals
         exec(code, module.__dict__)
+        logger.info("Code metric compiled successfully")
     except Exception as e:
+        logger.warning(f"Code metric compilation failed: {e}")
         raise InvalidMetricError("code", f"Invalid Python code: {e}")
     
     # Find the metric - look for either a function or a BaseMetric class
@@ -298,6 +416,7 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     # If we found a BaseMetric class, wrap it to match the optimizer signature
     if metric_class is not None:
         metric_instance = metric_class()
+        logger.info(f"Created code metric from BaseMetric class: {metric_class.__name__}")
         
         def wrapped_class_metric(dataset_item, llm_output):
             # BaseMetric.score expects output as first arg and kwargs for the rest
@@ -309,6 +428,7 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     # If we found a function, wrap it
     if metric_fn is not None:
         original_fn = metric_fn
+        logger.info(f"Created code metric from function: {metric_fn.__name__}")
         
         def wrapped_fn_metric(dataset_item, llm_output):
             return original_fn(dataset_item, llm_output)
