@@ -17,6 +17,7 @@ interface DataTabProps {
 }
 
 const DataTab = ({ data, experimentItems, openTrace }: DataTabProps) => {
+  const datasetItemId = experimentItems?.[0]?.dataset_item_id;
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
@@ -41,7 +42,7 @@ const DataTab = ({ data, experimentItems, openTrace }: DataTabProps) => {
       className="min-h-full"
     >
       <ResizablePanel defaultSize={30} className="min-w-72">
-        <ExperimentDataset data={data} />
+        <ExperimentDataset data={data} datasetItemId={datasetItemId} />
       </ResizablePanel>
       <ResizableHandle />
       {renderExperimentsSection()}
