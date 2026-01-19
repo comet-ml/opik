@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import Loader from "@/components/shared/Loader/Loader";
@@ -17,7 +17,6 @@ const CompareOptimizationsPage: React.FC = () => {
   const [view, setView] = useState<OPTIMIZATION_VIEW_TYPE>(
     OPTIMIZATION_VIEW_TYPE.TRIALS,
   );
-  const hasInitializedViewRef = useRef(false);
 
   const {
     optimizationId,
@@ -57,9 +56,9 @@ const CompareOptimizationsPage: React.FC = () => {
     sortableBy,
   });
 
-  // set initial view based on optimization status
+  // set initial view based on optimization status when optimization changes
   useEffect(() => {
-    if (optimization?.status && !hasInitializedViewRef.current) {
+    if (optimization?.status) {
       const isInProgress = IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
         optimization.status,
       );
@@ -68,9 +67,8 @@ const CompareOptimizationsPage: React.FC = () => {
           ? OPTIMIZATION_VIEW_TYPE.LOGS
           : OPTIMIZATION_VIEW_TYPE.TRIALS,
       );
-      hasInitializedViewRef.current = true;
     }
-  }, [optimization?.status]);
+  }, [optimizationId, optimization?.status]);
 
   if (isOptimizationPending || isExperimentsPending) {
     return <Loader />;

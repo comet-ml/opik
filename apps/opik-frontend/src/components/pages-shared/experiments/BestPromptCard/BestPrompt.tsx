@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils";
 import {
   extractPromptData,
   formatPromptDataAsText,
-  formatPromptDataAsJson,
   ExtractedPromptData,
 } from "@/lib/prompt";
 import {
@@ -122,10 +121,9 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
   }, [extractedPrompt, fallbackPrompt]);
 
   const currentPromptJson = useMemo(() => {
-    if (extractedPrompt) {
-      return formatPromptDataAsJson(extractedPrompt);
-    }
-    return fallbackPrompt || "";
+    return (
+      JSON.stringify(extractedPrompt?.data || fallbackPrompt, null, 2) || ""
+    );
   }, [extractedPrompt, fallbackPrompt]);
 
   return (

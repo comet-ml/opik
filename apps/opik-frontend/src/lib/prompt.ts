@@ -197,12 +197,3 @@ export const formatPromptDataAsText = (
   }
   return formatNamedPromptsAsText(extracted.data);
 };
-
-export const formatPromptDataAsJson = (
-  extracted: ExtractedPromptData,
-): string => {
-  if (extracted.type === "single") {
-    return JSON.stringify(extracted.data, null, 2);
-  }
-  return JSON.stringify(extracted.data, null, 2);
-};

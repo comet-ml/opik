@@ -61,6 +61,7 @@ const CompareOptimizationsConfiguration: React.FC<
               params={{ workspaceName, datasetId }}
               className="text-primary hover:underline"
               target="_blank"
+              rel="noopener noreferrer"
             >
               {dataset_name}
             </Link>
@@ -98,6 +99,7 @@ const CompareOptimizationsConfiguration: React.FC<
                   optimizationId,
                 }}
                 target="_blank"
+                rel="noopener noreferrer"
                 search={{ trials: [bestExperiment.id], tab: "config" }}
                 className="text-primary hover:underline"
               >
