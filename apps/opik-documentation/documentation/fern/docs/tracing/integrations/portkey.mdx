@@ -86,7 +86,6 @@ client = OpenAI(
     api_key=os.environ["OPENAI_API_KEY"],
     base_url=PORTKEY_GATEWAY_URL,
     default_headers=createHeaders(
-        provider="openai",
         api_key=os.environ["PORTKEY_API_KEY"],
         provider="@OPENAI_PROVIDER"
     )
@@ -126,7 +125,6 @@ client = OpenAI(
     api_key=os.environ["OPENAI_API_KEY"],
     base_url=PORTKEY_GATEWAY_URL,
     default_headers=createHeaders(
-        provider="openai",
         api_key=os.environ["PORTKEY_API_KEY"],
         provider="@OPENAI_PROVIDER"
     )
