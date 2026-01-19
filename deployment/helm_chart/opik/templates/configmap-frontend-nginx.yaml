@@ -76,6 +76,15 @@ data:
         # Add trace ID header for OpenTelemetry
         add_header X-Trace-ID $otel_trace_id always;
         
+        # Security headers (OWASP recommendations)
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header X-XSS-Protection "0" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" always;
+        {{- if .Values.component.frontend.hstsEnabled }}
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        {{- end }}
+        
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
         # Dedicated healthcheck endpoint
         # Returns 200 OK if nginx is running and can serve requests
