@@ -27,7 +27,7 @@ import {
   selectConfig,
   selectSetConfig,
 } from "@/store/DashboardStore";
-import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
+import { EXPERIMENT_DATA_SOURCE, BaseDashboardConfig } from "@/types/dashboard";
 import { Filters } from "@/types/filters";
 import DashboardDataSourceSection from "@/components/pages-shared/dashboards/DashboardDataSourceSection/DashboardDataSourceSection";
 
@@ -72,6 +72,18 @@ interface DashboardConfigDialogProps {
   disableExperimentsSelector?: boolean;
 }
 
+const getFormDefaults = (
+  config?: BaseDashboardConfig | null,
+): DashboardConfigFormData => ({
+  projectId: config?.projectIds?.[0] || "",
+  experimentIds: config?.experimentIds || [],
+  experimentDataSource:
+    config?.experimentDataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+  experimentFilters: config?.experimentFilters?.slice() ?? [],
+  maxExperimentsCount:
+    config?.maxExperimentsCount?.toString() || String(DEFAULT_MAX_EXPERIMENTS),
+});
+
 const DashboardConfigDialog: React.FC<DashboardConfigDialogProps> = ({
   open,
   onOpenChange,
@@ -84,30 +96,12 @@ const DashboardConfigDialog: React.FC<DashboardConfigDialogProps> = ({
   const form = useForm<DashboardConfigFormData>({
     resolver: zodResolver(DashboardConfigFormSchema),
     mode: "onChange",
-    defaultValues: {
-      projectId: config?.projectIds?.[0] || "",
-      experimentIds: config?.experimentIds || [],
-      experimentDataSource:
-        config?.experimentDataSource ||
-        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-      experimentFilters: config?.experimentFilters?.slice() ?? [],
-      maxExperimentsCount: config?.maxExperimentsCount?.toString() || "",
-    },
+    defaultValues: getFormDefaults(config),
   });
 
   useEffect(() => {
     if (open && config) {
-      form.reset({
-        projectId: config.projectIds?.[0] || "",
-        experimentIds: config.experimentIds || [],
-        experimentDataSource:
-          config.experimentDataSource ||
-          EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-        experimentFilters: config.experimentFilters?.slice() ?? [],
-        maxExperimentsCount:
-          config.maxExperimentsCount?.toString() ||
-          String(DEFAULT_MAX_EXPERIMENTS),
-      });
+      form.reset(getFormDefaults(config));
     }
   }, [open, config, form]);
 
