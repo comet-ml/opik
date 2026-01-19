@@ -205,16 +205,29 @@ def _evaluate_internal(
     experiment_config: dict[str, Any] | None,
     verbose: int,
 ) -> tuple[float, opik_evaluation_result.EvaluationResult | None]:
+    def _normalize_id(value: Any) -> str | None:
+        if value is None:
+            return None
+        return str(value)
+
     items = dataset.get_items(n_samples)
     if not items:
-        print("[DEBUG] Empty dataset, returning 0.0")
+        logger.debug("Empty dataset; returning 0.0")
         return 0.0, None
 
     if dataset_item_ids:
-        # FIXME: In rare cases sometimes dataset ids are missing (cause unknown, skip those for now)
-        available_ids = {item.get("id") for item in items}
+        available_ids = {
+            normalized_id
+            for item in items
+            if (normalized_id := _normalize_id(item.get("id"))) is not None
+        }
+        normalized_requested = [
+            normalized_id
+            for item_id in dataset_item_ids
+            if (normalized_id := _normalize_id(item_id)) is not None
+        ]
         missing_ids = [
-            item_id for item_id in dataset_item_ids if item_id not in available_ids
+            item_id for item_id in normalized_requested if item_id not in available_ids
         ]
         if missing_ids:
             logger.warning(
@@ -224,7 +237,7 @@ def _evaluate_internal(
                 missing_ids[:5],
             )
         dataset_item_ids = [
-            item_id for item_id in dataset_item_ids if item_id in available_ids
+            item_id for item_id in normalized_requested if item_id in available_ids
         ]
         if not dataset_item_ids:
             logger.warning(
@@ -232,7 +245,11 @@ def _evaluate_internal(
             )
             dataset_item_ids = None
         else:
-            items = [item for item in items if item.get("id") in dataset_item_ids]
+            items = [
+                item
+                for item in items
+                if _normalize_id(item.get("id")) in dataset_item_ids
+            ]
 
     eval_metrics = [_create_metric_class(metric)]
 
@@ -277,15 +294,16 @@ def _evaluate_internal(
     if not objective_score_results:
         return 0.0, evaluation_result
 
-    # FIXME: Possible misconfiguration when we are comparing 0 to 0 and get inf+
-    # We should avoid these from running in the first place by checking results
-    # further up, but this is a simple fix to avoid ending up in a dead loop.
     finite_values = [
         score_result_.value
         for score_result_ in objective_score_results
         if score_result_.value is not None and math.isfinite(score_result_.value)
     ]
     if not finite_values:
+        logger.error(
+            "All metric scores were non-finite for metric '%s'; aborting evaluation.",
+            objective_metric_name,
+        )
         raise ValueError(
             f"All metric scores were non-finite for metric '{objective_metric_name}'."
         )

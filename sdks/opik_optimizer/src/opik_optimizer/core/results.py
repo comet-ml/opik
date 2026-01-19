@@ -631,7 +631,10 @@ class OptimizationResult(pydantic.BaseModel):
 
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
-        rounds_ran = len(self.history)
+        return build_plaintext_summary(**self._plaintext_summary_kwargs())
+
+    def _plaintext_summary_kwargs(self) -> dict[str, Any]:
+        """Return the payload used for the plaintext summary formatter."""
         trials_completed = self.details.get("trials_completed")
         improvement_str = (
             self._calculate_improvement_str()
@@ -653,25 +656,25 @@ class OptimizationResult(pydantic.BaseModel):
             final_prompt_display = str(self.prompt)
 
         # FIXME: Pass context/history or something to pull everything to AVOID use of this huge args passing.
-        return build_plaintext_summary(
-            optimizer=self.optimizer,
-            model_name=f"{model_name} (Temp: {self.details.get('temperature')})"
+        return {
+            "optimizer": self.optimizer,
+            "model_name": f"{model_name} (Temp: {self.details.get('temperature')})"
             if self.details.get("temperature") is not None
             else model_name,
-            metric_name=self.metric_name,
-            initial_score=self.initial_score,
-            final_score=self.score,
-            improvement_str=improvement_str,
-            trials_completed=trials_completed
+            "metric_name": self.metric_name,
+            "initial_score": self.initial_score,
+            "final_score": self.score,
+            "improvement_str": improvement_str,
+            "trials_completed": trials_completed
             if isinstance(trials_completed, int)
             else None,
-            rounds_ran=rounds_ran,
-            optimized_params=optimized_params,
-            parameter_importance=parameter_importance,
-            search_ranges=search_ranges,
-            parameter_precision=precision,
-            final_prompt_display=final_prompt_display,
-        )
+            "rounds_ran": self._rounds_completed(),
+            "optimized_params": optimized_params,
+            "parameter_importance": parameter_importance,
+            "search_ranges": search_ranges,
+            "parameter_precision": precision,
+            "final_prompt_display": final_prompt_display,
+        }
 
     def __rich__(self) -> rich.panel.Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
