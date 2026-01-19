@@ -6,7 +6,7 @@ from .assert_helpers import (
     assert_equal,
 )
 from .backend_emulator_message_processor import BackendEmulatorMessageProcessor
-from .models import FeedbackScoreModel, SpanModel, TraceModel
+from .models import AttachmentModel, FeedbackScoreModel, SpanModel, TraceModel
 from .patch_helpers import patch_environ
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "ANY_DICT",
     "ANY_LIST",
     "ANY_STRING",
+    "AttachmentModel",
     "BackendEmulatorMessageProcessor",
     "FeedbackScoreModel",
     "SpanModel",

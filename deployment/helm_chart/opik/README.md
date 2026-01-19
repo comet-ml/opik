@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.81](https://img.shields.io/badge/Version-1.9.81-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.81](https://img.shields.io/badge/AppVersion-1.9.81-informational?style=flat-square)
+![Version: 1.9.87](https://img.shields.io/badge/Version-1.9.87-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.87](https://img.shields.io/badge/AppVersion-1.9.87-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -92,6 +92,7 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
@@ -279,6 +280,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |
