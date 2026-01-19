@@ -24,7 +24,6 @@ from ..utils.logging import debug_log
 from ..utils.time import now_iso
 
 
-# FIXME: Move to helpers.py if we add a time utilities module.
 @dataclass
 class OptimizerCandidate:
     """
@@ -176,6 +175,25 @@ class OptimizationHistoryState:
         stem = prefix or "cand"
         return f"{stem}_{base}_{suffix}"
 
+    @staticmethod
+    def _round_key(round_handle: Any) -> Any:
+        if isinstance(round_handle, int):
+            return round_handle
+        return round_handle
+
+    def _get_open_round(self, round_handle: Any) -> OptimizationRound:
+        key = self._round_key(round_handle)
+        entry = self._open_rounds.get(key)
+        if entry is None:
+            entry = OptimizationRound(
+                round_index=key, trials=[], candidates=[], extras={}
+            )
+            self._open_rounds[key] = entry
+        return entry
+
+    def _next_trial_index(self, entry: OptimizationRound) -> int:
+        return sum(len(e.trials) for e in self.entries) + len(entry.trials)
+
     def _normalize_candidates(
         self, candidates: list[dict[str, Any]] | list[OptimizerCandidate] | None
     ) -> list[dict[str, Any]] | None:
@@ -200,6 +218,12 @@ class OptimizationHistoryState:
             metrics = payload.pop("metrics", None)
             notes = payload.pop("notes", payload.pop("reason", None))
             extra = payload.pop("extra", None)
+            if isinstance(extra, str):
+                notes = notes or extra
+                extra = None
+
+            if prompt_payload is None and payload:
+                prompt_payload = payload.pop("payload", None)
 
             if payload:
                 extra = {**(extra or {}), **payload}
@@ -207,7 +231,9 @@ class OptimizationHistoryState:
             normalized.append(
                 {
                     "id": candidate_id,
-                    "candidate": prompt_payload,
+                    "candidate": prompt_payload
+                    if prompt_payload is not None
+                    else candidate,
                     "score": score,
                     "metrics": metrics,
                     "notes": notes,
@@ -250,14 +276,9 @@ class OptimizationHistoryState:
         timestamp: str | None = None,
     ) -> Any:
         idx = int(round_index) if round_index is not None else len(self.entries)
-        entry = OptimizationRound(
-            round_index=idx,
-            trials=[],
-            candidates=[],
-            extras=extras or {},
-            timestamp=timestamp or now_iso(),
-        )
-        self._open_rounds[idx] = entry
+        entry = self._get_open_round(idx)
+        entry.extras = extras or entry.extras or {}
+        entry.timestamp = timestamp or entry.timestamp or now_iso()
         debug_log("round_start", round_index=idx, extras=extras)
         return idx
 
@@ -299,12 +320,7 @@ class OptimizationHistoryState:
         stop_reason: str | None = None,
         candidate_id_prefix: str | None = None,
     ) -> dict[str, Any]:
-        entry = self._open_rounds.setdefault(
-            round_handle,
-            OptimizationRound(
-                round_index=round_handle, trials=[], candidates=[], extras={}
-            ),
-        )
+        entry = self._get_open_round(round_handle)
         score_val = self._coerce_float(score) if score is not None else None
         candidate_payload_raw: Any = (
             candidate.to_dict()
@@ -328,9 +344,7 @@ class OptimizationHistoryState:
         )
         candidate_id: str | None = None
         if trial.trial_index is None:
-            trial.trial_index = sum(len(e.trials) for e in self.entries) + len(
-                entry.trials
-            )
+            trial.trial_index = self._next_trial_index(entry)
         if isinstance(candidate_payload, dict):
             candidate_id = candidate_payload.get("id")
         if candidate_id is None and candidate_id_prefix is not None:
@@ -380,7 +394,7 @@ class OptimizationHistoryState:
         dataset_split: str | None = None,
     ) -> dict[str, Any]:
         entry = self._open_rounds.pop(
-            round_handle,
+            self._round_key(round_handle),
             OptimizationRound(
                 round_index=round_handle, trials=[], candidates=[], extras={}
             ),
@@ -469,6 +483,7 @@ class OptimizationHistoryState:
         self._open_rounds.clear()
         self._default_dataset_split = None
         self._current_selection_meta = None
+        self._current_pareto_front = None
 
     def _stamp_stop_reason(self, stop_reason: str | None) -> None:
         if not self.entries or stop_reason is None:
@@ -626,17 +641,26 @@ class OptimizationResult(pydantic.BaseModel):
             return "0.00% (no improvement from 0)"
 
     def _rounds_completed(self) -> int:
-        """Return rounds completed based on history length."""
+        """Return rounds completed based on details or history length."""
+        rounds_completed = self.details.get("rounds_completed")
+        if isinstance(rounds_completed, int):
+            return rounds_completed
         return len(self.history)
+
+    def _trials_completed(self) -> int | None:
+        """Return trials completed from details when available."""
+        trials_completed = self.details.get("trials_completed")
+        if isinstance(trials_completed, int):
+            return trials_completed
+        return None
 
     def __str__(self) -> str:
         """Provides a clean, well-formatted plain-text summary."""
         return build_plaintext_summary(**self._plaintext_summary_kwargs())
 
-    def _plaintext_summary_kwargs(self) -> dict[str, Any]:
-        """Return the payload used for the plaintext summary formatter."""
-        trials_completed = self.details.get("trials_completed")
-        improvement_str = (
+    def _plaintext_improvement_str(self) -> str:
+        """Return improvement string without rich markup."""
+        return (
             self._calculate_improvement_str()
             .replace("[bold green]", "")
             .replace("[/bold green]", "")
@@ -645,7 +669,12 @@ class OptimizationResult(pydantic.BaseModel):
             .replace("[dim]", "")
             .replace("[/dim]", "")
         )
-        model_name = self.details.get("model", "N/A")
+
+    def _plaintext_summary_kwargs(self) -> dict[str, Any]:
+        """Return the payload used for the plaintext summary formatter."""
+        trials_completed = self._trials_completed()
+        improvement_str = self._plaintext_improvement_str()
+        model_name = self._model_name_with_temperature()
         optimized_params = self.details.get("optimized_parameters") or {}
         parameter_importance = self.details.get("parameter_importance") or {}
         search_ranges = self.details.get("search_ranges") or {}
@@ -655,19 +684,14 @@ class OptimizationResult(pydantic.BaseModel):
         except Exception:
             final_prompt_display = str(self.prompt)
 
-        # FIXME: Pass context/history or something to pull everything to AVOID use of this huge args passing.
         return {
             "optimizer": self.optimizer,
-            "model_name": f"{model_name} (Temp: {self.details.get('temperature')})"
-            if self.details.get("temperature") is not None
-            else model_name,
+            "model_name": model_name,
             "metric_name": self.metric_name,
             "initial_score": self.initial_score,
             "final_score": self.score,
             "improvement_str": improvement_str,
-            "trials_completed": trials_completed
-            if isinstance(trials_completed, int)
-            else None,
+            "trials_completed": trials_completed,
             "rounds_ran": self._rounds_completed(),
             "optimized_params": optimized_params,
             "parameter_importance": parameter_importance,
@@ -690,3 +714,10 @@ class OptimizationResult(pydantic.BaseModel):
         """
         console = get_console()
         console.print(self)
+
+    def _model_name_with_temperature(self) -> str:
+        model_name = self.details.get("model", "N/A")
+        temperature = self.details.get("temperature")
+        if temperature is not None:
+            return f"{model_name} (Temp: {temperature})"
+        return model_name

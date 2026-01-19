@@ -2,14 +2,11 @@ from __future__ import annotations
 
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
-import copy
-import inspect
 import logging
 import time
 import json
 from abc import ABC
 import random
-import math
 import importlib.metadata
 
 from contextlib import contextmanager
@@ -21,6 +18,12 @@ from opik import Dataset, opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from .core import evaluation as task_evaluator
+from .core.runtime import (
+    RuntimeServices,
+    ScoreCoercer,
+    ExperimentConfigBuilder,
+    AgentFactory,
+)
 from . import helpers
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .api_objects import chat_prompt
@@ -47,14 +50,12 @@ litellm.drop_params = True
 # Set up logging:
 logger = logging.getLogger(__name__)
 
-
 try:
     _OPTIMIZER_VERSION = importlib.metadata.version("opik_optimizer")
 except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev installs
     _OPTIMIZER_VERSION = "unknown"
 
 
-# Valid reasons for optimization to finish
 class BaseOptimizer(ABC):
     # Subclasses define their prompts here
     DEFAULT_PROMPTS: dict[str, str] = {}
@@ -131,6 +132,9 @@ class BaseOptimizer(ABC):
         # Current optimization context (set during optimize_prompt, used by evaluate())
         self.__context: OptimizationContext | None = None
 
+        # Runtime helpers (runtime flows, configuration, reporting)
+        self._runtime = RuntimeServices(self)
+
         # Initialize prompt library with overrides
         self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
 
@@ -162,17 +166,11 @@ class BaseOptimizer(ABC):
         perfect_score: float | None = None,
     ) -> bool:
         """Return True if the baseline score is already good enough."""
-        if baseline_score is None:
-            return False
-        effective_skip = (
-            self.skip_perfect_score
-            if skip_perfect_score is None
-            else skip_perfect_score
+        return self._runtime.finish.should_skip_optimization(
+            baseline_score=baseline_score,
+            skip_perfect_score=skip_perfect_score,
+            perfect_score=perfect_score,
         )
-        if not effective_skip:
-            return False
-        threshold = self.perfect_score if perfect_score is None else perfect_score
-        return baseline_score >= threshold
 
     def _should_stop_context(self, context: OptimizationContext) -> bool:
         """
@@ -183,73 +181,27 @@ class BaseOptimizer(ABC):
         2) Perfect score (only when skip_perfect_score is True)
         3) Max trials reached
         """
-        if context.should_stop:
-            return True
-
-        if self.skip_perfect_score and context.current_best_score is not None:
-            if context.current_best_score >= self.perfect_score:
-                context.finish_reason = context.finish_reason or "perfect_score"
-                context.should_stop = True
-                debug_log(
-                    "early_stop",
-                    reason=context.finish_reason,
-                    best_score=context.current_best_score,
-                    trials_completed=context.trials_completed,
-                )
-                return True
-
-        if context.trials_completed >= context.max_trials:
-            context.finish_reason = context.finish_reason or "max_trials"
-            context.should_stop = True
-            debug_log(
-                "early_stop",
-                reason=context.finish_reason,
-                trials_completed=context.trials_completed,
-                max_trials=context.max_trials,
-            )
-            return True
-
-        return False
+        return self._runtime.finish.should_stop(context)
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
-        self.llm_call_counter = 0
-        self.llm_call_tools_counter = 0
-        self.llm_cost_total = 0.0
-        self.llm_token_usage_total = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        self._runtime.usage.reset()
 
     def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
-        self.llm_call_counter += 1
+        self._runtime.usage.increment_call()
 
     def _increment_llm_call_tools_counter(self) -> None:
         """Increment the tool call counter."""
-        self.llm_call_tools_counter += 1
+        self._runtime.usage.increment_tool_call()
 
     def _add_llm_cost(self, cost: float | None) -> None:
         """Accumulate cost across optimizer calls."""
-        if cost is None:
-            return
-        self.llm_cost_total += float(cost)
+        self._runtime.usage.add_cost(cost)
 
     def _add_llm_usage(self, usage: dict[str, Any] | None) -> None:
         """Accumulate token usage across optimizer calls."""
-        # TODO: Should we not use get_metadata or get_config instead
-        # to get the token usage? Or we can centralize in the OptimizationResult along
-        # with the counters and functions for incrementing?
-        if not usage:
-            return
-        self.llm_token_usage_total["prompt_tokens"] += int(
-            usage.get("prompt_tokens", 0)
-        )
-        self.llm_token_usage_total["completion_tokens"] += int(
-            usage.get("completion_tokens", 0)
-        )
-        self.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
+        self._runtime.usage.add_usage(usage)
 
     def get_prompt(self, key: str, **fmt: Any) -> str:
         """Get a prompt template, optionally formatted with kwargs.
@@ -554,17 +506,23 @@ class BaseOptimizer(ABC):
                     break
         """
         context = self._context
-        score = self.evaluate_prompt(
-            prompt=prompts,
-            dataset=context.evaluation_dataset,
-            metric=context.metric,
-            agent=context.agent,
-            experiment_config=experiment_config,
-            n_samples=context.n_samples,
-            n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
-            verbose=0,
-            allow_tool_use=context.allow_tool_use,
-        )
+        try:
+            score = self.evaluate_prompt(
+                prompt=prompts,
+                dataset=context.evaluation_dataset,
+                metric=context.metric,
+                agent=context.agent,
+                experiment_config=experiment_config,
+                n_samples=context.n_samples,
+                n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
+                verbose=0,
+                allow_tool_use=context.allow_tool_use,
+            )
+        except Exception:
+            context.finish_reason = "error"
+            context.should_stop = True
+            logger.exception("Evaluation failed; stopping optimization.")
+            raise
         # Record trial and update counters
         coerced_score = self._coerce_score(score)
         context.trials_completed += 1
@@ -595,13 +553,11 @@ class BaseOptimizer(ABC):
         prev_best_score: float | None = None,
     ) -> None:
         """Display progress after each evaluation."""
-        if not hasattr(self, "_display"):
-            self._display = OptimizationRunDisplay(verbose=self.verbose)
-        self._display.evaluation_progress(
+        self._runtime.display.evaluation_progress(
             context=context,
             prompts=prompts,
-            score=self._coerce_score(score),
-            display_info={"prev_best_score": prev_best_score},
+            score=score,
+            prev_best_score=prev_best_score,
         )
 
     def post_optimization(
@@ -656,136 +612,24 @@ class BaseOptimizer(ABC):
 
     def _select_result_prompts(self, **kwargs: Any) -> tuple[Any, Any]:
         """Return the result prompt(s) and initial prompt(s) for output."""
-        best_prompts = kwargs["best_prompts"]
-        initial_prompts = kwargs["initial_prompts"]
-        # TODO: I think we can auto-detect this by checking if
-        # best_prompts is a single prompt or a dictionary. and remove this parameter.
-        # is_single_prompt_optimization is not really needed anymore.
-        is_single_prompt_optimization = kwargs["is_single_prompt_optimization"]
-        if is_single_prompt_optimization:
-            return list(best_prompts.values())[0], list(initial_prompts.values())[0]
-        return best_prompts, initial_prompts
+        return self._runtime.result_builder.select_result_prompts(
+            best_prompts=kwargs["best_prompts"],
+            initial_prompts=kwargs["initial_prompts"],
+            is_single_prompt_optimization=kwargs["is_single_prompt_optimization"],
+        )
 
     def _build_early_result(self, **kwargs: Any) -> OptimizationResult:
         """Build a baseline-only OptimizationResult when skipping optimization."""
-        score = kwargs["score"]
-        return OptimizationResult(
-            optimizer=kwargs["optimizer_name"],
-            prompt=kwargs["prompt"],
-            score=score,
-            metric_name=kwargs["metric_name"],
-            initial_prompt=kwargs["initial_prompt"],
-            initial_score=score,
-            details=kwargs["details"],
-            history=kwargs.get("history", []) or [],
-            # TODO: Bean counter should be moved to OptimizationResult.counters.? to simplify.
-            llm_calls=kwargs.get("llm_calls"),
-            llm_calls_tools=kwargs.get("llm_calls_tools"),
-            llm_cost_total=kwargs.get("llm_cost_total"),
-            llm_token_usage_total=kwargs.get("llm_token_usage_total"),
-            dataset_id=kwargs.get("dataset_id"),
-            optimization_id=kwargs.get("optimization_id"),
-        )
+        return self._runtime.result_builder.build_early_result(**kwargs)
 
     def _build_final_result(
         self,
         algorithm_result: AlgorithmResult,
         context: OptimizationContext,
     ) -> OptimizationResult:
-        """
-        Convert AlgorithmResult to OptimizationResult.
-
-        This method is called by optimize_prompt() after run_optimization()
-        completes. It adds common framework fields (optimizer name, initial
-        score, LLM counters, etc.) to the algorithm-specific result.
-
-        Args:
-            algorithm_result: The result returned by run_optimization()
-            context: The optimization context
-
-        Returns:
-            Complete OptimizationResult ready for return
-        """
-        # Select appropriate prompt format (single vs dict)
-        result_prompt, initial_prompt = self._select_result_prompts(
-            best_prompts=algorithm_result.best_prompts,
-            initial_prompts=context.initial_prompts,
-            # TODO: Remove this parameter in favour of auto-detection.
-            is_single_prompt_optimization=context.is_single_prompt_optimization,
-        )
-
-        # Get optimizer-specific metadata
-        optimizer_metadata = self.get_metadata(context)
-
-        # Compute stopped_early from finish_reason
-        finish_reason = context.finish_reason or "completed"
-        stopped_early = finish_reason != "completed"
-
-        # Build details dict - framework fields + algorithm metadata
-        details = {
-            "initial_score": context.baseline_score,
-            "model": self.model,
-            "temperature": self.model_parameters.get("temperature"),
-            "model_parameters": dict(self.model_parameters),
-            "trials_completed": context.trials_completed,
-            "finish_reason": finish_reason,
-            "stopped_early": stopped_early,
-            "stop_reason": finish_reason,
-            "verbose": self.verbose,
-        }
-
-        # Merge in optimizer-specific metadata
-        details.update(optimizer_metadata)
-
-        # Merge in algorithm-specific metadata (can override optimizer metadata)
-        details.update(algorithm_result.metadata)
-
-        if algorithm_result.history:
-            history_entries: list[dict[str, Any]] = []
-            for entry in algorithm_result.history:
-                if hasattr(entry, "to_dict"):
-                    history_entries.append(entry.to_dict())
-                elif isinstance(entry, dict):
-                    history_entries.append(entry)
-            if not history_entries:
-                history_entries = self._history_builder.get_entries()
-        else:
-            history_entries = self._history_builder.get_entries()
-
-        if not history_entries:
-            # Ensure a minimal round/trial is recorded when optimizers skip history logging.
-            fallback_round = self.begin_round()
-            self.record_candidate_entry(
-                prompt_or_payload=result_prompt,
-                score=algorithm_result.best_score,
-                id="fallback",
-            )
-            self.post_candidate(
-                result_prompt,
-                score=algorithm_result.best_score,
-                round_handle=fallback_round,
-            )
-            self.post_round(
-                fallback_round,
-                best_score=algorithm_result.best_score,
-                best_prompt=result_prompt,
-                stop_reason=finish_reason,
-            )
-            history_entries = self._history_builder.get_entries()
-
-        return OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_prompt,
-            score=algorithm_result.best_score,
-            metric_name=context.metric.__name__,
-            initial_prompt=initial_prompt,
-            initial_score=context.baseline_score,
-            details=details,
-            history=history_entries,
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_call_tools_counter,
-            dataset_id=context.dataset.id,
-            optimization_id=context.optimization_id,
+        return self._runtime.result_builder.build_final_result(
+            algorithm_result=algorithm_result,
+            context=context,
         )
 
     def cleanup(self) -> None:
@@ -793,27 +637,15 @@ class BaseOptimizer(ABC):
         Clean up resources and perform memory management.
         Should be called when the optimizer is no longer needed.
         """
-        # Reset counters
-        self._reset_counters()
-
-        # Clear history to free memory
-        self._history_builder.clear()
-
-        # Clear Opik client if it exists
-        if self._opik_client is not None:
-            # Note: Opik client doesn't have explicit cleanup, but we can clear the reference
-            self._opik_client = None
-        self._reporter = None
-
-        logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
+        self._runtime.cleanup.cleanup()
 
     def _set_reporter(self, reporter: Any | None) -> None:
         """Set the active reporter for the current optimization scope."""
-        self._reporter = reporter
+        self._runtime.reporter.set_reporter(reporter)
 
     def _clear_reporter(self) -> None:
         """Clear the active reporter."""
-        self._reporter = None
+        self._runtime.reporter.clear_reporter()
 
     def __del__(self) -> None:
         """Destructor to ensure cleanup is called."""
@@ -826,11 +658,7 @@ class BaseOptimizer(ABC):
     @property
     def opik_client(self) -> Any:
         """Lazy initialization of Opik client."""
-        if self._opik_client is None:
-            import opik
-
-            self._opik_client = opik.Opik()
-        return self._opik_client
+        return self._runtime.opik_client.get_client()
 
     def _validate_optimization_inputs(
         self,
@@ -850,36 +678,12 @@ class BaseOptimizer(ABC):
         Raises:
             ValueError: If any input is invalid
         """
-        if isinstance(prompt, dict):
-            for prompt_value in prompt.values():
-                if not isinstance(prompt_value, chat_prompt.ChatPrompt):
-                    raise ValueError("Prompt must be a ChatPrompt object")
-
-            if prompt_value._has_content_parts() and not support_content_parts:
-                raise ValueError(
-                    "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
-                )
-        elif isinstance(prompt, chat_prompt.ChatPrompt):
-            if prompt._has_content_parts() and not support_content_parts:
-                raise ValueError(
-                    "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
-                )
-        else:
-            # FIXME: PossibleUnreachable code?
-            raise ValueError(
-                "Prompt must be a ChatPrompt object or a dictionary of ChatPrompt objects"
-            )
-
-        if not isinstance(dataset, Dataset):
-            # FIXME: PossibleUnreachable code?
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            # FIXME: PossibleUnreachable code?
-            raise ValueError(
-                "Metric must be a callable function that takes `dataset_item` and `llm_output` as arguments, "
-                "and optionally `task_span` for metrics that need access to span information."
-            )
+        self._runtime.validator.validate_inputs(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            support_content_parts=support_content_parts,
+        )
 
     def _setup_agent_class(
         self, prompt: chat_prompt.ChatPrompt, agent_class: Any = None
@@ -896,24 +700,13 @@ class BaseOptimizer(ABC):
         Returns:
             The agent class to instantiate for dataset evaluations.
         """
-        if agent_class is None:
-            return LiteLLMAgent
-        if not issubclass(agent_class, OptimizableAgent):
-            raise TypeError(
-                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
-            )
-        return agent_class
+        return self._runtime.agent_factory.setup_agent_class(
+            prompt, agent_class=agent_class
+        )
 
     def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
         """Attach this optimizer to the agent instance without mutating the class."""
-        try:
-            agent.optimizer = self  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - custom agents may forbid new attrs
-            logger.debug(
-                "Unable to record optimizer on agent instance of %s",
-                agent.__class__.__name__,
-            )
-        return agent
+        return self._runtime.agent_factory.bind_optimizer(agent)
 
     def _instantiate_agent(
         self,
@@ -924,11 +717,9 @@ class BaseOptimizer(ABC):
         """
         Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
         """
-        resolved_class = agent_class or getattr(self, "agent_class", None)
-        if resolved_class is None:
-            raise ValueError("agent_class must be provided before instantiation")
-        agent = resolved_class(*args, **kwargs)
-        return self._bind_optimizer_to_agent(agent)
+        return self._runtime.agent_factory.instantiate(
+            *args, agent_class=agent_class, **kwargs
+        )
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -942,15 +733,7 @@ class BaseOptimizer(ABC):
         Returns:
             Dictionary mapping tool names to descriptions, or None if no tools
         """
-        if not tools:
-            return None
-
-        return {
-            (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
-                "function", {}
-            ).get("description", "")
-            for idx, tool in enumerate(tools)
-        }
+        return self._runtime.agent_factory.extract_tool_prompts(tools)
 
     # ------------------------------------------------------------------
     # Experiment metadata helpers
@@ -962,90 +745,23 @@ class BaseOptimizer(ABC):
     def _deep_merge_dicts(
         base: dict[str, Any], overrides: dict[str, Any]
     ) -> dict[str, Any]:
-        result = copy.deepcopy(base)
-        for key, value in overrides.items():
-            if (
-                key in result
-                and isinstance(result[key], dict)
-                and isinstance(value, dict)
-            ):
-                result[key] = BaseOptimizer._deep_merge_dicts(result[key], value)
-            else:
-                result[key] = value
-        return result
+        return ExperimentConfigBuilder.deep_merge_dicts(base, overrides)
 
     @staticmethod
     def _serialize_tools(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
-        tools_obj = getattr(prompt, "tools", None)
-        if not isinstance(tools_obj, list):
-            return []
-
-        try:
-            return copy.deepcopy(cast(list[dict[str, Any]], tools_obj))
-        except Exception:  # pragma: no cover - defensive
-            serialized_tools: list[dict[str, Any]] = []
-            for tool in tools_obj:
-                if isinstance(tool, dict):
-                    serialized_tools.append({k: v for k, v in tool.items() if k})
-            return serialized_tools
+        return AgentFactory.serialize_tools(prompt)
 
     @staticmethod
     def _describe_annotation(annotation: Any) -> str | None:
-        if annotation is inspect._empty:
-            return None
-        if isinstance(annotation, type):
-            return annotation.__name__
-        return str(annotation)
+        return AgentFactory.describe_annotation(annotation)
 
     def _summarize_tool_signatures(
         self, prompt: chat_prompt.ChatPrompt
     ) -> list[dict[str, Any]]:
-        signatures: list[dict[str, Any]] = []
-        for name, func in getattr(prompt, "function_map", {}).items():
-            callable_obj = getattr(func, "__wrapped__", func)
-            try:
-                sig = inspect.signature(callable_obj)
-            except (TypeError, ValueError):  # pragma: no cover - defensive
-                signatures.append({"name": name, "signature": "unavailable"})
-                continue
-
-            params: list[dict[str, Any]] = []
-            for parameter in sig.parameters.values():
-                params.append(
-                    helpers.drop_none(
-                        {
-                            "name": parameter.name,
-                            "kind": parameter.kind.name,
-                            "annotation": self._describe_annotation(
-                                parameter.annotation
-                            ),
-                            "default": (
-                                None
-                                if parameter.default is inspect._empty
-                                else parameter.default
-                            ),
-                        }
-                    )
-                )
-
-            signatures.append(
-                helpers.drop_none(
-                    {
-                        "name": name,
-                        "parameters": params,
-                        "docstring": inspect.getdoc(callable_obj),
-                    }
-                )
-            )
-        return signatures
+        return self._runtime.agent_factory.summarize_tool_signatures(prompt)
 
     def _build_agent_config(self, prompt: chat_prompt.ChatPrompt) -> dict[str, Any]:
-        agent_config: dict[str, Any] = dict(prompt.to_dict())
-        agent_config["project_name"] = getattr(prompt, "project_name", None)
-        agent_config["model"] = getattr(prompt, "model", None) or self.model
-        agent_config["tools"] = self._serialize_tools(prompt)
-        agent_config["optimizer"] = self.__class__.__name__
-        return helpers.drop_none(agent_config)
+        return self._runtime.agent_factory.build_agent_config(prompt)
 
     # FIXME: Should we not use get_metadata or get_config instead
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -1124,79 +840,17 @@ class BaseOptimizer(ABC):
             dataset_training: Training dataset (used for feedback/context)
             validation_dataset: Optional validation dataset (used for ranking)
         """
-        project_name = self.project_name
-
-        # Handle dict vs single prompt for agent_config
-        prompt_messages: list[dict[str, Any]] | dict[str, list[dict[str, Any]]]
-        prompt_name: str | None | dict[str, str | None]
-        prompt_project_name: str | None | dict[str, str | None]
-
-        if isinstance(prompt, dict):
-            # For dict prompts, use the first prompt for agent_config
-            first_prompt = next(iter(prompt.values()))
-            agent_config = self._build_agent_config(first_prompt)
-            tool_signatures = self._summarize_tool_signatures(first_prompt)
-
-            # If this is single prompt optimization, log as single prompt not dict
-            if is_single_prompt_optimization:
-                prompt_messages = first_prompt.get_messages()
-                prompt_name = getattr(first_prompt, "name", None)
-                prompt_project_name = getattr(first_prompt, "project_name", None)
-            else:
-                prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-                prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
-                prompt_name = {
-                    k: getattr(p, "name", None) for k, p in prompt_dict.items()
-                }
-                prompt_project_name = {
-                    k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
-                }
-
-            tools = self._serialize_tools(first_prompt)
-        else:
-            agent_config = self._build_agent_config(prompt)
-            tool_signatures = self._summarize_tool_signatures(prompt)
-            prompt_messages = prompt.get_messages()
-            prompt_name = getattr(prompt, "name", None)
-            tools = self._serialize_tools(prompt)
-            prompt_project_name = getattr(prompt, "project_name", None)
-
-        base_config: dict[str, Any] = {
-            "project_name": project_name,
-            "agent_config": agent_config,
-            "metric": metric.__name__,
-            "dataset_training": dataset.name,
-            "dataset_training_id": dataset.id,
-            "optimizer": self.__class__.__name__,
-            "optimizer_metadata": self._build_optimizer_metadata(),
-            "tool_signatures": tool_signatures,
-            "configuration": {
-                "prompt": prompt_messages,
-                "prompt_name": prompt_name,
-                "tools": tools,
-                "prompt_project_name": prompt_project_name,
-            },
-        }
-
-        if agent is not None:
-            base_config["agent"] = agent.__class__.__name__
-
-        if configuration_updates:
-            base_config["configuration"] = self._deep_merge_dicts(
-                base_config["configuration"], configuration_updates
-            )
-
-        if additional_metadata:
-            base_config = self._deep_merge_dicts(base_config, additional_metadata)
-
-        if experiment_config:
-            base_config = self._deep_merge_dicts(base_config, experiment_config)
-
-        if validation_dataset:
-            base_config["validation_dataset"] = validation_dataset.name
-            base_config["validation_dataset_id"] = validation_dataset.id
-
-        return helpers.drop_none(base_config)
+        return self._runtime.experiment_config_builder.prepare(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            agent=agent,
+            validation_dataset=validation_dataset,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata=additional_metadata,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+        )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
         """
@@ -1228,11 +882,7 @@ class BaseOptimizer(ABC):
         Args:
             context: The optimization context
         """
-        if context.finish_reason is None:
-            if context.trials_completed >= context.max_trials:
-                context.finish_reason = "max_trials"
-            else:
-                context.finish_reason = "completed"
+        self._runtime.finish.finalize_finish_reason(context)
 
     def _run_optimization(
         self,
@@ -1728,23 +1378,8 @@ class BaseOptimizer(ABC):
 
     @staticmethod
     def _coerce_score(raw_score: Any) -> float:
-        """
-        Normalize scores returned by metrics into builtin floats.
-
-        Avoids comparison issues when metrics return Decimals, numpy scalars,
-        or other numeric types (including inf).
-        """
-        try:
-            score = float(raw_score)
-        except (TypeError, ValueError):
-            raise TypeError(
-                f"Score must be convertible to float, got {type(raw_score).__name__}"
-            )
-
-        if math.isnan(score):
-            raise ValueError("Score cannot be NaN.")
-
-        return score
+        """Normalize scores returned by metrics into builtin floats."""
+        return ScoreCoercer.coerce(raw_score)
 
     def _finalize_optimization(
         self,
