@@ -855,7 +855,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
             {
-              id: "experiment",
+              id: "experiment_name",
               label: "Experiment",
               type: COLUMN_TYPE.string,
               cell: ExperimentCell as never,
