@@ -139,7 +139,7 @@ class ExperimentDAO {
             LEFT JOIN (
                 SELECT
                 id
-                FROM experiments final
+                FROM experiments
                 WHERE id = :id
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
@@ -480,7 +480,7 @@ class ExperimentDAO {
     private static final String FIND_COUNT = """
             WITH experiments_initial AS (
                 SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids, experiment_scores
-                FROM experiments final
+                FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
@@ -863,7 +863,7 @@ class ExperimentDAO {
                 null AS total_estimated_cost_avg,
                 null AS usage,
                 null AS comments_array_agg
-            FROM experiments final
+            FROM experiments
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
             ORDER BY id DESC, last_updated_at DESC
@@ -875,7 +875,7 @@ class ExperimentDAO {
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
             SELECT
                 DISTINCT id, workspace_id
-            FROM experiments final
+            FROM experiments
             WHERE id in :experiment_ids
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -897,7 +897,7 @@ class ExperimentDAO {
                     id,
                     dataset_id,
                     created_at
-                FROM experiments final
+                FROM experiments
                 WHERE dataset_id IN :dataset_ids
             	AND workspace_id = :workspace_id
                 ORDER BY id DESC, last_updated_at DESC
@@ -911,7 +911,7 @@ class ExperimentDAO {
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
                 distinct dataset_id, type
-            FROM experiments final
+            FROM experiments
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
             <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
@@ -926,11 +926,11 @@ class ExperimentDAO {
                  workspace_id,
                  created_by AS user,
                  COUNT(DISTINCT id) AS experiment_count
-            FROM experiments final
+            FROM experiments
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
             AND id NOT IN (
                 SELECT id
-                FROM experiments final
+                FROM experiments
                 WHERE name IN :excluded_names
             )
             GROUP BY workspace_id, created_by
@@ -976,7 +976,7 @@ class ExperimentDAO {
                 <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
                 created_at,
                 now64(9) as last_updated_at
-            FROM experiments final
+            FROM experiments
             WHERE id = :id
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
