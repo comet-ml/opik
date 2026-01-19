@@ -7,6 +7,7 @@ import static com.comet.opik.api.sorting.SortableFields.DURATION;
 import static com.comet.opik.api.sorting.SortableFields.END_TIME;
 import static com.comet.opik.api.sorting.SortableFields.ERROR_INFO;
 import static com.comet.opik.api.sorting.SortableFields.EXPERIMENT;
+import static com.comet.opik.api.sorting.SortableFields.EXPERIMENT_ID;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
 import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.INPUT;
@@ -42,6 +43,7 @@ public class TraceSortingFactory extends SortingFactory {
                 ERROR_INFO,
                 CREATED_BY,
                 FEEDBACK_SCORES,
-                EXPERIMENT);
+                EXPERIMENT,
+                EXPERIMENT_ID);
     }
 }
