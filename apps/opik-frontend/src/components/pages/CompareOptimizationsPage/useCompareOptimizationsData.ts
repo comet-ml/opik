@@ -6,7 +6,11 @@ import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import isArray from "lodash/isArray";
 
-import { COLUMN_FEEDBACK_SCORES_ID, ROW_HEIGHT } from "@/types/shared";
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_ID_ID,
+  ROW_HEIGHT,
+} from "@/types/shared";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import {
@@ -29,7 +33,7 @@ const isInProgressStatus = (status?: OPTIMIZATION_STATUS) =>
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
-const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort";
+const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort-v2";
 const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
@@ -37,6 +41,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "objective_name",
   "created_at",
 ];
+
+const DEFAULT_SORTING: ColumnSort[] = [{ id: COLUMN_ID_ID, desc: false }];
 
 export const useCompareOptimizationsData = () => {
   const navigate = useNavigate();
@@ -54,7 +60,7 @@ export const useCompareOptimizationsData = () => {
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_SORTING,
     },
   );
 
