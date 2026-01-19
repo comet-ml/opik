@@ -129,10 +129,12 @@ const exporter = new OpikExporter({
     version: "1.0.0",
     team: "ai-team",
   },
+  // Optional: associate traces with a conversation thread
+  threadId: "conversation-123",
 });
 ```
 
-Tags are useful for filtering and grouping traces, while metadata adds additional context for debugging and analysis.
+Tags are useful for filtering and grouping traces, while metadata adds additional context for debugging and analysis. The `threadId` parameter is useful for tracking multi-turn conversations or grouping related AI interactions.
 
 ### Telemetry Settings
 
@@ -144,6 +146,10 @@ const result = await generateText({
   prompt: "Tell a joke",
   experimental_telemetry: OpikExporter.getSettings({
     name: "custom-trace-name",
+    // Optional: set threadId per request (overrides exporter-level threadId)
+    metadata: {
+      threadId: "conversation-456",
+    },
   }),
 });
 ```

@@ -4,6 +4,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import Loader from "@/components/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { OPTIMIZATION_VIEW_TYPE } from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { useCompareOptimizationsData } from "./useCompareOptimizationsData";
 import { useCompareOptimizationsColumns } from "./useCompareOptimizationsColumns";
 import CompareOptimizationsHeader from "./CompareOptimizationsHeader";
@@ -60,6 +61,13 @@ const CompareOptimizationsPage: React.FC = () => {
   }
 
   const isStudioOptimization = Boolean(optimization?.studio_config);
+  const canRerun =
+    isStudioOptimization &&
+    Boolean(optimization?.id) &&
+    optimization?.status &&
+    [OPTIMIZATION_STATUS.COMPLETED, OPTIMIZATION_STATUS.CANCELLED].includes(
+      optimization.status,
+    );
   const showTrialsView =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
 
@@ -75,6 +83,7 @@ const CompareOptimizationsPage: React.FC = () => {
           status={optimization?.status}
           optimizationId={optimization?.id}
           isStudioOptimization={isStudioOptimization}
+          canRerun={canRerun}
         />
       </PageBodyStickyContainer>
 
