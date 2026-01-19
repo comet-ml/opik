@@ -13,6 +13,7 @@ from ... import helpers
 from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
+from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
@@ -121,22 +122,16 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
     ) -> None:
         """Record adapter metric call and post candidate/round to history."""
         self._record_adapter_metric_call()
-        candidate_entry = self._optimizer.record_candidate_entry(
+        round_handle = self._optimizer.pre_round(self._context)
+        runtime.record_and_post_trial(
+            optimizer=self._optimizer,
+            context=self._context,
             prompt_or_payload=prompt_variants,
             score=score,
-            id=candidate_id,
+            candidate_id=candidate_id,
             metrics=metrics,
             extra=extra,
-        )
-        round_handle = self._optimizer.pre_round(self._context)
-        self._optimizer.post_trial(
-            self._context,
-            prompt_variants,
-            score=score,
-            metrics=candidate_entry.get("metrics"),
-            extras=candidate_entry.get("extra"),
             round_handle=round_handle,
-            candidates=[candidate_entry],
         )
         self._optimizer.post_round(
             round_handle,

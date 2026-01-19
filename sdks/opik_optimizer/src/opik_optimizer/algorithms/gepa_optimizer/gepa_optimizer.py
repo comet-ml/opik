@@ -3,6 +3,7 @@ from typing import Any, cast
 
 
 from ...base_optimizer import BaseOptimizer
+from ...core import runtime
 from ...core.state import (
     AlgorithmResult,
     OptimizationContext,
@@ -375,10 +376,12 @@ class GepaOptimizer(BaseOptimizer):
                         if not k.startswith("_") and k not in ("source", "id")
                     }
                     round_handle = self.pre_round(context, candidate_id=candidate_id)
-                    candidate_entry = self.record_candidate_entry(
+                    runtime.record_and_post_trial(
+                        optimizer=self,
+                        context=context,
                         prompt_or_payload=prompt_variants,
                         score=score,
-                        id=candidate_id,
+                        candidate_id=candidate_id,
                         metrics={
                             f"gepa_{metric.__name__}": filtered_val_scores[idx],
                             metric.__name__: score,
@@ -387,18 +390,11 @@ class GepaOptimizer(BaseOptimizer):
                             "components": components,
                             "source": candidate.get("source"),
                         },
-                    )
-                    self.post_trial(
-                        context,
-                        prompt_variants,
-                        score=score,
-                        metrics=candidate_entry.get("metrics"),
-                        extras={
+                        round_handle=round_handle,
+                        post_extras={
                             "components": components,
                             "candidate_id": candidate_id,
                         },
-                        round_handle=round_handle,
-                        candidates=[candidate_entry],
                     )
                     debug_log(
                         "candidate_end",

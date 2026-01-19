@@ -3,6 +3,7 @@ from typing import Any, cast
 
 from opik import Dataset
 from ...base_optimizer import BaseOptimizer
+from ...core import runtime
 from ...core.state import AlgorithmResult, OptimizationContext
 from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
@@ -426,19 +427,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
                 # Record each evaluated candidate as trials
                 for idx, (cand_prompt, cand_score) in enumerate(prompt_scores):
-                    candidate_entry = self.record_candidate_entry(
+                    runtime.record_and_post_trial(
+                        optimizer=self,
+                        context=context,
                         prompt_or_payload=cand_prompt,
                         score=cand_score,
-                        id=f"round{round_num}_cand",
+                        candidate_id=f"round{round_num}_cand",
                         metrics={"selection_score": cand_score},
-                    )
-                    self.post_trial(
-                        context,
-                        cand_prompt,
-                        score=cand_score,
                         round_handle=round_handle,
-                        extras={"round_num": round_num},
-                        candidates=[candidate_entry],
+                        post_metrics=None,
+                        post_extras={"round_num": round_num},
                     )
                 # Flush round metadata/candidates
                 self.post_round(

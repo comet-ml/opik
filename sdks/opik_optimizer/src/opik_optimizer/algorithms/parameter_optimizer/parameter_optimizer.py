@@ -14,6 +14,7 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer
+from ...core import runtime
 from ...core.state import OptimizationContext, AlgorithmResult
 from ...core.results import OptimizationResult
 from ...agents import OptimizableAgent
@@ -317,12 +318,14 @@ class ParameterOptimizer(BaseOptimizer):
             )
             self._history_builder.clear()
             baseline_round = self.pre_round(context, stage="baseline", type="baseline")
-            candidate_entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=base_prompts
                 if not is_single_prompt_optimization
                 else list(base_prompts.values())[0],
                 score=baseline_score,
-                id="baseline",
+                candidate_id="baseline",
                 extra={
                     "parameters": {},
                     "model_kwargs": copy.deepcopy(base_model_kwargs),
@@ -330,22 +333,14 @@ class ParameterOptimizer(BaseOptimizer):
                     "type": "baseline",
                     "stage": "baseline",
                 },
-            )
-            self.post_trial(
-                context,
-                base_prompts
-                if not is_single_prompt_optimization
-                else list(base_prompts.values())[0],
-                score=baseline_score,
-                extras={
+                round_handle=baseline_round,
+                post_extras={
                     "parameters": {},
                     "model_kwargs": copy.deepcopy(base_model_kwargs),
                     "model": list(base_prompts.values())[0].model,
                     "type": "baseline",
                     "stage": "baseline",
                 },
-                round_handle=baseline_round,
-                candidates=[candidate_entry],
             )
             self.post_round(
                 baseline_round,
@@ -418,12 +413,14 @@ class ParameterOptimizer(BaseOptimizer):
         first_prompt = list(base_prompts.values())[0]
         self._history_builder.clear()
         baseline_round = self.pre_round(context, stage="baseline", type="baseline")
-        candidate_entry = self.record_candidate_entry(
+        runtime.record_and_post_trial(
+            optimizer=self,
+            context=context,
             prompt_or_payload=base_prompts
             if not is_single_prompt_optimization
             else first_prompt,
             score=baseline_score,
-            id="baseline",
+            candidate_id="baseline",
             extra={
                 "parameters": {},
                 "model_kwargs": copy.deepcopy(first_prompt.model_kwargs or {}),
@@ -431,20 +428,14 @@ class ParameterOptimizer(BaseOptimizer):
                 "type": "baseline",
                 "stage": "baseline",
             },
-        )
-        self.post_trial(
-            context,
-            base_prompts if not is_single_prompt_optimization else first_prompt,
-            score=baseline_score,
-            extras={
+            round_handle=baseline_round,
+            post_extras={
                 "parameters": {},
                 "model_kwargs": copy.deepcopy(first_prompt.model_kwargs or {}),
                 "model": first_prompt.model,
                 "type": "baseline",
                 "stage": "baseline",
             },
-            round_handle=baseline_round,
-            candidates=[candidate_entry],
         )
         self.post_round(
             baseline_round,
@@ -712,25 +703,21 @@ class ParameterOptimizer(BaseOptimizer):
                 local_trials=trial.user_attrs.get("local_trials"),
                 global_trials=trial.user_attrs.get("global_trials"),
             )
-            candidate_entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=trial.user_attrs.get("model_kwargs"),
                 score=float(trial.value) if trial.value is not None else None,
-                id=f"trial{trial.number}",
+                candidate_id=f"trial{trial.number}",
                 extra={
                     "parameters": trial.user_attrs.get("parameters", {}),
                     "model": trial.user_attrs.get("model"),
                     "stage": stage,
                     "type": trial.user_attrs.get("type"),
                 },
-            )
-            self.post_trial(
-                context,
-                trial.user_attrs.get("model_kwargs"),
-                score=float(trial.value) if trial.value is not None else None,
-                extras=None,
                 round_handle=round_handle,
                 timestamp=timestamp_source.isoformat(),
-                candidates=[candidate_entry],
+                post_extras=None,
             )
             self.post_round(
                 round_handle=round_handle,

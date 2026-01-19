@@ -8,7 +8,7 @@ from ..utils.tool_helpers import serialize_tools
 from .. import helpers
 
 if TYPE_CHECKING:  # pragma: no cover
-    from ..agents.litellm_agent import LiteLLMAgent
+    pass
 __all__ = [
     "setup_agent_class",
     "bind_optimizer",

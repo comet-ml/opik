@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 from collections.abc import Callable, Sequence
 import json
 import logging
@@ -19,6 +19,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 logger = logging.getLogger(__name__)
+_INHERIT = object()
 
 
 def select_result_prompts(
@@ -151,6 +152,62 @@ def _record_fallback_history(
         stop_reason=finish_reason,
     )
     return optimizer._history_builder.get_entries()
+
+
+def record_and_post_trial(
+    *,
+    optimizer: BaseOptimizer,
+    context: OptimizationContext,
+    prompt_or_payload: Any,
+    score: float | None,
+    candidate_id: str | None = None,
+    metrics: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
+    candidate_handle: Any | None = None,
+    round_handle: Any | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    post_metrics: dict[str, Any] | None | object = _INHERIT,
+    post_extras: dict[str, Any] | None | object = _INHERIT,
+) -> dict[str, Any]:
+    """
+    Record a candidate entry and immediately post a trial.
+
+    Use post_metrics/post_extras to control what is stored on the trial record:
+    - _INHERIT (default) uses the candidate entry fields.
+    - None forces no metrics/extras on the trial record.
+    """
+    entry = optimizer.record_candidate_entry(
+        prompt_or_payload=prompt_or_payload,
+        score=score,
+        id=candidate_id,
+        metrics=metrics,
+        extra=extra,
+    )
+    if post_metrics is _INHERIT:
+        resolved_metrics: dict[str, Any] | None = entry.get("metrics")
+    else:
+        resolved_metrics = cast(dict[str, Any] | None, post_metrics)
+    if post_extras is _INHERIT:
+        resolved_extras: dict[str, Any] | None = entry.get("extra")
+    else:
+        resolved_extras = cast(dict[str, Any] | None, post_extras)
+    optimizer.post_trial(
+        context,
+        candidate_handle if candidate_handle is not None else prompt_or_payload,
+        score=score,
+        metrics=resolved_metrics,
+        extras=resolved_extras,
+        candidates=[entry],
+        dataset=dataset,
+        dataset_split=dataset_split,
+        trial_index=trial_index,
+        timestamp=timestamp,
+        round_handle=round_handle,
+    )
+    return entry
 
 
 def extract_tool_prompts(

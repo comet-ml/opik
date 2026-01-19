@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, cast
 import copy
-import inspect
 
 from ..api_objects import chat_prompt
 

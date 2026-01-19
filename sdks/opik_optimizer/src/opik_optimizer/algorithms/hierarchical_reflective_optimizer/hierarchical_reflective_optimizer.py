@@ -5,6 +5,7 @@ from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
 from ...core import llm_calls as _llm_calls
+from ...core import runtime
 from ...base_optimizer import BaseOptimizer
 from ...core.state import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
@@ -379,17 +380,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 context=context,
                 empty_score=best_score,
             )
-            candidate_entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=best_prompts,
                 score=fallback_score,
-                id=f"trial{context.trials_completed}_fallback",
-            )
-            self.post_trial(
-                context,
-                best_prompts,
-                score=fallback_score,
+                candidate_id=f"trial{context.trials_completed}_fallback",
                 round_handle=round_handle,
-                candidates=[candidate_entry],
+                post_extras=None,
+                post_metrics=None,
             )
             return best_prompts, fallback_score, fallback_result
 
@@ -402,17 +401,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_samples=n_samples,
             context=context,
         )
-        candidate_entry = self.record_candidate_entry(
+        runtime.record_and_post_trial(
+            optimizer=self,
+            context=context,
             prompt_or_payload=best_prompt_bundle,
             score=best_score_local,
-            id=f"trial{context.trials_completed}_best0",
-        )
-        self.post_trial(
-            context,
-            best_prompt_bundle,
-            score=best_score_local,
+            candidate_id=f"trial{context.trials_completed}_best0",
             round_handle=round_handle,
-            candidates=[candidate_entry],
+            post_extras=None,
+            post_metrics=None,
         )
 
         # Evaluate remaining candidates and keep the best-scoring bundle.
@@ -429,17 +426,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     context=context,
                 )
             )
-            candidate_entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=improved_chat_prompts,
                 score=improved_score,
-                id=f"trial{context.trials_completed}_cand{idx}",
-            )
-            self.post_trial(
-                context,
-                improved_chat_prompts,
-                score=improved_score,
+                candidate_id=f"trial{context.trials_completed}_cand{idx}",
                 round_handle=round_handle,
-                candidates=[candidate_entry],
+                post_extras=None,
+                post_metrics=None,
             )
 
             if improved_score > best_score_local:
@@ -702,17 +697,19 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
-            self.post_trial(
-                context,
-                best_prompts,
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
+                prompt_or_payload=best_prompts,
                 score=best_score,
-                extras={
+                round_handle=round_handle,
+                post_metrics=None,
+                post_extras={
                     "failure_modes": [
                         fm.name for fm in hierarchical_analysis.unified_failure_modes
                     ],
                     "trials_completed": context.trials_completed,
                 },
-                round_handle=round_handle,
             )
             self.post_round(
                 round_handle=round_handle,

@@ -13,6 +13,7 @@ from deap import base, tools
 from deap import creator as _creator
 
 from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core import runtime
 from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
 from opik_optimizer.utils.prompt_library import PromptOverrides
 from opik_optimizer.utils.logging import debug_log
@@ -344,18 +345,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     "primary": ind.fitness.values[0],
                     "length": ind.fitness.values[1],
                 }
-            entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=candidate_prompts,
                 score=primary_score,
-                id=f"gen{generation_idx}_ind{valid_idx if use_valid_index else idx}",
+                candidate_id=f"gen{generation_idx}_ind{valid_idx if use_valid_index else idx}",
                 metrics=metrics,
-            )
-            self.post_trial(
-                context,
-                candidate_prompts,
-                score=primary_score,
-                metrics=metrics,
-                candidates=[entry],
                 round_handle=round_handle,
             )
             valid_idx += 1
@@ -1026,16 +1022,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
         history_entries = self.get_history_entries()
         if not history_entries:
             fallback_round = self.pre_round(context)
-            entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=final_best_prompts,
                 score=final_primary_score,
-                id="final_best",
-            )
-            self.post_trial(
-                context,
-                final_best_prompts,
-                score=final_primary_score,
-                candidates=[entry],
+                candidate_id="final_best",
                 round_handle=fallback_round,
             )
             self.post_round(

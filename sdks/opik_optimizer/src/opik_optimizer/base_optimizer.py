@@ -731,13 +731,6 @@ class BaseOptimizer(ABC):
         """
         return runtime.extract_tool_prompts(tools)
 
-        Args:
-            context: The optimization context
-
-        Returns:
-            Dictionary of configuration parameters to display
-        """
-        return {}
     # ------------------------------------------------------------------
     # Hooks (subclass extension points)
     # ------------------------------------------------------------------
@@ -773,7 +766,6 @@ class BaseOptimizer(ABC):
             f"{self.__class__.__name__} must implement run_optimization()"
         )
 
-        fields that will be included in OptimizationResult.details.
     def pre_optimize(self, context: OptimizationContext) -> None:
         """
         Hook called before running the optimization algorithm.

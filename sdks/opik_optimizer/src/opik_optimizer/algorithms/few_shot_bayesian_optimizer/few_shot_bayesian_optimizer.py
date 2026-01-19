@@ -14,6 +14,7 @@ from opik import Dataset, opik_context
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
+from ...core import runtime
 from ...core.state import (
     OptimizationContext,
     AlgorithmResult,
@@ -640,10 +641,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 pruner=pruner_info,
                 study_direction=study.direction.name if study.direction else None,
             )
-            candidate_entry = self.record_candidate_entry(
+            runtime.record_and_post_trial(
+                optimizer=self,
+                context=context,
                 prompt_or_payload=prompt_cand_display,
                 score=score_val,
-                id=f"trial{trial.number}",
+                candidate_id=f"trial{trial.number}",
                 extra={
                     "parameters": trial.user_attrs.get("parameters", {}),
                     "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
@@ -651,14 +654,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "stage": trial.user_attrs.get("stage"),
                     "type": trial.user_attrs.get("type"),
                 },
-            )
-            self.post_trial(
-                context,
-                prompt_cand_display,
-                score=score_val,
                 round_handle=round_handle,
                 timestamp=timestamp,
-                candidates=[candidate_entry],
+                post_extras=None,
+                post_metrics=None,
             )
             self.set_selection_meta(
                 {
