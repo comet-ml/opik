@@ -75,9 +75,9 @@ export const generateEmptyConfig = (): BaseDashboardConfig => ({
   dateRange: DEFAULT_DATE_PRESET,
   projectIds: [],
   experimentIds: [],
-  experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+  experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
   experimentFilters: [],
-  maxExperimentsCount: undefined,
+  maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
 });
 
 export const generateEmptyDashboard = (): DashboardState => {
