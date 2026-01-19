@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import useExperimentBatchUpdateMutation from "@/api/datasets/useExperimentBatchUpdateMutation";
 
+const MAX_TAG_LENGTH = 100;
+
 type AddTagDialogProps = {
   experiments: Experiment[];
   open: boolean | number;
@@ -46,11 +48,11 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       return;
     }
 
-    if (tag.length > 100) {
+    if (tag.length > MAX_TAG_LENGTH) {
       toast({
         variant: "destructive",
         title: "Invalid tag",
-        description: "Tag cannot exceed 100 characters",
+        description: `Tag cannot exceed ${MAX_TAG_LENGTH} characters`,
       });
       return;
     }
@@ -99,7 +101,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
               placeholder="New tag"
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
-              maxLength={100}
+              maxLength={MAX_TAG_LENGTH}
               className="col-span-3"
             />
           </div>
@@ -110,7 +112,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
           </Button>
           <Button
             onClick={handleAddTag}
-            disabled={!newTag.trim() || newTag.length > 100}
+            disabled={!newTag.trim() || newTag.length > MAX_TAG_LENGTH}
           >
             Add tag
           </Button>
