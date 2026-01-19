@@ -105,6 +105,30 @@ def handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
     return item_data.get("trace_id")
 
 
+def clean_usage_for_import(
+    usage: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Return usage data as-is for import.
+
+    When exporting, usage data is already in backend-compatible format with:
+    - Top-level OpenAI-formatted keys: completion_tokens, prompt_tokens, total_tokens
+    - Provider-specific keys with 'original_usage.' prefix
+
+    The SDK's validation_helpers.validate_and_parse_usage now detects when usage
+    data contains 'original_usage.' prefixed keys and passes it through unchanged,
+    preserving the original values.
+
+    Args:
+        usage: The usage dictionary from exported data, or None
+
+    Returns:
+        The usage dictionary as-is (already in backend format), or None if input was None
+    """
+    # Return usage as-is - the SDK will detect the 'original_usage.' prefix
+    # and pass it through without reprocessing
+    return usage
+
+
 def clean_feedback_scores(
     feedback_scores: Optional[List[Dict[str, Any]]],
 ) -> Optional[List[FeedbackScoreDict]]:

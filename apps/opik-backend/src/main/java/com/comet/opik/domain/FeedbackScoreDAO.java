@@ -32,9 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -153,85 +151,42 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private static final String SELECT_FEEDBACK_SCORE_NAMES = """
-            SELECT
-                distinct name, 'feedback_scores' AS type
-            FROM (
+            <if(experiment_ids)>
+            WITH experiment_trace_ids AS (
                 SELECT
-                    name
-                FROM feedback_scores
+                    DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                <if(project_ids)>
-                AND project_id IN :project_ids
-                <endif>
-                <if(with_experiments_only)>
-                AND entity_id IN (
-                    SELECT
-                        trace_id
-                    FROM (
-                        SELECT
-                            id
-                        FROM experiments
-                        WHERE workspace_id = :workspace_id
-                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS e
-                    INNER JOIN (
-                        SELECT
-                            experiment_id,
-                            trace_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
-                        <if(experiment_ids)>
-                        AND experiment_id IN :experiment_ids
-                        <endif>
-                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) ei ON e.id = ei.experiment_id
-                )
-                <endif>
-                AND entity_type = :entity_type
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
-                UNION ALL
-                SELECT
-                    name
-                FROM authored_feedback_scores
-                WHERE workspace_id = :workspace_id
-                <if(project_ids)>
-                AND project_id IN :project_ids
-                <endif>
-                <if(with_experiments_only)>
-                AND entity_id IN (
-                    SELECT
-                        trace_id
-                    FROM (
-                        SELECT
-                            id
-                        FROM experiments
-                        WHERE workspace_id = :workspace_id
-                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS e
-                    INNER JOIN (
-                        SELECT
-                            experiment_id,
-                            trace_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
-                        <if(experiment_ids)>
-                        AND experiment_id IN :experiment_ids
-                        <endif>
-                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) ei ON e.id = ei.experiment_id
-                )
-                <endif>
-                AND entity_type = :entity_type
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, author, name
-            ) AS names
-            <if(with_experiment_scores)>
-            UNION ALL
+                AND experiment_id IN :experiment_ids
+            )
+            <endif>
+            SELECT DISTINCT
+                name,
+                'feedback_scores' AS type
+            FROM feedback_scores
+            WHERE workspace_id = :workspace_id
+            <if(project_ids)>
+            AND project_id IN :project_ids
+            <endif>
+            AND entity_type = :entity_type
+            <if(experiment_ids)>
+            AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
+            <endif>
+            UNION DISTINCT
+            SELECT DISTINCT
+                name,
+                'feedback_scores' AS type
+            FROM authored_feedback_scores
+            WHERE workspace_id = :workspace_id
+            <if(project_ids)>
+            AND project_id IN :project_ids
+            <endif>
+            AND entity_type = :entity_type
+            <if(experiment_ids)>
+            AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
+            <endif>
+            <if(experiment_ids)>
+            UNION DISTINCT
             SELECT DISTINCT
                 JSON_VALUE(score, '$.name') AS name,
                 'experiment_scores' AS type
@@ -239,15 +194,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 SELECT id, experiment_scores
                 FROM experiments
                 WHERE workspace_id = :workspace_id
-                <if(experiment_ids)>
                 AND id IN :experiment_ids
-                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
             ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
             WHERE length(e.experiment_scores) > 2
-                AND length(JSON_VALUE(score, '$.name')) > 0
+            AND length(JSON_VALUE(score, '$.name')) > 0
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -548,7 +501,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
-            bindTemplateParam(projectIds, false, null, false, template);
+            bindTemplateParam(projectIds, null, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -567,7 +520,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
                     workspaceId, experimentIds.size());
-            bindTemplateParam(null, true, experimentIds, true, template);
+            bindTemplateParam(null, experimentIds, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -615,7 +568,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES,
                     "get_projects_trace_threads_feedback_score_names", workspaceId, projectIds.size());
 
-            bindTemplateParam(projectIds, false, null, false, template);
+            bindTemplateParam(projectIds, null, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -699,13 +652,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }));
     }
 
-    private Mono<List<String>> getNames(Statement statement) {
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
     private void bindStatementParam(List<UUID> projectIds, Set<UUID> experimentIds, Statement statement,
             EntityType entityType) {
         if (CollectionUtils.isNotEmpty(projectIds)) {
@@ -719,19 +665,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         statement.bind("entity_type", entityType.getType());
     }
 
-    private void bindTemplateParam(List<UUID> projectIds, boolean withExperimentsOnly, Set<UUID> experimentIds,
-            boolean withExperimentScores, ST template) {
+    private void bindTemplateParam(List<UUID> projectIds, Set<UUID> experimentIds, ST template) {
         if (CollectionUtils.isNotEmpty(projectIds)) {
             template.add("project_ids", projectIds);
         }
-
-        template.add("with_experiments_only", withExperimentsOnly);
-
         if (CollectionUtils.isNotEmpty(experimentIds)) {
             template.add("experiment_ids", experimentIds);
         }
-
-        template.add("with_experiment_scores", withExperimentScores);
     }
 
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, UUID projectId, Connection connection) {
