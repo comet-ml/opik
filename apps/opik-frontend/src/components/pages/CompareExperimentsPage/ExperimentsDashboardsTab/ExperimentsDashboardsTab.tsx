@@ -22,6 +22,7 @@ import {
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { EXPERIMENTS_TEMPLATE_LIST } from "@/lib/dashboard/templates";
+import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CompareExperimentsButton from "@/components/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import { Separator } from "@/components/ui/separator";
@@ -63,7 +64,10 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
   useEffect(() => {
-    setRuntimeConfig({ experimentIds: experimentsIds });
+    setRuntimeConfig({
+      experimentIds: experimentsIds,
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+    });
 
     return () => {
       setRuntimeConfig({});
