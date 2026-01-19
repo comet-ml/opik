@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownToLine, Clock, ListEnd, RotateCw } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownToLine, Clock, ListEnd, Maximize2, RotateCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Optimization } from "@/types/optimizations";
@@ -15,6 +15,7 @@ import {
 import { convertTerminalOutputToHtml } from "@/lib/terminalOutput";
 import { useChatScroll } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
 import { formatDate } from "@/lib/date";
+import OptimizationLogsFullscreenDialog from "./OptimizationLogsFullscreenDialog";
 
 type OptimizationLogsProps = {
   optimization: Optimization | null;
@@ -26,6 +27,9 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   const isInProgress =
     optimization?.status &&
     IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [initialScrollRatio, setInitialScrollRatio] = useState(1);
 
   const { data, isPending, refetch, dataUpdatedAt } = useOptimizationStudioLogs(
     {
@@ -77,6 +81,29 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   const logHtml = useMemo(
     () => convertTerminalOutputToHtml(logContent),
     [logContent],
+  );
+
+  const openFullscreen = useCallback(() => {
+    if (scrollContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+      const maxScroll = scrollHeight - clientHeight;
+      const ratio = maxScroll > 0 ? scrollTop / maxScroll : 1;
+      setInitialScrollRatio(ratio);
+    }
+    setIsFullscreen(true);
+  }, [scrollContainerRef]);
+
+  const handleFullscreenClose = useCallback(
+    (scrollRatio: number) => {
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          const { scrollHeight, clientHeight } = scrollContainerRef.current;
+          const maxScroll = scrollHeight - clientHeight;
+          scrollContainerRef.current.scrollTop = maxScroll * scrollRatio;
+        }
+      });
+    },
+    [scrollContainerRef],
   );
 
   if (!optimization) {
@@ -178,11 +205,34 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
                 />
               </Button>
             </TooltipWrapper>
+            {logContent && (
+              <TooltipWrapper content="Fullscreen">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={openFullscreen}
+                >
+                  <Maximize2 className="size-3.5" />
+                </Button>
+              </TooltipWrapper>
+            )}
           </div>
         </div>
 
         {renderContent()}
       </CardContent>
+
+      <OptimizationLogsFullscreenDialog
+        open={isFullscreen}
+        onOpenChange={setIsFullscreen}
+        onClose={handleFullscreenClose}
+        logContent={logContent}
+        logHtml={logHtml}
+        isInProgress={Boolean(isInProgress)}
+        lastUpdatedAt={lastUpdatedAt}
+        hasNewLogs={hasNewLogs}
+        initialScrollRatio={initialScrollRatio}
+      />
     </Card>
   );
 };
