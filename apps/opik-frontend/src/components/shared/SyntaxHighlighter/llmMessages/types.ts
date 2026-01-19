@@ -5,6 +5,7 @@ import {
   PrettyLLMMessageVideoBlockProps,
   PrettyLLMMessageAudioPlayerBlockProps,
   PrettyLLMMessageCodeBlockProps,
+  PrettyLLMMessageFooterProps,
   MessageRole,
 } from "@/components/shared/PrettyLLMMessage/types";
 
@@ -52,6 +53,7 @@ export interface LLMMessageDescriptor {
   role: MessageRole;
   label?: string;
   blocks: LLMBlockDescriptor[];
+  footer?: PrettyLLMMessageFooterProps;
 }
 
 // Provider detector contract

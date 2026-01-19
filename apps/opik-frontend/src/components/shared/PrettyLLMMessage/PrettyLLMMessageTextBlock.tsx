@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useTruncation } from "@/hooks/useTruncation";
 import { PrettyLLMMessageTextBlockProps } from "./types";
+import { MarkdownPreview } from "@/components/shared/MarkdownPreview/MarkdownPreview";
 
 const MAX_LINES = 3;
 
@@ -21,7 +22,7 @@ const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = ({
   const showButton = showMoreButton && shouldTruncate && isTruncated;
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-2 py-1", className)}>
       <div
         ref={ref}
         className={cn(
@@ -30,7 +31,7 @@ const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = ({
         )}
       >
         {typeof children === "string" ? (
-          <span className="whitespace-pre-wrap">{children}</span>
+          <MarkdownPreview>{children}</MarkdownPreview>
         ) : (
           children
         )}

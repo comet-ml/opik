@@ -23,7 +23,18 @@ interface OpenAIImageContent {
   };
 }
 
-type OpenAIContentItem = OpenAITextContent | OpenAIImageContent;
+interface OpenAIInputAudioContent {
+  type: "input_audio";
+  input_audio: {
+    data: string;
+    format: string;
+  };
+}
+
+type OpenAIContentItem =
+  | OpenAITextContent
+  | OpenAIImageContent
+  | OpenAIInputAudioContent;
 
 interface OpenAIToolCall {
   id: string;
@@ -34,6 +45,13 @@ interface OpenAIToolCall {
   };
 }
 
+interface OpenAIAudio {
+  id: string;
+  data: string;
+  expires_at?: number;
+  transcript?: string;
+}
+
 interface OpenAIMessage {
   role: MessageRole;
   content?: string | OpenAIContentItem[] | null;
@@ -41,6 +59,7 @@ interface OpenAIMessage {
   tool_call_id?: string;
   name?: string;
   refusal?: string | null;
+  audio?: OpenAIAudio;
 }
 
 interface OpenAICustomInputMessage {
@@ -55,6 +74,7 @@ interface OpenAICustomInputMessage {
 interface OpenAIChoice {
   message: OpenAIMessage;
   index: number;
+  finish_reason?: string;
 }
 
 interface OpenAIInputData {
@@ -63,6 +83,11 @@ interface OpenAIInputData {
 
 interface OpenAIOutputData {
   choices: OpenAIChoice[];
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 }
 
 interface OpenAICustomInputFormat {
@@ -71,7 +96,11 @@ interface OpenAICustomInputFormat {
 
 interface OpenAICustomOutputFormat {
   text: string;
-  usage?: unknown;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
   finish_reason?: string;
 }
 
@@ -125,8 +154,9 @@ const mapCustomInputMessageContent = (
   }
   // Handle array content (multimodal)
   else if (Array.isArray(message.text)) {
-    // Group images together
+    // Group images and audios together
     const images: Array<{ url: string; name: string }> = [];
+    const audios: Array<{ url: string; name: string }> = [];
 
     message.text.forEach((item, index) => {
       if (item.type === "text") {
@@ -140,6 +170,17 @@ const mapCustomInputMessageContent = (
             },
           });
           images.length = 0;
+        }
+        // If we have pending audios, add them first
+        if (audios.length > 0) {
+          blocks.push({
+            blockType: "audio",
+            component: PrettyLLMMessage.AudioPlayerBlock,
+            props: {
+              audios: [...audios],
+            },
+          });
+          audios.length = 0;
         }
         blocks.push({
           blockType: "text",
@@ -165,6 +206,24 @@ const mapCustomInputMessageContent = (
           });
         }
         // Skip invalid image entries silently
+      } else if (item.type === "input_audio") {
+        // Handle input audio content
+        if (
+          item.input_audio &&
+          typeof item.input_audio === "object" &&
+          typeof item.input_audio.data === "string" &&
+          item.input_audio.data.length > 0
+        ) {
+          const audioData = item.input_audio.data;
+          const audioName = isPlaceholder(audioData)
+            ? audioData
+            : `Audio ${index + 1}`;
+          audios.push({
+            url: audioData,
+            name: audioName,
+          });
+        }
+        // Skip invalid audio entries silently
       }
     });
 
@@ -175,6 +234,17 @@ const mapCustomInputMessageContent = (
         component: PrettyLLMMessage.ImageBlock,
         props: {
           images,
+        },
+      });
+    }
+
+    // Add any remaining audios
+    if (audios.length > 0) {
+      blocks.push({
+        blockType: "audio",
+        component: PrettyLLMMessage.AudioPlayerBlock,
+        props: {
+          audios,
         },
       });
     }
@@ -268,20 +338,42 @@ const mapMessageContent = (
 
   // Handle string content
   if (typeof message.content === "string") {
-    blocks.push({
-      blockType: "text",
-      component: PrettyLLMMessage.TextBlock,
-      props: {
-        children: message.content,
-        role,
-        showMoreButton: true,
-      },
-    });
+    // For tool role (including normalized legacy "function" role), format as code
+    if (role === "tool") {
+      let formattedContent = message.content;
+      try {
+        const jsonLike = message.content.replace(/'/g, '"');
+        const parsed = JSON.parse(jsonLike);
+        formattedContent = JSON.stringify(parsed, null, 2);
+      } catch {
+        // Keep original if not parseable
+      }
+
+      blocks.push({
+        blockType: "code",
+        component: PrettyLLMMessage.CodeBlock,
+        props: {
+          code: formattedContent,
+          label: message.name || "Tool result",
+        },
+      });
+    } else {
+      blocks.push({
+        blockType: "text",
+        component: PrettyLLMMessage.TextBlock,
+        props: {
+          children: message.content,
+          role,
+          showMoreButton: true,
+        },
+      });
+    }
   }
   // Handle array content (multimodal)
   else if (Array.isArray(message.content)) {
-    // Group images together
+    // Group images and audios together
     const images: Array<{ url: string; name: string }> = [];
+    const audios: Array<{ url: string; name: string }> = [];
 
     message.content.forEach((item, index) => {
       if (item.type === "text") {
@@ -295,6 +387,17 @@ const mapMessageContent = (
             },
           });
           images.length = 0;
+        }
+        // If we have pending audios, add them first
+        if (audios.length > 0) {
+          blocks.push({
+            blockType: "audio",
+            component: PrettyLLMMessage.AudioPlayerBlock,
+            props: {
+              audios: [...audios],
+            },
+          });
+          audios.length = 0;
         }
         blocks.push({
           blockType: "text",
@@ -321,6 +424,24 @@ const mapMessageContent = (
           });
         }
         // Skip invalid image entries silently
+      } else if (item.type === "input_audio") {
+        // Handle input audio content
+        if (
+          item.input_audio &&
+          typeof item.input_audio === "object" &&
+          typeof item.input_audio.data === "string" &&
+          item.input_audio.data.length > 0
+        ) {
+          const audioData = item.input_audio.data;
+          const audioName = isPlaceholder(audioData)
+            ? audioData
+            : `Audio ${index + 1}`;
+          audios.push({
+            url: audioData,
+            name: audioName,
+          });
+        }
+        // Skip invalid audio entries silently
       }
     });
 
@@ -331,6 +452,45 @@ const mapMessageContent = (
         component: PrettyLLMMessage.ImageBlock,
         props: {
           images,
+        },
+      });
+    }
+
+    // Add any remaining audios
+    if (audios.length > 0) {
+      blocks.push({
+        blockType: "audio",
+        component: PrettyLLMMessage.AudioPlayerBlock,
+        props: {
+          audios,
+        },
+      });
+    }
+  }
+
+  // Handle audio messages
+  if (message.audio) {
+    // Add audio player block if data is present
+    if (message.audio.data) {
+      blocks.push({
+        blockType: "audio",
+        component: PrettyLLMMessage.AudioPlayerBlock,
+        props: {
+          url: message.audio.data,
+          name: `Audio ${message.audio.id}`,
+        },
+      });
+    }
+
+    // Add transcript as text block if present
+    if (message.audio.transcript) {
+      blocks.push({
+        blockType: "text",
+        component: PrettyLLMMessage.TextBlock,
+        props: {
+          children: message.audio.transcript,
+          role,
+          showMoreButton: true,
         },
       });
     }
@@ -426,10 +586,12 @@ const mapCustomInputMessage = (
   index: number,
   prefix: string,
 ): LLMMessageDescriptor => {
-  const role = message.role as MessageRole;
+  // Normalize legacy "function" role to "tool"
+  const rawRole = message.role;
+  const role = rawRole === "function" ? "tool" : (rawRole as MessageRole);
 
   // For tool messages, use the function name as label
-  const label = message.role === "tool" ? message.name : undefined;
+  const label = role === "tool" ? message.name : undefined;
 
   // Map content blocks to descriptors
   const blocks = mapCustomInputMessageContent(message, role);
@@ -450,10 +612,12 @@ const mapOpenAIMessage = (
   index: number,
   prefix: string,
 ): LLMMessageDescriptor => {
-  const role = message.role as MessageRole;
+  // Normalize legacy "function" role to "tool"
+  const rawRole = message.role;
+  const role = rawRole === "function" ? "tool" : (rawRole as MessageRole);
 
   // For tool messages, use the function name as label
-  const label = message.role === "tool" ? message.name : undefined;
+  const label = role === "tool" ? message.name : undefined;
 
   // Map content blocks to descriptors
   const blocks = mapMessageContent(message, role);
@@ -487,9 +651,20 @@ const mapOpenAIOutput = (data: OpenAIOutputData): LLMMessageDescriptor[] => {
     return [];
   }
 
-  return data.choices.map((choice, index) =>
-    mapOpenAIMessage(choice.message, index, "output"),
-  );
+  return data.choices.map((choice, index) => {
+    const message = mapOpenAIMessage(choice.message, index, "output");
+
+    // Add footer data if available
+    const hasFooterData = data.usage || choice.finish_reason;
+    if (hasFooterData) {
+      message.footer = {
+        usage: data.usage,
+        finishReason: choice.finish_reason,
+      };
+    }
+
+    return message;
+  });
 };
 
 /**
@@ -543,11 +718,21 @@ const mapCustomOutputFormat = (
     },
   ];
 
+  // Add footer data if available
+  const hasFooterData = data.usage || data.finish_reason;
+  const footer = hasFooterData
+    ? {
+        usage: data.usage,
+        finishReason: data.finish_reason,
+      }
+    : undefined;
+
   return [
     {
       id: generateMessageId(0, "output"),
       role: "assistant" as MessageRole,
       blocks,
+      footer,
     },
   ];
 };

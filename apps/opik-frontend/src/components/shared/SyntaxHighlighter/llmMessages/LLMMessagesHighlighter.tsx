@@ -122,6 +122,12 @@ const LLMMessagesHighlighter: React.FC<LLMMessagesHighlighterProps> = ({
                   />
                   <PrettyLLMMessage.Content>
                     {renderContentBlocks(message)}
+                    {message.footer && (
+                      <PrettyLLMMessage.Footer
+                        usage={message.footer.usage}
+                        finishReason={message.footer.finishReason}
+                      />
+                    )}
                   </PrettyLLMMessage.Content>
                 </PrettyLLMMessage.Root>
               ))}

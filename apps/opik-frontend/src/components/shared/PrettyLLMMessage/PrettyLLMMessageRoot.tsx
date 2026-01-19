@@ -9,7 +9,7 @@ const PrettyLLMMessageRoot: React.FC<PrettyLLMMessageRootProps> = ({
   className,
 }) => {
   return (
-    <AccordionItem value={value} className={cn("border-none", className)}>
+    <AccordionItem value={value} className={cn("border-none mb-3", className)}>
       {children}
     </AccordionItem>
   );

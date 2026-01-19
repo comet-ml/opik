@@ -10,7 +10,7 @@ const PrettyLLMMessageContent: React.FC<PrettyLLMMessageContentProps> = ({
   return (
     <AccordionContent
       className={cn(
-        "ml-[10px] pb-0.5 border-l pl-[12px] space-y-1 py-1",
+        "ml-[10px] pb-0 pt-0 px-0 border-l pl-[12px] space-y-3",
         className,
       )}
     >

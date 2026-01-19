@@ -62,14 +62,14 @@ export const useLLMMessagesExpandAll = (
   allMessageIds: string[],
   preserveKey?: string,
 ) => {
-  const [localIsAllExpanded, setLocalIsAllExpanded] = useState<boolean>(false);
+  const [localIsAllExpanded, setLocalIsAllExpanded] = useState<boolean>(true);
 
   const [preservedIsAllExpanded, setPreservedIsAllExpanded] =
     useLocalStorageState(
       preserveKey
         ? `${preserveKey}-llm-expand-all`
         : UNUSED_SYNTAX_HIGHLIGHTER_KEY,
-      { defaultValue: false },
+      { defaultValue: true },
     );
 
   const [isAllExpanded, setIsAllExpanded] = useMemo(

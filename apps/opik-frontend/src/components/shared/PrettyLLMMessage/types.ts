@@ -1,7 +1,7 @@
 import { ReactNode, ComponentPropsWithoutRef } from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 
-export type MessageRole = "system" | "user" | "assistant" | "tool";
+export type MessageRole = "system" | "user" | "assistant" | "tool" | "function";
 
 export type PrettyLLMMessageContainerProps = ComponentPropsWithoutRef<
   typeof AccordionPrimitive.Root
@@ -51,5 +51,15 @@ export interface PrettyLLMMessageAudioPlayerBlockProps {
   audios?: Array<{ url: string; name: string }>;
   url?: string;
   name?: string;
+  className?: string;
+}
+
+export interface PrettyLLMMessageFooterProps {
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  finishReason?: string;
   className?: string;
 }
