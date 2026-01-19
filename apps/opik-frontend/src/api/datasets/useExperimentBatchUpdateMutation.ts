@@ -33,7 +33,8 @@ const useExperimentBatchUpdateMutation = () => {
       const message = get(
         error,
         ["response", "data", "message"],
-        error.message,
+        error.message ??
+          "An unknown error occurred while updating experiments. Please try again later.",
       );
 
       toast({
