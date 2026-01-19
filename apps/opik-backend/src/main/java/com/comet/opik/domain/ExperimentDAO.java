@@ -908,19 +908,11 @@ class ExperimentDAO {
             """;
     private static final String FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_DATASET_IDS = """
             SELECT
-            	dataset_id,
-            	max(created_at) as created_at
-            FROM (
-                SELECT
-                    id,
-                    dataset_id,
-                    created_at
-                FROM experiments
-                WHERE dataset_id IN :dataset_ids
-            	AND workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            )
+                dataset_id,
+                max(created_at) as created_at
+            FROM experiments
+            WHERE dataset_id IN :dataset_ids
+            AND workspace_id = :workspace_id
             GROUP BY dataset_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -933,8 +925,6 @@ class ExperimentDAO {
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
             <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
