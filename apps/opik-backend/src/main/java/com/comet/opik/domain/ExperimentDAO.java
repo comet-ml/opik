@@ -1023,7 +1023,7 @@ class ExperimentDAO {
                 <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
                 created_at,
                 now64(9) as last_updated_at
-            FROM experiments final
+            FROM experiments
             WHERE id IN (:ids)
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
