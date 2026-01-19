@@ -660,7 +660,6 @@ const ExperimentsPage: React.FC = () => {
             experiments={selectedRows}
             onTagsAdded={() => {
               setRowSelection({});
-              refetch();
             }}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
