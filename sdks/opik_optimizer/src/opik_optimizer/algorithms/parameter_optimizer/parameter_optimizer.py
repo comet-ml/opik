@@ -296,6 +296,7 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
             selection_summary=display_utils.summarize_selection_policy(base_prompts),
         ) as baseline_reporter:
+            self.pre_trial(context, base_prompts)
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompts,
                 agent=agent,
@@ -515,6 +516,7 @@ class ParameterOptimizer(BaseOptimizer):
                     trials_completed=context.trials_completed,
                     max_trials=total_trials,
                 )
+                self.pre_trial(context, tuned_prompts)
                 score = self.evaluate_prompt(
                     prompt=tuned_prompts,
                     agent=agent,

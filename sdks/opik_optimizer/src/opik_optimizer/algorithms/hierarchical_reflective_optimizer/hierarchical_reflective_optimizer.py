@@ -181,6 +181,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         Returns the average score across EvaluationResult test results; when no
         scores exist, falls back to empty_score (or 0.0).
         """
+        self.pre_trial(context, prompts)
         evaluation_result = self.evaluate_prompt(
             prompt=prompts,
             dataset=dataset,
@@ -526,6 +527,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             ) as rca_reporter:
                 self._set_reporter(rca_reporter)
                 try:
+                    self.pre_trial(context, best_prompts)
                     train_dataset_experiment_result = self.evaluate_prompt(
                         prompt=best_prompts,
                         dataset=dataset,

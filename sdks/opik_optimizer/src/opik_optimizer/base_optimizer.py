@@ -525,6 +525,7 @@ class BaseOptimizer(ABC):
         context = self._context
         if context is None:
             raise RuntimeError("No optimization context available for evaluation.")
+        self.pre_trial(context, prompts)
         try:
             score = self.evaluate_prompt(
                 prompt=prompts,
