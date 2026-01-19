@@ -264,7 +264,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 dataset_id,
                 count(DISTINCT id) AS count
-            FROM FROM dataset_items
+            FROM dataset_items
             WHERE dataset_id IN :dataset_ids
             AND workspace_id = :workspace_id
             GROUP BY dataset_id
