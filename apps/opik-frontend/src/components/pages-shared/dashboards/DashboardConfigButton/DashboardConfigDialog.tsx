@@ -90,7 +90,7 @@ const DashboardConfigDialog: React.FC<DashboardConfigDialogProps> = ({
       experimentDataSource:
         config?.experimentDataSource ||
         EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-      experimentFilters: config?.experimentFilters || [],
+      experimentFilters: config?.experimentFilters?.slice() ?? [],
       maxExperimentsCount: config?.maxExperimentsCount?.toString() || "",
     },
   });
@@ -103,7 +103,7 @@ const DashboardConfigDialog: React.FC<DashboardConfigDialogProps> = ({
         experimentDataSource:
           config.experimentDataSource ||
           EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-        experimentFilters: config.experimentFilters || [],
+        experimentFilters: config.experimentFilters?.slice() ?? [],
         maxExperimentsCount:
           config.maxExperimentsCount?.toString() ||
           String(DEFAULT_MAX_EXPERIMENTS),
