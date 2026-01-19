@@ -37,11 +37,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     },
     {
       enabled: Boolean(optimization?.id),
-      refetchInterval:
-        optimization?.status &&
-        IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization?.status)
-          ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
-          : undefined,
+      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
       retry: false,
     },
   );
