@@ -166,8 +166,17 @@ class ExperimentDAO {
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+                <if(limit &&
+                !feedback_scores_filters &&
+                !feedback_scores_empty_filters &&
+                !experiment_scores_filters &&
+                !experiment_scores_empty_filters &&
+                !sort_fields
+                )>
+                LIMIT :limit <if(offset)> OFFSET :offset <endif>
+                <endif>
             ), experiment_items_final AS (
                 SELECT
                     id, experiment_id, trace_id
@@ -472,7 +481,16 @@ class ExperimentDAO {
             AND id NOT IN (SELECT experiment_id FROM esc)
             <endif>
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
-            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            <if(limit && (
+                feedback_scores_filters ||
+                feedback_scores_empty_filters ||
+                experiment_scores_filters ||
+                experiment_scores_empty_filters ||
+                sort_fields
+                )
+            )>
+            LIMIT :limit <if(offset)> OFFSET :offset <endif>
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
