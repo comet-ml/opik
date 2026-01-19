@@ -34,10 +34,8 @@ pytestmark = [
     pytest.mark.usefixtures("use_us_central1_for_veo"),
 ]
 
-# Cheapest Veo model - optimized for speed and cost
 VIDEO_MODEL = "veo-3.1-fast-generate-preview"
 
-# Cheapest config: 4s, 720p, no audio, 1 video
 VIDEO_CONFIG = GenerateVideosConfig(
     duration_seconds=4,
     resolution="720p",
@@ -45,7 +43,6 @@ VIDEO_CONFIG = GenerateVideosConfig(
     number_of_videos=1,
 )
 
-# Skip expensive tests unless explicitly enabled
 SKIP_EXPENSIVE_TESTS = os.environ.get("OPIK_TEST_EXPENSIVE", "").lower() not in (
     "1",
     "true",
