@@ -1199,12 +1199,19 @@ class TraceDAOImpl implements TraceDAO {
                  <if(experiment_filters)>
                  AND id IN (
                     SELECT
-                        trace_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
+                        ei.trace_id
+                    FROM experiment_items ei
+                    INNER JOIN (
+                        SELECT id, name
+                        FROM experiments
+                        WHERE workspace_id = :workspace_id
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) e ON ei.experiment_id = e.id
+                    WHERE ei.workspace_id = :workspace_id
                     AND <experiment_filters>
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                    LIMIT 1 BY ei.id
                  )
                  <endif>
                  <if(feedback_scores_empty_filters)>
@@ -1631,12 +1638,19 @@ class TraceDAOImpl implements TraceDAO {
                     <if(experiment_filters)>
                     AND id IN (
                         SELECT
-                            trace_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
+                            ei.trace_id
+                        FROM experiment_items ei
+                        INNER JOIN (
+                            SELECT id, name
+                            FROM experiments
+                            WHERE workspace_id = :workspace_id
+                            ORDER BY id DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) e ON ei.experiment_id = e.id
+                        WHERE ei.workspace_id = :workspace_id
                         AND <experiment_filters>
-                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                        LIMIT 1 BY ei.id
                     )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -2280,12 +2294,19 @@ class TraceDAOImpl implements TraceDAO {
                 <if(experiment_filters)>
                 AND id IN (
                     SELECT
-                        trace_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
+                        ei.trace_id
+                    FROM experiment_items ei
+                    INNER JOIN (
+                        SELECT id, name
+                        FROM experiments
+                        WHERE workspace_id = :workspace_id
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) e ON ei.experiment_id = e.id
+                    WHERE ei.workspace_id = :workspace_id
                     AND <experiment_filters>
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                    LIMIT 1 BY ei.id
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>

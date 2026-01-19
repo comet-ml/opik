@@ -103,6 +103,7 @@ public class FilterQueryBuilder {
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String EXPERIMENT_ID_DB = "experiment_id";
+    private static final String EXPERIMENT_NAME_DB = "e.name";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -296,6 +297,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
+                    .put(TraceField.EXPERIMENT_NAME, EXPERIMENT_NAME_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .build());
@@ -502,7 +504,8 @@ public class FilterQueryBuilder {
                 TraceField.ERROR_INFO));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
-                TraceField.EXPERIMENT_ID));
+                TraceField.EXPERIMENT_ID,
+                TraceField.EXPERIMENT_NAME));
 
         map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
                 TraceField.USAGE_COMPLETION_TOKENS,

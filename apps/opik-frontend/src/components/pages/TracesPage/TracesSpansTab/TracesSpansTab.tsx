@@ -921,6 +921,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
+              id: "experiment_name",
+              label: "Experiment name",
+              type: COLUMN_TYPE.string,
+            },
+            {
               id: "annotation_queue_ids",
               label: "Annotation queue ID",
               type: COLUMN_TYPE.list,
