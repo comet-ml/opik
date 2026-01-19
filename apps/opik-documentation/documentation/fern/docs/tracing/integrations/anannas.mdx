@@ -72,6 +72,7 @@ Since Anannas AI provides an OpenAI-compatible API, we can use the Opik OpenAI S
 ### Simple LLM Call
 
 ```python
+import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
@@ -104,6 +105,7 @@ print(response.choices[0].message.content)
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Anannas AI is called within one of these steps, the LLM call will be associated with that corresponding step:
 
 ```python
+import os
 from opik import track
 from opik.integrations.openai import track_openai
 from openai import OpenAI
