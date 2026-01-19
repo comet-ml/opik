@@ -21,7 +21,11 @@ def patch_videos_save(
     metadata: Optional[Dict[str, Any]],
 ) -> None:
     """Patch save method on all videos in the operation response."""
-    if not operation.response or not operation.response.generated_videos:
+    if (
+        not operation.response
+        or not hasattr(operation.response, "generated_videos")
+        or not operation.response.generated_videos
+    ):
         return
 
     for generated_video in operation.response.generated_videos:

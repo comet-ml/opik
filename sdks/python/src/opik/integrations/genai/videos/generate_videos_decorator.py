@@ -5,6 +5,7 @@ Output type: google.genai.types.GenerateVideosOperation
 
 This decorator is used for LLM spans that generate videos.
 """
+import copy
 
 from typing import (
     Any,
@@ -15,7 +16,6 @@ from typing import (
     Tuple,
     TYPE_CHECKING,
 )
-
 from typing_extensions import override
 
 import opik.dict_utils as dict_utils
@@ -60,7 +60,7 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         name = track_options.name if track_options.name is not None else func.__name__
 
-        metadata = track_options.metadata if track_options.metadata is not None else {}
+        metadata = copy.copy(track_options.metadata) if track_options.metadata is not None else {}
 
         input_data, _ = dict_utils.split_dict_by_keys(
             kwargs, keys=VIDEO_GENERATE_KWARGS_KEYS_TO_LOG_AS_INPUTS
