@@ -243,6 +243,7 @@ interface SMEFlowContextValue {
   // Actions
   setCurrentView: (currentView: WORKFLOW_STATUS) => void;
   handleStartAnnotating: () => void;
+  handleReviewAnnotations: () => void;
   handleNext: () => void;
   handlePrevious: () => void;
   handleSubmit: () => void;
@@ -417,6 +418,11 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       setCurrentIndex(allItemIds.indexOf(unprocessedIds[0]));
     }
   }, [setCurrentView, unprocessedIds, allItemIds]);
+
+  const handleReviewAnnotations = useCallback(() => {
+    setCurrentView(WORKFLOW_STATUS.ANNOTATING);
+    setCurrentIndex(0);
+  }, [setCurrentView]);
 
   const handleNext = useCallback(() => {
     // Always cache the current annotation state when navigating away
@@ -680,7 +686,14 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       omit(prev, getAnnotationQueueItemId(currentItem)),
     );
 
-    handleNextUnprocessed();
+    const wasLastUnprocessed =
+      unprocessedIds.length === 1 && unprocessedIds[0] === currentItem.id;
+
+    if (wasLastUnprocessed) {
+      setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    } else {
+      handleNextUnprocessed();
+    }
   }, [
     currentItem,
     annotationQueue,
@@ -691,6 +704,8 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     submitTraceFeedbackScores,
     submitThreadFeedbackScores,
     handleNextUnprocessed,
+    unprocessedIds,
+    setCurrentView,
   ]);
 
   useEffect(() => {
@@ -748,16 +763,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   }, [currentItem, isThread, currentAnnotationState]);
 
   useEffect(() => {
-    if (!isItemsLoading && queueItems.length > 0) {
-      if (
-        unprocessedItems.length === 0 &&
-        currentView !== WORKFLOW_STATUS.COMPLETED
-      ) {
+    if (!currentView && !isItemsLoading && queueItems.length > 0) {
+      if (unprocessedItems.length === 0) {
         setCurrentView(WORKFLOW_STATUS.COMPLETED);
-      } else if (
-        unprocessedItems.length > 0 &&
-        currentView !== WORKFLOW_STATUS.ANNOTATING
-      ) {
+      } else {
         setCurrentView(WORKFLOW_STATUS.INITIAL);
       }
     }
@@ -796,6 +805,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     // Actions
     setCurrentView,
     handleStartAnnotating,
+    handleReviewAnnotations,
     handleNext,
     handlePrevious,
     handleSubmit,
