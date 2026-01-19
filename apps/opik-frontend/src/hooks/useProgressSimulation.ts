@@ -13,6 +13,10 @@ interface UseProgressSimulationOptions {
    * Interval in milliseconds for progress updates (default: 800ms)
    */
   intervalMs?: number;
+  /**
+   * Whether to loop the progress animation continuously (default: false)
+   */
+  loop?: boolean;
 }
 
 interface UseProgressSimulationReturn {
@@ -39,6 +43,7 @@ const useProgressSimulation = ({
   messages,
   isPending,
   intervalMs = 800,
+  loop = false,
 }: UseProgressSimulationOptions): UseProgressSimulationReturn => {
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
@@ -56,11 +61,22 @@ const useProgressSimulation = ({
     const interval = setInterval(() => {
       setProgress((prev) => {
         const next = prev + Math.random() * 15;
-        if (next > 90) return 90;
+
+        if (loop) {
+          // In loop mode, reset to 0 when reaching 100
+          if (next >= 100) {
+            setMessage(messages[0] || "");
+            return 0;
+          }
+        } else {
+          // In normal mode, cap at 90
+          if (next > 90) return 90;
+        }
 
         // Calculate which message to show based on progress
+        const maxProgress = loop ? 100 : 90;
         const messageIndex = Math.min(
-          Math.floor((next / 90) * messages.length),
+          Math.floor((next / maxProgress) * messages.length),
           messages.length - 1,
         );
         setMessage(messages[messageIndex] || "");
@@ -70,7 +86,7 @@ const useProgressSimulation = ({
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [isPending, messages, intervalMs]);
+  }, [isPending, messages, intervalMs, loop]);
 
   const complete = useCallback(() => {
     setProgress(100);

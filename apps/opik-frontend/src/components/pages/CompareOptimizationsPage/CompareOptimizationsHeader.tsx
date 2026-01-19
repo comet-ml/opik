@@ -29,11 +29,10 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
   const { mutate: stopOptimization, isPending: isStoppingOptimization } =
     useOptimizationStopMutation();
 
-  const canStop =
-    isStudioOptimization &&
-    optimizationId &&
-    status &&
-    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+  const isInProgress =
+    status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
+
+  const canStop = isStudioOptimization && optimizationId && isInProgress;
 
   const handleStop = () => {
     if (!optimizationId) return;

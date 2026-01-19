@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
+import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import {
   MessagesList,
   NamedPromptsList,
@@ -71,6 +72,12 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
 
     return retVal;
   }, [experiment.id, scoreMap]);
+
+  const baselineScore = useMemo(() => {
+    if (!baselineExperiment) return undefined;
+    const scoreObject = scoreMap[baselineExperiment.id];
+    return scoreObject?.score;
+  }, [baselineExperiment, scoreMap]);
 
   const promptData = useMemo(() => {
     return get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
@@ -113,12 +120,28 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     return fallbackPrompt || "";
   }, [extractedPrompt, fallbackPrompt]);
 
+  const currentPromptJson = useMemo(() => {
+    return (
+      JSON.stringify(extractedPrompt?.data || fallbackPrompt, null, 2) || ""
+    );
+  }, [extractedPrompt, fallbackPrompt]);
+
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="shrink-0 gap-y-0.5 px-5">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="comet-body-s-accented">Best prompt</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="comet-body-s-accented">
+                Best prompt
+              </CardTitle>
+              <CopyButton
+                text={currentPromptJson}
+                message="Prompt copied to clipboard"
+                tooltipText="Copy prompt"
+                variant="ghost"
+              />
+            </div>
             <CardDescription className="!mt-0">
               <ColoredTagNew
                 label={optimization.objective_name}
@@ -128,6 +151,14 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
             </CardDescription>
           </div>
           <div className="flex flex-row items-baseline gap-2">
+            {!isUndefined(baselineScore) && (
+              <div className="comet-body-s text-muted-slate">
+                {formatNumericData(baselineScore)}
+              </div>
+            )}
+            {!isUndefined(baselineScore) && (
+              <div className="text-muted-slate">→</div>
+            )}
             <div className="comet-title-xl text-4xl leading-none text-foreground-secondary">
               {isUndefined(score) ? "-" : formatNumericData(score)}
             </div>
@@ -162,49 +193,53 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
               View details <ArrowRight className="size-4" />
             </Button>
           </Link>
-          {baselinePrompt && (
-            <>
-              <TooltipWrapper content="Compare with baseline prompt">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDiffOpen(true)}
-                  className="flex items-center gap-1"
-                >
-                  <Split className="size-4" />
-                  Diff
-                </Button>
-              </TooltipWrapper>
-              <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
-                <DialogContent className="max-w-lg sm:max-w-[880px]">
-                  <DialogHeader>
-                    <DialogTitle>Compare prompts</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid grid-cols-2 gap-4 pb-2">
-                    <div>
-                      <div className="mb-2 px-0.5">
-                        <span className="comet-body-s-accented">Baseline</span>
+          <div className="flex items-center gap-1">
+            {baselinePrompt && (
+              <>
+                <TooltipWrapper content="Compare with baseline prompt">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDiffOpen(true)}
+                    className="flex items-center gap-1"
+                  >
+                    <Split className="size-4" />
+                    Diff
+                  </Button>
+                </TooltipWrapper>
+                <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
+                  <DialogContent className="max-w-lg sm:max-w-[880px]">
+                    <DialogHeader>
+                      <DialogTitle>Compare prompts</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid grid-cols-2 gap-4 pb-2">
+                      <div>
+                        <div className="mb-2 px-0.5">
+                          <span className="comet-body-s-accented">
+                            Baseline
+                          </span>
+                        </div>
+                        <div className="comet-code h-[620px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
+                          {baselinePrompt}
+                        </div>
                       </div>
-                      <div className="comet-code h-[620px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
-                        {baselinePrompt}
+                      <div>
+                        <div className="mb-2 px-0.5">
+                          <span className="comet-body-s-accented">Current</span>
+                        </div>
+                        <div className="comet-code h-[620px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
+                          <TextDiff
+                            content1={baselinePrompt}
+                            content2={currentPromptText}
+                          />
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className="mb-2 px-0.5">
-                        <span className="comet-body-s-accented">Current</span>
-                      </div>
-                      <div className="comet-code h-[620px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
-                        <TextDiff
-                          content1={baselinePrompt}
-                          content2={currentPromptText}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
           {extractedPrompt ? (

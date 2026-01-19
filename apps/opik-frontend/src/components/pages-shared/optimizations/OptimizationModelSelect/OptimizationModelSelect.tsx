@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
 import { PROVIDERS } from "@/constants/providers";
+import { OPTIMIZATION_STUDIO_SUPPORTED_MODELS } from "@/constants/optimizations";
 
 const SUPPORTED_PROVIDERS = [
   PROVIDER_TYPE.OPEN_AI,
@@ -48,13 +49,22 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   const groupOptions = useMemo(() => {
     return SUPPORTED_PROVIDERS.map((providerType) => {
       const providerConfig = PROVIDERS[providerType];
-      const models = PROVIDER_MODELS[providerType];
+      const allModels = PROVIDER_MODELS[providerType];
+      const supportedModelValues =
+        OPTIMIZATION_STUDIO_SUPPORTED_MODELS[providerType] || [];
+
+      const filteredModels = supportedModelValues
+        .map((modelValue) => allModels.find((m) => m.value === modelValue))
+        .filter(Boolean) as { value: PROVIDER_MODEL_TYPE; label: string }[];
 
       return {
         providerType,
         label: providerConfig.label,
         icon: providerConfig.icon,
-        options: models.map((m) => ({ label: m.label, value: m.value })),
+        options: filteredModels.map((m) => ({
+          label: m.label,
+          value: m.value,
+        })),
       };
     });
   }, []);

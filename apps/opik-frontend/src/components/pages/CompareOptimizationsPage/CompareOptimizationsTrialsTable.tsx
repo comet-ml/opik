@@ -1,5 +1,5 @@
-import React from "react";
-import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
+import React, { useCallback } from "react";
+import { ColumnPinningState, ColumnSort, Row } from "@tanstack/react-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { ROW_HEIGHT, OnChangeFn } from "@/types/shared";
 import { Experiment } from "@/types/datasets";
@@ -42,6 +42,7 @@ interface CompareOptimizationsTrialsTableProps {
   onSortChange: OnChangeFn<ColumnSort[]>;
   columnsWidth: Record<string, number>;
   onColumnsWidthChange: OnChangeFn<Record<string, number>>;
+  highlightedTrialId?: string;
 }
 
 const CompareOptimizationsTrialsTable: React.FC<
@@ -56,7 +57,18 @@ const CompareOptimizationsTrialsTable: React.FC<
   onSortChange,
   columnsWidth,
   onColumnsWidthChange,
+  highlightedTrialId,
 }) => {
+  const getRowClassName = useCallback(
+    (row: Row<Experiment>) => {
+      if (highlightedTrialId && row.id === highlightedTrialId) {
+        return "[&_td]:bg-[#e6f7ed] [&:hover_td]:!bg-[#d0f0dc]";
+      }
+      return "";
+    },
+    [highlightedTrialId],
+  );
+
   return (
     <Card className="h-full flex-1 overflow-hidden">
       <DataTable
@@ -74,6 +86,7 @@ const CompareOptimizationsTrialsTable: React.FC<
           onColumnResize: onColumnsWidthChange,
         }}
         getRowId={getRowId}
+        getRowClassName={getRowClassName}
         rowHeight={rowHeight}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
