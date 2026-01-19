@@ -28,6 +28,7 @@
     "src/opik/integrations/opik-openai",
     "src/opik/integrations/opik-gemini",
     "src/opik/integrations/opik-vercel",
-    "src/opik/configure"
+    "src/opik/configure",
+    "src/opik/rest_api/core/fetcher/stream-wrappers/NodePre18StreamWrapper.ts"
   ]
 }
