@@ -72,6 +72,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
@@ -850,6 +851,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
               cell: ExperimentCell as never,
               accessorFn: (row: BaseTraceData) => get(row, "experiment"),
+            },
+            {
+              id: "experiment.id",
+              label: "Experiment ID",
+              type: COLUMN_TYPE.string,
+              cell: IdCell as never,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "experiment.id", "-"),
             },
           ]
         : []),
