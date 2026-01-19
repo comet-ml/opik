@@ -263,19 +263,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 dataset_id,
-                count(id) AS count
-            FROM (
-                     SELECT
-                         id,
-                         dataset_id
-                     FROM dataset_items
-                     WHERE dataset_id IN :dataset_ids
-                       AND workspace_id = :workspace_id
-                     ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                     LIMIT 1 BY id
-                     ) AS lastRows
+                count(DISTINCT id) AS count
+            FROM dataset_items
+            WHERE dataset_id IN :dataset_ids
+            AND workspace_id = :workspace_id
             GROUP BY dataset_id
-            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
