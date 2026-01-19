@@ -207,6 +207,9 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       const config = selectMixedConfig(state);
       return {
         experimentIds: config?.experimentIds || [],
+        experimentDataSource: config?.experimentDataSource,
+        experimentFilters: config?.experimentFilters || [],
+        maxExperimentsCount: config?.maxExperimentsCount,
       };
     }),
   );
@@ -225,16 +228,44 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     | ExperimentsFeedbackScoresWidgetType["config"]
     | undefined;
 
-  const dataSource =
-    widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
   const feedbackScores = widgetConfig?.feedbackScores;
   const overrideDefaults = widgetConfig?.overrideDefaults;
 
+  const dataSource = useMemo(() => {
+    if (overrideDefaults) {
+      return (
+        widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+      );
+    }
+    return (
+      globalConfig.experimentDataSource ||
+      EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+    );
+  }, [
+    overrideDefaults,
+    widgetConfig?.dataSource,
+    globalConfig.experimentDataSource,
+  ]);
+
   const validFilters = useMemo(() => {
-    const filters = (widgetConfig?.filters || []) as Filters;
-    return filters.filter(isFilterValid);
-  }, [widgetConfig?.filters]);
+    if (overrideDefaults) {
+      const filters = (widgetConfig?.filters || []) as Filters;
+      return filters.filter(isFilterValid);
+    }
+    return (globalConfig.experimentFilters || []).filter(isFilterValid);
+  }, [overrideDefaults, widgetConfig?.filters, globalConfig.experimentFilters]);
+
+  const maxExperimentsCount = useMemo(() => {
+    if (overrideDefaults) {
+      return widgetConfig?.maxExperimentsCount;
+    }
+    return globalConfig.maxExperimentsCount;
+  }, [
+    overrideDefaults,
+    widgetConfig?.maxExperimentsCount,
+    globalConfig.maxExperimentsCount,
+  ]);
 
   const validGroups = useMemo(() => {
     const groups = (widgetConfig?.groups || []) as Groups;
@@ -276,13 +307,20 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     experimentsIds: isSelectExperimentsMode ? limitedExperimentIds : [],
   });
 
+  const experimentsListSize = useMemo(() => {
+    if (maxExperimentsCount && maxExperimentsCount > 0) {
+      return Math.min(maxExperimentsCount, MAX_EXPERIMENTS_LIMIT);
+    }
+    return MAX_EXPERIMENTS_LIMIT;
+  }, [maxExperimentsCount]);
+
   const { data: experimentsData, isPending: isExperimentsPending } =
     useExperimentsList(
       {
         workspaceName,
         filters: validFilters,
         page: 1,
-        size: MAX_EXPERIMENTS_LIMIT,
+        size: experimentsListSize,
       },
       {
         enabled: !hasGroups && !isSelectExperimentsMode,
@@ -357,10 +395,10 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const hasMoreThanLimit =
     !hasGroups &&
     !isSelectExperimentsMode &&
-    totalExperiments > MAX_EXPERIMENTS_LIMIT;
+    totalExperiments > experimentsListSize;
 
   const warningMessage = hasMoreThanLimit
-    ? `Showing first ${MAX_EXPERIMENTS_LIMIT} of ${totalExperiments} experiments`
+    ? `Showing first ${experimentsListSize} of ${totalExperiments} experiments`
     : isSelectExperimentsMode && hasMoreThanMaxSelected
       ? `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`
       : undefined;
