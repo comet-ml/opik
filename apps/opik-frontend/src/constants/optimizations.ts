@@ -199,7 +199,7 @@ const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
     message:
       "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
     expected_intent: "complaint",
-    expected_urgency: "high",
+    expected_urgency: "medium",
   },
   {
     message:
@@ -232,8 +232,8 @@ const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
   {
     message:
       "Just checking - what's the process for exporting all my data? Asking for future reference.",
-    expected_intent: "request",
-    expected_urgency: "medium",
+    expected_intent: "question",
+    expected_urgency: "low",
   },
 ];
 
@@ -458,7 +458,7 @@ Output valid JSON only.`,
             reason="; ".join(reasons)
         )
 
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
+    except Exception as e:
         return ScoreResult(
             name="intent_accuracy",
             value=0.0,

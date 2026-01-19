@@ -1,14 +1,20 @@
 """Metric factory for Optimization Studio."""
 
+import ast
+import inspect
 import logging
+import uuid
+from types import ModuleType, FunctionType
 from typing import Callable, Dict, Any
 
 from opik.evaluation.metrics import (
+    BaseMetric,
     Equals,
     GEval,
     LevenshteinRatio,
     StructuredOutputCompliance,
 )
+from opik.evaluation.metrics.score_result import ScoreResult
 from .config import DEFAULT_REFERENCE_KEY, DEFAULT_CASE_SENSITIVE
 from .exceptions import InvalidMetricError
 
@@ -271,18 +277,36 @@ def _validate_code_safety(code: str) -> None:
             logger.warning(f"Code metric rejected: {message}. Pattern: {pattern}")
             raise InvalidMetricError("code", f"Security violation: {message}")
     
-    # Validate imports are from allowlist
-    import_pattern = r'^\s*(?:from\s+(\w+)|import\s+(\w+))'
-    for match in re.finditer(import_pattern, code, re.MULTILINE):
-        module = match.group(1) or match.group(2)
-        # Allow opik imports and allowed modules
-        if module and not module.startswith('opik') and module not in ALLOWED_MODULES:
-            logger.warning(f"Code metric rejected: Import of '{module}' is not allowed")
-            raise InvalidMetricError(
-                "code", 
-                f"Import of '{module}' is not allowed. "
-                f"Allowed modules: {', '.join(sorted(ALLOWED_MODULES))}, opik.*"
-            )
+    # Validate imports are from allowlist using ast for proper parsing
+    # This handles all import forms: import x, import x, y, from x import y, etc.
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                # import x, y, z
+                for alias in node.names:
+                    module = alias.name.split('.')[0]  # Get root module
+                    if not module.startswith('opik') and module not in ALLOWED_MODULES:
+                        logger.warning(f"Code metric rejected: Import of '{module}' is not allowed")
+                        raise InvalidMetricError(
+                            "code", 
+                            f"Import of '{module}' is not allowed. "
+                            f"Allowed modules: {', '.join(sorted(ALLOWED_MODULES))}, opik.*"
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                # from x import y, z
+                if node.module:
+                    module = node.module.split('.')[0]  # Get root module
+                    if not module.startswith('opik') and module not in ALLOWED_MODULES:
+                        logger.warning(f"Code metric rejected: Import of '{module}' is not allowed")
+                        raise InvalidMetricError(
+                            "code", 
+                            f"Import of '{module}' is not allowed. "
+                            f"Allowed modules: {', '.join(sorted(ALLOWED_MODULES))}, opik.*"
+                        )
+    except SyntaxError:
+        # If code has syntax errors, let it fail later during exec with a clearer message
+        pass
     
     logger.debug("Code safety validation passed")
 
@@ -320,12 +344,6 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
         InvalidMetricError: If code metrics are disabled, code is missing, 
                            contains dangerous patterns, or is invalid
     """
-    from types import ModuleType, FunctionType
-    import uuid
-    import inspect
-    from opik.evaluation.metrics.score_result import ScoreResult
-    from opik.evaluation.metrics import BaseMetric
-    
     # Check if code metrics are enabled
     if not CODE_METRIC_ENABLED:
         logger.warning("Code metric creation rejected: feature is disabled via OPIK_CODE_METRIC_ENABLED=false")
@@ -338,30 +356,40 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     if not code:
         raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
     
-    # Log code metric creation (for audit purposes, truncate long code)
-    code_preview = code[:200] + "..." if len(code) > 200 else code
-    logger.info(f"Building code metric. Code preview: {code_preview!r}")
+    # Log code metric creation - avoid logging raw code at INFO level as it may contain secrets
+    logger.info(f"Building code metric (code length: {len(code)} chars)")
+    # Only log code preview at DEBUG level (typically disabled in production)
+    if logger.isEnabledFor(logging.DEBUG):
+        code_preview = code[:200] + "..." if len(code) > 200 else code
+        logger.debug(f"Code metric preview: {code_preview!r}")
     
     # Validate code safety (defense-in-depth, primary isolation is via subprocess)
     _validate_code_safety(code)
     
+    # Create a restricted import function that only allows approved modules
+    real_import = __builtins__['__import__'] if isinstance(__builtins__, dict) else __builtins__.__import__
+    
+    def restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
+        """Restricted import that only allows approved modules."""
+        root_module = name.split('.')[0]
+        if root_module.startswith('opik') or root_module in ALLOWED_MODULES:
+            return real_import(name, globals, locals, fromlist, level)
+        raise ImportError(f"Import of '{name}' is not allowed. Allowed: {', '.join(sorted(ALLOWED_MODULES))}, opik.*")
+    
     # Create a restricted namespace for code execution
-    # Only allow safe builtins
-    safe_builtins = {
-        'True': True, 'False': False, 'None': None,
-        'int': int, 'float': float, 'str': str, 'bool': bool,
-        'list': list, 'dict': dict, 'set': set, 'tuple': tuple, 'frozenset': frozenset,
-        'len': len, 'range': range, 'enumerate': enumerate, 'zip': zip,
-        'map': map, 'filter': filter, 'sorted': sorted, 'reversed': reversed,
-        'min': min, 'max': max, 'sum': sum, 'abs': abs, 'round': round,
-        'any': any, 'all': all,
-        'isinstance': isinstance, 'issubclass': issubclass, 'type': type,
-        'hasattr': hasattr, 'getattr': getattr,  # getattr is validated above for dunder access
-        'print': print,  # Allow print for debugging
-        'Exception': Exception, 'ValueError': ValueError, 'TypeError': TypeError,
-        'KeyError': KeyError, 'IndexError': IndexError, 'AttributeError': AttributeError,
-        '__import__': None,  # Explicitly disable __import__
-    }
+    # Start with real builtins (needed for class definitions, etc.) but override dangerous ones
+    if isinstance(__builtins__, dict):
+        safe_builtins = dict(__builtins__)
+    else:
+        safe_builtins = dict(vars(__builtins__))
+    
+    # Override/remove dangerous builtins
+    safe_builtins['__import__'] = restricted_import  # Use restricted import
+    safe_builtins['eval'] = None  # Block eval
+    safe_builtins['exec'] = None  # Block exec
+    safe_builtins['compile'] = None  # Block compile
+    safe_builtins['open'] = None  # Block file access
+    safe_builtins['input'] = None  # Block input
     
     # Create a module to execute the code
     module = ModuleType(str(uuid.uuid4()))
@@ -386,11 +414,14 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
         raise InvalidMetricError("code", f"Invalid Python code: {e}")
     
     # Find the metric - look for either a function or a BaseMetric class
-    # These are new names that appeared after exec
-    new_names = set(module.__dict__.keys()) - pre_exec_names
+    # Use a list to preserve definition order (deterministic iteration)
+    new_names = [n for n in module.__dict__.keys() if n not in pre_exec_names]
     
-    metric_fn = None
     metric_class = None
+    metric_fn_candidates = []
+    
+    # Well-known metric function names (checked in priority order)
+    PREFERRED_METRIC_NAMES = ['evaluation_metric', 'score', 'metric', 'evaluate']
     
     for name in new_names:
         obj = module.__dict__[name]
@@ -407,11 +438,49 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
                 sig = inspect.signature(obj)
                 params_list = list(sig.parameters.keys())
                 if len(params_list) >= 2:
-                    metric_fn = obj
-                    # Don't break - prefer class pattern if both exist
+                    metric_fn_candidates.append((name, obj))
             except (ValueError, TypeError):
                 # Can't inspect signature, skip this function
                 continue
+    
+    # Helper to coerce metric return values into ScoreResult
+    def _coerce_to_score_result(value):
+        """Coerce metric return value to ScoreResult.
+        
+        Args:
+            value: The return value from the user's metric function
+            
+        Returns:
+            ScoreResult instance
+            
+        Raises:
+            InvalidMetricError: If value cannot be coerced to ScoreResult
+        """
+        # Already a ScoreResult - return as-is
+        if isinstance(value, ScoreResult):
+            return value
+        
+        # Numeric value - wrap with default name
+        if isinstance(value, (int, float)):
+            logger.debug(f"Coercing numeric metric result {value} to ScoreResult")
+            return ScoreResult(name="code", value=float(value), reason="")
+        
+        # Dict with expected keys - construct ScoreResult
+        if isinstance(value, dict) and "value" in value:
+            logger.debug(f"Coercing dict metric result to ScoreResult: {value}")
+            return ScoreResult(
+                name=value.get("name", "code"),
+                value=float(value["value"]),
+                reason=value.get("reason", "")
+            )
+        
+        # Unsupported type
+        logger.warning(f"Code metric returned unsupported type: {type(value).__name__}")
+        raise InvalidMetricError(
+            "code",
+            f"Metric must return a ScoreResult, numeric value (int/float), or dict with 'value' key. "
+            f"Got: {type(value).__name__}"
+        )
     
     # If we found a BaseMetric class, wrap it to match the optimizer signature
     if metric_class is not None:
@@ -420,26 +489,53 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
         
         def wrapped_class_metric(dataset_item, llm_output):
             # BaseMetric.score expects output as first arg and kwargs for the rest
-            return metric_instance.score(output=llm_output, **dataset_item)
+            result = metric_instance.score(output=llm_output, **dataset_item)
+            return _coerce_to_score_result(result)
         
-        wrapped_class_metric.__name__ = "code_metric"
+        wrapped_class_metric.__name__ = "code"
         return wrapped_class_metric
     
-    # If we found a function, wrap it
-    if metric_fn is not None:
-        original_fn = metric_fn
-        logger.info(f"Created code metric from function: {metric_fn.__name__}")
+    # If we found function candidates, select deterministically
+    if metric_fn_candidates:
+        # First, check for well-known metric function names
+        selected_fn = None
+        for preferred_name in PREFERRED_METRIC_NAMES:
+            for name, fn in metric_fn_candidates:
+                if name == preferred_name:
+                    selected_fn = fn
+                    logger.info(f"Selected metric function by preferred name: {name}")
+                    break
+            if selected_fn:
+                break
+        
+        # If no preferred name found, check if there's only one candidate
+        if selected_fn is None:
+            if len(metric_fn_candidates) == 1:
+                selected_fn = metric_fn_candidates[0][1]
+                logger.info(f"Selected single metric function: {metric_fn_candidates[0][0]}")
+            else:
+                # Multiple candidates - ambiguous, raise error
+                candidate_names = [name for name, _ in metric_fn_candidates]
+                raise InvalidMetricError(
+                    "code",
+                    f"Multiple metric function candidates found: {candidate_names}. "
+                    f"Please name your metric function one of: {PREFERRED_METRIC_NAMES}, "
+                    f"or ensure only one function with 2+ parameters is defined."
+                )
+        
+        original_fn = selected_fn
         
         def wrapped_fn_metric(dataset_item, llm_output):
-            return original_fn(dataset_item, llm_output)
+            result = original_fn(dataset_item, llm_output)
+            return _coerce_to_score_result(result)
         
-        wrapped_fn_metric.__name__ = "code_metric"
+        wrapped_fn_metric.__name__ = "code"
         return wrapped_fn_metric
     
     raise InvalidMetricError(
         "code", 
         "Code must define either:\n"
-        "1. A function: def my_metric(dataset_item, llm_output) -> ScoreResult\n"
+        f"1. A function named one of {PREFERRED_METRIC_NAMES}: def evaluation_metric(dataset_item, llm_output) -> ScoreResult\n"
         "2. A class: class MyMetric(BaseMetric) with a score() method"
     )
 

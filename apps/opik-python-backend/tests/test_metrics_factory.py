@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from opik.evaluation.metrics.score_result import ScoreResult
 from opik_backend.studio.metrics import MetricFactory
 from opik_backend.studio.exceptions import InvalidMetricError
 from opik_backend.studio.types import _convert_template_syntax, OptimizationConfig
@@ -323,6 +324,32 @@ def my_metric(dataset_item, llm_output):
         
         assert "Security violation" in str(exc_info.value) or "not allowed" in str(exc_info.value)
 
+    def test_code_metric_blocks_comma_separated_imports(self):
+        """Test that comma-separated imports are all validated (not just the first)."""
+        code = '''
+import json, subprocess
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        # subprocess should be blocked even though json is allowed
+        assert "subprocess" in str(exc_info.value) or "Security violation" in str(exc_info.value)
+
+    def test_code_metric_blocks_hidden_import_in_list(self):
+        """Test that disallowed modules hidden after allowed ones are blocked."""
+        code = '''
+import math, os
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        # os should be blocked even though math is allowed
+        assert "os" in str(exc_info.value).lower() or "not allowed" in str(exc_info.value)
+
     def test_code_metric_blocks_requests(self):
         """Test that requests module is blocked."""
         code = '''
@@ -470,6 +497,227 @@ def my_metric(dataset_item, llm_output):
         finally:
             # Restore the module
             importlib.reload(metrics)
+
+
+class TestCodeMetricDeterministicSelection:
+    """Tests for deterministic function selection in code metrics.
+    
+    These tests verify that:
+    1. Function selection is deterministic (uses definition order, not set iteration)
+    2. Preferred function names are selected over arbitrary names
+    3. Multiple candidates raise an error unless a preferred name is used
+    """
+
+    @pytest.fixture(autouse=True)
+    def enable_code_metric(self, monkeypatch):
+        """Enable code metrics for these tests."""
+        monkeypatch.setenv("OPIK_CODE_METRIC_ENABLED", "true")
+        # Reload the module to pick up the env var
+        import importlib
+        from opik_backend.studio import metrics
+        importlib.reload(metrics)
+        yield
+        # Restore
+        importlib.reload(metrics)
+
+    def test_prefers_evaluation_metric_name(self):
+        """Test that 'evaluation_metric' is preferred over other function names."""
+        code = '''
+def helper_function(dataset_item, llm_output):
+    return ScoreResult(name="helper", value=0.5, reason="Helper")
+
+def evaluation_metric(dataset_item, llm_output):
+    return ScoreResult(name="eval", value=1.0, reason="Preferred")
+
+def another_helper(dataset_item, llm_output):
+    return ScoreResult(name="another", value=0.3, reason="Another")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        # Should select evaluation_metric, not helper_function
+        assert result.name == "eval"
+        assert result.value == 1.0
+
+    def test_prefers_score_name(self):
+        """Test that 'score' is preferred when 'evaluation_metric' is not present."""
+        code = '''
+def helper(dataset_item, llm_output):
+    return ScoreResult(name="helper", value=0.5, reason="Helper")
+
+def score(dataset_item, llm_output):
+    return ScoreResult(name="score_fn", value=1.0, reason="Preferred")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert result.name == "score_fn"
+        assert result.value == 1.0
+
+    def test_single_candidate_selected(self):
+        """Test that a single candidate function is selected without preferred name."""
+        code = '''
+def my_custom_metric(dataset_item, llm_output):
+    return ScoreResult(name="custom", value=0.8, reason="Only candidate")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert result.name == "custom"
+        assert result.value == 0.8
+
+    def test_multiple_candidates_without_preferred_name_raises_error(self):
+        """Test that multiple candidates without a preferred name raise an error."""
+        code = '''
+def my_metric_one(dataset_item, llm_output):
+    return ScoreResult(name="one", value=0.5, reason="First")
+
+def my_metric_two(dataset_item, llm_output):
+    return ScoreResult(name="two", value=0.5, reason="Second")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Multiple metric function candidates" in str(exc_info.value)
+        assert "my_metric_one" in str(exc_info.value)
+        assert "my_metric_two" in str(exc_info.value)
+
+    def test_private_functions_ignored(self):
+        """Test that functions starting with underscore are ignored."""
+        code = '''
+def _private_helper(dataset_item, llm_output):
+    return ScoreResult(name="private", value=0.0, reason="Should be ignored")
+
+def evaluation_metric(dataset_item, llm_output):
+    return ScoreResult(name="public", value=1.0, reason="Should be selected")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert result.name == "public"
+
+    def test_class_preferred_over_function(self):
+        """Test that BaseMetric class is preferred over functions."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return ScoreResult(name="function", value=0.5, reason="Function")
+
+class MyMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        return ScoreResult(name="class", value=1.0, reason="Class preferred")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        # Class should be preferred
+        assert result.name == "class"
+
+
+class TestCodeMetricReturnValueCoercion:
+    """Tests for code metric return value coercion to ScoreResult."""
+
+    @pytest.fixture(autouse=True)
+    def enable_code_metric(self, monkeypatch):
+        """Enable code metrics for these tests."""
+        monkeypatch.setenv("OPIK_CODE_METRIC_ENABLED", "true")
+        import importlib
+        from opik_backend.studio import metrics
+        importlib.reload(metrics)
+        yield
+        importlib.reload(metrics)
+
+    def test_returns_score_result_unchanged(self):
+        """Test that ScoreResult is returned unchanged."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return ScoreResult(name="my_metric", value=0.75, reason="Test")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert isinstance(result, ScoreResult)
+        assert result.name == "my_metric"
+        assert result.value == 0.75
+        assert result.reason == "Test"
+
+    def test_coerces_float_to_score_result(self):
+        """Test that float return value is coerced to ScoreResult."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return 0.85
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert isinstance(result, ScoreResult)
+        assert result.name == "code"
+        assert result.value == 0.85
+
+    def test_coerces_int_to_score_result(self):
+        """Test that int return value is coerced to ScoreResult."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return 1
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert isinstance(result, ScoreResult)
+        assert result.name == "code"
+        assert result.value == 1.0
+
+    def test_coerces_dict_with_value_to_score_result(self):
+        """Test that dict with 'value' key is coerced to ScoreResult."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return {"value": 0.9, "name": "custom_name", "reason": "Custom reason"}
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert isinstance(result, ScoreResult)
+        assert result.name == "custom_name"
+        assert result.value == 0.9
+        assert result.reason == "Custom reason"
+
+    def test_coerces_dict_with_only_value_to_score_result(self):
+        """Test that dict with only 'value' key uses defaults."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return {"value": 0.5}
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert isinstance(result, ScoreResult)
+        assert result.name == "code"
+        assert result.value == 0.5
+
+    def test_raises_error_for_invalid_return_type(self):
+        """Test that invalid return types raise error."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return "invalid string"
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        
+        with pytest.raises(InvalidMetricError) as exc_info:
+            metric_fn({}, "test output")
+        
+        assert "must return a ScoreResult" in str(exc_info.value)
+
+    def test_raises_error_for_dict_without_value_key(self):
+        """Test that dict without 'value' key raises error."""
+        code = '''
+def evaluation_metric(dataset_item, llm_output):
+    return {"name": "test", "reason": "no value key"}
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        
+        with pytest.raises(InvalidMetricError) as exc_info:
+            metric_fn({}, "test output")
+        
+        assert "must return a ScoreResult" in str(exc_info.value)
 
 
 class TestTemplateSyntaxConversion:
