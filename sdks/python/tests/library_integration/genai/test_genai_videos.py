@@ -16,7 +16,6 @@ import google.genai as genai
 from google.genai.types import HttpOptions, GenerateVideosConfig
 from google.genai import errors as genai_errors
 import opik
-from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.genai import track_genai
 
 from ...testlib import (
@@ -134,7 +133,9 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
     EXPECTED_GENERATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
         name="models.generate_videos",
-        input=ANY_DICT.containing({"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}),
+        input=ANY_DICT.containing(
+            {"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}
+        ),
         output=ANY_DICT,
         tags=["genai"],
         metadata=ANY_DICT.containing(
@@ -152,7 +153,9 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="models.generate_videos",
-                input=ANY_DICT.containing({"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}),
+                input=ANY_DICT.containing(
+                    {"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}
+                ),
                 output=ANY_DICT,
                 tags=["genai"],
                 metadata=ANY_DICT.containing(
@@ -329,7 +332,9 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
     EXPECTED_GENERATE_TRACE = TraceModel(
         id=ANY_BUT_NONE,
         name="models.generate_videos",
-        input=ANY_DICT.containing({"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}),
+        input=ANY_DICT.containing(
+            {"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}
+        ),
         output=ANY_DICT,
         tags=["genai"],
         metadata=ANY_DICT.containing(
@@ -347,7 +352,9 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="models.generate_videos",
-                input=ANY_DICT.containing({"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}),
+                input=ANY_DICT.containing(
+                    {"prompt": prompt, "model": VIDEO_MODEL, "config": ANY_DICT}
+                ),
                 output=ANY_DICT,
                 tags=["genai"],
                 metadata=ANY_DICT.containing(
