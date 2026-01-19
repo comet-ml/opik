@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import get from "lodash/get";
 import isEmpty from "lodash/isEmpty";
-import isNumber from "lodash/isNumber";
 import { Loader2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,15 +32,14 @@ import useAppStore from "@/store/AppStore";
 import {
   generateEmptyDashboard,
   regenerateAllIds,
+  MIN_MAX_EXPERIMENTS,
+  MAX_MAX_EXPERIMENTS,
+  DEFAULT_MAX_EXPERIMENTS,
+  isValidIntegerInRange,
 } from "@/lib/dashboard/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
 import { DialogAutoScrollBody } from "@/components/ui/dialog";
-import {
-  MIN_MAX_EXPERIMENTS,
-  MAX_MAX_EXPERIMENTS,
-  DEFAULT_MAX_EXPERIMENTS,
-} from "@/lib/dashboard/utils";
 import useProjectsList from "@/api/projects/useProjectsList";
 import DashboardDialogSelectStep from "./DashboardDialogSelectStep";
 import DashboardDialogDetailsStep from "./DashboardDialogDetailsStep";
@@ -75,15 +73,10 @@ const DashboardFormSchema = z
       if (
         data.experimentDataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
       ) {
-        if (isEmpty(data.maxExperimentsCount)) {
-          return false;
-        }
-        const numValue = parseInt(data.maxExperimentsCount!, 10);
-        return (
-          isNumber(numValue) &&
-          !isNaN(numValue) &&
-          numValue >= MIN_MAX_EXPERIMENTS &&
-          numValue <= MAX_MAX_EXPERIMENTS
+        return isValidIntegerInRange(
+          data.maxExperimentsCount || "",
+          MIN_MAX_EXPERIMENTS,
+          MAX_MAX_EXPERIMENTS,
         );
       }
       return true;

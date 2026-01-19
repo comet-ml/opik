@@ -2,6 +2,8 @@ import uniqid from "uniqid";
 import cloneDeep from "lodash/cloneDeep";
 import map from "lodash/map";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
+import isString from "lodash/isString";
 import {
   BaseDashboardConfig,
   DashboardSection,
@@ -21,6 +23,7 @@ export const DASHBOARD_VERSION = 3;
 export const MIN_MAX_EXPERIMENTS = 1;
 export const MAX_MAX_EXPERIMENTS = 100;
 export const DEFAULT_MAX_EXPERIMENTS = 10;
+
 const DEFAULT_SECTION_NAME = "New section";
 
 const TEMPLATE_ID_PREFIX = "template:";
@@ -265,4 +268,25 @@ export const updateWidgetWithGeneratedTitle = (
     ...merged,
     generatedTitle,
   };
+};
+
+export const isValidIntegerInRange = (
+  value: string,
+  min: number,
+  max: number,
+): boolean => {
+  if (!isString(value) || isEmpty(value)) {
+    return false;
+  }
+  const trimmedValue = value.trim();
+  if (isEmpty(trimmedValue)) {
+    return false;
+  }
+  const numValue = Number(trimmedValue);
+  return (
+    Number.isInteger(numValue) &&
+    String(numValue) === trimmedValue &&
+    numValue >= min &&
+    numValue <= max
+  );
 };

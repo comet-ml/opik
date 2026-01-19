@@ -1,6 +1,4 @@
 import { z } from "zod";
-import isNumber from "lodash/isNumber";
-import isEmpty from "lodash/isEmpty";
 import { COLUMN_TYPE } from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
 import { CHART_TYPE } from "@/constants/chart";
@@ -9,6 +7,7 @@ import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/
 import {
   MIN_MAX_EXPERIMENTS,
   MAX_MAX_EXPERIMENTS,
+  isValidIntegerInRange,
 } from "@/lib/dashboard/utils";
 
 const GroupSchema = z.object({
@@ -37,14 +36,10 @@ export const ExperimentsFeedbackScoresWidgetSchema = z
         data.dataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP &&
         data.overrideDefaults
       ) {
-        if (isEmpty(data.maxExperimentsCount)) {
-          return false;
-        }
-        const numValue = parseInt(data.maxExperimentsCount!, 10);
-        return (
-          isNumber(numValue) &&
-          numValue >= MIN_MAX_EXPERIMENTS &&
-          numValue <= MAX_MAX_EXPERIMENTS
+        return isValidIntegerInRange(
+          data.maxExperimentsCount || "",
+          MIN_MAX_EXPERIMENTS,
+          MAX_MAX_EXPERIMENTS,
         );
       }
       return true;

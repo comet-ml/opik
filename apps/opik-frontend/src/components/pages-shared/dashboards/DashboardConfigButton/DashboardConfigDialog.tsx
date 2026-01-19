@@ -2,8 +2,6 @@ import React, { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import isEmpty from "lodash/isEmpty";
-import isNumber from "lodash/isNumber";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +18,7 @@ import {
   MIN_MAX_EXPERIMENTS,
   MAX_MAX_EXPERIMENTS,
   DEFAULT_MAX_EXPERIMENTS,
+  isValidIntegerInRange,
 } from "@/lib/dashboard/utils";
 import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
 import {
@@ -44,15 +43,10 @@ const DashboardConfigFormSchema = z
       if (
         data.experimentDataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
       ) {
-        if (isEmpty(data.maxExperimentsCount)) {
-          return false;
-        }
-        const numValue = parseInt(data.maxExperimentsCount!, 10);
-        return (
-          isNumber(numValue) &&
-          !isNaN(numValue) &&
-          numValue >= MIN_MAX_EXPERIMENTS &&
-          numValue <= MAX_MAX_EXPERIMENTS
+        return isValidIntegerInRange(
+          data.maxExperimentsCount || "",
+          MIN_MAX_EXPERIMENTS,
+          MAX_MAX_EXPERIMENTS,
         );
       }
       return true;
