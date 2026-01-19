@@ -279,7 +279,7 @@ const DashboardDataSourceSection: React.FC<DashboardDataSourceSectionProps> = ({
                 columns={EXPERIMENT_FILTER_COLUMNS as ColumnData<unknown>[]}
                 onChange={handleFiltersChange}
                 label="Filters"
-                description="Use filters to target specific experiments, or leave empty to apply to all."
+                description="Filter experiments shown in widgets that use experiment data. Leave empty to include all experiments."
                 errors={filterErrors}
               />
               <FormItem>
@@ -299,7 +299,7 @@ const DashboardDataSourceSection: React.FC<DashboardDataSourceSectionProps> = ({
                   />
                 </FormControl>
                 <Description>
-                  Limit how many experiments are loaded (max $
+                  Limit how many experiments are loaded (max{" "}
                   {MAX_MAX_EXPERIMENTS}).
                 </Description>
                 {maxExperimentsError && (

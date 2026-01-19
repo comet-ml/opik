@@ -381,7 +381,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
                               />
                             </FormControl>
                             <Description>
-                              Limit how many experiments are loaded (max $
+                              Limit how many experiments are loaded (max{" "}
                               {MAX_MAX_EXPERIMENTS}).
                             </Description>
                             <FormMessage />
