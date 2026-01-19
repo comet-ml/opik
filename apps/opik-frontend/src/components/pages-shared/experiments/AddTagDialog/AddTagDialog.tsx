@@ -35,7 +35,25 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   };
 
   const handleAddTag = () => {
-    if (!newTag) return;
+    const tag = newTag.trim();
+
+    if (!tag) {
+      toast({
+        variant: "destructive",
+        title: "Invalid tag",
+        description: "Tag cannot be empty or contain only whitespace",
+      });
+      return;
+    }
+
+    if (tag.length > 100) {
+      toast({
+        variant: "destructive",
+        title: "Invalid tag",
+        description: "Tag cannot exceed 100 characters",
+      });
+      return;
+    }
 
     const ids = experiments.map((exp) => exp.id);
 
@@ -43,14 +61,16 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       .mutateAsync({
         ids,
         experiment: {
-          tags: [newTag],
+          tags: [tag],
         },
         mergeTags: true,
       })
       .then(() => {
         toast({
           title: "Success",
-          description: `Tag "${newTag}" added to ${experiments.length} selected experiment${experiments.length > 1 ? "s" : ""}`,
+          description: `Tag "${tag}" added to ${
+            experiments.length
+          } selected experiment${experiments.length > 1 ? "s" : ""}`,
         });
 
         if (onSuccess) {
@@ -69,7 +89,8 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            Add tag to {experiments.length} experiment{experiments.length > 1 ? "s" : ""}
+            Add tag to {experiments.length} experiment
+            {experiments.length > 1 ? "s" : ""}
           </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -78,6 +99,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
               placeholder="New tag"
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
+              maxLength={100}
               className="col-span-3"
             />
           </div>
@@ -86,7 +108,10 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleAddTag} disabled={!newTag}>
+          <Button
+            onClick={handleAddTag}
+            disabled={!newTag.trim() || newTag.length > 100}
+          >
             Add tag
           </Button>
         </DialogFooter>
