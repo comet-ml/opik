@@ -49,8 +49,9 @@ public record BreakdownConfig(
 
         if (!field.isCompatibleWith(metricType)) {
             throw new IllegalArgumentException(
-                    "Group by field '%s' is not compatible with metric type '%s'"
-                            .formatted(field.getValue(), metricType.name()));
+                    "Group by field '%s' is not compatible with metric type '%s'. This field supports %s."
+                            .formatted(field.getValue(), metricType.name(),
+                                    field.getCompatibleMetricTypesDescription()));
         }
     }
 
