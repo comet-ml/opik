@@ -24,11 +24,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import UploadField from "@/components/shared/UploadField/UploadField";
 import Loader from "@/components/shared/Loader/Loader";
+import ImportDatasetFlow from "@/components/pages/DatasetsPage/ImportDatasetFlow";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { buildDocsUrl } from "@/lib/utils";
 import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
@@ -89,6 +91,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const [description, setDescription] = useState<string>(
     dataset ? dataset.description || "" : "",
   );
+  const [mode, setMode] = useState<"create" | "import">("create");
 
   // Reset state when dialog closes or when dataset prop changes
   useEffect(() => {
@@ -100,6 +103,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       setCsvData(undefined);
       setConfirmOpen(false);
       setNameError(undefined);
+      setMode("create");
       if (!dataset) {
         setName("");
         setDescription("");
@@ -109,6 +113,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       setIsOverlayShown(false);
       setConfirmOpen(false);
       setNameError(undefined);
+      setMode("create");
       if (dataset) {
         setName(dataset.name);
         setDescription(dataset.description || "");
@@ -389,103 +394,133 @@ const AddEditDatasetDialog: React.FunctionComponent<
             </div>
           )}
           {!isEdit && (
-            <ExplainerDescription
-              className="mb-4"
-              {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_multiple_datasets]}
-            />
-          )}
-          <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="datasetName">Name</Label>
-            <Input
-              id="datasetName"
-              placeholder="Dataset name"
-              value={name}
-              className={
-                nameError &&
-                "!border-destructive focus-visible:!border-destructive"
-              }
-              onChange={(event) => {
-                setName(event.target.value);
-                setNameError(undefined);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && isValid) {
-                  event.preventDefault();
-                  csvError ? setConfirmOpen(true) : submitHandler();
-                }
-              }}
-            />
-            <span
-              className={`comet-body-xs min-h-4 ${
-                nameError ? "text-destructive" : "invisible"
-              }`}
-            >
-              {nameError || " "}
-            </span>
-          </div>
-          <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="datasetDescription">Description</Label>
-            <Textarea
-              id="datasetDescription"
-              placeholder="Dataset description"
-              className="min-h-20"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              maxLength={255}
-            />
-          </div>
-          {!isEdit && !hideUpload && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
-              <Description className="tracking-normal">
-                {isCsvUploadEnabled ? (
-                  <>
-                    Your CSV file can be up to {fileSizeLimit}MB in size. The
-                    file will be processed in the background.
-                  </>
-                ) : (
-                  <>
-                    Your CSV file can contain up to 1,000 rows, for larger
-                    datasets use the SDK instead.
-                  </>
-                )}
-                <Button variant="link" size="sm" className="h-5 px-1" asChild>
-                  <a
-                    href={buildDocsUrl("/evaluation/manage_datasets")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Learn more
-                    <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
-                  </a>
-                </Button>
-              </Description>
-              <UploadField
-                disabled={isEdit}
-                description="Drop a CSV file to upload or"
-                accept={ACCEPTED_TYPE}
-                onFileSelect={handleFileSelect}
-                errorText={csvError}
-                successText={
-                  csvFile && !csvError ? "CSV file ready to upload" : undefined
-                }
+            <>
+              <ExplainerDescription
+                className="mb-4"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_multiple_datasets]}
               />
-            </div>
+              <Tabs value={mode} onValueChange={(v) => setMode(v as "create" | "import")} className="mb-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="create">Create new</TabsTrigger>
+                  <TabsTrigger value="import">Import dataset</TabsTrigger>
+                </TabsList>
+                <TabsContent value="create" className="mt-4">
+                  <div className="flex flex-col gap-2 pb-4">
+                    <Label htmlFor="datasetName">Name</Label>
+                    <Input
+                      id="datasetName"
+                      placeholder="Dataset name"
+                      value={name}
+                      className={
+                        nameError &&
+                        "!border-destructive focus-visible:!border-destructive"
+                      }
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        setNameError(undefined);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && isValid) {
+                          event.preventDefault();
+                          csvError ? setConfirmOpen(true) : submitHandler();
+                        }
+                      }}
+                    />
+                    <span
+                      className={`comet-body-xs min-h-4 ${
+                        nameError ? "text-destructive" : "invisible"
+                      }`}
+                    >
+                      {nameError || " "}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2 pb-4">
+                    <Label htmlFor="datasetDescription">Description</Label>
+                    <Textarea
+                      id="datasetDescription"
+                      placeholder="Dataset description"
+                      className="min-h-20"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      maxLength={255}
+                    />
+                  </div>
+                  {!isEdit && !hideUpload && (
+                    <div className="flex flex-col gap-2 pb-4">
+                      <Label>Upload a CSV</Label>
+                      <Description className="tracking-normal">
+                        {isCsvUploadEnabled ? (
+                          <>
+                            Your CSV file can be up to {fileSizeLimit}MB in size. The
+                            file will be processed in the background.
+                          </>
+                        ) : (
+                          <>
+                            Your CSV file can contain up to 1,000 rows, for larger
+                            datasets use the SDK instead.
+                          </>
+                        )}
+                        <Button variant="link" size="sm" className="h-5 px-1" asChild>
+                          <a
+                            href={buildDocsUrl("/evaluation/manage_datasets")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Learn more
+                            <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
+                          </a>
+                        </Button>
+                      </Description>
+                      <UploadField
+                        disabled={isEdit}
+                        description="Drop a CSV file to upload or"
+                        accept={ACCEPTED_TYPE}
+                        onFileSelect={handleFileSelect}
+                        errorText={csvError}
+                        successText={
+                          csvFile && !csvError ? "CSV file ready to upload" : undefined
+                        }
+                      />
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="import" className="mt-4">
+                  <ImportDatasetFlow
+                    onImportSuccess={(importedDataset) => {
+                      setOpen(false);
+                      if (onDatasetCreated) {
+                        onDatasetCreated(importedDataset);
+                      }
+                    }}
+                    onCancel={() => setMode("create")}
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
           )}
         </DialogAutoScrollBody>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">
-              {isOverlayShown ? "Close" : "Cancel"}
-            </Button>
-          </DialogClose>
-          <Button
-            type="submit"
-            disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
-          >
-            {buttonText}
-          </Button>
+          {mode === "create" && (
+            <>
+              <DialogClose asChild>
+                <Button variant="outline">
+                  {isOverlayShown ? "Close" : "Cancel"}
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                disabled={!isValid}
+                onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+              >
+                {buttonText}
+              </Button>
+            </>
+          )}
+          {mode === "import" && (
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+          )}
         </DialogFooter>
       </DialogContent>
       <ConfirmDialog

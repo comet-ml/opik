@@ -218,4 +218,33 @@ public interface DatasetDAO {
     int updateStatus(@Bind("workspace_id") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetStatus status);
+
+    @SqlQuery("SELECT DISTINCT workspace_id FROM datasets WHERE visibility = 'public'")
+    List<String> findPublicWorkspaceIds();
+
+    @SqlQuery("SELECT DISTINCT workspace_id FROM datasets")
+    List<String> findAllWorkspaceIds();
+
+    @SqlQuery("SELECT COUNT(id) FROM datasets " +
+            " WHERE workspace_id = :workspace_id " +
+            " AND visibility = 'public' " +
+            " <if(name)> AND name like concat('%', :name, '%') <endif> ")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    long findPublicCount(@Bind("workspace_id") String workspaceId,
+            @Define("name") @Bind("name") String name);
+
+    @SqlQuery("SELECT * FROM datasets " +
+            " WHERE workspace_id = :workspace_id " +
+            " AND visibility = 'public' " +
+            " <if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
+            " LIMIT :limit OFFSET :offset ")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Dataset> findPublic(@Bind("limit") int limit,
+            @Bind("offset") int offset,
+            @Bind("workspace_id") String workspaceId,
+            @Define("name") @Bind("name") String name,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 }
