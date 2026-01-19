@@ -290,7 +290,7 @@ class BaseOptimizer(ABC):
 
     def _attach_agent_owner(self, agent: Any) -> None:
         """Attach this optimizer to the agent so it can push counters/cost."""
-        # TODO: Refactor _attach_agent_owner to keep this inside _llm_calls.py?
+        # TODO: Refactor _attach_agent_owner to keep this inside core/llm_calls.py?
         try:
             setattr(agent, "_optimizer_owner", self)
         except Exception:

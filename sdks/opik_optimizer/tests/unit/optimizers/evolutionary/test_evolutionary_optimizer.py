@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer, OptimizationResult
-from opik_optimizer.base_optimizer import AlgorithmResult
+from opik_optimizer.core.state import AlgorithmResult
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import (
     population_ops,
@@ -503,7 +503,7 @@ class TestEvolutionaryOptimizerAgentUsage:
         self.agent is properly assigned from context.agent.
         """
         from opik_optimizer.agents.optimizable_agent import OptimizableAgent
-        from opik_optimizer.base_optimizer import OptimizationContext
+        from opik_optimizer.core.state import OptimizationContext
 
         optimizer = EvolutionaryOptimizer(
             model="gpt-4o-mini",

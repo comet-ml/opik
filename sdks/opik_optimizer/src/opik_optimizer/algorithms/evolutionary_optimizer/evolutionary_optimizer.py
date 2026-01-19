@@ -12,11 +12,8 @@ import numpy as np
 from deap import base, tools
 from deap import creator as _creator
 
-from opik_optimizer.base_optimizer import (
-    AlgorithmResult,
-    BaseOptimizer,
-    OptimizationContext,
-)
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
 from opik_optimizer.utils.prompt_library import PromptOverrides
 from opik_optimizer.utils.logging import debug_log
 from ...api_objects import chat_prompt

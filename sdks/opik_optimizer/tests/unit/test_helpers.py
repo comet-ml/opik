@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 from opik import Dataset
 from opik_optimizer import ChatPrompt
-from opik_optimizer.base_optimizer import OptimizationContext
+from opik_optimizer.core.state import OptimizationContext
 
 if TYPE_CHECKING:
     from opik_optimizer.api_objects.types import MetricFunction

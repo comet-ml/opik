@@ -2,11 +2,8 @@ import logging
 from typing import Any, cast
 
 from opik import Dataset
-from ...base_optimizer import (
-    AlgorithmResult,
-    BaseOptimizer,
-    OptimizationContext,
-)
+from ...base_optimizer import BaseOptimizer
+from ...core.state import AlgorithmResult, OptimizationContext
 from ...utils.prompt_library import PromptOverrides
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction

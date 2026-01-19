@@ -15,9 +15,10 @@ import pytest
 from typing import Any, TYPE_CHECKING
 from unittest.mock import MagicMock
 
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import OptimizationContext
 from opik_optimizer.api_objects import chat_prompt
-from opik_optimizer.base_optimizer import AlgorithmResult
+from opik_optimizer.core.state import AlgorithmResult
 from tests.unit.test_helpers import make_mock_dataset
 
 if TYPE_CHECKING:

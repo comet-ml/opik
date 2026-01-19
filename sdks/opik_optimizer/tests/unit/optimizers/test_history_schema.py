@@ -36,7 +36,8 @@ from opik_optimizer.core.results import (
     OptimizationTrial,
 )
 from tests.unit.test_helpers import make_optimization_context
-from opik_optimizer.base_optimizer import AlgorithmResult, BaseOptimizer
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import AlgorithmResult
 
 
 def _assert_candidate_schema(entry: dict[str, Any]) -> None:

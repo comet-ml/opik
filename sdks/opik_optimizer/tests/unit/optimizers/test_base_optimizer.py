@@ -1565,7 +1565,7 @@ class TestBuildFinalResultStoppedEarly:
         expected_reason: str,
     ) -> None:
         """Test stopped_early and stop_reason logic for various finish reasons."""
-        from opik_optimizer.base_optimizer import AlgorithmResult
+        from opik_optimizer.core.state import AlgorithmResult
 
         base_context.finish_reason = finish_reason  # type: ignore[assignment]
         base_context.trials_completed = trials_completed

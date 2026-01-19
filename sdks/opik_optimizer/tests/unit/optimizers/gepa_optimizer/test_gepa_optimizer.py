@@ -201,7 +201,7 @@ class TestGepaOptimizerAgentUsage:
         in OpikGEPAAdapter and reflection operations.
         """
         from opik_optimizer.agents.optimizable_agent import OptimizableAgent
-        from opik_optimizer.base_optimizer import OptimizationContext
+        from opik_optimizer.core.state import OptimizationContext
 
         optimizer = GepaOptimizer(
             model="gpt-4o-mini",
@@ -233,7 +233,7 @@ class TestGepaOptimizerAgentUsage:
         it creates OpikGEPAAdapter which accesses the agent via the optimizer instance.
         The agent is passed in run_optimization to the adapter as self.agent.
         """
-        from opik_optimizer.base_optimizer import OptimizationContext
+        from opik_optimizer.core.state import OptimizationContext
 
         optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
 

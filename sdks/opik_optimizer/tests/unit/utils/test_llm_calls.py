@@ -22,7 +22,8 @@ from opik_optimizer.core.llm_calls import (
     StructuredOutputParsingError,
 )
 from opik_optimizer.core import llm_calls as _llm_calls
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import OptimizationContext
 from tests.unit.test_helpers import make_mock_response
 
 
