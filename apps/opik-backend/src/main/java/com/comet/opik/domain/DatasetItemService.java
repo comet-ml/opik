@@ -17,8 +17,8 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
-import com.comet.opik.infrastructure.DatasetVersioningMigrationConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -150,7 +150,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull DatasetVersioningMigrationService migrationService;
-    private final @NonNull @Config DatasetVersioningMigrationConfig migrationConfig;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     @WithSpan
@@ -2345,7 +2345,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @return a Mono that completes when the dataset is ensured to be migrated (or immediately if lazy migration is disabled)
      */
     private Mono<Void> ensureLazyMigration(UUID datasetId, String workspaceId, String userName) {
-        if (!migrationConfig.isLazyEnabled()) {
+        if (!config.getDatasetVersioningMigration().isLazyEnabled()) {
             return Mono.empty();
         }
 
