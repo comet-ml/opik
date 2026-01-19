@@ -66,13 +66,12 @@ public class OptimizationStudioService {
 
         if (response.hasEntity() && response.bufferEntity()) {
             try {
-                errorMessage = response.readEntity(ErrorMessage.class).getMessage();
-            } catch (RuntimeException parseErrorResponse) {
-                log.warn("Failed to parse error response, falling back to parsing string", parseErrorResponse);
-                try {
-                    errorMessage = response.readEntity(String.class);
-                } catch (RuntimeException parseStringResponse) {
-                    log.warn("Failed to parse error string response", parseStringResponse);
+                String body = response.readEntity(String.class);
+                if (body != null && !body.isBlank()) {
+                    errorMessage = body;
+                }
+            } catch (jakarta.ws.rs.ProcessingException | IllegalStateException parseErrorResponse) {
+                log.warn("Failed to parse error response", parseErrorResponse);
                 }
             }
         }
