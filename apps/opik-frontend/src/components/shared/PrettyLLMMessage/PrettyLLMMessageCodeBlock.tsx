@@ -10,6 +10,20 @@ import { Check, Copy } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { PrettyLLMMessageCodeBlockProps } from "./types";
 
+const PRETTY_CODEMIRROR_SETUP = {
+  foldGutter: false,
+  lineNumbers: true,
+  highlightActiveLineGutter: false,
+  highlightActiveLine: false,
+};
+
+const CODEMIRROR_EXTENSIONS = [
+  jsonLanguage,
+  EditorView.lineWrapping,
+  EditorState.readOnly.of(true),
+  EditorView.editable.of(false),
+];
+
 const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> = ({
   code,
   label = "JSON",
@@ -49,18 +63,8 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> = ({
         <CodeMirror
           theme={theme}
           value={code}
-          basicSetup={{
-            foldGutter: false,
-            lineNumbers: true,
-            highlightActiveLineGutter: false,
-            highlightActiveLine: false,
-          }}
-          extensions={[
-            jsonLanguage,
-            EditorView.lineWrapping,
-            EditorState.readOnly.of(true),
-            EditorView.editable.of(false),
-          ]}
+          basicSetup={PRETTY_CODEMIRROR_SETUP}
+          extensions={CODEMIRROR_EXTENSIONS}
         />
       </div>
     </div>

@@ -35,7 +35,7 @@ interface OpenAIToolCall {
 }
 
 interface OpenAIMessage {
-  role: string;
+  role: MessageRole;
   content?: string | OpenAIContentItem[] | null;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
@@ -44,7 +44,7 @@ interface OpenAIMessage {
 }
 
 interface OpenAICustomInputMessage {
-  role: string;
+  role: MessageRole;
   text?: string | OpenAIContentItem[] | null;
   files?: unknown[];
   tool_calls?: OpenAIToolCall[];
@@ -78,10 +78,10 @@ interface OpenAICustomOutputFormat {
 type OpenAIDirectArrayInput = OpenAIMessage[];
 
 /**
- * Generates a unique ID for a message
+ * Generates a deterministic ID for a message
  */
 const generateMessageId = (index: number, prefix: string = "msg"): string => {
-  return `${prefix}-${index}-${Date.now()}`;
+  return `${prefix}-${index}`;
 };
 
 /**
@@ -151,11 +151,20 @@ const mapCustomInputMessageContent = (
           },
         });
       } else if (item.type === "image_url") {
-        const url = item.image_url.url;
-        images.push({
-          url: url,
-          name: isPlaceholder(url) ? url : getImageName(url, index),
-        });
+        // Guard against missing or invalid image_url
+        if (
+          item.image_url &&
+          typeof item.image_url === "object" &&
+          typeof item.image_url.url === "string" &&
+          item.image_url.url.length > 0
+        ) {
+          const url = item.image_url.url;
+          images.push({
+            url: url,
+            name: isPlaceholder(url) ? url : getImageName(url, index),
+          });
+        }
+        // Skip invalid image entries silently
       }
     });
 
@@ -174,6 +183,25 @@ const mapCustomInputMessageContent = (
   // Handle tool calls (assistant requesting tools)
   if (message.tool_calls && message.tool_calls.length > 0) {
     message.tool_calls.forEach((toolCall) => {
+      // Guard: skip if function is missing or invalid
+      if (
+        !toolCall.function ||
+        typeof toolCall.function !== "object" ||
+        !toolCall.function.name ||
+        typeof toolCall.function.arguments !== "string"
+      ) {
+        // Use safe fallback
+        blocks.push({
+          blockType: "code",
+          component: PrettyLLMMessage.CodeBlock,
+          props: {
+            code: "",
+            label: toolCall.function?.name ?? `unknown tool`,
+          },
+        });
+        return;
+      }
+
       let formattedArgs = toolCall.function.arguments;
       try {
         const parsed = JSON.parse(toolCall.function.arguments);
@@ -278,12 +306,21 @@ const mapMessageContent = (
           },
         });
       } else if (item.type === "image_url") {
-        const url = item.image_url.url;
-        // Keep placeholders as-is - they will be resolved by ImageBlock using MediaContext
-        images.push({
-          url: url, // May be placeholder like "[image_0]", actual URL, or base64
-          name: isPlaceholder(url) ? url : getImageName(url, index),
-        });
+        // Guard against missing or invalid image_url
+        if (
+          item.image_url &&
+          typeof item.image_url === "object" &&
+          typeof item.image_url.url === "string" &&
+          item.image_url.url.length > 0
+        ) {
+          const url = item.image_url.url;
+          // Keep placeholders as-is - they will be resolved by ImageBlock using MediaContext
+          images.push({
+            url: url, // May be placeholder like "[image_0]", actual URL, or base64
+            name: isPlaceholder(url) ? url : getImageName(url, index),
+          });
+        }
+        // Skip invalid image entries silently
       }
     });
 
@@ -302,6 +339,25 @@ const mapMessageContent = (
   // Handle tool calls (assistant requesting tools)
   if (message.tool_calls && message.tool_calls.length > 0) {
     message.tool_calls.forEach((toolCall) => {
+      // Guard: skip if function is missing or invalid
+      if (
+        !toolCall.function ||
+        typeof toolCall.function !== "object" ||
+        !toolCall.function.name ||
+        typeof toolCall.function.arguments !== "string"
+      ) {
+        // Use safe fallback
+        blocks.push({
+          blockType: "code",
+          component: PrettyLLMMessage.CodeBlock,
+          props: {
+            code: "",
+            label: toolCall.function?.name ?? `unknown tool`,
+          },
+        });
+        return;
+      }
+
       // Try to parse and pretty-print the arguments JSON
       let formattedArgs = toolCall.function.arguments;
       try {
@@ -470,7 +526,7 @@ const mapCustomInputFormat = (
 const mapCustomOutputFormat = (
   data: OpenAICustomOutputFormat,
 ): LLMMessageDescriptor[] => {
-  if (!data.text || typeof data.text !== "string") {
+  if (typeof data.text !== "string") {
     return [];
   }
 
