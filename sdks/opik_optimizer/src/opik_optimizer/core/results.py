@@ -194,6 +194,14 @@ class OptimizationHistoryState:
     def _next_trial_index(self, entry: OptimizationRound) -> int:
         return sum(len(e.trials) for e in self.entries) + len(entry.trials)
 
+    @staticmethod
+    def _normalize_candidate_payload(candidate: Any) -> Any:
+        if candidate is None:
+            return None
+        if isinstance(candidate, (chat_prompt.ChatPrompt, dict)):
+            return candidate
+        return {"value": candidate}
+
     def _normalize_candidates(
         self, candidates: list[dict[str, Any]] | list[OptimizerCandidate] | None
     ) -> list[dict[str, Any]] | None:
@@ -206,7 +214,9 @@ class OptimizationHistoryState:
                 normalized.append(candidate.to_dict())
                 continue
             if not isinstance(candidate, dict):
-                normalized.append({"candidate": candidate})
+                normalized.append(
+                    {"candidate": self._normalize_candidate_payload(candidate)}
+                )
                 continue
 
             payload = dict(candidate)
@@ -214,6 +224,7 @@ class OptimizationHistoryState:
             prompt_payload = payload.pop("prompt", payload.pop("prompts", None))
             if prompt_payload is None and "candidate" in payload:
                 prompt_payload = payload.pop("candidate")
+            prompt_payload = self._normalize_candidate_payload(prompt_payload)
             score = payload.pop("score", None)
             metrics = payload.pop("metrics", None)
             notes = payload.pop("notes", payload.pop("reason", None))
@@ -233,7 +244,7 @@ class OptimizationHistoryState:
                     "id": candidate_id,
                     "candidate": prompt_payload
                     if prompt_payload is not None
-                    else candidate,
+                    else self._normalize_candidate_payload(candidate),
                     "score": score,
                     "metrics": metrics,
                     "notes": notes,
@@ -331,6 +342,7 @@ class OptimizationHistoryState:
             candidate_payload = dict(candidate_payload_raw)
         else:
             candidate_payload = candidate_payload_raw
+        candidate_payload = self._normalize_candidate_payload(candidate_payload)
         dataset_split_val = dataset_split or self._default_dataset_split
         trial = OptimizationTrial(
             trial_index=int(trial_index) if isinstance(trial_index, int) else None,
@@ -359,6 +371,15 @@ class OptimizationHistoryState:
                 else max(self._best_so_far, score_val)
             )
             entry.best_so_far = self._best_so_far
+        if candidates is None and candidate_payload is not None:
+            candidates = [
+                {
+                    "candidate": candidate_payload,
+                    "score": score_val,
+                    "metrics": metrics,
+                    "extra": extras,
+                }
+            ]
         if candidates:
             normalized_candidates = self._normalize_candidates(candidates) or []
             entry.candidates = (entry.candidates or []) + normalized_candidates

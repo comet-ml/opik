@@ -101,6 +101,19 @@ def test_algorithm_result_accepts_typed_rounds(
     assert result.history[0]["round_index"] == 0
 
 
+def test_history_state_normalizes_scalar_candidate() -> None:
+    state = optimization_result.OptimizationHistoryState()
+    handle = state.start_round(round_index=0)
+    state.record_trial(round_handle=handle, score=0.1, candidate="example")
+    entries = state.get_entries()
+    assert entries
+    candidates = entries[0].get("candidates") or []
+    assert candidates
+    candidate_payload = candidates[0].get("candidate")
+    assert isinstance(candidate_payload, dict)
+    assert candidate_payload.get("value") == "example"
+
+
 @pytest.mark.parametrize(
     "optimizer_cls",
     [

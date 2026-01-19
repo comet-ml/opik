@@ -21,14 +21,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik_optimizer.base_optimizer import (
-    BaseOptimizer,
-    OptimizationContext,
-    AlgorithmResult,
-)
+from opik_optimizer.base_optimizer import BaseOptimizer, AlgorithmResult
 from opik_optimizer.core import agent as agent_utils
 from opik_optimizer.core import state as state_utils
-from opik_optimizer.core.state import get_current_context
+from opik_optimizer.core.state import OptimizationContext
 from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer import ChatPrompt
@@ -368,7 +364,7 @@ def test_evaluate_forwards_configured_n_threads(
     metric = MagicMock()
     agent = MagicMock()
 
-    optimizer._context = make_optimization_context(
+    context = make_optimization_context(
         simple_chat_prompt,
         dataset=dataset,
         metric=metric,
@@ -396,7 +392,7 @@ def test_evaluate_forwards_configured_n_threads(
 
     monkeypatch.setattr(ConcreteOptimizer, "evaluate_prompt", fake_evaluate_prompt)
 
-    score = optimizer.evaluate({"main": simple_chat_prompt})
+    score = optimizer.evaluate(context, {"main": simple_chat_prompt})
 
     assert score == 0.5
     assert captured_call["n_threads"] == optimizer.n_threads
@@ -466,7 +462,7 @@ def test_evaluate_coerces_infinite_scores(
     metric = MagicMock()
     agent = MagicMock()
 
-    optimizer._context = make_optimization_context(
+    context = make_optimization_context(
         simple_chat_prompt,
         dataset=dataset,
         metric=metric,
@@ -492,11 +488,9 @@ def test_evaluate_coerces_infinite_scores(
 
     monkeypatch.setattr(ConcreteOptimizer, "evaluate_prompt", fake_evaluate_prompt)
 
-    score = optimizer.evaluate({"main": simple_chat_prompt})
+    score = optimizer.evaluate(context, {"main": simple_chat_prompt})
 
     assert score == float("inf")
-    context = get_current_context()
-    assert context is not None
     assert context.current_best_score == float("inf")
     assert context.trials_completed == 1
 
@@ -540,8 +534,6 @@ def test_on_trial_handles_non_finite_scores(
     )
     context.current_best_score = float("inf")
     context.trials_completed = 1
-    optimizer._context = context
-
     captured: dict[str, Any] = {}
 
     def fake_display_evaluation_progress(**kwargs):
@@ -609,14 +601,13 @@ def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:
         agent=agent,
         max_trials=5,
     )
-    optimizer._context = context
 
     def fake_eval(*args, **kwargs):
         return 0.9
 
     optimizer.evaluate_prompt = fake_eval  # type: ignore[assignment]
 
-    optimizer.evaluate({"main": simple_chat_prompt})
+    optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert context.should_stop is True
     assert context.finish_reason == "perfect_score"
     from opik_optimizer.core.results import OptimizationHistoryState
@@ -643,14 +634,13 @@ def test_evaluate_sets_finish_reason_on_max_trials(simple_chat_prompt) -> None:
         agent=agent,
         max_trials=1,
     )
-    optimizer._context = context
 
     def fake_eval(*args, **kwargs):
         return 0.1
 
     optimizer.evaluate_prompt = fake_eval  # type: ignore[assignment]
 
-    optimizer.evaluate({"main": simple_chat_prompt})
+    optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert context.should_stop is True
     assert context.finish_reason == "max_trials"
     assert context.trials_completed == 1
@@ -1004,7 +994,6 @@ def test_pre_trial_invoked_during_evaluate(
         agent=agent,
         max_trials=5,
     )
-    optimizer._context = context
 
     monkeypatch.setattr(
         optimizer,
@@ -1012,7 +1001,7 @@ def test_pre_trial_invoked_during_evaluate(
         lambda **kwargs: 0.5,
     )
 
-    optimizer.evaluate({"main": simple_chat_prompt})
+    optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert optimizer.pre_trial_called is True
 
 
@@ -1044,7 +1033,6 @@ def test_on_trial_called_after_evaluation(
         agent=agent,
         max_trials=5,
     )
-    optimizer._context = context
 
     monkeypatch.setattr(
         optimizer,
@@ -1052,7 +1040,7 @@ def test_on_trial_called_after_evaluation(
         lambda **kwargs: 0.5,
     )
 
-    optimizer.evaluate({"main": simple_chat_prompt})
+    optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert optimizer.on_trial_called is True
 
 
@@ -1085,7 +1073,6 @@ def test_post_trial_not_called_by_evaluate(
         agent=agent,
         max_trials=5,
     )
-    optimizer._context = context
 
     monkeypatch.setattr(
         optimizer,
@@ -1093,7 +1080,7 @@ def test_post_trial_not_called_by_evaluate(
         lambda **kwargs: 0.5,
     )
 
-    optimizer.evaluate({"main": simple_chat_prompt})
+    optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert optimizer.post_trial_called is False
 
 

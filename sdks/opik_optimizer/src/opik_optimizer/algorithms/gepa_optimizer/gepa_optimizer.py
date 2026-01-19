@@ -354,7 +354,7 @@ class GepaOptimizer(BaseOptimizer):
                     try:
                         # Use base evaluate() to ensure trial counters and best tracking update
                         context.evaluation_dataset = dataset
-                        score = self.evaluate(prompt_variants)
+                        score = self.evaluate(context, prompt_variants)
                         score = float(score)
                     except Exception:
                         logger.debug(

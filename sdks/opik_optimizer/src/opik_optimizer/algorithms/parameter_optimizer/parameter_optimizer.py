@@ -290,8 +290,6 @@ class ParameterOptimizer(BaseOptimizer):
             baseline_score=None,
             extra_params={},
         )
-        self._context = context
-
         # Evaluate baseline with reporting
         with reporting.display_evaluation(
             verbose=self.verbose,

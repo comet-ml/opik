@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 from collections.abc import Sequence
-from contextvars import ContextVar
 
 from opik import Dataset
 from opik.api_objects import optimization
@@ -110,32 +109,6 @@ class AlgorithmResult:
         if not isinstance(self.history, list):
             raise TypeError("AlgorithmResult.history must be a list of history entries")
         self.history = list(self.history)
-
-
-_CURRENT_CONTEXT: ContextVar[OptimizationContext | None] = ContextVar(
-    "opik_optimizer_current_context",
-    default=None,
-)
-
-
-def set_current_context(context: OptimizationContext | None) -> None:
-    """Set the active optimization context for the current execution scope."""
-    # TODO: Remove this once context is passed explicitly through all flows.
-    _CURRENT_CONTEXT.set(context)
-
-
-def get_current_context() -> OptimizationContext | None:
-    """Return the active optimization context, if any."""
-    return _CURRENT_CONTEXT.get()
-
-
-def require_current_context() -> OptimizationContext:
-    """Return the active optimization context or raise if not set."""
-    # TODO: Replace this with explicit context passing in algorithm code.
-    context = _CURRENT_CONTEXT.get()
-    if context is None:
-        raise RuntimeError("No active optimization context is set.")
-    return context
 
 
 def get_optimizer_metadata(optimizer: Any) -> dict[str, Any]:

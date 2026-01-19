@@ -543,6 +543,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 # Convert individual to ChatPrompt dict and use centralized evaluate()
                 prompts_bundle = self._individual_to_prompts(individual)
                 primary_fitness_score = self.evaluate(
+                    context,
                     prompts_bundle,
                     experiment_config=(experiment_config or {}).copy(),
                 )
@@ -564,6 +565,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 # Convert individual to ChatPrompt dict and use centralized evaluate()
                 prompts_bundle = self._individual_to_prompts(individual)
                 fitness_score = self.evaluate(
+                    context,
                     prompts_bundle,
                     experiment_config=(experiment_config or {}).copy(),
                 )

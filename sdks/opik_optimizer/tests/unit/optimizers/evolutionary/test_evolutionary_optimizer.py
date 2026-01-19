@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer, OptimizationResult
-from opik_optimizer.core.state import AlgorithmResult, get_current_context
+from opik_optimizer.core.state import AlgorithmResult
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import (
     population_ops,
@@ -59,7 +59,7 @@ def _minimize_generation_work(monkeypatch: pytest.MonkeyPatch) -> None:
         hof: Any,
         best_primary_score_overall: float,
     ) -> tuple[list[Any], int]:
-        context = get_current_context()
+        context = getattr(self, "_test_context", None)
         if context is not None:
             context.trials_completed += 1
             if context.current_best_score is None:
@@ -74,10 +74,11 @@ def _fast_run_optimization(monkeypatch: pytest.MonkeyPatch) -> None:
     """Short-circuit run_optimization while keeping trial/accounting semantics."""
 
     def _run_optimization(self, context):  # type: ignore[no-untyped-def]
+        self._test_context = context
         if context.validation_dataset is not None:
             context.evaluation_dataset = context.validation_dataset
 
-        self.evaluate(context.prompts)
+        self.evaluate(context, context.prompts)
 
         if context.current_best_prompt is None:
             context.current_best_prompt = context.prompts
@@ -96,8 +97,12 @@ def _fast_run_optimization(monkeypatch: pytest.MonkeyPatch) -> None:
 def _fast_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Skip display/stop checks while still calling evaluate_prompt."""
 
-    def _evaluate(self, prompts, experiment_config=None):  # type: ignore[no-untyped-def]
-        context = self._context
+    def _evaluate(  # type: ignore[no-untyped-def]
+        self,
+        context,
+        prompts,
+        experiment_config=None,
+    ):
         score = self.evaluate_prompt(
             prompt=prompts,
             dataset=context.evaluation_dataset,
@@ -463,7 +468,7 @@ class TestEvolutionaryOptimizerAgentUsage:
         # Track if optimizer.agent is set during evaluation
         agent_set_during_eval = [False]
 
-        def mock_evaluate(*args, **kwargs):
+        def mock_evaluate(_context, *args, **kwargs):
             # During evaluation, optimizer.agent should be set
             agent_set_during_eval[0] = (
                 hasattr(optimizer, "agent") and optimizer.agent is not None

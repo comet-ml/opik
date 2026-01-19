@@ -365,7 +365,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # - Early stop checking (sets should_stop flag)
                     # - Best score/prompt tracking
                     # - Display via on_trial -> get_progress_state
-                    prompt_score = self.evaluate(candidate)
+                    prompt_score = self.evaluate(context, candidate)
 
                     # Update the round's best score if this candidate is better
                     if prompt_score > current_round_best_score:

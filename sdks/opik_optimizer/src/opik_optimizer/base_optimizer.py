@@ -37,8 +37,6 @@ from .core.state import (
     OptimizationContext,
     build_optimization_metadata,
     prepare_experiment_config,
-    require_current_context,
-    set_current_context,
 )
 from .utils.logging import debug_log
 from .utils.prompt_library import PromptLibrary, PromptOverrides
@@ -132,23 +130,6 @@ class BaseOptimizer(ABC):
 
         # Initialize prompt library with overrides
         self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
-
-    @property
-    def _context(self) -> OptimizationContext:
-        """
-        Access the current optimization context.
-
-        This property is only valid during an active optimization run.
-        It returns the non-optional type since these methods are only
-        called when optimization is in progress.
-        """
-        # TODO: Replace this with explicit context passing in algorithm code.
-        return require_current_context()
-
-    @_context.setter
-    def _context(self, value: OptimizationContext | None) -> None:
-        # TODO: Remove the setter once all callers pass context explicitly.
-        set_current_context(value)
 
     @property
     def prompts(self) -> PromptLibrary:
@@ -508,6 +489,7 @@ class BaseOptimizer(ABC):
 
     def evaluate(
         self,
+        context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         experiment_config: dict[str, Any] | None = None,
     ) -> float:
@@ -525,6 +507,7 @@ class BaseOptimizer(ABC):
         to determine if they should exit their loop.
 
         Args:
+            context: Optimization context for this run.
             prompts: Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}).
                      Single-prompt optimizations use a dict with one entry.
             experiment_config: Optional experiment configuration.
@@ -534,14 +517,10 @@ class BaseOptimizer(ABC):
 
         Example:
             for candidate in candidates:
-                score = self.evaluate(candidate)
-                if self._context.should_stop:
+                score = self.evaluate(context, candidate)
+                if context.should_stop:
                     break
         """
-        # TODO: Replace _context usage with explicit context passing.
-        context = self._context
-        if context is None:
-            raise RuntimeError("No optimization context available for evaluation.")
         self.pre_trial(context, prompts)
         try:
             score = self.evaluate_prompt(
@@ -614,7 +593,7 @@ class BaseOptimizer(ABC):
         The method should:
         1. Control the optimization loop (when/how to generate candidates)
         2. Generate candidate prompts using algorithm-specific logic
-        3. Call self.evaluate(prompts) for each candidate
+        3. Call self.evaluate(context, prompts) for each candidate
         4. Check context.should_stop after evaluations
         5. Return AlgorithmResult with best prompt and score
 
@@ -906,8 +885,6 @@ class BaseOptimizer(ABC):
         # Allow subclasses to perform pre-optimization setup (e.g., set self.agent)
         self.pre_optimize(context)
 
-        # Store context for use by evaluate() method
-        self._context = context
         return context
 
     def _run_baseline(self, context: OptimizationContext) -> float:
@@ -1217,6 +1194,7 @@ class BaseOptimizer(ABC):
         self,
         round_handle: Any,
         *,
+        context: OptimizationContext | None = None,
         best_score: float | None = None,
         best_candidate: Any | None = None,
         best_prompt: Any | None = None,
@@ -1229,13 +1207,8 @@ class BaseOptimizer(ABC):
         selection_meta: dict[str, Any] | None = None,
     ) -> None:
         """Finalize a history round."""
-        if stop_reason is None:
-            try:
-                context = self._context
-            except Exception:
-                context = None
-            if context is not None and context.should_stop:
-                stop_reason = context.finish_reason or "stopped"
+        if stop_reason is None and context is not None and context.should_stop:
+            stop_reason = context.finish_reason or "stopped"
         if hasattr(self._history_builder, "end_round"):
             self._history_builder.end_round(
                 round_handle=round_handle,
@@ -1281,8 +1254,7 @@ class BaseOptimizer(ABC):
             logger.debug(
                 f"Optimization {context.optimization_id} status updated to {status}."
             )
-        # Clear context reference to allow garbage collection
-        self._context = None
+        # No implicit context storage; nothing to clear here.
 
     @overload
     def evaluate_prompt(

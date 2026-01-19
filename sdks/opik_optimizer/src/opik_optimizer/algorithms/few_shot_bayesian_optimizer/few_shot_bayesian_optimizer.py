@@ -552,7 +552,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # - Trial counting (context.trials_completed)
                 # - Early stop checks (perfect score, max trials)
                 # - Progress display hooks
-                score = self.evaluate(prompts_with_examples, trial_config)
+                score = self.evaluate(context, prompts_with_examples, trial_config)
             finally:
                 # Clear custom task state
                 self._custom_evaluated_task = None

@@ -77,15 +77,6 @@ def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
         else "UnknownOptimizer",
         "opik_call_type": call_type,
     }
-    try:
-        ctx = getattr(optimizer, "_context", None)
-        if ctx and getattr(ctx, "optimization_id", None):
-            metadata["opik"] = {
-                "optimization_id": ctx.optimization_id,
-                "project_name": getattr(ctx, "project_name", None),
-            }
-    except Exception:
-        pass
     return metadata
 
 
