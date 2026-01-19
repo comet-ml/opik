@@ -1146,6 +1146,9 @@ class TraceDAOImpl implements TraceDAO {
                 <if(sort_has_span_statistics)>
                 LEFT JOIN spans_agg s ON t.id = s.trace_id
                 <endif>
+                <if(sort_has_experiment)>
+                LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
+                <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = t.id
                 <endif>
@@ -2921,7 +2924,9 @@ class TraceDAOImpl implements TraceDAO {
             template.add("log_comment", logComment);
 
             var finalTemplate = template;
-            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
+            // Field mapping for experiment - sort by experiment name (tuple element 2)
+            var fieldMapping = Map.of("experiment", "eaag.experiment.2");
+            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), fieldMapping))
                     .ifPresent(sortFields -> {
 
                         if (sortFields.contains("feedback_scores")) {
@@ -2930,6 +2935,10 @@ class TraceDAOImpl implements TraceDAO {
 
                         if (hasSpanStatistics(sortFields)) {
                             finalTemplate.add("sort_has_span_statistics", true);
+                        }
+
+                        if (sortFields.contains("experiment") || sortFields.contains("eaag.experiment")) {
+                            finalTemplate.add("sort_has_experiment", true);
                         }
 
                         finalTemplate.add("sort_fields", sortFields);
