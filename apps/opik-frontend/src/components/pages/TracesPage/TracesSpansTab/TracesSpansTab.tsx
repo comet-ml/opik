@@ -109,7 +109,7 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import ExperimentCell from "@/components/shared/DataTableCells/ExperimentCell";
-import { Filter } from "@/types/filters";
+import { Filter, FilterOperator } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -434,8 +434,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 keyComponentProps: {
                   className: "w-full min-w-72",
                 },
-                defaultOperator: "contains",
-                operators: [{ label: "contains", value: "contains" }],
+                defaultOperator: "=" as FilterOperator,
+                operators: [{ label: "=", value: "=" as FilterOperator }],
               },
             }
           : {}),
