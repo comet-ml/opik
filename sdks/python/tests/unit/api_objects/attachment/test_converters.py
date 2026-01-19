@@ -96,7 +96,9 @@ def test_attachment_to_message__content_type():
     url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
-    attachment_data = attachment.Attachment(data="test.pdf", content_type="image/jpeg")
+    attachment_data = attachment.Attachment(
+        data="test.pdf", content_type="image/jpeg", create_temp_copy=False
+    )
 
     message = converters.attachment_to_message(
         attachment_data=attachment_data,
