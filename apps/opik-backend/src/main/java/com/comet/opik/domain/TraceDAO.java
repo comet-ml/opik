@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
+import com.comet.opik.api.ExperimentReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
@@ -1084,6 +1085,23 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
+            ), experiments_agg AS (
+                SELECT
+                    ei.trace_id,
+                    tuple(e.id, e.name) AS experiment
+                FROM experiment_items ei
+                INNER JOIN (
+                    SELECT id, name
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) e ON ei.experiment_id = e.id
+                WHERE ei.workspace_id = :workspace_id
+                <if(uuid_from_time)> AND ei.trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND ei.trace_id \\<= :uuid_to_time <endif>
+                ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                LIMIT 1 BY ei.trace_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1224,12 +1242,14 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
+                  <if(!exclude_experiment)>, eaag.experiment AS experiment<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+             <if(!exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2794,6 +2814,8 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .experiment(
+                        mapExperiment(getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment", List.class)))
                 .build();
     }
 
@@ -2811,6 +2833,19 @@ class TraceDAOImpl implements TraceDAO {
                         .details(JsonNodeFactory.instance.objectNode())
                         .build())
                 .toList());
+    }
+
+    private ExperimentReference mapExperiment(List<Object> experiment) {
+        if (experiment == null || experiment.isEmpty()) {
+            return null;
+        }
+        // Tuple from ClickHouse: (id, name)
+        String idStr = (String) experiment.get(0);
+        String name = (String) experiment.get(1);
+        if (StringUtils.isBlank(idStr) || StringUtils.isBlank(name)) {
+            return null;
+        }
+        return new ExperimentReference(UUID.fromString(idStr), name);
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
@@ -2964,6 +2999,8 @@ class TraceDAOImpl implements TraceDAO {
                                 fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
                         template.add("exclude_has_tool_spans",
                                 fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
+                        template.add("exclude_experiment",
+                                fields.contains(Trace.TraceField.EXPERIMENT.getValue()));
                     }
                 });
     }

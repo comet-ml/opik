@@ -106,6 +106,7 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
+import ExperimentCell from "@/components/shared/DataTableCells/ExperimentCell";
 import { Filter } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
@@ -842,6 +843,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 asId: true,
               },
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
+            },
+            {
+              id: "experiment",
+              label: "Experiment",
+              type: COLUMN_TYPE.string,
+              cell: ExperimentCell as never,
+              accessorFn: (row: BaseTraceData) => get(row, "experiment"),
             },
           ]
         : []),
