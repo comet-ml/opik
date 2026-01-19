@@ -71,7 +71,7 @@ public class OptimizationStudioService {
         String errorMessage = extractErrorMessage(response);
         log.error("Python code generation failed with HTTP {}: {}", statusCode, errorMessage);
 
-        if (statusCode == 400) {
+        if (statusInfo.getFamily() == Response.Status.Family.CLIENT_ERROR) {
             throw new BadRequestException(errorMessage);
         }
 
