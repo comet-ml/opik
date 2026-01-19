@@ -1,0 +1,56 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import get from "lodash/get";
+
+import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
+import { Experiment } from "@/types/datasets";
+import { useToast } from "@/components/ui/use-toast";
+
+type UseExperimentBatchUpdateMutationParams = {
+  ids: string[];
+  experiment: Partial<Experiment>;
+  mergeTags?: boolean;
+};
+
+const useExperimentBatchUpdateMutation = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({
+      ids,
+      experiment,
+      mergeTags = false,
+    }: UseExperimentBatchUpdateMutationParams) => {
+      const { data } = await api.patch(`${EXPERIMENTS_REST_ENDPOINT}batch`, {
+        ids,
+        update: experiment,
+        merge_tags: mergeTags,
+      });
+      return data;
+    },
+    onError: (error: AxiosError) => {
+      const message = get(
+        error,
+        ["response", "data", "message"],
+        error.message,
+      );
+
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["experiments"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["experiment"],
+      });
+    },
+  });
+};
+
+export default useExperimentBatchUpdateMutation;

@@ -16,6 +16,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -599,6 +600,14 @@ public class ExperimentService {
                     log.error("Failed to update experiment with id '{}'", id, throwable);
                     return Mono.error(throwable);
                 });
+    }
+
+    public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
+
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        return experimentDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()));
     }
 
     private NotFoundException newNotFoundException(String message) {

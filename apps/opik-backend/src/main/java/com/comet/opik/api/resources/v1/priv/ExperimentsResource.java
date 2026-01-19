@@ -16,6 +16,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.IdsHolder;
@@ -286,6 +287,28 @@ public class ExperimentsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Updated experiment with id '{}', workspaceId '{}'", id, workspaceId);
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/batch")
+    @Operation(operationId = "batchUpdateExperiments", summary = "Batch update experiments", description = "Update multiple experiments", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentBatchUpdate.class))) @Valid @NotNull ExperimentBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' experiments on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        experimentService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' experiments on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
         return Response.noContent().build();
     }
 
