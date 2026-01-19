@@ -646,4 +646,86 @@ describe("migrateDashboardConfig", () => {
       });
     });
   });
+
+  describe("migration from v2 to v3", () => {
+    it("should migrate dashboard from version 2 to 3 and add default config fields", () => {
+      const v2Dashboard: DashboardState = {
+        version: 2,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [],
+            layout: [],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.version).toBe(3);
+      expect(result.config.experimentDataSource).toBe(
+        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+      );
+      expect(result.config.experimentFilters).toEqual([]);
+      expect(result.config.maxExperimentsCount).toBe(10);
+    });
+
+    it("should preserve existing config values", () => {
+      const v2Dashboard: DashboardState = {
+        version: 2,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [],
+            layout: [],
+          },
+        ],
+        lastModified: Date.now(),
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+          maxExperimentsCount: 25,
+        },
+      };
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.config.experimentDataSource).toBe(
+        EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      );
+      expect(result.config.maxExperimentsCount).toBe(25);
+    });
+
+    it("should add maxExperimentsCount to EXPERIMENTS_FEEDBACK_SCORES widgets", () => {
+      const v2Dashboard: DashboardState = {
+        version: 2,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+      };
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.sections[0].widgets[0].config.maxExperimentsCount).toBe(10);
+    });
+  });
 });
