@@ -262,11 +262,15 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
                             FieldType.ERROR_CONTAINER,
+                            "empty(%1$s)",
+                            FieldType.LIST,
                             "empty(%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
                             FieldType.ERROR_CONTAINER,
+                            "notEmpty(%1$s)",
+                            FieldType.LIST,
                             "notEmpty(%1$s)")))
                     .build());
 
