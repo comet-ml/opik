@@ -1715,7 +1715,8 @@ class ExperimentDAO {
                 .doOnSuccess(__ -> log.info("Completed bulk update for '{}' experiments", ids.size()));
     }
 
-    private ST buildBulkUpdateTemplate(ExperimentUpdate experimentUpdate, String sql, boolean mergeTags, String workspaceId) {
+    private ST buildBulkUpdateTemplate(ExperimentUpdate experimentUpdate, String sql, boolean mergeTags,
+            String workspaceId) {
         var template = getSTWithLogComment(sql, "bulk_update_experiments", workspaceId, "");
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
