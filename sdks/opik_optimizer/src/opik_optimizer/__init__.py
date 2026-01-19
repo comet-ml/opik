@@ -18,7 +18,7 @@ from .algorithms import (
     ParameterOptimizer,
 )
 from .utils.logging import setup_logging
-from .optimization_result import OptimizationResult
+from .core.results import OptimizationResult
 from .metrics.multi_metric_objective import MultiMetricObjective
 
 # FIXME: Remove once LiteLLM issue is resolved

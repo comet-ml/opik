@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from typing import Any
 
 from opik_optimizer import ChatPrompt
-from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.core.results import OptimizationResult
 from opik_optimizer.utils.display import (
     format_float,
     format_prompt_for_plaintext,
@@ -442,7 +442,7 @@ class TestOptimizationResultDisplay:
             score=0.85,
             metric_name="accuracy",
         )
-        with patch("opik_optimizer.optimization_result.get_console") as mock_console:
+        with patch("opik_optimizer.core.results.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
             mock_console.return_value.print.assert_called_once()
@@ -457,7 +457,7 @@ class TestOptimizationResultDisplay:
             optimization_id="opt-123",
             dataset_id="ds-123",
         )
-        with patch("opik_optimizer.optimization_result.get_console") as mock_console:
+        with patch("opik_optimizer.core.results.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
             from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
@@ -478,7 +478,7 @@ class TestOptimizationResultDisplay:
             score=0.85,
             metric_name="accuracy",
         )
-        with patch("opik_optimizer.optimization_result.get_console") as mock_console:
+        with patch("opik_optimizer.core.results.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
             mock_console.return_value.print.assert_called_once()

@@ -8,7 +8,7 @@ from typing import Any, ContextManager, Protocol, TYPE_CHECKING
 from ...api_objects import chat_prompt
 
 if TYPE_CHECKING:
-    from ...base_optimizer import OptimizationContext
+    from ...core.state import OptimizationContext
 from .format import summarize_selection_policy
 from . import terminal as display_terminal
 

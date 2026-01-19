@@ -36,7 +36,7 @@ from .core.results import (
     OptimizationRound,
     build_candidate_entry,
 )
-from .core.state import AlgorithmResult, FinishReason, OptimizationContext
+from .core.state import AlgorithmResult, OptimizationContext
 from .utils.logging import debug_log
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate

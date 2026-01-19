@@ -15,7 +15,7 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
-from .... import _llm_calls
+from ....core import llm_calls as _llm_calls
 from ....utils.helpers import json_to_dict
 from ....utils.text import normalize_llm_text
 from .. import helpers

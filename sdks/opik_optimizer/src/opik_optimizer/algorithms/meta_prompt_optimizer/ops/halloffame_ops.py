@@ -123,7 +123,7 @@ class PromptHallOfFame:
             top_prompts, metric_name
         )
 
-        from .... import _llm_calls
+        from ....core import llm_calls as _llm_calls
 
         # Get system prompt from prompts library or use default
         if self.prompts is not None:

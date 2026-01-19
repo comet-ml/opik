@@ -1,5 +1,5 @@
 """
-Unit tests for opik_optimizer._llm_calls module.
+Unit tests for opik_optimizer.core.llm_calls module.
 
 Tests cover:
 - _build_call_time_params: Parameter filtering and building
@@ -15,13 +15,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from opik_optimizer._llm_calls import (
+from opik_optimizer.core.llm_calls import (
     _build_call_time_params,
     _prepare_model_params,
     _parse_response,
     StructuredOutputParsingError,
 )
-from opik_optimizer import _llm_calls
+from opik_optimizer.core import llm_calls as _llm_calls
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
 from tests.unit.test_helpers import make_mock_response
 
@@ -95,7 +95,7 @@ class TestPrepareModelParams:
         """Call-time params should override model parameters."""
         # Mock the Opik monitoring to return the params unchanged
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -119,7 +119,7 @@ class TestPrepareModelParams:
         # Mock returns params with empty metadata dict (simulating what the real
         # monitoring wrapper does - it ensures metadata exists)
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: {**x, "metadata": x.get("metadata", {})},
         )
 
@@ -137,7 +137,7 @@ class TestPrepareModelParams:
     ) -> None:
         """When is_reasoning=False, should not add opik_call_type metadata."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -155,7 +155,7 @@ class TestPrepareModelParams:
     ) -> None:
         """Project name should be added to metadata.opik."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -170,7 +170,7 @@ class TestPrepareModelParams:
     def test_adds_optimization_id_tags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Optimization ID should add tags to metadata.opik."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -188,7 +188,7 @@ class TestPrepareModelParams:
     ) -> None:
         """When response_model is provided, should add response_format."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -206,7 +206,7 @@ class TestPrepareModelParams:
     def test_preserves_existing_metadata(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Existing metadata should be preserved and extended, not replaced."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -427,7 +427,7 @@ class TestEdgeCases:
     ) -> None:
         """When project_name is None, existing opik.project_name should be preserved."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -457,9 +457,9 @@ class TestCallModelSync:
         mock_response = make_mock_response("response")
 
         with patch(
-            "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+            "opik_optimizer.core.llm_calls._increment_llm_counter_if_in_optimizer"
         ) as mock_inc:
-            with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
                 mock_track.return_value = lambda x: x
                 with patch("litellm.completion", return_value=mock_response):
                     _llm_calls.call_model(
@@ -472,7 +472,7 @@ class TestCallModelSync:
         """Test call_model with Pydantic response model."""
         mock_response = make_mock_response('{"name": "test", "score": 0.9}')
 
-        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
             mock_completion = MagicMock(return_value=mock_response)
             mock_track.return_value = lambda x: mock_completion
 
@@ -495,9 +495,9 @@ class TestCallModelAsync:
         mock_response = make_mock_response("response")
 
         with patch(
-            "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+            "opik_optimizer.core.llm_calls._increment_llm_counter_if_in_optimizer"
         ) as mock_inc:
-            with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
                 async_mock = AsyncMock(return_value=mock_response)
                 mock_track.return_value = lambda x: async_mock
 
@@ -512,7 +512,7 @@ class TestCallModelAsync:
         """Test call_model_async with Pydantic response model."""
         mock_response = make_mock_response('{"name": "test", "score": 0.9}')
 
-        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
             async_mock = AsyncMock(return_value=mock_response)
             mock_track.return_value = lambda x: async_mock
 
@@ -536,7 +536,7 @@ class TestCallModelAsync:
             captured_kwargs.update(kwargs)
             return mock_response
 
-        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
             mock_track.return_value = lambda x: capture_call
 
             await _llm_calls.call_model_async(
@@ -564,7 +564,7 @@ class TestCallModelAsync:
             return lambda x: AsyncMock(return_value=mock_response)
 
         with patch(
-            "opik_optimizer._llm_calls.track_completion", side_effect=capture_track
+            "opik_optimizer.core.llm_calls.track_completion", side_effect=capture_track
         ):
             await _llm_calls.call_model_async(
                 messages=[{"role": "user", "content": "test"}],

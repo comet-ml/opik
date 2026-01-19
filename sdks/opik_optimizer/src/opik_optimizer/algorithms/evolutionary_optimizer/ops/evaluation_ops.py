@@ -1,7 +1,8 @@
 from typing import Any, TYPE_CHECKING, cast
 
 
-from .... import task_evaluator, helpers
+from ....core import evaluation as task_evaluator
+from .... import helpers
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 import opik

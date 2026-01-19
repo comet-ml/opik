@@ -376,7 +376,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         def fake_evaluate(**_kwargs: Any) -> float:
             return 0.6
 
-        monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+        monkeypatch.setattr("opik_optimizer.core.evaluation.evaluate", fake_evaluate)
         monkeypatch.setattr(
             population_ops,
             "initialize_population",

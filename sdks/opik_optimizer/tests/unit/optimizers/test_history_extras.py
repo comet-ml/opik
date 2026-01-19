@@ -1,4 +1,4 @@
-from opik_optimizer.optimization_result import OptimizationHistoryState
+from opik_optimizer.core.results import OptimizationHistoryState
 
 
 def test_dataset_split_propagates_into_history() -> None:

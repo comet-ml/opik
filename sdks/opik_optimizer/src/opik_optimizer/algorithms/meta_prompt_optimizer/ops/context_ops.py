@@ -12,7 +12,7 @@ import re
 
 import opik
 from ....api_objects.types import MetricFunction
-from ....optimization_result import OptimizationRound, round_payload
+from ....core.results import OptimizationRound, round_payload
 from .. import prompts as meta_prompts
 
 logger = logging.getLogger(__name__)

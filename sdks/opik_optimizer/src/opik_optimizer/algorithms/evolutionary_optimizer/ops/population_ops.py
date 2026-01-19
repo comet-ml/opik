@@ -8,7 +8,7 @@ from deap import creator as _creator
 
 from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
-from .... import _llm_calls
+from ....core import llm_calls as _llm_calls
 from ....utils.helpers import json_to_dict
 from ....utils.prompt_library import PromptLibrary
 from ....utils.logging import compact_debug_text, debug_log

@@ -28,8 +28,8 @@ from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSpec,
 )
 from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
-from opik_optimizer import optimization_result
-from opik_optimizer.optimization_result import (
+from opik_optimizer.core import results as optimization_result
+from opik_optimizer.core.results import (
     OptimizerCandidate,
     OptimizationResult,
     OptimizationRound,
@@ -125,7 +125,7 @@ def test_history_schema_smoke(
     def fake_evaluate(**kwargs: Any) -> float:
         return 0.1
 
-    monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+    monkeypatch.setattr("opik_optimizer.core.evaluation.evaluate", fake_evaluate)
     # Stub Opik client to avoid network
     fake_client = MagicMock()
     fake_optimization = MagicMock()

@@ -16,7 +16,7 @@ class TestGetSynonym:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model", make_fake_llm_call("quick")
+            "opik_optimizer.core.llm_calls.call_model", make_fake_llm_call("quick")
         )
 
         result = mutation_ops._get_synonym(
@@ -28,7 +28,7 @@ class TestGetSynonym:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(raises=Exception("API error")),
         )
 
@@ -41,7 +41,8 @@ class TestGetSynonym:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model", make_fake_llm_call("  quick  \n")
+            "opik_optimizer.core.llm_calls.call_model",
+            make_fake_llm_call("  quick  \n"),
         )
 
         result = mutation_ops._get_synonym(
@@ -57,7 +58,7 @@ class TestModifyPhrase:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model", make_fake_llm_call("rapidly")
+            "opik_optimizer.core.llm_calls.call_model", make_fake_llm_call("rapidly")
         )
 
         result = mutation_ops._modify_phrase(
@@ -69,7 +70,7 @@ class TestModifyPhrase:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(raises=Exception("API error")),
         )
 
@@ -369,7 +370,7 @@ class TestRadicalInnovationMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(
                 '[{"role": "system", "content": "New innovative prompt"}, {"role": "user", "content": "{input}"}]'
             ),
@@ -395,7 +396,7 @@ class TestRadicalInnovationMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call("Not valid JSON at all"),
         )
 
@@ -418,7 +419,7 @@ class TestRadicalInnovationMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(raises=Exception("LLM API error")),
         )
 
@@ -486,7 +487,7 @@ class TestSemanticMutation:
         )
 
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(raises=Exception("LLM error")),
         )
 
@@ -547,7 +548,7 @@ class TestDeapMutation:
         )
 
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model",
+            "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(
                 '[{"role": "system", "content": "Mutated"}, {"role": "user", "content": "Question"}]'
             ),
@@ -612,7 +613,7 @@ def test_semantic_mutation_invalid_json_response(
         return "[{'role': 'system', 'content': 'Provide a brief and direct answer to the question.'}, {'role': 'user', 'content': '{question}'}]"
 
     monkeypatch.setattr(
-        "opik_optimizer._llm_calls.call_model",
+        "opik_optimizer.core.llm_calls.call_model",
         fake_call_model,
     )
 

@@ -9,8 +9,8 @@ from collections.abc import Sequence
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
-from ....base_optimizer import AlgorithmResult
-from ....optimization_result import OptimizationRound, OptimizationTrial
+from ....core.state import AlgorithmResult
+from ....core.results import OptimizationRound, OptimizationTrial
 
 
 def calculate_improvement(current_score: float, previous_score: float) -> float:

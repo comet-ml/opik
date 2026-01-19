@@ -12,12 +12,14 @@ import optuna.pruners
 
 from opik import Dataset, opik_context
 
-from ... import base_optimizer, _llm_calls
+from ... import base_optimizer
+from ...core import llm_calls as _llm_calls
 from ...base_optimizer import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
-from ... import task_evaluator, helpers as parent_helpers
+from ...core import evaluation as task_evaluator
+from ... import helpers as parent_helpers
 from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from ...utils.logging import debug_log

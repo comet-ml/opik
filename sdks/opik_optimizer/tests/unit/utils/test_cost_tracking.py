@@ -8,7 +8,7 @@ import pytest
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationContext
-from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.core.results import OptimizationResult
 
 
 class DummyOptimizer(BaseOptimizer):

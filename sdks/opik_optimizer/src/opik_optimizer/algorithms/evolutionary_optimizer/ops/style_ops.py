@@ -5,7 +5,7 @@ import opik
 
 from .. import reporting
 from ..types import StyleInferenceResponse
-from .... import _llm_calls
+from ....core import llm_calls as _llm_calls
 from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)

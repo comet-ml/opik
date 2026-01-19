@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from opik_optimizer.agents import OptimizableAgent
     from opik_optimizer.api_objects import chat_prompt
     from opik_optimizer.api_objects.types import MetricFunction
-    from opik_optimizer.optimization_result import OptimizationResult
+    from opik_optimizer.core.results import OptimizationResult
 
 
 class ConcreteOptimizer(BaseOptimizer):
@@ -613,7 +613,7 @@ def test_should_stop_context_on_perfect_score(simple_chat_prompt) -> None:
     optimizer.evaluate({"main": simple_chat_prompt})
     assert context.should_stop is True
     assert context.finish_reason == "perfect_score"
-    from opik_optimizer.optimization_result import OptimizationHistoryState
+    from opik_optimizer.core.results import OptimizationHistoryState
 
     builder = OptimizationHistoryState()
     handle = builder.start_round(round_index=0)
@@ -1173,7 +1173,7 @@ class TestToolUseFlag:
             assert agent.last_allow_tool_use is True
 
         monkeypatch.setattr(
-            "opik_optimizer.task_evaluator.evaluate",
+            "opik_optimizer.core.evaluation.evaluate",
             make_fake_evaluator(assert_output=assert_output),
         )
 
@@ -1197,7 +1197,7 @@ class TestToolUseFlag:
             assert agent.last_allow_tool_use is True
 
         monkeypatch.setattr(
-            "opik_optimizer.task_evaluator.evaluate",
+            "opik_optimizer.core.evaluation.evaluate",
             make_fake_evaluator(assert_output=assert_output),
         )
 

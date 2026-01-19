@@ -7,7 +7,7 @@ owning optimizer for telemetry and budgeting.
 """
 
 from ..api_objects import chat_prompt
-from .. import _llm_calls
+from ..core import llm_calls as _llm_calls
 from ..utils import throttle as _throttle
 import os
 from typing import Any

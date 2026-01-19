@@ -4,7 +4,7 @@ import opik
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
-from ... import _llm_calls
+from ...core import llm_calls as _llm_calls
 from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction

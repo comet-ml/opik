@@ -10,8 +10,8 @@ from deap import creator as _creator
 
 from opik_optimizer.utils.display import display_message
 from ..types import CrossoverResponse
-from .... import _llm_calls
-from ...._llm_calls import StructuredOutputParsingError
+from ....core import llm_calls as _llm_calls
+from ....core.llm_calls import StructuredOutputParsingError
 from ....api_objects.types import (
     Content,
     extract_text_from_content,

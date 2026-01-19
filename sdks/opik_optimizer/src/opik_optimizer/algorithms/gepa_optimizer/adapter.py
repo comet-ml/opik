@@ -9,7 +9,8 @@ import logging
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 from opik import Dataset
 
-from ... import helpers, task_evaluator
+from ... import helpers
+from ...core import evaluation as task_evaluator
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
@@ -17,7 +18,7 @@ from ...utils.candidate_selection import select_candidate
 from .types import OpikDataInst
 
 if TYPE_CHECKING:
-    from ...base_optimizer import OptimizationContext
+    from ...core.state import OptimizationContext
 
 
 logger = logging.getLogger(__name__)

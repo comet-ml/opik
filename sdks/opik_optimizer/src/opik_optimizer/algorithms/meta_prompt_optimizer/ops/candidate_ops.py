@@ -15,7 +15,7 @@ import random
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
-from .... import _llm_calls
+from ....core import llm_calls as _llm_calls
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import (
@@ -26,9 +26,9 @@ from ..types import (
 from ....utils import display as display_utils
 from ....utils.logging import compact_debug_text
 from ....utils.text import normalize_llm_text
-from ....optimization_result import OptimizationRound, round_payload
+from ....core.results import OptimizationRound, round_payload
 from litellm.exceptions import BadRequestError
-from ...._llm_calls import StructuredOutputParsingError
+from ....core.llm_calls import StructuredOutputParsingError
 
 logger = logging.getLogger(__name__)
 

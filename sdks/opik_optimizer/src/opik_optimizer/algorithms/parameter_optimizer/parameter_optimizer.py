@@ -14,7 +14,7 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer, OptimizationContext, AlgorithmResult
-from ...optimization_result import OptimizationResult
+from ...core.results import OptimizationResult
 from ...agents import OptimizableAgent
 from ...agents import LiteLLMAgent
 from ...api_objects import chat_prompt

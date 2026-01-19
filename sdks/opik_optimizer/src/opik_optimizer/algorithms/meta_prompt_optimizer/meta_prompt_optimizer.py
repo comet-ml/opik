@@ -14,7 +14,7 @@ from ...utils import throttle as _throttle
 from ...utils.logging import debug_log
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame
-from ...optimization_result import OptimizationRound
+from ...core.results import OptimizationRound
 
 # Import ops modules
 from .ops import candidate_ops, context_ops, result_ops

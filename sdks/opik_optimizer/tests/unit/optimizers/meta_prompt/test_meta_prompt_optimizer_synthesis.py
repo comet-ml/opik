@@ -10,7 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik_optimizer import ChatPrompt, task_evaluator
+from opik_optimizer import ChatPrompt
+from opik_optimizer.core import evaluation as task_evaluator
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
 )
