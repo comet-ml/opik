@@ -4,7 +4,7 @@ export const GROUPING_COLUMN = "virtual_dataset_id";
 
 export const MAX_GROUP_LEVELS = 5;
 export const DEFAULT_ITEMS_PER_GROUP = 100;
-export const DELETED_DATASET_LABEL = "__DELETED";
+export const DELETED_ENTITY_LABEL = "__DELETED";
 export const GROUPING_KEY = "$__grouping__";
 export const GROUPING_ROW_PREFIX = "$__grouping_row__";
 export const GROUP_ID_SEPARATOR = ">";

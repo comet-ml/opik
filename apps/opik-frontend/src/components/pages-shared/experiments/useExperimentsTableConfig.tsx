@@ -18,6 +18,7 @@ import {
   DynamicColumn,
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_METADATA_ID,
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
@@ -41,7 +42,7 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DELETED_DATASET_LABEL, GROUPING_KEY } from "@/constants/groups";
+import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
 import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
@@ -237,11 +238,30 @@ export const useExperimentsTableConfig = <
               idKey: `${metaKey}.value`,
               resource: RESOURCE_TYPE.dataset,
               getIsDeleted: (row: T) =>
-                get(row, `${metaKey}.label`, "") === DELETED_DATASET_LABEL,
+                get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
               explainer: {
                 id: "group-experiments",
                 description: `Some experiments reference a dataset that has been deleted`,
+              },
+            },
+          } as ColumnData<T>;
+          break;
+        case COLUMN_PROJECT_ID:
+          groupCellDef = {
+            ...groupCellDef,
+            type: COLUMN_TYPE.string,
+            cell: ResourceCell.Group as never,
+            customMeta: {
+              nameKey: `${metaKey}.label`,
+              idKey: `${metaKey}.value`,
+              resource: RESOURCE_TYPE.project,
+              getIsDeleted: (row: T) =>
+                get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
+              countAggregationKey: "experiment_count",
+              explainer: {
+                id: "group-experiments",
+                description: `Some experiments reference a project that has been deleted`,
               },
             },
           } as ColumnData<T>;

@@ -38,7 +38,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
@@ -502,7 +502,7 @@ const ExperimentsPage: React.FC = () => {
                 return {
                   label: calculateGroupLabel(groups[index]),
                   value:
-                    label === DELETED_DATASET_LABEL
+                    label === DELETED_ENTITY_LABEL
                       ? "Deleted dataset"
                       : label || value || "Undefined",
                 };
