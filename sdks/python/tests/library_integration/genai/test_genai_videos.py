@@ -175,7 +175,7 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
         id=ANY_BUT_NONE,
         name="operations.get",
         input=ANY_DICT.containing({"operation": ANY_BUT_NONE}),
-        output={"name": ANY_BUT_NONE, "done": True},
+        output=ANY_DICT.containing({"name": ANY_BUT_NONE, "done": True}),
         tags=["genai"],
         metadata=ANY_DICT.containing(
             {
@@ -193,7 +193,7 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
                 type="general",
                 name="operations.get",
                 input=ANY_DICT.containing({"operation": ANY_BUT_NONE}),
-                output={"name": ANY_BUT_NONE, "done": True},
+                output=ANY_DICT.containing({"name": ANY_BUT_NONE, "done": True}),
                 tags=["genai"],
                 metadata=ANY_DICT.containing(
                     {
@@ -374,7 +374,7 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
         id=ANY_BUT_NONE,
         name="operations.get",
         input=ANY_DICT.containing({"operation": ANY_BUT_NONE}),
-        output={"name": ANY_BUT_NONE, "done": True},
+        output=ANY_DICT.containing({"name": ANY_BUT_NONE, "done": True}),
         tags=["genai"],
         metadata=ANY_DICT.containing(
             {
@@ -392,7 +392,7 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
                 type="general",
                 name="operations.get",
                 input=ANY_DICT.containing({"operation": ANY_BUT_NONE}),
-                output={"name": ANY_BUT_NONE, "done": True},
+                output=ANY_DICT.containing({"name": ANY_BUT_NONE, "done": True}),
                 tags=["genai"],
                 metadata=ANY_DICT.containing(
                     {

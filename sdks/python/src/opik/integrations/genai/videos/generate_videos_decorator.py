@@ -6,7 +6,6 @@ Output type: google.genai.types.GenerateVideosOperation
 This decorator is used for LLM spans that generate videos.
 """
 
-import logging
 from typing import (
     Any,
     Callable,
@@ -25,8 +24,6 @@ from opik.decorator import arguments_helpers, base_track_decorator
 
 if TYPE_CHECKING:
     from google.genai.types import GenerateVideosOperation
-
-LOGGER = logging.getLogger(__name__)
 
 # Input parameters to log for video generation
 VIDEO_GENERATE_KWARGS_KEYS_TO_LOG_AS_INPUTS = [
@@ -61,8 +58,6 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert kwargs is not None, "Expected kwargs to be not None in videos API calls"
-
         name = track_options.name if track_options.name is not None else func.__name__
 
         metadata = track_options.metadata if track_options.metadata is not None else {}

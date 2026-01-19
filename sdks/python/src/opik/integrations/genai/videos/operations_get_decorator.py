@@ -69,27 +69,15 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        output_data: Dict[str, Any] = {}
+        if output is not None and output.done and output.response:
+            video_save_decorator.patch_videos_save(
+                output,
+                project_name=self._project_name,
+                tags=current_span_data.tags,
+                metadata=current_span_data.metadata,
+            )
 
-        if output is not None:
-            output_data = {
-                "name": output.name,
-                "done": output.done,
-            }
-            if output.error:
-                output_data["error"] = str(output.error)
-
-            if output.done and output.response:
-                video_save_decorator.patch_videos_save(
-                    output,
-                    project_name=self._project_name,
-                    tags=current_span_data.tags,
-                    metadata=current_span_data.metadata,
-                )
-
-        return arguments_helpers.EndSpanParameters(
-            output=output_data,
-        )
+        return arguments_helpers.EndSpanParameters(output=output)
 
     @override
     def _streams_handler(
