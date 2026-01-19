@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Copy, MoreHorizontal, Pencil, Trash } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -42,8 +42,9 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
       <AddEditFeedbackDefinitionDialog
         key={`edit-${resetKeyRef.current}`}
         feedbackDefinition={feedbackDefinition}
-        open={open === 2}
+        open={open === 2 || open === 3}
         setOpen={setOpen}
+        mode={open === 2 ? "edit" : "clone"}
       />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
@@ -71,6 +72,15 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
           >
             <Pencil className="mr-2 size-4" />
             Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(3);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Copy className="mr-2 size-4" />
+            Clone
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {

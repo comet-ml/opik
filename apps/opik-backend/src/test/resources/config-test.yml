@@ -318,6 +318,24 @@ onlineScoring:
       pendingMessageDuration: # Empty - will use global default
       maxRetries: # Empty - will use global default
 
+datasetExport:
+  enabled: true
+  streamName: 'dataset-export-test'
+  consumerGroupName: 'dataset_export_consumers_test'
+  consumerBatchSize: 10
+  poolingInterval: 1s
+  longPollingDuration: 500ms
+  maxRetries: 3
+  claimIntervalRatio: 10
+  pendingMessageDuration: 5m
+  defaultTtl: 24h
+  minPartSize: 5242880  # 5MB - S3 minimum
+  maxPartSize: 10485760  # 10MB
+  itemBatchSize: 100
+  cleanupTimeout: 5m
+  cleanupLockWaitTime: 1s
+  cleanupBatchSize: 100
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s

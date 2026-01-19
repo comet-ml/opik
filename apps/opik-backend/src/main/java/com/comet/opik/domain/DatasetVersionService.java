@@ -159,6 +159,17 @@ public interface DatasetVersionService {
     boolean isLatestVersion(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
+     * Finds a version by its batch ID.
+     * Used to support SDK batch operations where multiple API calls share the same batch_group_id.
+     *
+     * @param batchGroupId the batch group ID to search for
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @return Optional containing the version if found, empty otherwise
+     */
+    Optional<DatasetVersion> findByBatchGroupId(UUID batchGroupId, UUID datasetId, String workspaceId);
+
+    /**
      * Creates a new version from the result of applying delta changes.
      * This is called after items have been written to the versions table.
      *
@@ -168,13 +179,14 @@ public interface DatasetVersionService {
      * @param baseVersionId the base version ID (for diff calculation)
      * @param tags optional tags for the new version
      * @param changeDescription optional description of the changes
+     * @param batchGroupId optional batch group ID for SDK batch operations
      * @param workspaceId the workspace ID (required when called from reactive context)
      * @param userName the user name (required when called from reactive context)
      * @return the created version
      */
     DatasetVersion createVersionFromDelta(UUID datasetId, UUID newVersionId, int itemsTotal,
             UUID baseVersionId, List<String> tags, String changeDescription,
-            String workspaceId, String userName);
+            UUID batchGroupId, String workspaceId, String userName);
 
     /**
      * Restores a dataset to a previous version state by creating a new version.
@@ -242,6 +254,17 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
+    public Optional<DatasetVersion> findByBatchGroupId(@NonNull UUID batchGroupId, @NonNull UUID datasetId,
+            @NonNull String workspaceId) {
+        log.info("Finding version by batch_group_id '{}' for dataset '{}'", batchGroupId, datasetId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findByBatchGroupId(batchGroupId, datasetId, workspaceId);
+        });
+    }
+
+    @Override
     public DatasetVersion getVersionById(@NonNull String workspaceId, @NonNull UUID datasetId,
             @NonNull UUID versionId) {
         log.info("Getting version by ID '{}' for dataset '{}'", versionId, datasetId);
@@ -278,10 +301,11 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
-            @NonNull String workspaceId, @NonNull String userName) {
+            UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
 
-        log.info("Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}'",
-                datasetId, newVersionId, itemsTotal, baseVersionId);
+        log.info(
+                "Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}', batchGroupId '{}'",
+                datasetId, newVersionId, itemsTotal, baseVersionId, batchGroupId);
 
         String versionHash = CommitUtils.getCommit(newVersionId);
 
@@ -322,6 +346,13 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
+
+            // Associate batch_group_id if provided
+            if (batchGroupId != null) {
+                datasetVersionDAO.updateBatchGroupId(newVersionId, batchGroupId, workspaceId, userName);
+                log.info("Associated batch_group_id '{}' with version '{}' for dataset '{}'",
+                        batchGroupId, versionHash, datasetId);
+            }
 
             // Remove 'latest' tag from previous version (if exists)
             datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);

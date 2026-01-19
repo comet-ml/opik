@@ -57,6 +57,21 @@ const shouldIncludeScore = (
   );
 };
 
+const createUniqueEntityLabels = (data: DataRecord[]): string[] => {
+  const nameCounts: Record<string, number> = {};
+
+  data.forEach((record) => {
+    nameCounts[record.entityName] = (nameCounts[record.entityName] || 0) + 1;
+  });
+
+  return data.map((record) => {
+    const isDuplicate = (nameCounts[record.entityName] || 0) > 1;
+    return isDuplicate
+      ? `${record.entityName} (${record.entityId})`
+      : record.entityName;
+  });
+};
+
 function transformGroupedExperimentsToChartData(
   groupsAggregationsData:
     | { content: Record<string, ExperimentsGroupNodeWithAggregations> }
@@ -351,20 +366,21 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       : undefined;
 
   const { transformedData, chartConfig } = useMemo(() => {
-    if (chartType === CHART_TYPE.radar) {
-      const entityNames = chartData.data.map((record) => record.entityName);
-      const radarData = chartData.lines.map((scoreName) => {
+    if (chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar) {
+      const entityLabels = createUniqueEntityLabels(chartData.data);
+      const data = chartData.lines.map((scoreName) => {
         const point: Record<string, string | number> = { name: scoreName };
-        chartData.data.forEach((record) => {
+        chartData.data.forEach((record, index) => {
           if (record.scores[scoreName] !== undefined) {
-            point[record.entityName] = record.scores[scoreName];
+            point[entityLabels[index]] = record.scores[scoreName];
           }
         });
         return point;
       });
+
       return {
-        transformedData: radarData,
-        chartConfig: getDefaultHashedColorsChartConfig(entityNames),
+        transformedData: data,
+        chartConfig: getDefaultHashedColorsChartConfig(entityLabels),
       };
     }
 
@@ -452,7 +468,6 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           xAxisKey="name"
-          renderTooltipHeader={renderHeader}
           className="size-full"
         />
       );
