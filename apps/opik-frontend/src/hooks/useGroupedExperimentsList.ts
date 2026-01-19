@@ -142,7 +142,7 @@ const buildGroupPath = (
         key: currentGroup.key,
         type: currentGroup.type,
         operator: isEmptyListGroup ? "is_empty" : "=",
-        value: isEmptyListGroup ? "" : value,
+        value,
       }),
     ];
 
