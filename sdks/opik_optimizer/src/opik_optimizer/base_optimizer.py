@@ -454,6 +454,8 @@ class BaseOptimizer(ABC):
             The baseline score
         """
 
+        self.pre_baseline(context)
+
         def _evaluate_baseline() -> float:
             baseline_score = self.evaluate_prompt(
                 prompt=context.prompts,
@@ -473,7 +475,9 @@ class BaseOptimizer(ABC):
                     is_single_prompt_optimization=context.is_single_prompt_optimization,
                 ),
             )
-            return self._coerce_score(baseline_score)
+            coerced_score = self._coerce_score(baseline_score)
+            self.post_baseline(context, coerced_score)
+            return coerced_score
 
         return runtime.run_baseline_evaluation(
             optimizer=self,
@@ -498,7 +502,7 @@ class BaseOptimizer(ABC):
         - Progress tracking (trials_completed++)
         - Early stop checking (sets should_stop flag)
         - Best score/prompt tracking
-        - Display progress (via _on_evaluation hook)
+        - Display progress (via on_trial hook)
 
         After calling this method, optimizers should check context.should_stop
         to determine if they should exit their loop.
@@ -519,6 +523,8 @@ class BaseOptimizer(ABC):
         """
         # TODO: Replace _context usage with explicit context passing.
         context = self._context
+        if context is None:
+            raise RuntimeError("No optimization context available for evaluation.")
         try:
             score = self.evaluate_prompt(
                 prompt=prompts,
@@ -538,7 +544,7 @@ class BaseOptimizer(ABC):
             raise
         coerced_score = self._coerce_score(score)
         prev_best_score = context.current_best_score
-        self._on_evaluation(context, prompts, coerced_score, prev_best_score)
+        self.on_trial(context, prompts, coerced_score, prev_best_score)
 
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
@@ -548,14 +554,14 @@ class BaseOptimizer(ABC):
     # Reporting/display
     # ------------------------------------------------------------------
 
-    def _on_evaluation(
+    def _handle_trial_end(
         self,
         context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         score: float,
         prev_best_score: float | None = None,
     ) -> None:
-        """Display progress after each evaluation."""
+        """Common evaluation-complete logic (shared by legacy/new hooks)."""
         context.trials_completed += 1
         if prev_best_score is None or score > prev_best_score:
             context.current_best_score = score
@@ -579,26 +585,6 @@ class BaseOptimizer(ABC):
     # Optimization lifecycle
     # ------------------------------------------------------------------
 
-    def post_optimization(
-        self,
-        context: OptimizationContext,
-        result: OptimizationResult,
-    ) -> OptimizationResult:
-        """
-        Hook called after optimization completes.
-
-        This is the public interface that the orchestrator calls.
-        Subclasses can override to modify the result before returning.
-
-        Args:
-            context: The optimization context.
-            result: The optimization result.
-
-        Returns:
-            The (possibly modified) optimization result.
-        """
-        return result
-
     def run_optimization(
         self,
         context: OptimizationContext,
@@ -617,7 +603,7 @@ class BaseOptimizer(ABC):
         The framework (BaseOptimizer.optimize_prompt) handles:
         - Setup: validation, context creation, baseline computation
         - Trial tracking: context.trials_completed++ happens in evaluate()
-        - Progress display: _on_evaluation() hook handles all display
+        - Progress display: on_trial() hook handles all display
         - Early stop: evaluate() checks and sets context.should_stop
         - Result building: converts AlgorithmResult to OptimizationResult
 
@@ -950,7 +936,7 @@ class BaseOptimizer(ABC):
         """
         return {}
 
-    def pre_optimization(self, context: OptimizationContext) -> None:
+    def pre_optimize(self, context: OptimizationContext) -> None:
         """
         Hook called before running the optimization algorithm.
 
@@ -964,6 +950,78 @@ class BaseOptimizer(ABC):
             context: The optimization context
         """
         pass
+
+    def post_optimize(
+        self, context: OptimizationContext, result: OptimizationResult
+    ) -> OptimizationResult:
+        """Hook called after optimization completes."""
+        return result
+
+    def pre_baseline(self, context: OptimizationContext) -> None:
+        """Hook fired before baseline evaluation starts."""
+        return None
+
+    def post_baseline(self, context: OptimizationContext, score: float) -> None:
+        """Hook fired after baseline evaluation completes."""
+        return None
+
+    def pre_round(self, context: OptimizationContext, **extras: Any) -> Any:
+        """Hook fired before a round begins."""
+        return self._history_builder.start_round(extras=extras or None)
+
+    def pre_trial(
+        self,
+        context: OptimizationContext,
+        candidate: Any,
+        round_handle: Any | None = None,
+    ) -> Any:
+        """Hook fired before a trial evaluation."""
+        return candidate
+
+    def on_trial(
+        self,
+        context: OptimizationContext,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        score: float,
+        prev_best_score: float | None = None,
+    ) -> None:
+        """Hook fired after a trial evaluation (display/metrics)."""
+        self._handle_trial_end(context, prompts, score, prev_best_score)
+
+    def post_trial(
+        self,
+        context: OptimizationContext,
+        candidate_handle: Any,
+        *,
+        score: float | None,
+        metrics: dict[str, Any] | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        dataset: str | None = None,
+        dataset_split: str | None = None,
+        trial_index: int | None = None,
+        timestamp: str | None = None,
+        round_handle: Any | None = None,
+    ) -> None:
+        """Hook fired after a trial to record history."""
+        if hasattr(self._history_builder, "record_trial"):
+            stop_reason = None
+            context_obj = get_current_context()
+            if context_obj is not None and context_obj.should_stop:
+                stop_reason = getattr(context_obj, "finish_reason", None)
+            self._history_builder.record_trial(
+                round_handle=round_handle,
+                score=score,
+                candidate=candidate_handle,
+                trial_index=trial_index,
+                metrics=metrics,
+                dataset=dataset,
+                dataset_split=dataset_split,
+                extras=extras,
+                candidates=candidates,
+                timestamp=timestamp,
+                stop_reason=stop_reason,
+            )
 
     # ------------------------------------------------------------------
     # Orchestrated run flow
@@ -1017,7 +1075,7 @@ class BaseOptimizer(ABC):
         runtime.show_run_start(optimizer=self, context=context)
 
         # Allow subclasses to perform pre-optimization setup (e.g., set self.agent)
-        self.pre_optimization(context)
+        self.pre_optimize(context)
 
         # Store context for use by evaluate() method
         self._context = context
@@ -1064,6 +1122,7 @@ class BaseOptimizer(ABC):
 
         runtime.record_baseline_history(
             optimizer=self,
+            context=context,
             prompt=early_result_prompt,
             score=baseline_score,
             stop_reason=early_stop_details.get("stop_reason"),
@@ -1077,7 +1136,7 @@ class BaseOptimizer(ABC):
             trials_completed=context.trials_completed,
             stop_reason=context.finish_reason,
         )
-        return runtime.build_early_stop_result(
+        result = runtime.build_early_stop_result(
             optimizer=self,
             context=context,
             baseline_score=baseline_score,
@@ -1085,6 +1144,7 @@ class BaseOptimizer(ABC):
             initial_prompt=early_initial_prompt,
             details=early_stop_details,
         )
+        return self.post_optimize(context, result)
 
     @staticmethod
     def _collect_optimize_args(
@@ -1158,7 +1218,7 @@ class BaseOptimizer(ABC):
                 stop_reason=context.finish_reason,
             )
             runtime.log_final_state(optimizer=self, result=result)
-            return result
+            return self.post_optimize(context, result)
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
             self._finalize_optimization(context, status="cancelled")
@@ -1261,15 +1321,6 @@ class BaseOptimizer(ABC):
         """Get typed history rounds captured by the builder."""
         return self._history_builder.get_rounds()
 
-    # --- History hook wrappers (candidate-first) ---
-    def begin_round(self, **extras: Any) -> Any:
-        """Start a history round and return its handle."""
-        try:
-            return self._history_builder.start_round(extras=extras or None)
-        except AttributeError:
-            # Fallback for legacy builders
-            return None
-
     def set_default_dataset_split(self, dataset_split: str | None) -> None:
         """Set a default dataset split for subsequent trials/rounds."""
         try:
@@ -1332,44 +1383,6 @@ class BaseOptimizer(ABC):
             extra=extra,
         )
         return entry
-
-    def pre_candidate(self, candidate: Any, round_handle: Any) -> Any:
-        """Optional pre-hook for candidate; returns the candidate as the handle."""
-        return candidate
-
-    def post_candidate(
-        self,
-        candidate_handle: Any,
-        *,
-        score: float | None,
-        metrics: dict[str, Any] | None = None,
-        extras: dict[str, Any] | None = None,
-        candidates: list[dict[str, Any]] | None = None,
-        dataset: str | None = None,
-        dataset_split: str | None = None,
-        trial_index: int | None = None,
-        timestamp: str | None = None,
-        round_handle: Any | None = None,
-    ) -> None:
-        """Record a candidate trial in history (post-candidate hook)."""
-        if hasattr(self._history_builder, "record_trial"):
-            stop_reason = None
-            context = get_current_context()
-            if context is not None and context.should_stop:
-                stop_reason = getattr(context, "finish_reason", None)
-            self._history_builder.record_trial(
-                round_handle=round_handle,
-                score=score,
-                candidate=candidate_handle,
-                trial_index=trial_index,
-                metrics=metrics,
-                dataset=dataset,
-                dataset_split=dataset_split,
-                extras=extras,
-                candidates=candidates,
-                timestamp=timestamp,
-                stop_reason=stop_reason,
-            )
 
     def post_round(
         self,

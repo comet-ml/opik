@@ -53,7 +53,7 @@ class SimpleOptimizer(BaseOptimizer):
                 self.stopped_early = True
                 break
 
-            round_handle = self.begin_round()
+            round_handle = self.pre_round(context)
 
             # Evaluate a candidate prompt
             score = self.evaluate_prompt(
@@ -71,7 +71,8 @@ class SimpleOptimizer(BaseOptimizer):
             # Update context counters
             context.trials_completed = self._trials_completed
 
-            self.post_candidate(
+            self.post_trial(
+                context,
                 best_prompt,
                 score=score,
                 round_handle=round_handle,

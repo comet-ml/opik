@@ -363,7 +363,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # - Progress tracking (trials_completed++)
                     # - Early stop checking (sets should_stop flag)
                     # - Best score/prompt tracking
-                    # - Display via _on_evaluation -> get_progress_state
+                    # - Display via on_trial -> get_progress_state
                     prompt_score = self.evaluate(candidate)
 
                     # Update the round's best score if this candidate is better
@@ -416,7 +416,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             f"trial={context.trials_completed}"
                         )
 
-                round_handle = self.begin_round()
+                round_handle = self.pre_round(context)
                 self.set_selection_meta(
                     {
                         "selection_policy": self.selection_strategy,
@@ -432,7 +432,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                         id=f"round{round_num}_cand",
                         metrics={"selection_score": cand_score},
                     )
-                    self.post_candidate(
+                    self.post_trial(
+                        context,
                         cand_prompt,
                         score=cand_score,
                         round_handle=round_handle,

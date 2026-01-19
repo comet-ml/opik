@@ -21,13 +21,14 @@ def test_round_counter_increments_on_non_improving_rounds(
     round_num = 0
     best_score = 1.0
 
-    round_handle = optimizer.begin_round()
+    round_handle = optimizer.pre_round(context)
     optimizer.record_candidate_entry(
         prompt_or_payload=simple_chat_prompt,
         score=0.5,
         id=f"round{round_num}_cand",
     )
-    optimizer.post_candidate(
+    optimizer.post_trial(
+        context,
         simple_chat_prompt,
         score=0.5,
         trial_index=0,

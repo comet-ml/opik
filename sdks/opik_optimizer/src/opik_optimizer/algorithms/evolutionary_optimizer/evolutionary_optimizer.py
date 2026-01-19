@@ -118,7 +118,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         "mutation_strategy_increase_complexity_and_detail": evo_prompts.MUTATION_STRATEGY_INCREASE_COMPLEXITY,
     }
 
-    def pre_optimization(self, context: OptimizationContext) -> None:
+    def pre_optimize(self, context: OptimizationContext) -> None:
         """Store agent reference for use in evaluation."""
         self.agent = context.agent
 
@@ -655,7 +655,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 )
 
         self.set_default_dataset_split(context.dataset_split or "train")
-        round_handle = self.begin_round()
+        round_handle = self.pre_round(context)
         generation_idx = 0
         for idx, ind in enumerate(deap_population):
             if not ind.fitness.valid:
@@ -674,7 +674,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 id=f"gen0_ind{idx}",
                 metrics=metrics,
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 candidate_prompts,
                 score=primary_score,
                 metrics=metrics,
@@ -746,7 +747,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         trials_completed=context.trials_completed,
                     )
                     evo_reporter.start_gen(generation_idx, self.num_generations)
-                    round_handle = self.begin_round()
+                    round_handle = self.pre_round(context)
 
                     curr_best_score = self._population_best_score(deap_population)
 
@@ -851,7 +852,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             id=f"gen{generation_idx}_ind{posted_idx}",
                             metrics=cand_metrics,
                         )
-                        self.post_candidate(
+                        self.post_trial(
+                            context,
                             candidate_prompts,
                             score=primary_score,
                             metrics=cand_metrics,
@@ -1023,13 +1025,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
         # Fallback state for histtory
         history_entries = self.get_history_entries()
         if not history_entries:
-            fallback_round = self.begin_round()
+            fallback_round = self.pre_round(context)
             entry = self.record_candidate_entry(
                 prompt_or_payload=final_best_prompts,
                 score=final_primary_score,
                 id="final_best",
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 final_best_prompts,
                 score=final_primary_score,
                 candidates=[entry],

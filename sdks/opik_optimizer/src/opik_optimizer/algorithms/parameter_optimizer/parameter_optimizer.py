@@ -270,6 +270,27 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
+        context = OptimizationContext(
+            prompts=base_prompts,
+            initial_prompts=copy.deepcopy(base_prompts),
+            is_single_prompt_optimization=is_single_prompt_optimization,
+            dataset=dataset,
+            evaluation_dataset=evaluation_dataset,
+            validation_dataset=validation_dataset,
+            metric=metric,
+            agent=agent,
+            optimization=optimization,
+            optimization_id=self.current_optimization_id,
+            experiment_config=experiment_config,
+            n_samples=n_samples,
+            max_trials=max_trials or self.default_n_trials,
+            project_name=project_name,
+            allow_tool_use=True,
+            baseline_score=None,
+            extra_params={},
+        )
+        self._context = context
+
         # Evaluate baseline with reporting
         with reporting.display_evaluation(
             verbose=self.verbose,
@@ -294,7 +315,7 @@ class ParameterOptimizer(BaseOptimizer):
                 self.perfect_score,
             )
             self._history_builder.clear()
-            baseline_round = self.begin_round(stage="baseline", type="baseline")
+            baseline_round = self.pre_round(context, stage="baseline", type="baseline")
             self.record_candidate_entry(
                 prompt_or_payload=base_prompts
                 if not is_single_prompt_optimization
@@ -309,7 +330,8 @@ class ParameterOptimizer(BaseOptimizer):
                     "stage": "baseline",
                 },
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 base_prompts
                 if not is_single_prompt_optimization
                 else list(base_prompts.values())[0],
@@ -393,7 +415,7 @@ class ParameterOptimizer(BaseOptimizer):
         # Use first prompt for model info in history
         first_prompt = list(base_prompts.values())[0]
         self._history_builder.clear()
-        baseline_round = self.begin_round(stage="baseline", type="baseline")
+        baseline_round = self.pre_round(context, stage="baseline", type="baseline")
         self.record_candidate_entry(
             prompt_or_payload=base_prompts
             if not is_single_prompt_optimization
@@ -408,7 +430,8 @@ class ParameterOptimizer(BaseOptimizer):
                 "stage": "baseline",
             },
         )
-        self.post_candidate(
+        self.post_trial(
+            context,
             base_prompts if not is_single_prompt_optimization else first_prompt,
             score=baseline_score,
             extras={
@@ -458,25 +481,8 @@ class ParameterOptimizer(BaseOptimizer):
         best_tuned_prompts: dict[str, chat_prompt.ChatPrompt] = copy.deepcopy(
             base_prompts
         )
-        context = OptimizationContext(
-            prompts=base_prompts,
-            initial_prompts=copy.deepcopy(base_prompts),
-            is_single_prompt_optimization=is_single_prompt_optimization,
-            dataset=dataset,
-            evaluation_dataset=evaluation_dataset,
-            validation_dataset=validation_dataset,
-            metric=metric,
-            agent=agent,
-            optimization=optimization,
-            optimization_id=self.current_optimization_id,
-            experiment_config=experiment_config,
-            n_samples=n_samples,
-            max_trials=total_trials,
-            project_name=project_name,
-            allow_tool_use=True,
-            baseline_score=baseline_score,
-            extra_params={},
-        )
+        context.max_trials = total_trials
+        context.baseline_score = baseline_score
         context.current_best_score = baseline_score
 
         def objective(trial: Trial) -> float:
@@ -693,7 +699,8 @@ class ParameterOptimizer(BaseOptimizer):
             )
             stage = trial.user_attrs.get("stage", current_stage)
             stage_counts[stage] = stage_counts.get(stage, 0) + 1
-            round_handle = self.begin_round(
+            round_handle = self.pre_round(
+                context,
                 stage=stage,
                 type=trial.user_attrs.get("type"),
                 stage_count=stage_counts[stage],
@@ -712,7 +719,8 @@ class ParameterOptimizer(BaseOptimizer):
                     "type": trial.user_attrs.get("type"),
                 },
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 trial.user_attrs.get("model_kwargs"),
                 score=float(trial.value) if trial.value is not None else None,
                 extras=None,

@@ -157,7 +157,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         keep BaseOptimizer stop logic aligned with actual scoring events.
         """
         coerced_score = self._coerce_score(score)
-        self._on_evaluation(
+        self.on_trial(
             context=context,
             prompts=prompts,
             score=coerced_score,
@@ -383,7 +383,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 score=fallback_score,
                 id=f"trial{context.trials_completed}_fallback",
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 best_prompts,
                 score=fallback_score,
                 round_handle=round_handle,
@@ -404,7 +405,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             score=best_score_local,
             id=f"trial{context.trials_completed}_best0",
         )
-        self.post_candidate(
+        self.post_trial(
+            context,
             best_prompt_bundle,
             score=best_score_local,
             round_handle=round_handle,
@@ -429,7 +431,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 score=improved_score,
                 id=f"trial{context.trials_completed}_cand{idx}",
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 improved_chat_prompts,
                 score=improved_score,
                 round_handle=round_handle,
@@ -515,7 +518,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 context.should_stop = True
                 context.finish_reason = "max_trials"
                 break
-            round_handle = self.begin_round()
+            round_handle = self.pre_round(context)
 
             # Perform hierarchical root cause analysis
             with reporting.display_root_cause_analysis(
@@ -694,7 +697,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
-            self.post_candidate(
+            self.post_trial(
+                context,
                 best_prompts,
                 score=best_score,
                 extras={

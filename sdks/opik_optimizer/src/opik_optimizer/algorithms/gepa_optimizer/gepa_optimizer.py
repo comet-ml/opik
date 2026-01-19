@@ -113,7 +113,7 @@ class GepaOptimizer(BaseOptimizer):
     # Base optimizer overrides
     # ------------------------------------------------------------------
 
-    def pre_optimization(self, context: OptimizationContext) -> None:
+    def pre_optimize(self, context: OptimizationContext) -> None:
         """Set up GEPA-specific state before optimization."""
         # Store agent reference for use in adapter
         self.agent = context.agent
@@ -370,7 +370,7 @@ class GepaOptimizer(BaseOptimizer):
                         for k, v in candidate.items()
                         if not k.startswith("_") and k not in ("source", "id")
                     }
-                    round_handle = self.begin_round(candidate_id=candidate_id)
+                    round_handle = self.pre_round(context, candidate_id=candidate_id)
                     candidate_entry = self.record_candidate_entry(
                         prompt_or_payload=prompt_variants,
                         score=score,
@@ -384,7 +384,8 @@ class GepaOptimizer(BaseOptimizer):
                             "source": candidate.get("source"),
                         },
                     )
-                    self.post_candidate(
+                    self.post_trial(
+                        context,
                         prompt_variants,
                         score=score,
                         metrics=candidate_entry.get("metrics"),

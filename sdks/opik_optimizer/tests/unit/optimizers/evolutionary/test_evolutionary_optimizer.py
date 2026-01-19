@@ -444,7 +444,7 @@ class TestEvolutionaryOptimizerAgentUsage:
         """
         Verify that EvolutionaryOptimizer.agent is set during optimization.
 
-        This test documents why pre_optimization sets self.agent - it's
+        This test documents why pre_optimize sets self.agent - it's
         used during evaluation through the base class evaluate method.
         """
         optimizer = EvolutionaryOptimizer(
@@ -488,18 +488,18 @@ class TestEvolutionaryOptimizerAgentUsage:
             # May fail due to mocking, but we just need to verify agent setup
             pass
 
-        # After pre_optimization, the optimizer should have self.agent set
+        # After pre_optimize, the optimizer should have self.agent set
         assert hasattr(optimizer, "agent")
         # Agent should have been set during evaluation
         assert agent_set_during_eval[0], (
             "optimizer.agent should be set during evaluation"
         )
 
-    def test_agent_set_inpre_optimization(self, monkeypatch) -> None:
+    def test_agent_set_inpre_optimize(self, monkeypatch) -> None:
         """
-        Verify that self.agent is set during pre_optimization.
+        Verify that self.agent is set during pre_optimize.
 
-        This test ensures that when pre_optimization is called,
+        This test ensures that when pre_optimize is called,
         self.agent is properly assigned from context.agent.
         """
         from opik_optimizer.agents.optimizable_agent import OptimizableAgent
@@ -519,9 +519,9 @@ class TestEvolutionaryOptimizerAgentUsage:
         mock_context = MagicMock(spec=OptimizationContext)
         mock_context.agent = mock_agent
 
-        # Call pre_optimization
-        optimizer.pre_optimization(mock_context)
+        # Call pre_optimize
+        optimizer.pre_optimize(mock_context)
 
         # Verify self.agent is now set
-        assert hasattr(optimizer, "agent"), "pre_optimization should set self.agent"
+        assert hasattr(optimizer, "agent"), "pre_optimize should set self.agent"
         assert optimizer.agent is mock_agent, "self.agent should be context.agent"

@@ -519,10 +519,10 @@ def test_reporter_helpers_set_and_clear() -> None:
     assert optimizer._reporter is None
 
 
-def test_on_evaluation_handles_non_finite_scores(
+def test_on_trial_handles_non_finite_scores(
     monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
 ) -> None:
-    """_on_evaluation should not crash when scores are non-finite."""
+    """on_trial should not crash when scores are non-finite."""
     optimizer = ConcreteOptimizer(model="gpt-4", verbose=1)
     dataset = make_mock_dataset()
     metric = MagicMock()
@@ -549,7 +549,7 @@ def test_on_evaluation_handles_non_finite_scores(
         fake_display_evaluation_progress,
     )
 
-    optimizer._on_evaluation(context, {"main": simple_chat_prompt}, float("inf"))
+    optimizer.on_trial(context, {"main": simple_chat_prompt}, float("inf"))
 
     assert captured["style"] == "yellow"
     assert captured["score_text"] == "non-finite score"
@@ -920,9 +920,11 @@ class TestHistoryManagement:
     def test_round_lifecycle_adds_round_data(self, simple_chat_prompt) -> None:
         """start/record/end round should add round data via the history state."""
         optimizer = ConcreteOptimizer(model="gpt-4")
+        context = MagicMock()
 
-        handle = optimizer.begin_round()
-        optimizer.post_candidate(
+        handle = optimizer.pre_round(context)
+        optimizer.post_trial(
+            context,
             simple_chat_prompt,
             score=0.5,
             trial_index=1,
@@ -942,9 +944,11 @@ class TestHistoryManagement:
     def test_cleanup_clears_history(self, simple_chat_prompt) -> None:
         """cleanup should clear the history."""
         optimizer = ConcreteOptimizer(model="gpt-4")
+        context = MagicMock()
 
-        handle = optimizer.begin_round()
-        optimizer.post_candidate(
+        handle = optimizer.pre_round(context)
+        optimizer.post_trial(
+            context,
             simple_chat_prompt,
             score=0.5,
             trial_index=1,

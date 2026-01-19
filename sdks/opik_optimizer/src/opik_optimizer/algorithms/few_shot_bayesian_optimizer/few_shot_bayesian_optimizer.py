@@ -626,7 +626,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             sampler_info = type(study.sampler).__name__ if study.sampler else None
             pruner_info = type(study.pruner).__name__ if study.pruner else None
-            round_handle = self.begin_round(
+            round_handle = self.pre_round(
+                context,
                 sampler=sampler_info,
                 pruner=pruner_info,
                 study_direction=study.direction.name if study.direction else None,
@@ -643,7 +644,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "type": trial.user_attrs.get("type"),
                 },
             )
-            self.post_candidate(
+            self.post_trial(
+                context,
                 prompt_cand_display,
                 score=score_val,
                 round_handle=round_handle,

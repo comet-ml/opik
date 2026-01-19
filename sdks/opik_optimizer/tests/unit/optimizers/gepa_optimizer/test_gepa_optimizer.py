@@ -192,11 +192,11 @@ class TestGepaOptimizerEarlyStop:
 class TestGepaOptimizerAgentUsage:
     """Test that self.agent is properly set and used by GEPA adapter."""
 
-    def test_agent_set_inpre_optimization(self, monkeypatch) -> None:
+    def test_agent_set_inpre_optimize(self, monkeypatch) -> None:
         """
-        Verify that self.agent is set during pre_optimization.
+        Verify that self.agent is set during pre_optimize.
 
-        This test ensures that when pre_optimization is called,
+        This test ensures that when pre_optimize is called,
         self.agent is properly assigned from context.agent for use
         in OpikGEPAAdapter and reflection operations.
         """
@@ -218,11 +218,11 @@ class TestGepaOptimizerAgentUsage:
         mock_context.agent = mock_agent
         mock_context.extra_params = {}
 
-        # Call pre_optimization
-        optimizer.pre_optimization(mock_context)
+        # Call pre_optimize
+        optimizer.pre_optimize(mock_context)
 
         # Verify self.agent is now set
-        assert hasattr(optimizer, "agent"), "pre_optimization should set self.agent"
+        assert hasattr(optimizer, "agent"), "pre_optimize should set self.agent"
         assert optimizer.agent is mock_agent, "self.agent should be context.agent"
 
     def test_self_agent_available_for_adapter(self) -> None:
@@ -237,7 +237,7 @@ class TestGepaOptimizerAgentUsage:
 
         optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
 
-        # Verify agent is not set before pre_optimization
+        # Verify agent is not set before pre_optimize
         assert not hasattr(optimizer, "agent") or optimizer.agent is None
 
         # Create a mock context
@@ -246,8 +246,8 @@ class TestGepaOptimizerAgentUsage:
         mock_context.agent = mock_agent
         mock_context.extra_params = {}
 
-        # Call pre_optimization
-        optimizer.pre_optimization(mock_context)
+        # Call pre_optimize
+        optimizer.pre_optimize(mock_context)
 
         # Verify self.agent is set and can be accessed in run_optimization
         assert optimizer.agent is mock_agent

@@ -187,6 +187,7 @@ def build_final_result(
     if not history_entries:
         history_entries = _record_fallback_history(
             optimizer=optimizer,
+            context=context,
             result_prompt=result_prompt,
             score=algorithm_result.best_score,
             finish_reason=finish_reason,
@@ -223,17 +224,19 @@ def _coerce_history_entries(
 def _record_fallback_history(
     *,
     optimizer: BaseOptimizer,
+    context: OptimizationContext,
     result_prompt: Any,
     score: float,
     finish_reason: str,
 ) -> list[dict[str, Any]]:
-    fallback_round = optimizer.begin_round()
+    fallback_round = optimizer.pre_round(context)
     entry = optimizer.record_candidate_entry(
         prompt_or_payload=result_prompt,
         score=score,
         id="fallback",
     )
-    optimizer.post_candidate(
+    optimizer.post_trial(
+        context,
         result_prompt,
         score=score,
         candidates=[entry],
@@ -476,18 +479,20 @@ def run_baseline_evaluation(
 def record_baseline_history(
     *,
     optimizer: BaseOptimizer,
+    context: OptimizationContext,
     prompt: Any,
     score: float,
     stop_reason: str | None,
 ) -> None:
     optimizer._history_builder.clear()
-    baseline_round = optimizer.begin_round()
+    baseline_round = optimizer.pre_round(context)
     entry = optimizer.record_candidate_entry(
         prompt_or_payload=prompt,
         score=score,
         id="baseline",
     )
-    optimizer.post_candidate(
+    optimizer.post_trial(
+        context,
         prompt,
         score=score,
         candidates=[entry],
