@@ -1,10 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { flushSync } from "react-dom";
 import { AxiosError, HttpStatusCode } from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
+import isNumber from "lodash/isNumber";
 import { Loader2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
-import { Dashboard, TEMPLATE_TYPE } from "@/types/dashboard";
+import {
+  Dashboard,
+  TEMPLATE_TYPE,
+  EXPERIMENT_DATA_SOURCE,
+} from "@/types/dashboard";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
+import { Filters } from "@/types/filters";
+import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import {
@@ -29,6 +37,12 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
 import { DialogAutoScrollBody } from "@/components/ui/dialog";
+import {
+  MIN_MAX_EXPERIMENTS,
+  MAX_MAX_EXPERIMENTS,
+  DEFAULT_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
+import useProjectsList from "@/api/projects/useProjectsList";
 import DashboardDialogSelectStep from "./DashboardDialogSelectStep";
 import DashboardDialogDetailsStep from "./DashboardDialogDetailsStep";
 
@@ -37,21 +51,48 @@ enum DialogStep {
   DETAILS = "details",
 }
 
-const DashboardFormSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .max(100, "Name must be less than 100 characters")
-    .trim(),
-  description: z
-    .string()
-    .max(255, "Description must be less than 255 characters")
-    .optional()
-    .or(z.literal("")),
-  projectId: z.string().optional(),
-  experimentIds: z.array(z.string()).optional(),
-  templateType: z.string().optional(),
-});
+const DashboardFormSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Name is required")
+      .max(100, "Name must be less than 100 characters")
+      .trim(),
+    description: z
+      .string()
+      .max(255, "Description must be less than 255 characters")
+      .optional()
+      .or(z.literal("")),
+    projectId: z.string().optional(),
+    experimentIds: z.array(z.string()).optional(),
+    templateType: z.string().optional(),
+    experimentDataSource: z.nativeEnum(EXPERIMENT_DATA_SOURCE).optional(),
+    experimentFilters: FiltersArraySchema.optional(),
+    maxExperimentsCount: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (
+        data.experimentDataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
+      ) {
+        if (isEmpty(data.maxExperimentsCount)) {
+          return false;
+        }
+        const numValue = parseInt(data.maxExperimentsCount!, 10);
+        return (
+          isNumber(numValue) &&
+          !isNaN(numValue) &&
+          numValue >= MIN_MAX_EXPERIMENTS &&
+          numValue <= MAX_MAX_EXPERIMENTS
+        );
+      }
+      return true;
+    },
+    {
+      message: `Max experiments to load is required and must be between ${MIN_MAX_EXPERIMENTS} and ${MAX_MAX_EXPERIMENTS}`,
+      path: ["maxExperimentsCount"],
+    },
+  );
 
 type DashboardFormData = z.infer<typeof DashboardFormSchema>;
 
@@ -119,8 +160,43 @@ const AddEditCloneDashboardDialog: React.FC<
       projectId: defaultProjectId,
       experimentIds: defaultExperimentIds || [],
       templateType: undefined,
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: String(DEFAULT_MAX_EXPERIMENTS),
     },
   });
+
+  const shouldFetchLastModifiedProject =
+    !defaultProjectId && open && isCreateMode;
+
+  const { data: projectsData } = useProjectsList(
+    {
+      workspaceName,
+      sorting: [
+        {
+          desc: true,
+          id: "last_updated_trace_at",
+        },
+      ],
+      page: 1,
+      size: 1,
+    },
+    {
+      enabled: shouldFetchLastModifiedProject,
+    },
+  );
+
+  const lastModifiedProject = projectsData?.content?.[0];
+
+  useEffect(() => {
+    if (
+      shouldFetchLastModifiedProject &&
+      lastModifiedProject?.id &&
+      isEmpty(form.getValues("projectId"))
+    ) {
+      form.setValue("projectId", lastModifiedProject.id);
+    }
+  }, [shouldFetchLastModifiedProject, lastModifiedProject?.id, form]);
 
   const handleSelectOption = (templateType: string) => {
     setCurrentStep(DialogStep.DETAILS);
@@ -249,6 +325,14 @@ const AddEditCloneDashboardDialog: React.FC<
             ? [values.projectId]
             : [];
           dashboardConfig.config.experimentIds = values.experimentIds || [];
+          dashboardConfig.config.experimentDataSource =
+            values.experimentDataSource;
+          dashboardConfig.config.experimentFilters =
+            (values.experimentFilters as Filters) || [];
+          dashboardConfig.config.maxExperimentsCount =
+            values.maxExperimentsCount
+              ? parseInt(values.maxExperimentsCount, 10)
+              : undefined;
         } else if (mode === "save_as" || mode === "clone") {
           dashboardConfig = regenerateAllIds(dashboard!.config);
           dashboardConfig.config.projectIds = values.projectId

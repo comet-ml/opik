@@ -44,9 +44,6 @@ import RankingHeader from "@/components/shared/DataTableHeaders/RankingHeader";
 import {
   formatConfigColumnName,
   PREDEFINED_COLUMNS,
-  DEFAULT_MAX_ROWS,
-  MIN_MAX_ROWS,
-  MAX_MAX_ROWS,
   getExperimentListParams,
   isSelectExperimentsMode,
   parseScoreColumnId,
@@ -55,6 +52,11 @@ import {
   getRankingSorting,
   getRankingFilters,
 } from "./helpers";
+import {
+  MIN_MAX_EXPERIMENTS,
+  MAX_MAX_EXPERIMENTS,
+  DEFAULT_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
@@ -97,8 +99,6 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
   const config = useMemo(() => widgetConfig || {}, [widgetConfig]);
 
   const {
-    dataSource = EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-    filters = [],
     selectedColumns = [],
     enableRanking = true,
     rankingMetric,
@@ -107,16 +107,42 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     columnsOrder = [],
     scoresColumnsOrder = [],
     metadataColumnsOrder = [],
-    maxRows,
     sorting: savedSorting = [],
     overrideDefaults = false,
   } = config;
 
+  const dataSource = useMemo(() => {
+    if (overrideDefaults) {
+      return config.dataSource || EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+    }
+    return (
+      globalConfig?.experimentDataSource ||
+      EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS
+    );
+  }, [overrideDefaults, config.dataSource, globalConfig?.experimentDataSource]);
+
+  const filters = useMemo(() => {
+    if (overrideDefaults) {
+      return config.filters || [];
+    }
+    return globalConfig?.experimentFilters || [];
+  }, [overrideDefaults, config.filters, globalConfig?.experimentFilters]);
+
+  const maxRows = useMemo(() => {
+    if (overrideDefaults) {
+      return config.maxRows;
+    }
+    return globalConfig?.maxExperimentsCount;
+  }, [overrideDefaults, config.maxRows, globalConfig?.maxExperimentsCount]);
+
   const maxRowsValue = useMemo(() => {
     if (!isNumber(maxRows)) {
-      return DEFAULT_MAX_ROWS;
+      return DEFAULT_MAX_EXPERIMENTS;
     }
-    return Math.max(MIN_MAX_ROWS, Math.min(MAX_MAX_ROWS, maxRows));
+    return Math.max(
+      MIN_MAX_EXPERIMENTS,
+      Math.min(MAX_MAX_EXPERIMENTS, maxRows),
+    );
   }, [maxRows]);
 
   const experimentIds = useMemo(() => {
@@ -158,7 +184,9 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
       experimentIds: experimentListParams.experimentIds,
       sorting: apiSorting,
       page: 1,
-      size: isSelectExperimentsMode(dataSource) ? MAX_MAX_ROWS : maxRowsValue,
+      size: isSelectExperimentsMode(dataSource)
+        ? MAX_MAX_EXPERIMENTS
+        : maxRowsValue,
     },
     {
       placeholderData: keepPreviousData,
@@ -178,7 +206,7 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
       experimentIds: experimentListParams.experimentIds,
       sorting: rankingSorting,
       page: 1,
-      size: MAX_MAX_ROWS,
+      size: MAX_MAX_EXPERIMENTS,
       queryKey: "experiments-ranking",
     },
     {
