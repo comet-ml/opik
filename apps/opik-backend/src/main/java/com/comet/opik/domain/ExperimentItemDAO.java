@@ -286,8 +286,7 @@ class ExperimentItemDAO {
             + SMART_OUTPUT_TRUNCATION + """
                                      as output
                                 <else> output <endif>,
-                                visibility_mode,
-                                output_keys
+                                visibility_mode
                             FROM traces
                             WHERE workspace_id = :workspace_id
                             AND id IN (SELECT trace_id FROM experiment_items_scope)

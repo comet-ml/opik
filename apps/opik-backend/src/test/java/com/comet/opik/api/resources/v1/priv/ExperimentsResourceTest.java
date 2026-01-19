@@ -4929,7 +4929,7 @@ class ExperimentsResourceTest {
                     .build();
             createAndAssert(createRequest, apiKey, workspaceName);
 
-            // Stream experiment items with truncation enabled (default)
+            // Stream experiment items with truncation enabled
             var streamRequest = ExperimentItemStreamRequest.builder()
                     .experimentName(experiment.name())
                     .truncate(true)
@@ -4967,11 +4967,17 @@ class ExperimentsResourceTest {
             assertThat(streamedItem.output().get("short_key").asText())
                     .isEqualTo("small value");
 
-            // Verify the long value is truncated but still accessible
+            // Verify the long value is truncated to the configured truncation size
+            // The new implementation truncates each field value as a string to the max size
             var longKeyValue = streamedItem.output().get("long_key").asText();
+            assertThat(longKeyValue.length())
+                    .as("long_key value should be truncated to max size")
+                    .isLessThanOrEqualTo(10001);
+            
+            // Verify the truncated value starts with the original string
             assertThat(longKeyValue)
-                    .as("long_key value should be truncated")
-                    .contains("[truncated]");
+                    .as("long_key value should start with original content")
+                    .startsWith(largeString.substring(0, Math.min(100, largeString.length())));
         }
     }
 

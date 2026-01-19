@@ -15,47 +15,31 @@ import java.io.UncheckedIOException;
  * Utility class for handling data truncation operations in DAO classes.
  * Contains shared methods for JSON node processing and truncation threshold binding.
  *
- * <h2>Smart JSON Truncation</h2>
- * <p>The smart truncation approach preserves JSON structure by truncating individual field values
- * rather than the entire JSON string. This ensures all keys remain accessible even when values
- * exceed the truncation threshold.
+ * <h2>Smart Truncation Strategy</h2>
+ * <p>The optimized truncation approach uses ClickHouse's JSONExtractKeysAndValuesRaw function
+ * to extract all top-level fields as raw strings, then truncates each value individually while
+ * maintaining valid top-level JSON structure.
  *
- * <h3>Output Truncation</h3>
- * <p>Uses the materialized {@code output_keys} column (Array of Tuple(key, type)) for efficient
- * key extraction. The SQL pattern is:
- * <pre>{@code
- * if(length(output_keys) > 0,
- *     toJSONString(mapFromArrays(
- *         arrayMap(kt -> tupleElement(kt, 1), output_keys),
- *         arrayMap(kt -> multiIf(...truncation logic...), output_keys)
- *     )),
- *     substring(output, 1, truncationSize)  -- fallback for legacy data
- * )
- * }</pre>
- *
- * <h3>Input Truncation</h3>
- * <p>Uses {@code JSONExtractKeys(input)} at query time since there's no materialized input_keys column.
- * The SQL pattern is:
- * <pre>{@code
- * if(length(JSONExtractKeys(input)) > 0,
- *     toJSONString(mapFromArrays(
- *         JSONExtractKeys(input),
- *         arrayMap(k -> multiIf(...truncation logic...), JSONExtractKeys(input))
- *     )),
- *     substring(input, 1, truncationSize)  -- fallback for non-JSON input
- * )
- * }</pre>
- *
- * <p>The truncation logic for each field value:
+ * <p>The truncation logic:
  * <ul>
- *   <li>String values exceeding limit: truncated with "...[truncated]" marker</li>
- *   <li>Non-string values (objects, arrays) exceeding limit: replaced with "[value truncated]"</li>
- *   <li>Values within limit: preserved with original type</li>
- *   <li>Image patterns: replaced with "[image]" placeholder</li>
+ *   <li><b>Image Replacement:</b> Replaces base64-encoded images with "[image]" placeholder</li>
+ *   <li><b>Field Extraction:</b> Uses JSONExtractKeysAndValuesRaw to get all fields (nested objects become strings)</li>
+ *   <li><b>Value Truncation:</b> Truncates ALL field values as strings (primitives, nested objects, arrays)</li>
+ *   <li><b>JSON Reconstruction:</b> Rebuilds valid top-level JSON with toJSONString</li>
  * </ul>
+ *
+ * <h2>Performance Optimization</h2>
+ * <p>ClickHouse's Common Subexpression Elimination (CSE) automatically deduplicates repeated
+ * {@code replaceRegexpAll} calls within the same expression, reducing regex operations from 5 to 1.
+ *
+ * <h2>Graceful Degradation</h2>
+ * <p>Truncated nested objects may contain invalid JSON (cut mid-structure), but the top-level
+ * JSON remains valid. The Java mapper's {@code JsonUtils.getJsonNodeFromStringWithFallback}
+ * handles this gracefully by returning TextNode for unparseable values.
  *
  * @see com.comet.opik.domain.ExperimentItemDAO
  * @see com.comet.opik.domain.DatasetItemVersionDAO
+ * @see com.comet.opik.domain.DatasetItemDAO
  */
 @Slf4j
 @UtilityClass
@@ -63,66 +47,92 @@ public final class TruncationUtils {
 
     /**
      * SQL template for smart truncation of the input field.
-     * Uses JSONExtractKeys at runtime since there's no materialized input_keys column.
-     * Preserves JSON structure by truncating individual field values rather than the entire string.
+     * Applies image replacement first, then truncates all top-level field values as strings.
+     *
+     * <p>This optimized approach:
+     * <ol>
+     *   <li><b>Image Replacement:</b> Replaces image patterns with "[image]" placeholder (ClickHouse CSE optimizes multiple calls)</li>
+     *   <li><b>Field-level Truncation:</b> Uses JSONExtractKeysAndValuesRaw to get all fields as raw strings, truncates each value</li>
+     *   <li><b>JSON Reconstruction:</b> Rebuilds valid top-level JSON structure with toJSONString</li>
+     * </ol>
+     *
+     * <p>Key behaviors:
+     * <ul>
+     *   <li>Truncates ALL field values as strings (primitives, nested objects, arrays)</li>
+     *   <li>Top-level JSON structure remains valid for deserialization</li>
+     *   <li>Truncated nested objects may become invalid JSON, handled gracefully by JsonUtils.getJsonNodeFromStringWithFallback</li>
+     *   <li>ClickHouse Common Subexpression Elimination automatically deduplicates replaceRegexpAll calls</li>
+     * </ul>
      *
      * <p>Template parameters:
      * <ul>
-     *   <li>{@code <truncationSize>} - maximum size for each field value</li>
+     *   <li>{@code <truncationSize>} - maximum size for each truncated field value</li>
      *   <li>{@code <truncate>} - regex pattern for image data to replace with [image]</li>
      * </ul>
      */
     public static final String SMART_INPUT_TRUNCATION = """
-            if(length(JSONExtractKeys(input)) > 0,
+            if(length(JSONExtractKeys(replaceRegexpAll(input, '<truncate>', '"[image]"'))) > 0,
                 toJSONString(
-                    mapFromArrays(
-                        JSONExtractKeys(input),
-                        arrayMap(
-                            k ->
-                                multiIf(
-                                    JSONType(input, k) = 'String' AND length(JSONExtractString(input, k)) > <truncationSize>,
-                                    concat('"', replaceRegexpAll(substring(JSONExtractString(input, k), 1, <truncationSize> - 20), '<truncate>', '[image]'), '...[truncated]"'),
-                                    length(JSONExtractRaw(input, k)) > <truncationSize>,
-                                    '"[value truncated]"',
-                                    replaceRegexpAll(JSONExtractRaw(input, k), '<truncate>', '"[image]"')
-                                ),
-                            JSONExtractKeys(input)
-                        )
+                  mapFromArrays(
+                    arrayMap(kv -> kv.1,
+                      arrayMap(
+                        kv -> tuple(kv.1, substring(kv.2, 1, <truncationSize>)),
+                        JSONExtractKeysAndValuesRaw(replaceRegexpAll(input, '<truncate>', '"[image]"'))
+                      )
+                    ),
+                    arrayMap(kv -> kv.2,
+                      arrayMap(
+                        kv -> tuple(kv.1, substring(kv.2, 1, <truncationSize>)),
+                        JSONExtractKeysAndValuesRaw(replaceRegexpAll(input, '<truncate>', '"[image]"'))
+                      )
                     )
+                  )
                 ),
                 substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>)
             )""";
 
     /**
      * SQL template for smart truncation of the output field.
-     * Uses the materialized output_keys column (Array of Tuple(key, type)) for efficient key extraction.
-     * Preserves JSON structure by truncating individual field values rather than the entire string.
+     * Applies image replacement first, then truncates all top-level field values as strings.
+     *
+     * <p>This optimized approach:
+     * <ol>
+     *   <li><b>Image Replacement:</b> Replaces image patterns with "[image]" placeholder (ClickHouse CSE optimizes multiple calls)</li>
+     *   <li><b>Field-level Truncation:</b> Uses JSONExtractKeysAndValuesRaw to get all fields as raw strings, truncates each value</li>
+     *   <li><b>JSON Reconstruction:</b> Rebuilds valid top-level JSON structure with toJSONString</li>
+     * </ol>
+     *
+     * <p>Key behaviors:
+     * <ul>
+     *   <li>Truncates ALL field values as strings (primitives, nested objects, arrays)</li>
+     *   <li>Top-level JSON structure remains valid for deserialization</li>
+     *   <li>Truncated nested objects may become invalid JSON, handled gracefully by JsonUtils.getJsonNodeFromStringWithFallback</li>
+     *   <li>ClickHouse Common Subexpression Elimination automatically deduplicates replaceRegexpAll calls</li>
+     * </ul>
      *
      * <p>Template parameters:
      * <ul>
-     *   <li>{@code <truncationSize>} - maximum size for each field value</li>
+     *   <li>{@code <truncationSize>} - maximum size for each truncated field value</li>
      *   <li>{@code <truncate>} - regex pattern for image data to replace with [image]</li>
      * </ul>
-     *
-     * <p>Requires the query to select {@code output_keys} from the traces table.
      */
     public static final String SMART_OUTPUT_TRUNCATION = """
-            if(length(output_keys) > 0,
+            if(length(JSONExtractKeys(replaceRegexpAll(output, '<truncate>', '"[image]"'))) > 0,
                 toJSONString(
-                    mapFromArrays(
-                        arrayMap(kt -> tupleElement(kt, 1), output_keys),
-                        arrayMap(
-                            kt ->
-                                multiIf(
-                                    tupleElement(kt, 2) = 'String' AND length(JSONExtractString(output, tupleElement(kt, 1))) > <truncationSize>,
-                                    concat('"', replaceRegexpAll(substring(JSONExtractString(output, tupleElement(kt, 1)), 1, <truncationSize> - 20), '<truncate>', '[image]'), '...[truncated]"'),
-                                    length(JSONExtractRaw(output, tupleElement(kt, 1))) > <truncationSize>,
-                                    '"[value truncated]"',
-                                    replaceRegexpAll(JSONExtractRaw(output, tupleElement(kt, 1)), '<truncate>', '"[image]"')
-                                ),
-                            output_keys
-                        )
+                  mapFromArrays(
+                    arrayMap(kv -> kv.1,
+                      arrayMap(
+                        kv -> tuple(kv.1, substring(kv.2, 1, <truncationSize>)),
+                        JSONExtractKeysAndValuesRaw(replaceRegexpAll(output, '<truncate>', '"[image]"'))
+                      )
+                    ),
+                    arrayMap(kv -> kv.2,
+                      arrayMap(
+                        kv -> tuple(kv.1, substring(kv.2, 1, <truncationSize>)),
+                        JSONExtractKeysAndValuesRaw(replaceRegexpAll(output, '<truncate>', '"[image]"'))
+                      )
                     )
+                  )
                 ),
                 substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>)
             )""";

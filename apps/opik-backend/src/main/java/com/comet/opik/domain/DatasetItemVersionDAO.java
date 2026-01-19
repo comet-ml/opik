@@ -507,8 +507,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             SELECT
                                 id,
                                 input,
-                                output,
-                                output_keys
+                                output
                             FROM traces
                             WHERE workspace_id = :workspace_id
                             AND id IN (SELECT trace_id FROM experiment_items_final)
@@ -890,8 +889,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                      as output
                                 <else> output <endif>,
                                 metadata,
-                                visibility_mode,
-                                output_keys
+                                visibility_mode
                             FROM traces
                             WHERE workspace_id = :workspace_id
                             AND id IN (SELECT trace_id FROM experiment_items_final)

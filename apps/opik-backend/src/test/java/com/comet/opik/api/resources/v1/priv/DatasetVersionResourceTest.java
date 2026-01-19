@@ -2385,7 +2385,6 @@ class DatasetVersionResourceTest {
             var datasetItem = datasetItems.getFirst();
 
             // Create a trace first (experiment items require a trace ID)
-            // The trace's output field should have "input" and "output" keys so they appear in output_keys
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(UUID.randomUUID().toString())
                     .output(JsonUtils.getJsonNodeFromString(
