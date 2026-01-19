@@ -40,6 +40,7 @@ const OptimizationProgressChartContainer: React.FC<
   const { message: currentTip } = useProgressSimulation({
     messages: OPTIMIZATION_TIPS,
     isPending: isInProgress,
+    loop: true,
   });
 
   const chartData = useMemo(() => {
