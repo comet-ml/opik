@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   extractPromptData,
   formatPromptDataAsText,
+  formatPromptDataAsJson,
   ExtractedPromptData,
 } from "@/lib/prompt";
 import {
@@ -33,6 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
+import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import {
   MessagesList,
   NamedPromptsList,
@@ -119,12 +121,27 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     return fallbackPrompt || "";
   }, [extractedPrompt, fallbackPrompt]);
 
+  const currentPromptJson = useMemo(() => {
+    if (extractedPrompt) {
+      return formatPromptDataAsJson(extractedPrompt);
+    }
+    return fallbackPrompt || "";
+  }, [extractedPrompt, fallbackPrompt]);
+
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="shrink-0 gap-y-0.5 px-5">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="comet-body-s-accented">Best prompt</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="comet-body-s-accented">Best prompt</CardTitle>
+              <CopyButton
+                text={currentPromptJson}
+                message="Prompt copied to clipboard"
+                tooltipText="Copy prompt"
+                variant="ghost"
+              />
+            </div>
             <CardDescription className="!mt-0">
               <ColoredTagNew
                 label={optimization.objective_name}
@@ -176,6 +193,7 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
               View details <ArrowRight className="size-4" />
             </Button>
           </Link>
+          <div className="flex items-center gap-1">
           {baselinePrompt && (
             <>
               <TooltipWrapper content="Compare with baseline prompt">
@@ -219,6 +237,7 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
               </Dialog>
             </>
           )}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
           {extractedPrompt ? (
