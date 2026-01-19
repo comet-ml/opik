@@ -37,8 +37,12 @@ public class SortingQueryBuilder {
                     // Skip null handling for JSONExtractRaw fields (they're JSON strings, not maps)
                     boolean isJsonExtract = dbField.startsWith(JSON_EXTRACT_RAW_PREFIX);
 
-                    // Handle null direction for dynamic fields (unless it's a JSON extract)
-                    if (sortingField.handleNullDirection().isEmpty() || isJsonExtract) {
+                    // Skip null handling for fields that are explicitly mapped (like experiment.id -> eaag.experiment.1)
+                    // These are static fields that happen to contain a dot, not dynamic map access fields
+                    boolean isMappedField = fieldMapping != null && fieldMapping.containsKey(sortingField.field());
+
+                    // Handle null direction for dynamic fields (unless it's a JSON extract or explicitly mapped)
+                    if (sortingField.handleNullDirection().isEmpty() || isJsonExtract || isMappedField) {
                         return "%s %s".formatted(dbField, getDirection(sortingField));
                     } else {
                         String nullDirection = transformNullDirection(sortingField);
