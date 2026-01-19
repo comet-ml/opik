@@ -36,7 +36,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
     setNewTag("");
   };
 
-  const handleAddTag = () => {
+  const handleAddTag = async () => {
     const tag = newTag.trim();
 
     if (!tag) {
@@ -59,31 +59,30 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 
     const ids = experiments.map((exp) => exp.id);
 
-    experimentBatchUpdateMutation
-      .mutateAsync({
+    try {
+      await experimentBatchUpdateMutation.mutateAsync({
         ids,
         experiment: {
           tags: [tag],
         },
         mergeTags: true,
-      })
-      .then(() => {
-        toast({
-          title: "Success",
-          description: `Tag "${tag}" added to ${
-            experiments.length
-          } selected experiment${experiments.length > 1 ? "s" : ""}`,
-        });
-
-        if (onSuccess) {
-          onSuccess();
-        }
-
-        handleClose();
-      })
-      .catch(() => {
-        // Error handling is already done by the mutation hook
       });
+
+      toast({
+        title: "Success",
+        description: `Tag "${tag}" added to ${
+          experiments.length
+        } selected experiment${experiments.length > 1 ? "s" : ""}`,
+      });
+
+      if (onSuccess) {
+        onSuccess();
+      }
+
+      handleClose();
+    } catch {
+      // Error handling is already done by the mutation hook
+    }
   };
 
   return (
