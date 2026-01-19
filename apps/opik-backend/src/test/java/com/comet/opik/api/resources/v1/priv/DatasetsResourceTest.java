@@ -1577,7 +1577,7 @@ class DatasetsResourceTest {
 
             var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            DatasetItemBatch batch = new DatasetItemBatch(dataset.name(), null, datasetItems);
+            DatasetItemBatch batch = DatasetItemBatch.builder().datasetName(dataset.name()).items(datasetItems).build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -2482,7 +2482,10 @@ class DatasetsResourceTest {
             var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
             datasetItems.forEach(datasetItem -> putAndAssert(
-                    new DatasetItemBatch(null, datasets.get(index.getAndIncrement()).id(), List.of(datasetItem)),
+                    DatasetItemBatch.builder()
+                            .datasetId(datasets.get(index.getAndIncrement()).id())
+                            .items(List.of(datasetItem))
+                            .build(),
                     workspaceName, apiKey));
 
             // Creating two traces with input, output and scores
@@ -3824,7 +3827,8 @@ class DatasetsResourceTest {
         @DisplayName("when streaming has max steamLimit, then return items sorted by created date")
         void streamDataItems__whenStreamingHasMaxSize__thenReturnItemsSortedByCreatedDate() {
 
-            var items = IntStream.range(0, 1000)
+            // Create 3000 items total, but insert in batches of 1000 (max batch size)
+            var allItems = IntStream.range(0, 3000)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
@@ -3832,17 +3836,24 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(items)
-                    .datasetId(null)
-                    .build();
+            String datasetName = UUID.randomUUID().toString();
 
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            // Insert items in 3 batches of 1000 each
+            for (int i = 0; i < 3; i++) {
+                var batchItems = allItems.subList(i * 1000, (i + 1) * 1000);
+                var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                        .datasetName(datasetName)
+                        .items(batchItems)
+                        .datasetId(null)
+                        .build();
 
-            List<DatasetItem> expectedFirstPage = items.reversed().subList(0, 500);
+                putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            }
+
+            List<DatasetItem> expectedFirstPage = allItems.reversed().subList(0, 2000);
 
             var streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(batch.datasetName()).build();
+                    .datasetName(datasetName).build();
 
             try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -3861,8 +3872,8 @@ class DatasetsResourceTest {
             }
 
             streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(batch.datasetName())
-                    .lastRetrievedId(expectedFirstPage.get(499).id())
+                    .datasetName(datasetName)
+                    .lastRetrievedId(expectedFirstPage.get(1999).id())
                     .build();
 
             try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -3878,7 +3889,7 @@ class DatasetsResourceTest {
 
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
-                assertPage(items.reversed().subList(500, 1000), actualItems);
+                assertPage(allItems.reversed().subList(2000, 3000), actualItems);
             }
         }
     }
@@ -5088,6 +5099,7 @@ class DatasetsResourceTest {
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
+                    .batchGroupId(null)
                     .build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
@@ -7260,38 +7272,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when workspace size exceeds limit, then dynamic sorting is disabled and sortableBy is empty")
-        void findDatasetItemsWithExperimentItems__whenWorkspaceExceedsSize__thenDynamicSortingDisabled() {
-            /*
-             * Note: This test verifies the workspace size protection mechanism.
-             *
-             * The protection works as follows:
-             * 1. WorkspaceMetadataService calculates workspace size based on spans data
-             * 2. If workspace size exceeds maxSizeToAllowSorting, dynamic sorting is disabled
-             * 3. The API strips sortableBy fields and ignores sorting parameters
-             *
-             * Test configuration (config-test.yml):
-             *   workspaceSettings.maxSizeToAllowSorting: -1 (unlimited for tests)
-             *
-             * In production:
-             *   - maxSizeToAllowSorting is set to a reasonable limit (e.g., 100 GB)
-             *   - Large workspaces automatically disable dynamic sorting
-             *   - This prevents expensive ClickHouse queries on large datasets
-             *
-             * The workspace metadata check is implemented in:
-             *   - ScopeMetadata.canUseDynamicSorting()
-             *   - DatasetsResource.findDatasetItemsWithExperimentItems() (lines 440-446, 464-470)
-             *
-             * To test this scenario in a real environment:
-             *   1. Set maxSizeToAllowSorting to a low value (e.g., 0.1 GB)
-             *   2. Insert enough spans data to exceed the threshold
-             *   3. Verify sortableBy is empty in API response
-             *   4. Verify sorting parameters are ignored
-             *
-             * This test documents the protection mechanism. The actual workspace size
-             * calculation and threshold logic is tested in WorkspaceMetadataService tests.
-             */
-
+        @DisplayName("dynamic sorting is always enabled for dataset items with experiment items")
+        void findDatasetItemsWithExperimentItems__dynamicSortingEnabled() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -7303,8 +7285,7 @@ class DatasetsResourceTest {
 
             String projectName = GENERATOR.generate().toString();
 
-            // Create multiple traces and spans to generate workspace data
-            // This simulates a workspace with meaningful data for size calculation
+            // Create multiple traces
             List<Trace> traces = IntStream.range(0, 10)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
@@ -7382,23 +7363,9 @@ class DatasetsResourceTest {
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
                 assertThat(actualPage.content()).isNotEmpty();
 
-                // With current test configuration (maxSizeToAllowSorting: -1),
-                // dynamic sorting is always enabled, so sortableBy should be present
+                // Dynamic sorting is always enabled, sortableBy should be present
                 assertThat(actualPage.sortableBy()).isNotNull();
                 assertThat(actualPage.sortableBy()).isNotEmpty();
-
-                /*
-                 * If this test were run with maxSizeToAllowSorting set to 0:
-                 *   assertThat(actualPage.sortableBy()).isEmpty();
-                 *
-                 * And the data would NOT be sorted by the requested field.
-                 *
-                 * The protection mechanism is:
-                 *   1. Resource fetches ScopeMetadata
-                 *   2. Checks canUseDynamicSorting()
-                 *   3. If false: clears sorting fields and strips sortableBy from response
-                 *   4. Frontend receives empty sortableBy and knows sorting is unavailable
-                 */
             }
         }
     }

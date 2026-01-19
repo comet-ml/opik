@@ -32,8 +32,10 @@ object. This will allow you to continue versioning your prompts in code while
 also getting the benefit of having prompt versions managed in the Opik platform
 so you can more easily keep track of your progress.
 
+#### Prompts stored in code variables
+
 <Tabs>
-    <Tab value="Prompts stored in code" title="Prompts stored in code">
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -56,7 +58,38 @@ so you can more easily keep track of your progress.
         ```
 
     </Tab>
-    <Tab value="Prompts stored in a file" title="Prompts stored in a file">
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+
+        // Prompt text stored in a variable
+        const PROMPT_TEXT = "Write a summary of the following text: {{text}}";
+
+        // Create a prompt
+        const client = new Opik();
+        const prompt = await client.createPrompt({
+          name: "prompt-summary",
+          prompt: PROMPT_TEXT,
+          metadata: { environment: "production" },
+        });
+
+        // Print the prompt text
+        console.log(prompt.prompt);
+
+        // Build the prompt
+        console.log(prompt.format({ text: "Hello, world!" }));
+        ```
+
+    </Tab>
+</Tabs>
+
+#### Prompts stored in files
+
+Prompts can also be stored in a file and loaded from it:
+
+<Tabs>
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -75,7 +108,29 @@ so you can more easily keep track of your progress.
         ```
 
     </Tab>
+    <Tab value="TypeScript" title="TypeScript">
 
+        ```typescript
+        import { Opik } from "opik";
+        import { readFileSync } from "fs";
+
+        // Read the prompt from a file
+        const promptText = readFileSync("prompt.txt", "utf-8");
+
+        const client = new Opik();
+        const prompt = await client.createPrompt({
+          name: "prompt-summary",
+          prompt: promptText,
+        });
+
+        // Print the prompt text
+        console.log(prompt.prompt);
+
+        // Build the prompt
+        console.log(prompt.format({ text: "Hello, world!" }));
+        ```
+
+    </Tab>
 </Tabs>
 
 The prompt will now be stored in the library and versioned:
@@ -112,7 +167,7 @@ them, you can use the low-level Python SDK to manage your prompts.
 You can create a new prompt in the library using both the SDK and the UI:
 
 <Tabs>
-    <Tab value="Using the Python SDK" title="Using the Python SDK">
+    <Tab value="Python SDK" title="Python SDK">
         ```python
         import opik
 
@@ -121,6 +176,20 @@ You can create a new prompt in the library using both the SDK and the UI:
 
         # Create a new prompt
         prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}", metadata={"environment": "development"})
+        ```
+    </Tab>
+    <Tab value="TypeScript SDK" title="TypeScript SDK">
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Create a new prompt
+        const prompt = await client.createPrompt({
+          name: "prompt-summary",
+          prompt: "Write a summary of the following text: {{text}}",
+          metadata: { environment: "development" },
+        });
         ```
     </Tab>
     <Tab value="Using the UI" title="Using the UI">
@@ -266,53 +335,111 @@ For instance, you can use prompts with the `Google ADK` integration, as shown in
 
 #### Downloading your text prompts
 
-Once a prompt is created in the library, you can download it in code using the [`Opik.get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
+Once a prompt is created in the library, you can download it in code:
 
-```python
-import opik
+<Tabs>
+    <Tab value="Python" title="Python">
+        Use the [`Opik.get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
 
-opik.configure()
-client = opik.Opik()
+        ```python
+        import opik
 
-# Get a dataset
-dataset = client.get_or_create_dataset("test_dataset")
+        opik.configure()
+        client = opik.Opik()
 
-# Get the prompt
-prompt = client.get_prompt(name="prompt-summary")
+        # Get a dataset
+        dataset = client.get_or_create_dataset("test_dataset")
 
-# Create the prompt message
-prompt.format(text="Hello, world!")
-```
+        # Get the prompt
+        prompt = client.get_prompt(name="prompt-summary")
+
+        # Create the prompt message
+        prompt.format(text="Hello, world!")
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        Use the `getPrompt` method:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Get the prompt
+        const prompt = await client.getPrompt({ name: "prompt-summary" });
+
+        if (prompt) {
+          // Format the prompt
+          const formatted = prompt.format({ text: "Hello, world!" });
+          console.log(formatted);
+        }
+        ```
+    </Tab>
+</Tabs>
 
 If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest-api/overview).
 
 #### Searching prompts
 
-To discover prompts by name substring and/or filters, use [`search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts). Filters are written in Opik Query Language (OQL):
+To discover prompts by name substring and/or filters, use `search_prompts`. Filters are written in Opik Query Language (OQL):
 
-```python
-import opik
+<Tabs>
+    <Tab value="Python" title="Python">
+        Use [`search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts):
 
-client = opik.Opik()
+        ```python
+        import opik
 
-# Search by name substring only
-latest_versions = client.search_prompts(
-    filter_string='name contains "summary"'
-)
+        client = opik.Opik()
 
-# Search by name substring and tags filter
-filtered = client.search_prompts(
-    filter_string='name contains "summary" AND tags contains "alpha" AND tags contains "beta"',
-)
+        # Search by name substring only
+        latest_versions = client.search_prompts(
+            filter_string='name contains "summary"'
+        )
 
-# Search for only text prompts
-text_prompts = client.search_prompts(
-    filter_string='template_structure = "text"'
-)
+        # Search by name substring and tags filter
+        filtered = client.search_prompts(
+            filter_string='name contains "summary" AND tags contains "alpha" AND tags contains "beta"',
+        )
 
-for prompt in filtered:
-    print(prompt.name, prompt.commit, prompt.prompt)
-```
+        # Search for only text prompts
+        text_prompts = client.search_prompts(
+            filter_string='template_structure = "text"'
+        )
+
+        for prompt in filtered:
+            print(prompt.name, prompt.commit, prompt.prompt)
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        Use `searchPrompts`:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Search by name substring only
+        const latestVersions = await client.searchPrompts(
+          'name contains "summary"'
+        );
+
+        // Search by name substring and tags filter
+        const filtered = await client.searchPrompts(
+          'name contains "summary" AND tags contains "alpha" AND tags contains "beta"'
+        );
+
+        // Search for only text prompts
+        const textPrompts = await client.searchPrompts(
+          'template_structure = "text"'
+        );
+
+        for (const prompt of filtered) {
+          console.log(prompt.name, prompt.commit, prompt.prompt);
+        }
+        ```
+    </Tab>
+</Tabs>
 
 You can filter by `template_structure` to search for only text prompts (`"text"`) or only chat prompts (`"chat"`). Without the filter, `search_prompts` returns both types.
 
@@ -359,8 +486,10 @@ Similar to text prompts, you can create and manage chat prompts using the
 class. This allows you to version your chat prompts in code while benefiting from
 centralized management in the Opik platform.
 
+#### Simple chat prompt
+
 <Tabs>
-    <Tab value="Simple chat prompt" title="Simple chat prompt">
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -396,7 +525,53 @@ centralized management in the Opik platform.
         ```
 
     </Tab>
-    <Tab value="With OpenAI" title="With OpenAI">
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Define chat messages with variables
+        const messages = [
+          {
+            role: "system",
+            content: "You are a helpful assistant specializing in {{domain}}.",
+          },
+          { role: "user", content: "Explain {{topic}} in simple terms." },
+        ];
+
+        // Create a chat prompt
+        const chatPrompt = await client.createChatPrompt({
+          name: "educational-assistant",
+          messages: messages,
+          metadata: { category: "education" },
+        });
+
+        // Format the prompt with variables
+        const formattedMessages = chatPrompt.format({
+          domain: "physics",
+          topic: "quantum entanglement",
+        });
+
+        // Use formatted messages with your LLM
+        console.log(formattedMessages);
+        // Output:
+        // [
+        //   { role: "system", content: "You are a helpful assistant specializing in physics." },
+        //   { role: "user", content: "Explain quantum entanglement in simple terms." }
+        // ]
+        ```
+
+    </Tab>
+</Tabs>
+
+#### Using chat prompts with OpenAI
+
+Chat prompts work seamlessly with OpenAI's chat completion API:
+
+<Tabs>
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -434,7 +609,55 @@ centralized management in the Opik platform.
         ```
 
     </Tab>
-    <Tab value="Multi-turn conversation" title="Multi-turn conversation">
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+        import OpenAI from "openai";
+
+        const client = new Opik();
+        const openai = new OpenAI();
+
+        // Define chat messages with variables
+        const messages = [
+          {
+            role: "system",
+            content: "You are a helpful assistant specializing in {{domain}}.",
+          },
+          { role: "user", content: "Explain {{topic}} in simple terms." },
+        ];
+
+        // Create a chat prompt
+        const chatPrompt = await client.createChatPrompt({
+          name: "educational-assistant",
+          messages: messages,
+          metadata: { category: "education" },
+        });
+
+        // Format the prompt with variables
+        const formattedMessages = chatPrompt.format({
+          domain: "physics",
+          topic: "quantum entanglement",
+        });
+
+        // Use with OpenAI API
+        const response = await openai.chat.completions.create({
+          model: "gpt-4",
+          messages: formattedMessages,
+        });
+
+        console.log(response.choices[0].message.content);
+        ```
+
+    </Tab>
+</Tabs>
+
+#### Multi-turn conversation templates
+
+You can create templates for multi-turn conversations:
+
+<Tabs>
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -463,6 +686,42 @@ centralized management in the Opik platform.
         ```
 
     </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Define a multi-turn conversation template
+        const messages = [
+          {
+            role: "system",
+            content: "You are a customer support agent for {{company}}.",
+          },
+          { role: "user", content: "I have an issue with {{product}}." },
+          {
+            role: "assistant",
+            content:
+              "I'd be happy to help with your {{product}}. Can you describe the issue?",
+          },
+          { role: "user", content: "{{issue_description}}" },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "customer-support-flow",
+          messages: messages,
+        });
+
+        // Format with specific values
+        const formatted = chatPrompt.format({
+          company: "Acme Corp",
+          product: "Widget Pro",
+          issue_description: "It won't turn on",
+        });
+        ```
+
+    </Tab>
 </Tabs>
 
 The chat prompt will now be stored in the library and versioned, just like text prompts.
@@ -485,8 +744,10 @@ Once created, you can view and manage your chat prompts in the Opik UI:
 
 Chat prompts support multimodal content, allowing you to include images and videos alongside text. This is useful for vision-enabled models.
 
+#### Image analysis
+
 <Tabs>
-    <Tab value="Image analysis" title="Image analysis">
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -525,7 +786,58 @@ Chat prompts support multimodal content, allowing you to include images and vide
         ```
 
     </Tab>
-    <Tab value="Video analysis" title="Video analysis">
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Chat prompt with image content
+        const messages = [
+          {
+            role: "system",
+            content: "You analyze images and provide detailed descriptions.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "What's in this image of {{subject}}?" },
+              {
+                type: "image_url",
+                image_url: {
+                  url: "{{image_url}}",
+                  detail: "high",
+                },
+              },
+            ],
+          },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "image-analyzer",
+          messages: messages,
+        });
+
+        // Format with variables
+        const formatted = chatPrompt.format(
+          {
+            subject: "a sunset",
+            image_url: "https://example.com/sunset.jpg",
+          },
+          { vision: true }
+        );
+        ```
+
+    </Tab>
+</Tabs>
+
+#### Video analysis
+
+Chat prompts can also include video content:
+
+<Tabs>
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -564,7 +876,58 @@ Chat prompts support multimodal content, allowing you to include images and vide
         ```
 
     </Tab>
-    <Tab value="Mixed content" title="Mixed content">
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Chat prompt with video content
+        const messages = [
+          {
+            role: "system",
+            content: "You analyze videos and provide insights.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze this video: {{description}}" },
+              {
+                type: "video_url",
+                video_url: {
+                  url: "{{video_url}}",
+                  mime_type: "video/mp4",
+                },
+              },
+            ],
+          },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "video-analyzer",
+          messages: messages,
+        });
+
+        // Format with variables
+        const formatted = chatPrompt.format(
+          {
+            description: "traffic analysis",
+            video_url: "https://example.com/traffic.mp4",
+          },
+          { vision: true, video: true }
+        );
+        ```
+
+    </Tab>
+</Tabs>
+
+#### Mixed content
+
+You can combine multiple types of content in a single message:
+
+<Tabs>
+    <Tab value="Python" title="Python">
 
         ```python
         import opik
@@ -604,6 +967,48 @@ Chat prompts support multimodal content, allowing you to include images and vide
         ```
 
     </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Chat prompt with multiple images and text
+        const messages = [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Compare these two images:" },
+              {
+                type: "image_url",
+                image_url: { url: "{{image1_url}}" },
+              },
+              { type: "text", text: "and" },
+              {
+                type: "image_url",
+                image_url: { url: "{{image2_url}}" },
+              },
+              { type: "text", text: "What are the main differences?" },
+            ],
+          },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "image-comparison",
+          messages: messages,
+        });
+
+        const formatted = chatPrompt.format(
+          {
+            image1_url: "https://example.com/before.jpg",
+            image2_url: "https://example.com/after.jpg",
+          },
+          { vision: true }
+        );
+        ```
+
+    </Tab>
 </Tabs>
 
 <Note>
@@ -630,7 +1035,7 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
 #### Creating chat prompts
 
 <Tabs>
-    <Tab value="Using the Python SDK" title="Using the Python SDK">
+    <Tab value="Python SDK" title="Python SDK">
         Use [`Opik.create_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.create_chat_prompt) to create a chat prompt:
 
         ```python
@@ -656,6 +1061,31 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
         print(formatted)
         ```
     </Tab>
+    <Tab value="TypeScript SDK" title="TypeScript SDK">
+        Use `createChatPrompt` to create a chat prompt:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Create a new chat prompt
+        const messages = [
+          { role: "system", content: "You are a helpful assistant." },
+          { role: "user", content: "Hello, {{name}}!" },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "greeting-prompt",
+          messages: messages,
+          metadata: { environment: "development" },
+        });
+
+        // Format and use the prompt
+        const formatted = chatPrompt.format({ name: "Alice" });
+        console.log(formatted);
+        ```
+    </Tab>
     <Tab value="Using the UI" title="Using the UI">
         You can create a chat prompt in the UI by navigating to the Prompt library and clicking `Create new prompt`. Select "Chat prompt" as the prompt type, then enter the prompt name, add your chat messages with different roles (system, user, assistant), and optionally add metadata.
 
@@ -669,42 +1099,93 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
 
 #### Downloading chat prompts
 
-Once a chat prompt is created in the library, you can download it in code using the [`Opik.get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) method:
+Once a chat prompt is created in the library, you can download it in code:
 
-```python
-import opik
+<Tabs>
+    <Tab value="Python" title="Python">
+        Use the [`Opik.get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) method:
 
-opik.configure()
-client = opik.Opik()
+        ```python
+        import opik
 
-# Get a chat prompt
-chat_prompt = client.get_chat_prompt(name="greeting-prompt")
+        opik.configure()
+        client = opik.Opik()
 
-# Format the messages
-formatted_messages = chat_prompt.format(variables={"name": "Bob"})
+        # Get a chat prompt
+        chat_prompt = client.get_chat_prompt(name="greeting-prompt")
 
-# Use with your LLM
-# response = llm.chat(messages=formatted_messages)
-```
+        # Format the messages
+        formatted_messages = chat_prompt.format(variables={"name": "Bob"})
+
+        # Use with your LLM
+        # response = llm.chat(messages=formatted_messages)
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        Use the `getChatPrompt` method:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Get a chat prompt
+        const chatPrompt = await client.getChatPrompt({ name: "greeting-prompt" });
+
+        if (chatPrompt) {
+          // Format the messages
+          const formattedMessages = chatPrompt.format({ name: "Bob" });
+
+          // Use with your LLM
+          // const response = await llm.chat(formattedMessages);
+        }
+        ```
+    </Tab>
+</Tabs>
 
 #### Searching chat prompts
 
-You can search for chat prompts specifically by using the `template_structure` filter with [`Opik.search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts):
+You can search for chat prompts specifically by using the `template_structure` filter:
 
-```python
-import opik
+<Tabs>
+    <Tab value="Python" title="Python">
+        Use [`Opik.search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts) with the filter:
 
-client = opik.Opik()
+        ```python
+        import opik
 
-# Search for only chat prompts
-chat_prompts = client.search_prompts(
-    filter_string='template_structure = "chat" AND name contains "assistant"'
-)
+        client = opik.Opik()
 
-for prompt in chat_prompts:
-    print(f"Chat prompt: {prompt.name}")
-    print(f"Messages: {prompt.template}")
-```
+        # Search for only chat prompts
+        chat_prompts = client.search_prompts(
+            filter_string='template_structure = "chat" AND name contains "assistant"'
+        )
+
+        for prompt in chat_prompts:
+            print(f"Chat prompt: {prompt.name}")
+            print(f"Messages: {prompt.template}")
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        Use `searchPrompts` with the filter:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Search for only chat prompts
+        const chatPrompts = await client.searchPrompts(
+          'template_structure = "chat" AND name contains "assistant"'
+        );
+
+        for (const prompt of chatPrompts) {
+          console.log(`Chat prompt: ${prompt.name}`);
+          console.log(`Messages: ${prompt.messages}`);
+        }
+        ```
+    </Tab>
+</Tabs>
 
 To search for text prompts only, use `template_structure = "text"`. Without the filter, `search_prompts` returns both text and chat prompts.
 
@@ -712,10 +1193,12 @@ The `filter_string` parameter uses Opik Query Language (OQL) and supports the sa
 
 ### Template types for chat prompts
 
-Chat prompts support two template types for variable substitution, specified using [`PromptType`](https://www.comet.com/docs/opik/python-sdk-reference/library/PromptType.html):
+Chat prompts support two template types for variable substitution.
+
+#### Mustache (default)
 
 <Tabs>
-    <Tab value="Mustache (default)" title="Mustache (default)">
+    <Tab value="Python" title="Python">
         ```python
         import opik
         from opik.api_objects.prompt import PromptType
@@ -734,7 +1217,34 @@ Chat prompts support two template types for variable substitution, specified usi
         # Result: [{"role": "user", "content": "Hello Alice, you live in Paris."}]
         ```
     </Tab>
-    <Tab value="Jinja2" title="Jinja2">
+    <Tab value="TypeScript" title="TypeScript">
+        ```typescript
+        import { Opik, PromptType } from "opik";
+
+        const client = new Opik();
+
+        const messages = [
+          { role: "user", content: "Hello {{name}}, you live in {{city}}." },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "mustache-example",
+          messages: messages,
+          type: PromptType.MUSTACHE, // Default
+        });
+
+        const formatted = chatPrompt.format({ name: "Alice", city: "Paris" });
+        // Result: [{ role: "user", content: "Hello Alice, you live in Paris." }]
+        ```
+    </Tab>
+</Tabs>
+
+#### Jinja2
+
+For more advanced templating with conditionals, loops, and filters:
+
+<Tabs>
+    <Tab value="Python" title="Python">
         ```python
         import opik
         from opik.api_objects.prompt import PromptType
@@ -771,6 +1281,46 @@ Chat prompts support two template types for variable substitution, specified usi
         # Result includes: "Hello Bob, welcome!"
         ```
     </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        ```typescript
+        import { Opik, PromptType } from "opik";
+
+        const client = new Opik();
+
+        const messages = [
+          {
+            role: "user",
+            content: `
+              {% if is_premium %}
+              Hello {{ name }}, welcome to our premium service!
+              {% else %}
+              Hello {{ name }}, welcome!
+              {% endif %}
+            `,
+          },
+        ];
+
+        const chatPrompt = await client.createChatPrompt({
+          name: "jinja-example",
+          messages: messages,
+          type: PromptType.JINJA2,
+        });
+
+        // With premium user
+        const formatted1 = chatPrompt.format({
+          name: "Alice",
+          is_premium: true,
+        });
+        // Result includes: "Hello Alice, welcome to our premium service!"
+
+        // With regular user
+        const formatted2 = chatPrompt.format({
+          name: "Bob",
+          is_premium: false,
+        });
+        // Result includes: "Hello Bob, welcome!"
+        ```
+    </Tab>
 </Tabs>
 
 <Note>
@@ -781,49 +1331,99 @@ Jinja2 templates support advanced features like conditionals, loops, and filters
 
 Chat prompts are automatically versioned when the messages change. Each version has a unique commit hash.
 
-```python
-import opik
+<Tabs>
+    <Tab value="Python" title="Python">
+        ```python
+        import opik
 
-# Create initial version
-messages_v1 = [
-    {"role": "system", "content": "You are helpful."},
-    {"role": "user", "content": "Hi!"}
-]
+        # Create initial version
+        messages_v1 = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Hi!"}
+        ]
 
-chat_prompt_v1 = opik.ChatPrompt(
-    name="assistant-prompt",
-    messages=messages_v1
-)
+        chat_prompt_v1 = opik.ChatPrompt(
+            name="assistant-prompt",
+            messages=messages_v1
+        )
 
-print(f"Version 1 commit: {chat_prompt_v1.commit}")
+        print(f"Version 1 commit: {chat_prompt_v1.commit}")
 
-# Create new version with different messages
-messages_v2 = [
-    {"role": "system", "content": "You are very helpful."},
-    {"role": "user", "content": "Hello there!"},
-    {"role": "assistant", "content": "How can I assist you?"}
-]
+        # Create new version with different messages
+        messages_v2 = [
+            {"role": "system", "content": "You are very helpful."},
+            {"role": "user", "content": "Hello there!"},
+            {"role": "assistant", "content": "How can I assist you?"}
+        ]
 
-chat_prompt_v2 = opik.ChatPrompt(
-    name="assistant-prompt",
-    messages=messages_v2
-)
+        chat_prompt_v2 = opik.ChatPrompt(
+            name="assistant-prompt",
+            messages=messages_v2
+        )
 
-print(f"Version 2 commit: {chat_prompt_v2.commit}")
+        print(f"Version 2 commit: {chat_prompt_v2.commit}")
 
-# Get specific version by commit
-client = opik.Opik()
-specific_version = client.get_chat_prompt(
-    name="assistant-prompt",
-    commit=chat_prompt_v1.commit
-)
+        # Get specific version by commit
+        client = opik.Opik()
+        specific_version = client.get_chat_prompt(
+            name="assistant-prompt",
+            commit=chat_prompt_v1.commit
+        )
 
-# Get version history
-history = client.get_chat_prompt_history(name="assistant-prompt")
-print(f"Total versions: {len(history)}")
-```
+        # Get version history
+        history = client.get_chat_prompt_history(name="assistant-prompt")
+        print(f"Total versions: {len(history)}")
+        ```
 
-You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit hash, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
+        You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit hash, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Create initial version
+        const messagesV1 = [
+          { role: "system", content: "You are helpful." },
+          { role: "user", content: "Hi!" },
+        ];
+
+        const chatPromptV1 = await client.createChatPrompt({
+          name: "assistant-prompt",
+          messages: messagesV1,
+        });
+
+        console.log(`Version 1 commit: ${chatPromptV1.commit}`);
+
+        // Create new version with different messages
+        const messagesV2 = [
+          { role: "system", content: "You are very helpful." },
+          { role: "user", content: "Hello there!" },
+          { role: "assistant", content: "How can I assist you?" },
+        ];
+
+        const chatPromptV2 = await client.createChatPrompt({
+          name: "assistant-prompt",
+          messages: messagesV2,
+        });
+
+        console.log(`Version 2 commit: ${chatPromptV2.commit}`);
+
+        // Get specific version by commit
+        const specificVersion = await client.getChatPrompt({
+          name: "assistant-prompt",
+          commit: chatPromptV1.commit,
+        });
+
+        // Get version history
+        const versions = await chatPromptV1.getVersions();
+        console.log(`Total versions: ${versions.length}`);
+        ```
+
+        You can use `getChatPrompt` with a commit parameter to retrieve a specific version, and the `getVersions()` method to get all versions.
+    </Tab>
+</Tabs>
 
 <Tip>
 If you create a chat prompt with identical messages to an existing version, Opik will return the existing version instead of creating a duplicate. This helps avoid unnecessary version proliferation.

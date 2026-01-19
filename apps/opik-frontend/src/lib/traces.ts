@@ -51,6 +51,47 @@ type PrettifyMessageResponse = {
   prettified: boolean;
 };
 
+/**
+ * Extracts the last human/user message content from an array of messages.
+ * Supports both string content and array content (e.g., multimodal messages).
+ * Used by LangGraph and LangChain prettify logic.
+ */
+const extractLastHumanMessageContent = (
+  messages: unknown[],
+): string | undefined => {
+  const humanMessageContents: string[] = [];
+
+  for (const m of messages) {
+    if (isObject(m) && "type" in m && m.type === "human" && "content" in m) {
+      // Content can be a string
+      if (isString(m.content) && m.content !== "") {
+        humanMessageContents.push(m.content);
+      }
+      // Or content can be an array with text content (e.g., multimodal messages)
+      else if (isArray(m.content)) {
+        const lastTextContent = findLast(
+          m.content,
+          (c) =>
+            isObject(c) &&
+            "type" in c &&
+            c.type === "text" &&
+            "text" in c &&
+            isString(c.text) &&
+            c.text !== "",
+        );
+
+        if (lastTextContent && "text" in lastTextContent) {
+          humanMessageContents.push(lastTextContent.text);
+        }
+      }
+    }
+  }
+
+  return humanMessageContents.length > 0
+    ? last(humanMessageContents)
+    : undefined;
+};
+
 const prettifyOpenAIMessageLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -61,7 +102,11 @@ const prettifyOpenAIMessageLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const lastMessage = last(message.messages);
+    // Filter for user messages only, then get the last one
+    const userMessages = message.messages.filter(
+      (m) => isObject(m) && "role" in m && m.role === "user" && "content" in m,
+    );
+    const lastMessage = last(userMessages);
     if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
       if (isString(lastMessage.content) && lastMessage.content.length > 0) {
         return lastMessage.content;
@@ -212,19 +257,7 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const humanMessages = message.messages.filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
-
-    if (humanMessages.length > 0) {
-      return last(humanMessages).content;
-    }
+    return extractLastHumanMessageContent(message.messages);
   } else if (
     config.type === "output" &&
     isObject(message) &&
@@ -285,19 +318,7 @@ const prettifyLangChainLogic = (
     message.messages.length == 1 &&
     isArray(message.messages[0])
   ) {
-    const humanMessages = message.messages[0].filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
-
-    if (humanMessages.length > 0) {
-      return last(humanMessages).content;
-    }
+    return extractLastHumanMessageContent(message.messages[0]);
   } else if (
     config.type === "output" &&
     isObject(message) &&

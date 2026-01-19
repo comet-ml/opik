@@ -13,6 +13,10 @@ ProjectMetricResponsePublicMetricType = typing.Union[
         "THREAD_COUNT",
         "THREAD_DURATION",
         "THREAD_FEEDBACK_SCORES",
+        "SPAN_FEEDBACK_SCORES",
+        "SPAN_COUNT",
+        "SPAN_DURATION",
+        "SPAN_TOKEN_USAGE",
     ],
     typing.Any,
 ]

@@ -434,6 +434,62 @@ class TestOpikCallbackLLMRouter:
         assert lm_info.total_cost is None
 
 
+class TestCacheHitCostCalculation:
+    """Tests for cache hit scenarios and cost calculation."""
+
+    def test_cache_hit_returns_no_cost(self):
+        """
+        When a response is served from cache (no usage data), total_cost should be None.
+        Cached responses don't incur API costs, so cost should not be reported.
+        """
+        mock_response = MagicMock()
+        mock_response.cache_hit = True
+
+        mock_lm = MagicMock()
+        expected_messages = [{"role": "user", "content": "test"}]
+        mock_lm.history = [
+            {
+                "messages": expected_messages,
+                "response": mock_response,
+                "usage": None,  # No usage for cached responses
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, expected_messages)
+
+        assert result.cache_hit is True
+        assert result.usage is None
+        assert result.total_cost is None
+
+    def test_non_cached_response_returns_cost(self):
+        """
+        When a response is not cached and has cost data, total_cost should be extracted.
+        """
+        mock_response = MagicMock()
+        mock_response.cache_hit = False
+
+        mock_lm = MagicMock()
+        expected_messages = [{"role": "user", "content": "test"}]
+        mock_lm.history = [
+            {
+                "messages": expected_messages,
+                "response": mock_response,
+                "cost": 0.00025,
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                },
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, expected_messages)
+
+        assert result.cache_hit is False
+        assert result.usage is not None
+        assert result.total_cost == 0.00025
+
+
 class TestOpikCallbackCaseInsensitiveProvider:
     """Tests for case-insensitive provider comparison."""
 
