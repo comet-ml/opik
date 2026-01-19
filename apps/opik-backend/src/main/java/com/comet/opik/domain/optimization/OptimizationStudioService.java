@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class OptimizationStudioService {
 
-    private static final String URL_TEMPLATE = "%s/v1/private/studio/generate-code";
+    private static final String URL_TEMPLATE = "%s/v1/private/studio/code";
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull OpikConfiguration config;

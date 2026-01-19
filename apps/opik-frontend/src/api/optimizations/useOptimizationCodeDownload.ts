@@ -52,7 +52,7 @@ export default function useOptimizationCodeDownload() {
     ) => {
       try {
         const response = await api.post<string>(
-          `${OPTIMIZATIONS_REST_ENDPOINT}studio/generate-code`,
+          `${OPTIMIZATIONS_REST_ENDPOINT}studio/code`,
           config,
           {
             responseType: "text",
