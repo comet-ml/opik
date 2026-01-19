@@ -90,13 +90,10 @@ public class FiltersFactory {
                             StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.MAP, filter -> filter.value() != null &&
                             StringUtils.isNotBlank(filter.key()))
-                    .put(FieldType.LIST, filter -> {
-                        if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
-                            // don't validate value in case it's not needed
-                            return true;
-                        }
-                        return StringUtils.isNotBlank(filter.value());
-                    })
+                    .put(FieldType.LIST, filter ->
+                        // don't validate value in case it's unnecessary
+                        Operator.NO_VALUE_OPERATORS.contains(filter.operator()) ||
+                                StringUtils.isNotBlank(filter.value()))
                     .build());
 
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
