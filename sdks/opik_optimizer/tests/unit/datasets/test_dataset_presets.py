@@ -5,7 +5,7 @@ import unittest.mock as mock
 import pytest
 
 import opik_optimizer.datasets as dataset_module
-from opik_optimizer.utils import dataset_utils
+from opik_optimizer.utils import dataset as dataset_utils
 
 
 CURATED_DATASETS = [

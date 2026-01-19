@@ -1,11 +1,9 @@
-from typing import Any
+from typing import Any, cast
 
 import copy
-import hashlib
 import json
 import logging
 import warnings
-import random
 from datetime import datetime
 
 import optuna
@@ -14,15 +12,20 @@ import optuna.pruners
 
 from opik import Dataset, opik_context
 
-from ... import base_optimizer, _llm_calls, helpers
+from ... import base_optimizer
+from ...core import llm_calls as _llm_calls
+from ...core.state import OptimizationContext, AlgorithmResult
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...agents import LiteLLMAgent, OptimizableAgent
-from ... import _throttle, optimization_result, task_evaluator, reporting_utils
+from ...agents import OptimizableAgent
+from ...core import evaluation as task_evaluator
+from ... import helpers as parent_helpers
+from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
-from . import reporting, types
+from ...utils.logging import debug_log
+from . import helpers, types
 from . import prompts as few_shot_prompts
-from .columnar_search_space import ColumnarSearchSpace
+from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
 from collections.abc import Callable
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -112,6 +115,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         elif self.verbose == 2:
             logger.setLevel(logging.DEBUG)
 
+        # Instance state for custom evaluation (used by overridden evaluate_prompt)
+        self._custom_evaluated_task: Callable[..., dict[str, Any]] | None = None
+        self._custom_eval_item_ids: list[str] | None = None
+
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -124,13 +131,86 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "enable_optuna_pruning": self.enable_optuna_pruning,
         }
 
-    # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
-    def _make_rng(self, *parts: object) -> random.Random:
-        """Create a deterministic RNG keyed by the base seed plus contextual parts (e.g., trial id)."""
-        namespace = "|".join(str(part) for part in (self.seed, *parts))
-        digest = hashlib.sha256(namespace.encode("utf-8")).digest()
-        derived_seed = int.from_bytes(digest[:8], "big")
-        return random.Random(derived_seed)
+    def evaluate_prompt(  # type: ignore[override]
+        self,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
+        n_threads: int | None = None,
+        verbose: int = 1,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        seed: int | None = None,
+        return_evaluation_result: bool = False,
+        allow_tool_use: bool | None = None,
+    ) -> float:
+        """
+        Override evaluate_prompt to support custom evaluated_task.
+
+        When _custom_evaluated_task is set (during Bayesian optimization),
+        uses the pre-built task with few-shot examples injected instead of
+        building one from the prompt parameter.
+        """
+        if self._custom_evaluated_task is not None:
+            # Use the custom task (with few-shot examples already injected)
+            if n_threads is None:
+                n_threads = self.n_threads
+
+            return task_evaluator.evaluate(
+                dataset=dataset,
+                evaluated_task=self._custom_evaluated_task,
+                metric=metric,
+                num_threads=n_threads,
+                dataset_item_ids=self._custom_eval_item_ids,
+                project_name=self.project_name,
+                experiment_config=experiment_config,
+                optimization_id=self.current_optimization_id,
+                verbose=verbose,
+            )
+
+        # Default behavior: delegate to parent
+        # Note: This method always returns float, so we pass literal False
+        # to help mypy narrow the overload correctly
+        return super().evaluate_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            agent=agent,
+            n_threads=n_threads,
+            verbose=verbose,
+            dataset_item_ids=dataset_item_ids,
+            experiment_config=experiment_config,
+            n_samples=n_samples,
+            seed=seed,
+            return_evaluation_result=False,
+            allow_tool_use=allow_tool_use,
+        )
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer-specific configuration for display."""
+        return {
+            "optimizer": self.__class__.__name__,
+            "metric": context.metric.__name__,
+            "max_trials": context.max_trials,
+            "n_samples": context.n_samples,
+        }
+
+    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
+        """
+        Return FewShotBayesian-specific metadata for the optimization result.
+
+        Provides trials and rounds tracking that can be used in any scenario
+        (early stop, completion, etc.). The optimizer doesn't know why this
+        is being called - it just provides its current state.
+        """
+        return {
+            "total_trials": context.max_trials,
+            "total_rounds": context.max_trials,
+            "rounds": [],
+            "trials_completed": context.trials_completed,
+        }
 
     # FIXME: Dead code, should be wired or removed
     def _split_dataset(
@@ -149,7 +229,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if not dataset:
             return [], []
 
-        rng = self._make_rng("split_dataset", train_ratio)
+        rng = helpers.make_rng(self.seed, "split_dataset", train_ratio)
         dataset_copy = dataset.copy()
         rng.shuffle(dataset_copy)
 
@@ -237,89 +317,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         return new_prompts, str(response_content.template)
 
-    def _stringify_column_value(self, value: Any) -> str | None:
-        """Convert a dataset value to a string suitable for column grouping."""
-        if value is None:
-            return self._MISSING_VALUE_SENTINEL
-        if isinstance(value, (list, dict)):
-            return None
-        text = str(value)
-        if len(text) > self._MAX_COLUMN_VALUE_LENGTH:
-            return None
-        return text
-
-    def _build_columnar_search_space(
-        self, dataset_items: list[dict[str, Any]]
-    ) -> ColumnarSearchSpace:
-        """
-        Infer a lightweight columnar index so Optuna can learn over categorical fields.
-
-        We only keep columns that repeat across rows (avoid high-cardinality text) and
-        cap unique values to keep the search space manageable.
-        """
-        if not dataset_items:
-            return ColumnarSearchSpace.empty()
-
-        candidate_columns: list[str] = []
-        for key in dataset_items[0]:
-            if key == "id":
-                continue
-
-            unique_values: set[str] = set()
-            skip_column = False
-            for item in dataset_items:
-                if key not in item:
-                    skip_column = True
-                    break
-                str_value = self._stringify_column_value(item.get(key))
-                if str_value is None:
-                    skip_column = True
-                    break
-                unique_values.add(str_value)
-                if len(unique_values) > self._MAX_UNIQUE_COLUMN_VALUES:
-                    skip_column = True
-                    break
-
-            if skip_column:
-                continue
-
-            if len(unique_values) < 2 or len(unique_values) >= len(dataset_items):
-                continue
-
-            candidate_columns.append(key)
-
-        if not candidate_columns:
-            return ColumnarSearchSpace.empty()
-
-        combo_to_indices: dict[str, list[int]] = {}
-        for idx, item in enumerate(dataset_items):
-            combo_parts: list[str] = []
-            skip_example = False
-            for column in candidate_columns:
-                str_value = self._stringify_column_value(item.get(column))
-                if str_value is None:
-                    skip_example = True
-                    break
-                combo_parts.append(f"{column}={str_value}")
-
-            if skip_example:
-                continue
-
-            combo_label = "|".join(combo_parts)
-            combo_to_indices.setdefault(combo_label, []).append(idx)
-
-        if not combo_to_indices:
-            return ColumnarSearchSpace.empty()
-
-        max_group_size = max(len(indices) for indices in combo_to_indices.values())
-        combo_labels = sorted(combo_to_indices.keys())
-        return ColumnarSearchSpace(
-            columns=candidate_columns,
-            combo_labels=combo_labels,
-            combo_to_indices=combo_to_indices,
-            max_group_size=max_group_size,
-        )
-
     def _suggest_example_index(
         self,
         trial: optuna.Trial,
@@ -396,12 +393,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         return resolved_index
 
-    def _run_optimization(
+    def _run_bayesian_optimization(
         self,
+        context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         original_prompts: dict[str, chat_prompt.ChatPrompt],
         fewshot_prompt_template: str,
-        agent: OptimizableAgent,
+        agent: OptimizableAgent | None,
         dataset: Dataset,
         validation_dataset: Dataset | None,
         metric: MetricFunction,
@@ -411,9 +409,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         is_single_prompt_optimization: bool = False,
-    ) -> optimization_result.OptimizationResult:
-        reporting.start_optimization_run(verbose=self.verbose)
-
+    ) -> AlgorithmResult:
+        if agent is None:
+            raise ValueError(
+                "FewShotBayesianOptimizer requires an agent for optimization."
+            )
         # Load the dataset
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
@@ -421,7 +421,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         dataset_items = dataset.get_items()
         columnar_search_space = (
-            self._build_columnar_search_space(dataset_items)
+            build_columnar_search_space(
+                dataset_items, max_unique_column_values=self._MAX_UNIQUE_COLUMN_VALUES
+            )
             if self.enable_columnar_selection
             else ColumnarSearchSpace.empty()
         )
@@ -434,10 +436,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         eval_dataset_items = evaluation_dataset.get_items()
         eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
         if n_samples is not None and n_samples < len(dataset_items):
-            rng = self._make_rng("optimization_eval_ids", n_samples)
+            rng = helpers.make_rng(self.seed, "optimization_eval_ids", n_samples)
             eval_dataset_item_ids = rng.sample(eval_dataset_item_ids, n_samples)
 
-        configuration_updates = helpers.drop_none(
+        configuration_updates = parent_helpers.drop_none(
             {
                 "n_trials": n_trials,
                 "n_samples": n_samples,
@@ -456,6 +458,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Start Optuna Study
         def optimization_objective(trial: optuna.Trial) -> float:
+            # Check should_stop flag at start of each trial
+            if context.should_stop:
+                raise optuna.exceptions.TrialPruned()
+
             n_examples = trial.suggest_int(
                 "n_examples", self.min_examples, self.max_examples
             )
@@ -522,48 +528,45 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 f"Trial {trial.number}: n_examples={n_examples}, indices={example_indices}"
             )
             logger.debug(f"Evaluating trial {trial.number}...")
-
-            # Display trial start
-            reporting.display_trial_start(
-                trial_number=trial.number,
-                total_trials=n_trials,
-                messages=messages_for_reporting,
-                verbose=self.verbose,
-                selection_summary=reporting_utils.summarize_selection_policy(
-                    prompts_with_examples
-                ),
+            debug_log(
+                "trial_start",
+                trial_index=trial.number + 1,
+                trials_completed=context.trials_completed,
+                max_trials=n_trials,
             )
 
-            score = task_evaluator.evaluate(
-                dataset=evaluation_dataset,  # use right dataset for scoring
-                dataset_item_ids=eval_dataset_item_ids,
-                metric=metric,
-                evaluated_task=llm_task,
-                num_threads=self.n_threads,
-                project_name=self.project_name,
-                experiment_config=trial_config,
-                optimization_id=optimization_id,
-                verbose=self.verbose,
-            )
+            # Set custom task for evaluate_prompt override
+            self._custom_evaluated_task = llm_task
+            self._custom_eval_item_ids = eval_dataset_item_ids
+            try:
+                # Use base optimizer's evaluate() which handles:
+                # - Trial counting (context.trials_completed)
+                # - Early stop checks (perfect score, max trials)
+                # - Progress display hooks
+                score = self.evaluate(prompts_with_examples, trial_config)
+            finally:
+                # Clear custom task state
+                self._custom_evaluated_task = None
+                self._custom_eval_item_ids = None
 
-            # Display trial score
-            reporting.display_trial_score(
-                trial_number=trial.number,
-                baseline_score=baseline_score,
-                score=score,
-                verbose=self.verbose,
-            )
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
+            debug_log(
+                "trial_end",
+                trial_index=trial.number + 1,
+                score=score,
+                trials_completed=context.trials_completed,
+            )
 
-            # Trial results
-            trial_config = {
+            # Trial results for Optuna
+            trial_result_config = {
                 "demo_examples": demo_examples,
                 "message_list": messages_for_reporting,
             }
             if columnar_choices:
-                trial_config["columnar_choices"] = columnar_choices
+                trial_result_config["columnar_choices"] = columnar_choices
             trial.set_user_attr("score", score)
-            trial.set_user_attr("config", trial_config)
+            trial.set_user_attr("config", trial_result_config)
+
             return score
 
         # Configure Optuna Logging
@@ -603,50 +606,67 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_objective, n_trials=n_trials, show_progress_bar=False
         )
 
-        optuna_history_processed = []
+        self._history_builder.clear()
         for trial in study.trials:
-            if trial.state == optuna.trial.TrialState.COMPLETE:
-                trial_config = trial.user_attrs.get("config", {})
-                prompt_cand_display = trial_config.get(
-                    "message_list"
-                )  # Default to None
-
-                score_val = (
-                    trial.value
-                )  # This can be None if trial failed to produce a score
-                duration_val = None
-                if trial.datetime_complete and trial.datetime_start:
-                    duration_val = (
-                        trial.datetime_complete - trial.datetime_start
-                    ).total_seconds()
-
-                iter_detail = {
-                    "iteration": trial.number + 1,
-                    "timestamp": (
-                        trial.datetime_start.isoformat()
-                        if trial.datetime_start
-                        else datetime.now().isoformat()
-                    ),
-                    "prompt_candidate": prompt_cand_display,
-                    "parameters_used": {
-                        "optuna_params": trial.user_attrs.get("config", {}),
-                        "example_indices": trial.user_attrs.get(
-                            "example_indices", []
-                        ),  # Default to empty list
-                    },
-                    "scores": [
-                        {
-                            "metric_name": metric.__name__,
-                            "score": score_val,  # Can be None
-                        }
-                    ],
-                    "duration_seconds": duration_val,
-                }
-                optuna_history_processed.append(iter_detail)
-            else:
+            if trial.state != optuna.trial.TrialState.COMPLETE:
                 logger.warning(
                     f"Skipping trial {trial.number} from history due to state: {trial.state}. Value: {trial.value}"
                 )
+                continue
+
+            trial_config = trial.user_attrs.get("config", {})
+            prompt_cand_display = trial_config.get("message_list")  # Default to None
+            score_val = (
+                trial.value
+            )  # This can be None if trial failed to produce a score
+            timestamp = (
+                trial.datetime_start.isoformat()
+                if trial.datetime_start
+                else datetime.now().isoformat()
+            )
+            sampler_info = type(study.sampler).__name__ if study.sampler else None
+            pruner_info = type(study.pruner).__name__ if study.pruner else None
+            round_handle = self.pre_round(
+                context,
+                sampler=sampler_info,
+                pruner=pruner_info,
+                study_direction=study.direction.name if study.direction else None,
+            )
+            self.record_candidate_entry(
+                prompt_or_payload=prompt_cand_display,
+                score=score_val,
+                id=f"trial{trial.number}",
+                extra={
+                    "parameters": trial.user_attrs.get("parameters", {}),
+                    "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
+                    "model": trial.user_attrs.get("model", {}),
+                    "stage": trial.user_attrs.get("stage"),
+                    "type": trial.user_attrs.get("type"),
+                },
+            )
+            self.post_trial(
+                context,
+                prompt_cand_display,
+                score=score_val,
+                round_handle=round_handle,
+                timestamp=timestamp,
+            )
+            self.set_selection_meta(
+                {
+                    "sampler": sampler_info,
+                    "pruner": pruner_info,
+                    "study_direction": study.direction.name
+                    if study.direction
+                    else None,
+                    "stage": trial.user_attrs.get("stage")
+                    if trial is not None
+                    else None,
+                }
+            )
+            self.post_round(
+                round_handle,
+                stop_reason=context.finish_reason,
+            )
 
         best_trial = study.best_trial
         best_score = best_trial.value
@@ -667,223 +687,39 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 fewshot_prompt_template=fewshot_prompt_template,
             )
 
-        reporting.display_result(
-            initial_score=baseline_score,
+        # finish_reason, stopped_early, stop_reason are handled by base class
+
+        return AlgorithmResult(
+            best_prompts=best_prompts,
             best_score=best_score,
-            prompt=best_prompts,
-            verbose=self.verbose,
-        )
-
-        # Handle single vs. dict of prompts for result
-        result_best_prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompts: (
-            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        )
-        if is_single_prompt_optimization:
-            result_best_prompts = list(best_prompts.values())[0]
-            result_initial_prompts = list(original_prompts.values())[0]
-        else:
-            result_best_prompts = best_prompts
-            result_initial_prompts = original_prompts
-
-        trials_requested = n_trials
-        trials_completed = len(optuna_history_processed)
-        stopped_early = trials_completed < trials_requested
-        stop_reason = "max_trials" if not stopped_early else None
-        stop_reason_details = {"best_score": best_score}
-
-        return optimization_result.OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_best_prompts,
-            initial_prompt=result_initial_prompts,
-            initial_score=baseline_score,
-            score=best_score,
-            metric_name=metric.__name__,
-            details={
-                "initial_score": baseline_score,
+            history=self.get_history_entries(),
+            metadata={
+                # Algorithm-specific fields only (framework fields handled by base)
                 "prompt_parameter": best_trial.user_attrs.get("config", {}),
                 "example_indices": best_example_indices,
                 "trial_number": best_trial.number,
-                "total_trials": n_trials,
-                "total_rounds": n_trials,
-                "rounds": [],
-                "trials_requested": trials_requested,
-                "trials_completed": trials_completed,
-                "rounds_completed": None,
-                "stopped_early": stopped_early,
-                "stop_reason": stop_reason,
-                "stop_reason_details": stop_reason_details,
-                "model": self.model,
-                "temperature": self.model_parameters.get("temperature"),
             },
-            history=optuna_history_processed,
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
-            dataset_id=dataset.id,
-            optimization_id=optimization_id,
         )
 
-    def optimize_prompt(
+    def run_optimization(
         self,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        dataset: Dataset,
-        metric: MetricFunction,
-        agent: OptimizableAgent | None = None,
-        experiment_config: dict | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        project_name: str = "Optimization",
-        optimization_id: str | None = None,
-        validation_dataset: Dataset | None = None,
-        max_trials: int = 10,
-        *args: Any,
-        **kwargs: Any,
-    ) -> optimization_result.OptimizationResult:
-        """
-        Args:
-            prompt: The prompt to optimize
-            dataset: Opik Dataset to optimize on
-            metric: Metric function to evaluate on
-            experiment_config: Optional configuration for the experiment, useful to log additional metadata
-            n_samples: Optional number of items to test in the dataset
-            auto_continue: Whether to auto-continue optimization
-            agent_class: Optional agent class to use
-            project_name: Opik project name for logging traces (default: "Optimization")
-            max_trials: Number of trials for Bayesian Optimization (default: 10)
-            optimization_id: Optional ID for the Opik optimization run; when provided it
-                must be a valid UUIDv7 string.
-            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
-
-        Returns:
-            OptimizationResult: Result of the optimization
-        """
-        # Use base class validation and setup methods
-        if agent is None:
-            agent = LiteLLMAgent(project_name=project_name)
-
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
-
-        self._validate_optimization_inputs(
-            optimizable_prompts, dataset, metric, support_content_parts=True
+        context: OptimizationContext,
+    ) -> AlgorithmResult:
+        optimizable_prompts = context.prompts
+        self.set_default_dataset_split(
+            "validation" if context.validation_dataset is not None else "train"
         )
+        dataset = context.dataset
+        validation_dataset = context.validation_dataset
+        metric = context.metric
+        agent = context.agent
+        experiment_config = context.experiment_config
+        max_trials = context.max_trials
+        optimization_id = context.optimization_id
+        baseline_score = cast(float, context.baseline_score)
+        n_samples = context.n_samples
+        is_single_prompt_optimization = context.is_single_prompt_optimization
 
-        optimization = None
-        try:
-            optimization = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata=self._build_optimization_metadata(),
-                name=self.name,
-                optimization_id=optimization_id,
-            )
-            self.current_optimization_id = optimization.id
-        except Exception:
-            logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
-            )
-            optimization = None
-            self.current_optimization_id = None
-
-        # Start experiment reporting
-        reporting.display_header(
-            algorithm=self.__class__.__name__,
-            optimization_id=self.current_optimization_id,
-            dataset_id=dataset.id,
-            verbose=self.verbose,
-        )
-        reporting.display_configuration(
-            messages=optimizable_prompts,
-            optimizer_config={
-                "optimizer": self.__class__.__name__,
-                "metric": metric.__name__,
-                "max_trials": max_trials,
-                "n_samples": n_samples,
-            },
-            verbose=self.verbose,
-        )
-
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
-        )
-
-        # Step 1. Compute the baseline evaluation
-        with reporting.display_evaluation(
-            message="First we will establish the baseline performance:",
-            verbose=self.verbose,
-            selection_summary=reporting_utils.summarize_selection_policy(
-                optimizable_prompts
-            ),
-        ) as eval_report:
-            baseline_score = self.evaluate_prompt(
-                prompt=optimizable_prompts,
-                dataset=evaluation_dataset,
-                metric=metric,
-                agent=agent,
-                n_samples=n_samples,
-                experiment_config=self._prepare_experiment_config(
-                    prompt=optimizable_prompts,
-                    dataset=evaluation_dataset,
-                    metric=metric,
-                    agent=agent,
-                    experiment_config=experiment_config,
-                    is_single_prompt_optimization=is_single_prompt_optimization,
-                ),
-            )
-
-            eval_report.set_score(baseline_score)
-
-        if self._should_skip_optimization(baseline_score):
-            logger.info(
-                "Baseline score %.4f >= %.4f; skipping few-shot optimization.",
-                baseline_score,
-                self.perfect_score,
-            )
-            reporting.display_result(
-                initial_score=baseline_score,
-                best_score=baseline_score,
-                prompt=optimizable_prompts,
-                verbose=self.verbose,
-            )
-
-            early_result_prompt, early_initial_prompt = self._select_result_prompts(
-                best_prompts=optimizable_prompts,
-                initial_prompts=optimizable_prompts,
-                is_single_prompt_optimization=is_single_prompt_optimization,
-            )
-
-            return self._build_early_result(
-                optimizer_name=self.__class__.__name__,
-                prompt=early_result_prompt,
-                initial_prompt=early_initial_prompt,
-                score=baseline_score,
-                metric_name=metric.__name__,
-                details={
-                    "initial_score": baseline_score,
-                    "total_trials": 0,
-                    "total_rounds": 0,
-                    "rounds": [],
-                    "stopped_early": True,
-                    "stop_reason": "baseline_score_met_threshold",
-                    "stop_reason_details": {"best_score": baseline_score},
-                    "perfect_score": self.perfect_score,
-                    "skip_perfect_score": self.skip_perfect_score,
-                    "model": self.model,
-                    "temperature": self.model_parameters.get("temperature"),
-                },
-                history=[],
-                llm_calls=self.llm_call_counter,
-                llm_calls_tools=self.llm_calls_tools_counter,
-                dataset_id=dataset.id,
-                optimization_id=optimization.id if optimization is not None else None,
-            )
-
-        # Step 2. Create the few-shot prompt template
         prompts_with_placeholder, fewshot_template = (
             self._create_fewshot_prompt_template(
                 model=self.model,
@@ -895,15 +731,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
         )
 
-        reporting.display_few_shot_prompt_template(
-            prompts_with_placeholder=prompts_with_placeholder,
-            fewshot_template=fewshot_template,
-            placeholder=str(self.get_prompt("example_placeholder")),
-            verbose=self.verbose,
+        logger.debug(
+            "Generated few-shot prompt template (placeholder=%s)",
+            self.get_prompt("example_placeholder"),
         )
 
-        # Step 3. Start the optimization process
-        result = self._run_optimization(
+        return self._run_bayesian_optimization(
+            context=context,
             prompts=prompts_with_placeholder,
             original_prompts=optimizable_prompts,
             fewshot_prompt_template=fewshot_template,
@@ -912,16 +746,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             validation_dataset=validation_dataset,
             metric=metric,
             baseline_score=baseline_score,
-            optimization_id=optimization.id if optimization is not None else None,
+            optimization_id=optimization_id,
             experiment_config=experiment_config,
             n_trials=max_trials,
             n_samples=n_samples,
             is_single_prompt_optimization=is_single_prompt_optimization,
         )
-        if optimization:
-            self._update_optimization(optimization, status="completed")
-
-        return result
 
     def _build_task_from_messages(
         self,

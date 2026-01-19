@@ -23,6 +23,7 @@ import os
 import traceback
 from typing import Any
 
+from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation.metrics import score_result
 from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer
 from opik_optimizer.datasets import arc_agi2
@@ -273,6 +274,8 @@ def main() -> None:
         return_evaluation_result=True,
         verbose=1,
     )
+    if not isinstance(baseline_eval, EvaluationResult):
+        raise TypeError("Expected EvaluationResult from evaluate_prompt.")
     baseline_score = getattr(baseline_eval, "score", None)
 
     def _composite_from_results() -> float:

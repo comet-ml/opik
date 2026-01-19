@@ -7,7 +7,8 @@ owning optimizer for telemetry and budgeting.
 """
 
 from ..api_objects import chat_prompt
-from .. import _llm_calls, _throttle
+from ..core import llm_calls as _llm_calls
+from ..utils import throttle as _throttle
 import os
 from typing import Any
 import json
@@ -16,6 +17,9 @@ from opik import opik_context
 import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
+from ..constants import resolve_project_name
+from ..utils.logging import debug_tool_call
+from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
 
 
@@ -30,10 +34,10 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def __init__(
         self,
-        project_name: str,
+        project_name: str | None = None,
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
-        self.project_name = project_name
+        self.project_name = resolve_project_name(project_name)
         self.init_llm()
 
     def init_llm(self) -> None:
@@ -48,7 +52,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
         self,
-        model: str,
+        model: str | None,
         messages: list[dict[str, str]],
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
@@ -139,8 +143,13 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 prompt.model_kwargs["n"] = 1
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
+            last_tool_response: str | None = None
             count = 0
-            while count < 20:
+            # honour system-wide max tool call loop
+            max_iterations = tool_call_max_iterations()
+            if max_iterations <= 0:
+                return "Tool-calling loop aborted (max_iterations <= 0)."
+            while count < max_iterations:
                 count += 1
                 response = self._llm_complete(
                     model=prompt.model,
@@ -169,6 +178,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                             )
                         except Exception:
                             tool_result = f"Error in calling tool `{tool_name}`"
+                        last_tool_response = str(tool_result)
                         all_messages.append(
                             {
                                 "role": "tool",
@@ -176,11 +186,26 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                                 "content": str(tool_result),
                             }
                         )
+                        debug_tool_call(
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            result=tool_result,
+                            tool_call_id=tool_call["id"],
+                        )
                         # Increment tool call counter if we have access to the optimizer
-                        _llm_calls._increment_tool_counter_if_in_optimizer()
+                        _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
                 else:
                     final_response = msg["content"]
                     break
+            if count >= max_iterations and msg.tool_calls:
+                final_response = (
+                    last_tool_response
+                    if last_tool_response is not None
+                    else (
+                        "Tool-calling loop aborted after reaching the maximum of "
+                        f"{max_iterations} iterations."
+                    )
+                )
             result = final_response
         else:
             response = self._llm_complete(
@@ -196,7 +221,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             if os.getenv("ARC_AGI2_DEBUG", "0") not in {"", "0", "false", "False"}:
                 try:
                     # Lightweight debug to confirm number of completions returned
-                    from opik_optimizer.utils.dataset_utils import resolve_dataset_seed  # noqa: F401
+                    from opik_optimizer.utils.dataset import resolve_dataset_seed  # noqa: F401
                 except Exception:
                     pass
             if len(choices) > 1:

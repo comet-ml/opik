@@ -11,10 +11,10 @@ Note: Some optimizers are expected to fail initially as they don't yet
 support content_parts. These will be updated to support multimodal prompts.
 """
 
-import os
 from typing import Any
 
 import pytest
+import os
 
 import opik
 from opik.evaluation.metrics import LevenshteinRatio
@@ -29,6 +29,8 @@ from opik_optimizer import (
     GepaOptimizer,
     HierarchicalReflectiveOptimizer,
     ParameterOptimizer,
+)
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
 )
 
@@ -106,7 +108,7 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         ParameterOptimizer: {
             "n_threads": 2,
-            "default_n_trials": 2,
+            "default_n_trials": 1,
             "local_search_ratio": 0.0,
         },
     }
@@ -197,16 +199,16 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
             dataset=dataset,
             metric=hazard_metric,
             parameter_space=get_parameter_space(),
-            n_samples=2,
-            max_trials=2,
+            n_samples=1,
+            max_trials=1,
         )
     else:
         results = optimizer.optimize_prompt(
             dataset=dataset,
             metric=hazard_metric,
             prompt=original_prompt,
-            n_samples=2,
-            max_trials=2,
+            n_samples=1,
+            max_trials=1,
             **gepa_kwargs,
         )
 

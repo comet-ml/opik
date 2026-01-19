@@ -6,117 +6,31 @@ This module contains functions for generating and sanitizing candidate prompts.
 
 import ast
 import copy
-from dataclasses import dataclass
 from typing import Any
+from collections.abc import Sequence
 from collections.abc import Callable
 import logging
 import json
 import random
 
-from pydantic import BaseModel, Field
-
-from ....api_objects import chat_prompt, types
+from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
-from .... import _llm_calls
-from ....base_optimizer import OptimizationRound
+from ....core import llm_calls as _llm_calls
 from .. import prompts as meta_prompts
 from .. import reporting
-from .... import reporting_utils
+from ..types import (
+    AgentBundleCandidatesResponse,
+    AgentMetadata,
+    AgentBundleCandidate,
+)
+from ....utils import display as display_utils
+from ....utils.logging import compact_debug_text
+from ....utils.text import normalize_llm_text
+from ....core.results import OptimizationRound, round_payload
 from litellm.exceptions import BadRequestError
-from ...._llm_calls import StructuredOutputParsingError
+from ....core.llm_calls import StructuredOutputParsingError
 
 logger = logging.getLogger(__name__)
-
-
-def _build_metadata_for_call(
-    optimizer: Any,
-    call_type: str,
-    optimization_id: str | None = None,
-    project_name: str | None = None,
-) -> dict[str, Any]:
-    """Build LiteLLM metadata payloads for trace attribution."""
-    metadata_for_call: dict[str, Any] = {
-        "optimizer_name": optimizer.__class__.__name__,
-        "opik_call_type": call_type,
-    }
-    opik_metadata: dict[str, Any] = {}
-    if optimization_id:
-        opik_metadata["optimization_id"] = optimization_id
-    if project_name:
-        opik_metadata["project_name"] = project_name
-    if opik_metadata:
-        metadata_for_call["opik"] = opik_metadata
-    return metadata_for_call
-
-
-class AgentPromptUpdate(BaseModel):
-    """Represents an update to a single agent's prompt."""
-
-    name: str = Field(..., description="The name of the agent to update")
-    messages: list[types.Message] = Field(
-        ..., description="The updated messages for this agent"
-    )
-    improvement_focus: str | None = Field(
-        None, description="What aspect of the agent's performance is being improved"
-    )
-    reasoning: str | None = Field(
-        None, description="Explanation of why these changes were made"
-    )
-
-
-class AgentBundleCandidateResponse(BaseModel):
-    """Response model for agent bundle candidate generation."""
-
-    agents: list[AgentPromptUpdate] = Field(
-        ..., description="List of agent prompt updates"
-    )
-    bundle_improvement_focus: str | None = Field(
-        None, description="Overall focus for this bundle of improvements"
-    )
-
-
-class AgentBundleCandidatesResponse(BaseModel):
-    """Response model for multiple agent bundle candidates."""
-
-    candidates: list[AgentBundleCandidateResponse] = Field(
-        ..., description="List of candidate bundles"
-    )
-
-
-@dataclass
-class AgentMetadata:
-    """Metadata for a single agent's prompt optimization."""
-
-    improvement_focus: str | None = None
-    """What aspect of the agent's performance is being targeted for improvement"""
-
-    reasoning: str | None = None
-    """Explanation of why the prompt changes were made"""
-
-
-@dataclass
-class AgentBundleCandidate:
-    """Represents a single candidate bundle of agent prompts with metadata."""
-
-    prompts: dict[str, chat_prompt.ChatPrompt]
-    """Dictionary mapping agent names to their updated ChatPrompt objects"""
-
-    metadata: dict[str, AgentMetadata]
-    """Dictionary mapping agent names to their improvement metadata"""
-
-    def get_agent_names(self) -> list[str]:
-        """Get all agent names in this bundle."""
-        return list(self.prompts.keys())
-
-    def get_agent_reasoning(self, agent_name: str) -> str | None:
-        """Get the reasoning for a specific agent's prompt changes."""
-        agent_meta = self.metadata.get(agent_name)
-        return agent_meta.reasoning if agent_meta else None
-
-    def get_agent_improvement_focus(self, agent_name: str) -> str | None:
-        """Get the improvement focus for a specific agent."""
-        agent_meta = self.metadata.get(agent_name)
-        return agent_meta.improvement_focus if agent_meta else None
 
 
 def sanitize_generated_prompts(
@@ -226,7 +140,7 @@ def generate_candidate_prompts(
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
     round_num: int,
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
@@ -256,7 +170,7 @@ def generate_candidate_prompts(
     with reporting.display_candidate_generation_report(
         optimizer.prompts_per_round,
         verbose=optimizer.verbose,
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
+        selection_summary=display_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
         logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
@@ -320,11 +234,8 @@ def generate_candidate_prompts(
 
         try:
             # Prepare metadata for optimization algorithm call
-            metadata_for_call = _build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm",
-                optimization_id=optimization_id,
-                project_name=project_name,
+            metadata_for_call = _llm_calls.build_llm_call_metadata(
+                optimizer, "optimization_algorithm"
             )
 
             content = _llm_calls.call_model(
@@ -349,7 +260,16 @@ def generate_candidate_prompts(
                 project_name=project_name,
             )
             contents = content if isinstance(content, list) else [content]
-            logger.debug("Raw response from reasoning model: %s", contents)
+            contents = [
+                normalize_llm_text(item) if isinstance(item, str) else item
+                for item in contents
+            ]
+            if logger.isEnabledFor(logging.DEBUG):
+                cleaned = [
+                    compact_debug_text(item) if isinstance(item, str) else item
+                    for item in contents
+                ]
+                logger.debug("Raw response from reasoning model: %s", cleaned)
 
             valid_prompts: list[chat_prompt.ChatPrompt] = []
             metric_name = metric.__name__
@@ -359,14 +279,16 @@ def generate_candidate_prompts(
                 json_result = None
                 try:
                     # Try direct JSON parsing
-                    json_result = json.loads(content_item)
+                    json_result = json.loads(normalize_llm_text(content_item))
                 except json.JSONDecodeError:
                     import re
 
                     json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
                     if json_match:
                         try:
-                            json_result = json.loads(json_match.group())
+                            json_result = json.loads(
+                                normalize_llm_text(json_match.group())
+                            )
                         except json.JSONDecodeError as e:
                             raise ValueError(
                                 f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
@@ -494,7 +416,7 @@ def generate_agent_bundle_candidates(
     current_prompts: dict[str, chat_prompt.ChatPrompt],
     best_score: float,
     round_num: int,
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
@@ -512,7 +434,7 @@ def generate_agent_bundle_candidates(
     with reporting.display_candidate_generation_report(
         optimizer.prompts_per_round,
         verbose=optimizer.verbose,
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompts),
+        selection_summary=display_utils.summarize_selection_policy(current_prompts),
     ) as candidate_generation_report:
         logger.debug(f"\nGenerating agent bundle prompts for round {round_num + 1}")
         logger.debug("Generating from agents: %s", list(current_prompts.keys()))
@@ -565,11 +487,8 @@ def generate_agent_bundle_candidates(
         )
 
         try:
-            metadata_for_call = _build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm",
-                optimization_id=optimization_id,
-                project_name=project_name,
+            metadata_for_call = _llm_calls.build_llm_call_metadata(
+                optimizer, "optimization_algorithm"
             )
 
             response = _llm_calls.call_model(
@@ -685,7 +604,7 @@ def generate_synthesis_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
-    previous_rounds: list[OptimizationRound],
+    previous_rounds: Sequence[OptimizationRound],
     metric: MetricFunction,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -711,11 +630,12 @@ def generate_synthesis_prompts(
         List of comprehensive synthesis prompts
     """
     num_synthesis_prompts = getattr(optimizer, "synthesis_prompts_per_round", 2)
+    previous_rounds_list = list(previous_rounds)
 
     with reporting.display_candidate_generation_report(
         num_synthesis_prompts,
         verbose=optimizer.verbose,  # Synthesis generates a small number of prompts
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
+        selection_summary=display_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
         # Get top performers from Hall of Fame
         top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
@@ -752,29 +672,32 @@ def generate_synthesis_prompts(
         if not top_prompts_with_scores:
             logger.warning("Hall of Fame empty - using recent rounds for synthesis")
             # Collect best prompts from recent rounds
-            for round_data in reversed(previous_rounds[-5:]):
+            for round_data in reversed(previous_rounds_list[-5:]):
+                generated = round_payload(round_data).get("generated_prompts", [])
                 sorted_generated = sorted(
-                    round_data.generated_prompts,
+                    generated,
                     key=lambda p: p.get("score", -float("inf")),
                     reverse=True,
                 )
                 if sorted_generated:
                     best = sorted_generated[0]
-                    prompt_text = best.get("prompt", "")
+                    prompt_payload = best.get("candidate") or best.get("prompt", "")
                     score = best.get("score", 0.0)
-                    reasoning = best.get("reasoning", "")
+                    reasoning = best.get("notes") or best.get("reasoning", "")
                     # Try to parse as messages
+                    messages: list[Any] | None = None
                     try:
-                        if isinstance(prompt_text, list):
-                            messages = prompt_text
-                        elif isinstance(prompt_text, str) and prompt_text:
+                        if isinstance(prompt_payload, list):
+                            messages = prompt_payload
+                        elif isinstance(prompt_payload, str) and prompt_payload:
                             try:
-                                messages = json.loads(prompt_text)
+                                messages = json.loads(
+                                    normalize_llm_text(prompt_payload)
+                                )
                             except json.JSONDecodeError:
-                                messages = ast.literal_eval(prompt_text)
-                        else:
-                            continue
-
+                                messages = ast.literal_eval(
+                                    normalize_llm_text(prompt_payload)
+                                )
                         if isinstance(messages, list):
                             top_prompts_with_scores.append((messages, score, reasoning))
                     except Exception:
@@ -813,11 +736,8 @@ def generate_synthesis_prompts(
 
         try:
             # Prepare metadata for synthesis call
-            metadata_for_call = _build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm_synthesis",
-                optimization_id=optimization_id,
-                project_name=project_name,
+            metadata_for_call = _llm_calls.build_llm_call_metadata(
+                optimizer, "optimization_algorithm_synthesis"
             )
 
             content = _llm_calls.call_model(
@@ -842,14 +762,16 @@ def generate_synthesis_prompts(
                 # Parse JSON response
                 json_result = None
                 try:
-                    json_result = json.loads(content_item)
+                    json_result = json.loads(normalize_llm_text(content_item))
                 except json.JSONDecodeError:
                     import re
 
                     json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
                     if json_match:
                         try:
-                            json_result = json.loads(json_match.group())
+                            json_result = json.loads(
+                                normalize_llm_text(json_match.group())
+                            )
                         except json.JSONDecodeError as e:
                             raise ValueError(
                                 f"Could not parse synthesis JSON: {e} - received: {json_match.group()}"
@@ -936,3 +858,98 @@ def generate_synthesis_prompts(
             raise ValueError(
                 f"Unexpected error during synthesis prompt generation: {e}"
             )
+
+
+def generate_round_candidates(
+    *,
+    optimizer: Any,
+    best_prompts: dict[str, chat_prompt.ChatPrompt],
+    best_score: float,
+    round_num: int,
+    previous_rounds: Sequence[OptimizationRound],
+    metric: MetricFunction,
+    prompts_this_round: int,
+    build_history_context_fn: Callable,
+    get_task_context_fn: Callable,
+    optimization_id: str | None = None,
+    project_name: str | None = None,
+    is_single_prompt_optimization: bool,
+    winning_patterns: list[str] | None = None,
+) -> list[dict[str, chat_prompt.ChatPrompt]]:
+    """
+    Generate candidate prompt bundles for a single optimization round.
+
+    Returns a list of prompt bundles (dict[str, ChatPrompt]) for evaluation.
+    """
+    try:
+        if is_single_prompt_optimization:
+            single_candidates = generate_candidate_prompts(
+                optimizer=optimizer,
+                current_prompt=list(best_prompts.values())[0],
+                best_score=best_score,
+                round_num=round_num,
+                previous_rounds=previous_rounds,
+                metric=metric,
+                optimization_id=optimization_id,
+                project_name=project_name,
+                build_history_context_fn=build_history_context_fn,
+                get_task_context_fn=get_task_context_fn,
+                winning_patterns=winning_patterns,
+            )
+            prompt_key = next(iter(best_prompts.keys()))
+            candidate_prompts = [
+                {prompt_key: prompt}
+                for prompt in single_candidates[:prompts_this_round]
+            ]
+        else:
+            bundle_candidates = generate_agent_bundle_candidates(
+                optimizer=optimizer,
+                current_prompts=best_prompts,
+                best_score=best_score,
+                round_num=round_num,
+                previous_rounds=previous_rounds,
+                metric=metric,
+                optimization_id=optimization_id,
+                project_name=project_name,
+                build_history_context_fn=build_history_context_fn,
+                get_task_context_fn=get_task_context_fn,
+            )
+            candidate_prompts = [
+                bundle.prompts for bundle in bundle_candidates[:prompts_this_round]
+            ]
+
+        synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+        if (
+            is_single_prompt_optimization
+            and optimizer.synthesis_prompts_per_round > 0
+            and round_num >= optimizer.synthesis_start_round
+            and optimizer.synthesis_round_interval > 0
+            and (round_num - optimizer.synthesis_start_round)
+            % optimizer.synthesis_round_interval
+            == 0
+        ):
+            synthesis_prompts = generate_synthesis_prompts(
+                optimizer=optimizer,
+                current_prompt=list(best_prompts.values())[0],
+                best_score=best_score,
+                previous_rounds=previous_rounds,
+                metric=metric,
+                get_task_context_fn=get_task_context_fn,
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
+            prompt_key = next(iter(best_prompts.keys()))
+            synthesis_candidates = [
+                {prompt_key: prompt} for prompt in synthesis_prompts
+            ]
+
+        if synthesis_candidates:
+            candidate_prompts = synthesis_candidates + candidate_prompts
+            candidate_prompts = candidate_prompts[:prompts_this_round]
+
+        return candidate_prompts
+    except Exception as exc:
+        if isinstance(exc, (BadRequestError, StructuredOutputParsingError)):
+            raise
+        logger.warning("Failed to generate %s candidates: %s", prompts_this_round, exc)
+        return []

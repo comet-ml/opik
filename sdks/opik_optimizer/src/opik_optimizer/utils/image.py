@@ -7,6 +7,7 @@ from typing import Any
 
 
 def _is_safe_relative_path(path: str) -> bool:
+    """Check if a path is a safe relative path."""
     if os.path.isabs(path):
         return False
     normalized = os.path.normpath(path)

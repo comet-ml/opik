@@ -10,8 +10,8 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from . import reporting
-from ...reporting_utils import get_console
-from ... import _llm_calls
+from ...utils.reporting import get_console
+from ...core import llm_calls as _llm_calls
 from ...utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)

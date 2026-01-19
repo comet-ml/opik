@@ -5,7 +5,7 @@ from typing import Any
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 IF_TRAIN_DATASET = ("allenai/IF_multi_constraints_upto5", "train")
 IF_TEST_DATASET = ("allenai/IFBench_test", "train")

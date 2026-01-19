@@ -6,7 +6,7 @@ from collections.abc import Callable
 import pytest
 
 import opik_optimizer
-from opik_optimizer.utils import dataset_utils
+from opik_optimizer.utils import dataset as dataset_utils
 
 
 DATASET_SIZES = {

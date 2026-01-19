@@ -4,6 +4,8 @@ import copy
 import json
 import logging
 import random
+import sys
+import types
 
 from deap import creator as _creator
 
@@ -13,13 +15,22 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
-from .... import utils, _llm_calls
-from .. import reporting, helpers
+from ....core import llm_calls as _llm_calls
+from ....utils.helpers import json_to_dict
+from ....utils.text import normalize_llm_text
+from .. import helpers
+from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
 
 
 logger = logging.getLogger(__name__)
 creator = _creator
+
+_reporting_module: Any = types.ModuleType(__name__ + ".reporting")
+_reporting_module.display_error = display_error
+_reporting_module.display_success = display_success
+sys.modules[_reporting_module.__name__] = _reporting_module
+reporting = _reporting_module
 
 
 def _get_synonym(
@@ -304,7 +315,7 @@ def _semantic_mutation(
                 else:
                     messages = [response_item]
             else:
-                messages = utils.json_to_dict(response_item.strip())
+                messages = json_to_dict(normalize_llm_text(response_item))
         except Exception as parse_exc:
             raise RuntimeError(
                 "Error parsing semantic mutation response as JSON. "
@@ -368,7 +379,7 @@ def _radical_innovation_mutation(
         )
         logger.info(f"Radical innovation LLM result (truncated): {response_item[:200]}")
         try:
-            new_messages = utils.json_to_dict(response_item)
+            new_messages = json_to_dict(normalize_llm_text(response_item))
         except Exception as parse_exc:
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."

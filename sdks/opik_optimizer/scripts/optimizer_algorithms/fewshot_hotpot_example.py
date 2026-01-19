@@ -60,7 +60,7 @@ optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=optimization_metric,
-    n_samples=50,
-    max_trials=5,
+    n_samples=25,
+    max_trials=3,
 )
 optimization_result.display()

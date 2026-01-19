@@ -33,6 +33,7 @@ class ChatPrompt:
             a content containing {input-dataset-field}
     """
 
+    # FIXME: Move to constants.py
     DISPLAY_TRUNCATION_LENGTH = 500
 
     def __init__(
@@ -88,7 +89,6 @@ class ChatPrompt:
             self._validate_tools(tools)
 
         self.name = name
-
         self.system = system
         self.user = user
         self.messages = messages

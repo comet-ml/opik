@@ -63,6 +63,7 @@ def rate_limited_async(
 
 
 def get_rate_limiter_for_current_opik_installation() -> RateLimiter:
+    """Get the rate limiter for the current Opik installation."""
     opik_config = opik.config.OpikConfig()
     max_calls_per_second = 10 if opik_config.is_cloud_installation else 50
     return RateLimiter(max_calls_per_second=max_calls_per_second)

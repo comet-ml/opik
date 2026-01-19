@@ -450,7 +450,7 @@ class TestLLMCrossoverMessages:
         def fake_call_model(**kwargs: Any) -> CrossoverResponse:
             return mock_response
 
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
 
         messages1 = [
             {"role": "system", "content": "System A"},
@@ -493,7 +493,7 @@ class TestLLMDeapCrossover:
         def fake_call_model(**kwargs: Any) -> None:
             raise Exception("LLM API error")
 
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
 
         def fake_display_message(msg: str, verbose: int) -> None:
             pass
@@ -547,7 +547,7 @@ class TestLLMDeapCrossover:
         def fake_call_model(**kwargs: Any) -> CrossoverResponse:
             return mock_response
 
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
 
         def fake_display_message(msg: str, verbose: int) -> None:
             pass

@@ -20,6 +20,6 @@ def setup_driving_hazard_dataset() -> opik.Dataset:
     before parallel tests try to access it, avoiding race conditions.
     """
     # Create the dataset (will be reused by all tests)
-    dataset = opik_optimizer.datasets.driving_hazard(test_mode=True)
+    dataset = opik_optimizer.datasets.driving_hazard(test_mode=True, count=1)
     yield dataset
     # Cleanup is optional - leave dataset for future runs

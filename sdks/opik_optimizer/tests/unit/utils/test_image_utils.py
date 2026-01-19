@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Any, BinaryIO
 
-from opik_optimizer.utils import encode_image_to_base64_uri
+from opik_optimizer.utils.image import encode_image_to_base64_uri
 
 
 def test_encode_image_to_base64_uri_passthrough() -> None:

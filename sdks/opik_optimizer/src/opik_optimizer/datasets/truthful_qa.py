@@ -4,7 +4,7 @@ import opik
 from typing import Any
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 
 def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

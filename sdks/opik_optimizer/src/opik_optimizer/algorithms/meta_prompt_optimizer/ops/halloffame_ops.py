@@ -5,7 +5,6 @@ This module implements meta-learning: discovering what makes prompts successful
 and re-injecting those patterns into future candidate generation.
 """
 
-from dataclasses import dataclass, field
 from typing import Any
 import json
 from collections import Counter
@@ -13,22 +12,10 @@ import re
 import logging
 
 from .. import prompts as meta_prompts
+from ..types import HallOfFameEntry
 from ....utils.prompt_library import PromptLibrary
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class HallOfFameEntry:
-    """Represents a high-performing prompt in the hall of fame"""
-
-    prompt_messages: list[dict[str, str]]
-    score: float
-    trial_number: int
-    improvement_over_baseline: float
-    metric_name: str
-    extracted_patterns: list[str] | None = None  # Filled during pattern extraction
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class PromptHallOfFame:
@@ -136,7 +123,7 @@ class PromptHallOfFame:
             top_prompts, metric_name
         )
 
-        from .... import _llm_calls
+        from ....core import llm_calls as _llm_calls
 
         # Get system prompt from prompts library or use default
         if self.prompts is not None:
@@ -256,9 +243,11 @@ class PromptHallOfFame:
     def _parse_pattern_response(self, response: str) -> list[str]:
         """Parse LLM response into pattern list"""
         try:
-            from ....utils.core import json_to_dict
+            from ....utils.helpers import json_to_dict
 
-            parsed = json_to_dict(response)
+            from ....utils.text import normalize_llm_text
+
+            parsed = json_to_dict(normalize_llm_text(response))
             patterns = []
             for item in parsed.get("patterns", []):
                 if isinstance(item, dict):

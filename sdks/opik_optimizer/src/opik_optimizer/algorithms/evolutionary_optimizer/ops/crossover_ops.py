@@ -3,16 +3,17 @@ from typing import Any
 import copy
 import logging
 import random
+import sys
+import types
 
-from pydantic import BaseModel
 from deap import creator as _creator
 
-from .. import reporting
-from .... import _llm_calls
-from ...._llm_calls import StructuredOutputParsingError
+from opik_optimizer.utils.display import display_message
+from ..types import CrossoverResponse
+from ....core import llm_calls as _llm_calls
+from ....core.llm_calls import StructuredOutputParsingError
 from ....api_objects.types import (
     Content,
-    Messages,
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
@@ -22,20 +23,10 @@ from ....utils.prompt_library import PromptLibrary
 logger = logging.getLogger(__name__)
 creator = _creator  # backward compt.
 
-
-class CrossoverResponse(BaseModel):
-    """Response containing two child prompts from crossover operation.
-
-    Each child is a list of messages representing a complete prompt.
-    Example:
-        {
-            "child_1": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}],
-            "child_2": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
-        }
-    """
-
-    child_1: Messages
-    child_2: Messages
+_reporting_module: Any = types.ModuleType(__name__ + ".reporting")
+_reporting_module.display_message = display_message
+sys.modules[_reporting_module.__name__] = _reporting_module
+reporting = _reporting_module
 
 
 def _deap_crossover_chunking_strategy(

@@ -11,8 +11,12 @@ from litellm.exceptions import BadRequestError
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
-from . import _throttle
-from . import utils as _utils
+from ..utils import throttle as _throttle
+from ..utils.helpers import json_to_dict
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    pass
 
 
 def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
@@ -56,6 +60,35 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
     return updated_params
 
 
+def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
+    """
+    Build standardized metadata for LLM calls across optimizers.
+
+    Args:
+        optimizer: Optimizer instance (provides context/ids when available).
+        call_type: Logical call type label (e.g., "candidate_generation").
+
+    Returns:
+        Metadata dict suitable for LiteLLM/OpenAI calls.
+    """
+    metadata: dict[str, Any] = {
+        "optimizer_name": getattr(optimizer, "__class__", type("X", (), {})).__name__
+        if optimizer is not None
+        else "UnknownOptimizer",
+        "opik_call_type": call_type,
+    }
+    try:
+        ctx = getattr(optimizer, "_context", None)
+        if ctx and getattr(ctx, "optimization_id", None):
+            metadata["opik"] = {
+                "optimization_id": ctx.optimization_id,
+                "project_name": getattr(ctx, "project_name", None),
+            }
+    except Exception:
+        pass
+    return metadata
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,7 +112,7 @@ def _increment_llm_counter_if_in_optimizer() -> None:
     Walk up the call stack and increment the first optimizer's counter if found.
     """
     try:
-        from .base_optimizer import BaseOptimizer
+        from ..base_optimizer import BaseOptimizer
     except Exception:
         return
 
@@ -96,12 +129,12 @@ def _increment_llm_counter_if_in_optimizer() -> None:
         frame = frame.f_back
 
 
-def _increment_tool_counter_if_in_optimizer() -> None:
+def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
     try:
-        from .base_optimizer import BaseOptimizer
+        from ..base_optimizer import BaseOptimizer
     except Exception:
         return
 
@@ -113,7 +146,7 @@ def _increment_tool_counter_if_in_optimizer() -> None:
     while frame is not None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_tool_counter()
+            optimizer_candidate._increment_llm_call_tools_counter()
             break
         frame = frame.f_back
 
@@ -121,7 +154,7 @@ def _increment_tool_counter_if_in_optimizer() -> None:
 def _get_project_name_from_optimizer() -> str | None:
     """Return project_name from the nearest optimizer on the call stack."""
     try:
-        from .base_optimizer import BaseOptimizer
+        from ..base_optimizer import BaseOptimizer
     except Exception:
         return None
 
@@ -299,7 +332,7 @@ def _parse_response(
             return response_model.model_validate_json(content)
         except PydanticValidationError as exc:
             try:
-                cleaned = _utils.json_to_dict(content)
+                cleaned = json_to_dict(content)
                 if cleaned is not None:
                     return response_model.model_validate(cleaned)
             except (
@@ -354,7 +387,7 @@ def _parse_response_list(
             parsed.append(response_model.model_validate_json(content))
         except PydanticValidationError as exc:
             try:
-                cleaned = _utils.json_to_dict(content)
+                cleaned = json_to_dict(content)
                 if cleaned is not None:
                     parsed.append(response_model.model_validate(cleaned))
                     continue
@@ -486,10 +519,6 @@ def call_model(
     tracked_completion = track_completion(project_name=effective_project_name)(
         litellm.completion
     )
-    logger.debug(
-        f"call_model: model={model} project={effective_project_name} "
-        f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
-    )
     response = tracked_completion(
         model=model,
         messages=messages,
@@ -499,8 +528,16 @@ def call_model(
     )
 
     choices = getattr(response, "choices", None)
+    choices_count = len(choices) if isinstance(choices, list) else "unknown"
+    missing_metadata = not bool(final_params_for_litellm.get("metadata"))
+    metadata_note = " metadata=missing" if missing_metadata else ""
     logger.debug(
-        f"call_model: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+        "call_model: model=%s project=%s n=%s choices=%s%s",
+        model,
+        effective_project_name,
+        final_params_for_litellm.get("n"),
+        choices_count,
+        metadata_note,
     )
     wants_all = return_all
     return _parse_response(response, response_model, wants_all)

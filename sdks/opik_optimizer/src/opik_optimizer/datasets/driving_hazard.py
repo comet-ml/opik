@@ -13,7 +13,7 @@ from typing import Any
 import opik
 from PIL import Image
 
-from opik_optimizer.utils.dataset_utils import (
+from opik_optimizer.utils.dataset import (
     dataset_name_for_mode,
     default_dataset_name,
     resolve_test_mode_count,
@@ -22,7 +22,7 @@ from opik_optimizer.utils.dataset_utils import (
     record_matches_filter_by,
     FilterBy,
 )
-from opik_optimizer.utils.image_utils import encode_image_to_base64_uri
+from opik_optimizer.utils.image import encode_image_to_base64_uri
 
 
 def driving_hazard(

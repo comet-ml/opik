@@ -1,49 +1,45 @@
 # mypy: disable-error-code=no-untyped-def
 
+import contextlib
 from collections.abc import Callable
-from typing import Any
+from typing import Any, no_type_check
 from unittest.mock import MagicMock
 
+from datetime import datetime, timezone
 import pytest
+from optuna.trial import TrialState
 
-from opik import Dataset
 from opik_optimizer import ChatPrompt, ParameterOptimizer
-from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
     ParameterSearchSpace,
+    ParameterSpec,
 )
-from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import ParameterSpec
-from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
-    ParameterType,
+from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
+from tests.unit.test_helpers import (
+    make_mock_dataset,
+    make_simple_metric,
+    STANDARD_DATASET_ITEMS,
 )
-
-
-def _metric(dataset_item: dict[str, Any], llm_output: str) -> float:
-    return 1.0
-
-
-def _make_dataset() -> MagicMock:
-    dataset = MagicMock(spec=Dataset)
-    dataset.name = "test-dataset"
-    dataset.id = "dataset-123"
-    dataset.get_items.return_value = [{"id": "1", "question": "Q1", "answer": "A1"}]
-    return dataset
 
 
 class TestParameterOptimizerInit:
-    def test_initialization_with_defaults(self) -> None:
-        optimizer = ParameterOptimizer(model="gpt-4o")
-        assert optimizer.model == "gpt-4o"
-        assert optimizer.seed == 42
-
-    def test_initialization_with_custom_params(self) -> None:
-        optimizer = ParameterOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=123,
-        )
-        assert optimizer.model == "gpt-4o-mini"
-        assert optimizer.verbose == 0
-        assert optimizer.seed == 123
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
+            (
+                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
+                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
+            ),
+        ],
+    )
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
+        """Test optimizer initialization with defaults and custom params."""
+        optimizer = ParameterOptimizer(**kwargs)
+        for key, value in expected.items():
+            assert getattr(optimizer, key) == value
 
 
 class TestParameterOptimizerOptimizePrompt:
@@ -54,13 +50,15 @@ class TestParameterOptimizerOptimizePrompt:
         mock_optimization_context()
         optimizer = ParameterOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
 
         with pytest.raises(NotImplementedError):
             optimizer.optimize_prompt(
                 prompt=prompt,
                 dataset=dataset,
-                metric=_metric,
+                metric=make_simple_metric(),
                 max_trials=1,
             )
 
@@ -72,7 +70,9 @@ class TestParameterOptimizerEarlyStop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         mock_opik_client()
-        dataset = _make_dataset()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = ParameterOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -95,7 +95,7 @@ class TestParameterOptimizerEarlyStop:
         result = optimizer.optimize_parameter(
             prompt=prompt,
             dataset=dataset,
-            metric=_metric,
+            metric=make_simple_metric(),
             parameter_space=parameter_space,
             max_trials=1,
         )
@@ -551,3 +551,121 @@ class TestBackwardCompatibility:
         assert "p2.temperature" in description
         assert description["p1.temperature"]["min"] == 0.0
         assert description["p1.temperature"]["max"] == 1.0
+
+
+class TestReporterLifecycle:
+    def test_sets_and_clears_reporter_during_trial(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dataset = make_mock_dataset(
+            [{"id": "1", "question": "Q1", "answer": "A1"}],
+            name="train",
+            dataset_id="ds-1",
+        )
+
+        prompt = ChatPrompt(name="p", system="Test")
+
+        optimizer = ParameterOptimizer(model="gpt-4o", verbose=0)
+        events: list[str] = []
+
+        orig_set = optimizer._set_reporter
+        orig_clear = optimizer._clear_reporter
+
+        def tracking_set(reporter: Any) -> None:
+            events.append("set")
+            orig_set(reporter)
+
+        def tracking_clear() -> None:
+            events.append("clear")
+            orig_clear()
+
+        monkeypatch.setattr(optimizer, "_set_reporter", tracking_set)
+        monkeypatch.setattr(optimizer, "_clear_reporter", tracking_clear)
+
+        # Stub evaluate_prompt to avoid real LLM calls
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
+
+        class FakeTrial:
+            def __init__(self, number: int) -> None:
+                self.number = number
+                self.value: float | None = None
+                self.user_attrs: dict[str, Any] = {}
+                self.datetime_start = datetime.now(timezone.utc)
+                self.datetime_complete = self.datetime_start
+                self.state = TrialState.COMPLETE
+                self.pruner = None
+
+            def set_user_attr(self, key: str, value: Any) -> None:
+                self.user_attrs[key] = value
+
+            def suggest_float(
+                self, name: str, low: float, high: float, step=None, log=False
+            ) -> float:
+                return (low + high) / 2
+
+        @no_type_check
+        class FakeStudy:
+            def __init__(self) -> None:
+                self.trials: list[FakeTrial] = []
+                self.pruner = MagicMock()
+
+            def optimize(
+                self,
+                objective: "Callable[[FakeTrial], float]",
+                n_trials: int,
+                timeout: float | None = None,
+                callbacks: list | None = None,
+                show_progress_bar: bool = False,
+            ) -> None:
+                _ = show_progress_bar  # keep signature parity, silence linters
+                trial = FakeTrial(0)
+                trial.value = objective(trial)
+                self.trials.append(trial)
+
+        def make_study(direction: str, sampler: Any) -> FakeStudy:
+            return FakeStudy()
+
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.optuna.create_study",
+            make_study,
+        )
+
+        @contextlib.contextmanager
+        def fake_trial_reporter(**kwargs):
+            reporter = MagicMock()
+            yield reporter
+
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.parameter_optimizer.reporting.display_trial_evaluation",
+            fake_trial_reporter,
+        )
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.optuna_importance.get_param_importances",
+            lambda study, params=None, target=None: {},
+        )
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.sensitivity_analysis",
+            lambda trials, specs: {},
+        )
+
+        space = ParameterSearchSpace(
+            parameters=[
+                ParameterSpec(
+                    name="temperature",
+                    distribution=ParameterType.FLOAT,
+                    low=0.0,
+                    high=1.0,
+                )
+            ]
+        )
+
+        optimizer.optimize_parameter(
+            prompt=prompt,
+            dataset=dataset,
+            metric=lambda item, output: 0.5,
+            parameter_space=space,
+            max_trials=1,
+        )
+
+        assert events == ["set", "clear"]
+        assert optimizer._reporter is None

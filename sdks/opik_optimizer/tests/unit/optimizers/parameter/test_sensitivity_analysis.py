@@ -1,16 +1,14 @@
 """
-Unit tests for opik_optimizer.algorithms.parameter_optimizer.sensitivity_analysis module.
+Unit tests for opik_optimizer.algorithms.parameter_optimizer.ops.sensitivity_ops module.
 
 Tests cover:
-- compute_sensitivity_from_trials: Correlation-based sensitivity calculation
+- sensitivity_analysis: Correlation-based sensitivity calculation
 """
 
-from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import ParameterSpec
-from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
-    ParameterType,
-)
-from opik_optimizer.algorithms.parameter_optimizer.sensitivity_analysis import (
-    compute_sensitivity_from_trials,
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import ParameterSpec
+from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
+from opik_optimizer.algorithms.parameter_optimizer.ops.sensitivity_ops import (
+    sensitivity_analysis,
 )
 
 
@@ -32,14 +30,14 @@ def _make_parameter_spec(name: str) -> ParameterSpec:
     )
 
 
-class TestComputeSensitivityFromTrials:
-    """Tests for compute_sensitivity_from_trials function."""
+class TestSensitivityAnalysis:
+    """Tests for sensitivity_analysis function."""
 
     def test_returns_empty_for_no_specs(self) -> None:
         """Should return empty dict when no specs provided."""
         trials = [MockTrial({"param": 0.5}, 0.8)]
 
-        result = compute_sensitivity_from_trials(trials, [])
+        result = sensitivity_analysis(trials, [])
 
         assert result == {}
 
@@ -48,7 +46,7 @@ class TestComputeSensitivityFromTrials:
         trials = [MockTrial({"param": 0.5}, 0.8)]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         assert result["param"] == 0.0
 
@@ -61,7 +59,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         assert result["param"] == 0.0
 
@@ -77,7 +75,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         # Should be close to 1.0 (high correlation)
         assert result["param"] > 0.9
@@ -94,7 +92,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         # Should be close to 0.0 (no correlation when score is constant)
         assert result["param"] == 0.0
@@ -111,7 +109,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         # Should still be high (absolute correlation)
         assert result["param"] > 0.9
@@ -126,7 +124,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         # True (1.0) correlates with high scores
         assert result["param"] > 0.5
@@ -141,7 +139,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         assert result["param"] > 0.9
 
@@ -154,7 +152,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         # Should still compute correlation from valid trials
         assert result["param"] > 0.9
@@ -167,7 +165,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         # Non-numeric values are skipped, resulting in len(values) < 2, so sensitivity is 0.0
         assert result["param"] == 0.0
@@ -181,7 +179,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param_a"), _make_parameter_spec("param_b")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         assert "param_a" in result
         assert "param_b" in result
@@ -195,7 +193,7 @@ class TestComputeSensitivityFromTrials:
         ]
         specs = [_make_parameter_spec("param")]
 
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         assert 0.0 <= result["param"] <= 1.0
 
@@ -209,6 +207,6 @@ class TestComputeSensitivityFromTrials:
         specs = [_make_parameter_spec("param")]
 
         # Should not crash, just use available data
-        result = compute_sensitivity_from_trials(trials, specs)
+        result = sensitivity_analysis(trials, specs)
 
         assert "param" in result

@@ -7,7 +7,7 @@ from typing import Any, Union
 
 import opik
 
-from opik_optimizer.utils.dataset_utils import attach_uuids, dataset_suffix
+from opik_optimizer.utils.dataset import attach_uuids, dataset_suffix
 
 OpikDataset = Any
 

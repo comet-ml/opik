@@ -24,6 +24,12 @@ class LiveCostOptimizer(BaseOptimizer):
     def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("not used in this integration test")
 
+    def run_optimization(self, context: Any) -> Any:
+        raise NotImplementedError("not used in this integration test")
+
+    def get_config(self, context: Any) -> dict[str, Any]:
+        return {"optimizer": "LiveCostOptimizer", "model": self.model}
+
 
 @pytest.mark.integration
 def test_live_cost_tracking_round_trip() -> None:
@@ -54,5 +60,5 @@ def test_live_cost_tracking_round_trip() -> None:
     print(
         f"[live-cost-test] cost={opt.llm_cost_total} "
         f"usage={opt.llm_token_usage_total} "
-        f"llm_calls={opt.llm_call_counter} tools={opt.llm_calls_tools_counter}"
+        f"llm_calls={opt.llm_call_counter} tools={opt.llm_call_tools_counter}"
     )

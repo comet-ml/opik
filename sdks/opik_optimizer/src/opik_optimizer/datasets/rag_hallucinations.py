@@ -3,7 +3,7 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, FilterBy, add_record_index
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy, add_record_index
 
 
 RAG_HALLU_SPEC = DatasetSpec(

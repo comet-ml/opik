@@ -29,7 +29,8 @@ from benchmarks.core.benchmark_task import (
     TASK_STATUS_SUCCESS,
 )
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
-from opik_optimizer import BaseOptimizer, ChatPrompt, reporting_utils
+from opik_optimizer import BaseOptimizer, ChatPrompt
+from opik_optimizer.utils import reporting as reporting_utils
 from benchmarks.local.logging import console
 from rich.table import Table
 from rich.panel import Panel

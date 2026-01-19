@@ -8,8 +8,11 @@ from deap import creator as _creator
 
 from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
-from .... import utils, _llm_calls
+from ....core import llm_calls as _llm_calls
+from ....utils.helpers import json_to_dict
 from ....utils.prompt_library import PromptLibrary
+from ....utils.logging import compact_debug_text, debug_log
+from ....utils.text import normalize_llm_text
 
 
 logger = logging.getLogger(__name__)
@@ -143,14 +146,23 @@ def initialize_population(
                     if isinstance(response_content, list)
                     else [response_content]
                 )
-                logger.debug(
-                    "Raw LLM response for fresh start prompts: %s", response_items
+                response_items = [
+                    normalize_llm_text(item) if isinstance(item, str) else item
+                    for item in response_items
+                ]
+                cleaned = [
+                    compact_debug_text(item) if isinstance(item, str) else item
+                    for item in response_items
+                ]
+                debug_log(
+                    "population_fresh_start_response",
+                    prompts=cleaned,
                 )
 
                 # Collect prompt lists from each n-choice response to expand candidates.
                 parsed_prompts: list[list[dict[str, Any]]] = []
                 for response_item in response_items:
-                    fresh_prompts = utils.json_to_dict(response_item)
+                    fresh_prompts = json_to_dict(response_item)
                     if isinstance(fresh_prompts, list):
                         if all(isinstance(p, dict) for p in fresh_prompts) and all(
                             p.get("role") is not None for p in fresh_prompts
@@ -161,6 +173,12 @@ def initialize_population(
 
                 if parsed_prompts:
                     prompts_to_use = parsed_prompts[:num_fresh_starts]
+                    for idx, prompt_messages in enumerate(prompts_to_use):
+                        debug_log(
+                            "population_fresh_start_prompt",
+                            index=idx,
+                            prompt=compact_debug_text(json.dumps(prompt_messages)),
+                        )
                     population.extend(
                         [
                             chat_prompt.ChatPrompt(
@@ -224,12 +242,23 @@ def initialize_population(
                     if isinstance(response_content_variations, list)
                     else [response_content_variations]
                 )
-                logger.debug(
-                    "Raw response for population variations: %s", response_items
+                response_items = [
+                    normalize_llm_text(item) if isinstance(item, str) else item
+                    for item in response_items
+                ]
+                cleaned = [
+                    compact_debug_text(item) if isinstance(item, str) else item
+                    for item in response_items
+                ]
+                debug_log(
+                    "population_variation_response",
+                    prompts=cleaned,
                 )
                 generated_prompts_variations: list[list[dict[str, Any]]] = []
                 for response_item in response_items:
-                    json_response_variations = json.loads(response_item)
+                    json_response_variations = json.loads(
+                        normalize_llm_text(response_item)
+                    )
                     generated_prompts_variations.extend(
                         [
                             p["prompt"]
@@ -242,6 +271,12 @@ def initialize_population(
                     init_pop_report.success_variations(
                         len(generated_prompts_variations)
                     )
+                    for idx, prompt_messages in enumerate(generated_prompts_variations):
+                        debug_log(
+                            "population_variation_prompt",
+                            index=idx,
+                            prompt=compact_debug_text(json.dumps(prompt_messages)),
+                        )
                     population.extend(
                         [
                             chat_prompt.ChatPrompt(

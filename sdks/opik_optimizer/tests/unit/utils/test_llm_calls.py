@@ -1,5 +1,5 @@
 """
-Unit tests for opik_optimizer._llm_calls module.
+Unit tests for opik_optimizer.core.llm_calls module.
 
 Tests cover:
 - _build_call_time_params: Parameter filtering and building
@@ -15,13 +15,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from opik_optimizer._llm_calls import (
+from opik_optimizer.core.llm_calls import (
     _build_call_time_params,
     _prepare_model_params,
     _parse_response,
     StructuredOutputParsingError,
 )
-from opik_optimizer import _llm_calls
+from opik_optimizer.core import llm_calls as _llm_calls
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import OptimizationContext
+from tests.unit.test_helpers import make_mock_response
 
 
 class TestBuildCallTimeParams:
@@ -93,7 +96,7 @@ class TestPrepareModelParams:
         """Call-time params should override model parameters."""
         # Mock the Opik monitoring to return the params unchanged
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -117,7 +120,7 @@ class TestPrepareModelParams:
         # Mock returns params with empty metadata dict (simulating what the real
         # monitoring wrapper does - it ensures metadata exists)
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: {**x, "metadata": x.get("metadata", {})},
         )
 
@@ -135,7 +138,7 @@ class TestPrepareModelParams:
     ) -> None:
         """When is_reasoning=False, should not add opik_call_type metadata."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -153,7 +156,7 @@ class TestPrepareModelParams:
     ) -> None:
         """Project name should be added to metadata.opik."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -168,7 +171,7 @@ class TestPrepareModelParams:
     def test_adds_optimization_id_tags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Optimization ID should add tags to metadata.opik."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -186,7 +189,7 @@ class TestPrepareModelParams:
     ) -> None:
         """When response_model is provided, should add response_format."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -204,7 +207,7 @@ class TestPrepareModelParams:
     def test_preserves_existing_metadata(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Existing metadata should be preserved and extended, not replaced."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -224,10 +227,7 @@ class TestParseResponse:
 
     def test_returns_content_when_no_response_model(self) -> None:
         """When no response_model is provided, should return raw content."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello, world!"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("Hello, world!")
 
         result = _parse_response(mock_response)
 
@@ -240,10 +240,7 @@ class TestParseResponse:
             name: str
             count: int
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "test", "count": 42}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"name": "test", "count": 42}')
 
         result = _parse_response(mock_response, response_model=TestModel)
 
@@ -255,11 +252,7 @@ class TestParseResponse:
         """Should raise BadRequestError when content is empty and finish_reason indicates truncation."""
         from litellm.exceptions import BadRequestError
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = ""
-        mock_response.choices[0].finish_reason = "length"
-        mock_response.model = "gpt-4"
+        mock_response = make_mock_response("", finish_reason="length")
 
         with pytest.raises(BadRequestError) as exc_info:
             _parse_response(mock_response)
@@ -268,10 +261,9 @@ class TestParseResponse:
 
     def test_does_not_raise_on_truncation_with_non_empty_content(self) -> None:
         """Should NOT raise when finish_reason is 'length' but content is not empty."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Some partial content"
-        mock_response.choices[0].finish_reason = "length"
+        mock_response = make_mock_response(
+            "Some partial content", finish_reason="length"
+        )
 
         result = _parse_response(mock_response)
 
@@ -281,11 +273,7 @@ class TestParseResponse:
         """Should handle 'max_tokens' finish reason like 'length'."""
         from litellm.exceptions import BadRequestError
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "   "  # Whitespace only
-        mock_response.choices[0].finish_reason = "max_tokens"
-        mock_response.model = "gpt-4"
+        mock_response = make_mock_response("   ", finish_reason="max_tokens")
 
         with pytest.raises(BadRequestError):
             _parse_response(mock_response)
@@ -294,11 +282,7 @@ class TestParseResponse:
         """Should handle 'token limit' finish reason like 'length'."""
         from litellm.exceptions import BadRequestError
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = ""
-        mock_response.choices[0].finish_reason = "token limit"
-        mock_response.model = "gpt-4"
+        mock_response = make_mock_response("", finish_reason="token limit")
 
         with pytest.raises(BadRequestError):
             _parse_response(mock_response)
@@ -309,10 +293,7 @@ class TestParseResponse:
         class TestModel(BaseModel):
             field: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "not valid json"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("not valid json")
 
         with pytest.raises(StructuredOutputParsingError) as exc_info:
             _parse_response(mock_response, response_model=TestModel)
@@ -325,10 +306,7 @@ class TestParseResponse:
         class TestModel(BaseModel):
             required_field: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"wrong_field": "value"}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"wrong_field": "value"}')
 
         with pytest.raises(StructuredOutputParsingError) as exc_info:
             _parse_response(mock_response, response_model=TestModel)
@@ -343,11 +321,8 @@ class TestParseResponse:
         class TestModel(BaseModel):
             name: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
         # Python repr style (single quotes) - fallback should handle this
-        mock_response.choices[0].message.content = "{'name': 'test'}"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("{'name': 'test'}")
 
         result = _parse_response(mock_response, response_model=TestModel)
 
@@ -356,9 +331,7 @@ class TestParseResponse:
 
     def test_handles_none_finish_reason(self) -> None:
         """Should handle when finish_reason attribute is missing or None."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Response content"
+        mock_response = make_mock_response("Response content")
         # Don't set finish_reason at all (will return None via getattr default)
         del mock_response.choices[0].finish_reason
 
@@ -415,12 +388,7 @@ class TestEdgeCases:
             inner: Inner
             name: str
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = '{"inner": {"value": 42}, "name": "test"}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"inner": {"value": 42}, "name": "test"}')
 
         result = _parse_response(mock_response, response_model=Outer)
 
@@ -434,10 +402,7 @@ class TestEdgeCases:
         class ListModel(BaseModel):
             items: list[str]
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"items": ["a", "b", "c"]}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"items": ["a", "b", "c"]}')
 
         result = _parse_response(mock_response, response_model=ListModel)
 
@@ -446,10 +411,7 @@ class TestEdgeCases:
 
     def test_parse_response_handles_unicode_content(self) -> None:
         """Should correctly handle Unicode content."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello, 世界! 🌍"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("Hello, 世界! 🌍")
 
         result = _parse_response(mock_response)
 
@@ -466,7 +428,7 @@ class TestEdgeCases:
     ) -> None:
         """When project_name is None, existing opik.project_name should be preserved."""
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
             lambda x: x,
         )
 
@@ -493,15 +455,12 @@ class TestCallModelSync:
 
     def test_call_model_increments_counter(self) -> None:
         """Test that call_model increments LLM counter."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         with patch(
-            "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+            "opik_optimizer.core.llm_calls._increment_llm_counter_if_in_optimizer"
         ) as mock_inc:
-            with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
                 mock_track.return_value = lambda x: x
                 with patch("litellm.completion", return_value=mock_response):
                     _llm_calls.call_model(
@@ -512,12 +471,9 @@ class TestCallModelSync:
 
     def test_call_model_with_structured_output(self) -> None:
         """Test call_model with Pydantic response model."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "test", "score": 0.9}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
 
-        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
             mock_completion = MagicMock(return_value=mock_response)
             mock_track.return_value = lambda x: mock_completion
 
@@ -537,15 +493,12 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_increments_counter(self) -> None:
         """Test that call_model_async increments LLM counter."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         with patch(
-            "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
+            "opik_optimizer.core.llm_calls._increment_llm_counter_if_in_optimizer"
         ) as mock_inc:
-            with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
                 async_mock = AsyncMock(return_value=mock_response)
                 mock_track.return_value = lambda x: async_mock
 
@@ -558,12 +511,9 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_with_structured_output(self) -> None:
         """Test call_model_async with Pydantic response model."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "test", "score": 0.9}'
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
 
-        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
             async_mock = AsyncMock(return_value=mock_response)
             mock_track.return_value = lambda x: async_mock
 
@@ -579,10 +529,7 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_passes_model_parameters(self) -> None:
         """Test that model_parameters are passed to acompletion."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         captured_kwargs: dict[str, Any] = {}
 
@@ -590,7 +537,7 @@ class TestCallModelAsync:
             captured_kwargs.update(kwargs)
             return mock_response
 
-        with patch("opik_optimizer._llm_calls.track_completion") as mock_track:
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
             mock_track.return_value = lambda x: capture_call
 
             await _llm_calls.call_model_async(
@@ -606,10 +553,7 @@ class TestCallModelAsync:
     @pytest.mark.asyncio
     async def test_call_model_async_project_name_passed(self) -> None:
         """Test that project_name is passed to track_completion."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.choices[0].finish_reason = "stop"
+        mock_response = make_mock_response("response")
 
         captured_project: str | None = None
 
@@ -621,7 +565,7 @@ class TestCallModelAsync:
             return lambda x: AsyncMock(return_value=mock_response)
 
         with patch(
-            "opik_optimizer._llm_calls.track_completion", side_effect=capture_track
+            "opik_optimizer.core.llm_calls.track_completion", side_effect=capture_track
         ):
             await _llm_calls.call_model_async(
                 messages=[{"role": "user", "content": "test"}],
@@ -683,13 +627,18 @@ class TestCounterIncrement:
 
     def test_increment_llm_counter_walks_stack(self) -> None:
         """Test that counter increment walks call stack to find optimizer."""
-        from opik_optimizer.base_optimizer import BaseOptimizer
 
         class MockOptimizer(BaseOptimizer):
             DEFAULT_PROMPTS: dict[str, str] = {}
 
             def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
                 pass
+
+            def run_optimization(self, context: OptimizationContext) -> Any:
+                pass
+
+            def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+                return {"optimizer": "MockOptimizer"}
 
             def get_optimizer_metadata(self) -> dict[str, Any]:
                 return {}
@@ -705,9 +654,8 @@ class TestCounterIncrement:
 
         assert optimizer.llm_call_counter == initial_count + 1
 
-    def test_increment_tool_counter_walks_stack(self) -> None:
+    def test_increment_llm_call_tools_counter_walks_stack(self) -> None:
         """Test that tool counter increment walks call stack."""
-        from opik_optimizer.base_optimizer import BaseOptimizer
 
         class MockOptimizer(BaseOptimizer):
             DEFAULT_PROMPTS: dict[str, str] = {}
@@ -715,15 +663,21 @@ class TestCounterIncrement:
             def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
                 pass
 
+            def run_optimization(self, context: OptimizationContext) -> Any:
+                pass
+
+            def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+                return {"optimizer": "MockOptimizer"}
+
             def get_optimizer_metadata(self) -> dict[str, Any]:
                 return {}
 
         optimizer = MockOptimizer(model="gpt-4o")
-        initial_count = optimizer.tool_call_counter
+        initial_count = optimizer.llm_call_tools_counter
 
         def inner_call(self: Any) -> None:
-            _llm_calls._increment_tool_counter_if_in_optimizer()
+            _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
 
         inner_call(optimizer)
 
-        assert optimizer.tool_call_counter == initial_count + 1
+        assert optimizer.llm_call_tools_counter == initial_count + 1
