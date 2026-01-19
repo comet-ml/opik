@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING, cast
-from collections.abc import Callable
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable, Sequence
 import json
-from collections.abc import Sequence
-import copy
-import inspect
 import logging
 import math
 
@@ -13,110 +10,15 @@ from opik import Dataset
 
 from ..api_objects import chat_prompt
 from ..api_objects.types import MetricFunction
-from ..agents import LiteLLMAgent, OptimizableAgent
 from ..core.results import OptimizationResult, OptimizationRound
 from ..core.state import AlgorithmResult, OptimizationContext
 from ..utils.logging import debug_log
-from .. import helpers
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..base_optimizer import BaseOptimizer
 
 
 logger = logging.getLogger(__name__)
-
-
-def deep_merge_dicts(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
-    result = copy.deepcopy(base)
-    for key, value in overrides.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge_dicts(result[key], value)
-        else:
-            result[key] = value
-    return result
-
-
-def prepare_experiment_config(
-    *,
-    optimizer: BaseOptimizer,
-    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-    dataset: Dataset,
-    metric: MetricFunction,
-    agent: OptimizableAgent | None,
-    validation_dataset: Dataset | None,
-    experiment_config: dict[str, Any] | None,
-    configuration_updates: dict[str, Any] | None,
-    additional_metadata: dict[str, Any] | None,
-    is_single_prompt_optimization: bool,
-) -> dict[str, Any]:
-    project_name = optimizer.project_name
-
-    prompt_messages: list[dict[str, Any]] | dict[str, list[dict[str, Any]]]
-    prompt_name: str | None | dict[str, str | None]
-    prompt_project_name: str | None | dict[str, str | None]
-
-    if isinstance(prompt, dict):
-        first_prompt = next(iter(prompt.values()))
-        agent_config = optimizer._build_agent_config(first_prompt)
-        tool_signatures = optimizer._summarize_tool_signatures(first_prompt)
-
-        if is_single_prompt_optimization:
-            prompt_messages = first_prompt.get_messages()
-            prompt_name = getattr(first_prompt, "name", None)
-            prompt_project_name = getattr(first_prompt, "project_name", None)
-        else:
-            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-            prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
-            prompt_name = {k: getattr(p, "name", None) for k, p in prompt_dict.items()}
-            prompt_project_name = {
-                k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
-            }
-
-        tools = optimizer._serialize_tools(first_prompt)
-    else:
-        agent_config = optimizer._build_agent_config(prompt)
-        tool_signatures = optimizer._summarize_tool_signatures(prompt)
-        prompt_messages = prompt.get_messages()
-        prompt_name = getattr(prompt, "name", None)
-        tools = optimizer._serialize_tools(prompt)
-        prompt_project_name = getattr(prompt, "project_name", None)
-
-    base_config: dict[str, Any] = {
-        "project_name": project_name,
-        "agent_config": agent_config,
-        "metric": metric.__name__,
-        "dataset_training": dataset.name,
-        "dataset_training_id": dataset.id,
-        "optimizer": optimizer.__class__.__name__,
-        "optimizer_metadata": optimizer._build_optimizer_metadata(),
-        "tool_signatures": tool_signatures,
-        "configuration": {
-            "prompt": prompt_messages,
-            "prompt_name": prompt_name,
-            "tools": tools,
-            "prompt_project_name": prompt_project_name,
-        },
-    }
-
-    if agent is not None:
-        base_config["agent"] = agent.__class__.__name__
-
-    if configuration_updates:
-        base_config["configuration"] = deep_merge_dicts(
-            base_config["configuration"], configuration_updates
-        )
-
-    if additional_metadata:
-        base_config = deep_merge_dicts(base_config, additional_metadata)
-
-    if experiment_config:
-        base_config = deep_merge_dicts(base_config, experiment_config)
-
-    if validation_dataset:
-        base_config["validation_dataset"] = validation_dataset.name
-        base_config["validation_dataset_id"] = validation_dataset.id
-
-    return helpers.drop_none(base_config)
 
 
 def select_result_prompts(
@@ -251,46 +153,6 @@ def _record_fallback_history(
     return optimizer._history_builder.get_entries()
 
 
-def setup_agent_class(
-    optimizer: BaseOptimizer,
-    prompt: chat_prompt.ChatPrompt,
-    agent_class: Any = None,
-) -> Any:
-    if agent_class is None:
-        return LiteLLMAgent
-    if not issubclass(agent_class, OptimizableAgent):
-        raise TypeError(
-            f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
-        )
-    return agent_class
-
-
-def bind_optimizer(
-    optimizer: BaseOptimizer, agent: OptimizableAgent
-) -> OptimizableAgent:
-    try:
-        agent.optimizer = optimizer  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover - custom agents may forbid new attrs
-        logger.debug(
-            "Unable to record optimizer on agent instance of %s",
-            agent.__class__.__name__,
-        )
-    return agent
-
-
-def instantiate_agent(
-    optimizer: BaseOptimizer,
-    *args: Any,
-    agent_class: type[OptimizableAgent] | None = None,
-    **kwargs: Any,
-) -> OptimizableAgent:
-    resolved_class = agent_class or getattr(optimizer, "agent_class", None)
-    if resolved_class is None:
-        raise ValueError("agent_class must be provided before instantiation")
-    agent = resolved_class(*args, **kwargs)
-    return bind_optimizer(optimizer, agent)
-
-
 def extract_tool_prompts(
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, str] | None:
@@ -302,81 +164,6 @@ def extract_tool_prompts(
         ).get("description", "")
         for idx, tool in enumerate(tools)
     }
-
-
-def serialize_tools(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
-    tools_obj = getattr(prompt, "tools", None)
-    if not isinstance(tools_obj, list):
-        return []
-
-    try:
-        return copy.deepcopy(cast(list[dict[str, Any]], tools_obj))
-    except Exception:  # pragma: no cover - defensive
-        serialized_tools: list[dict[str, Any]] = []
-        for tool in tools_obj:
-            if isinstance(tool, dict):
-                serialized_tools.append({k: v for k, v in tool.items() if k})
-        return serialized_tools
-
-
-def describe_annotation(annotation: Any) -> str | None:
-    if annotation is inspect._empty:
-        return None
-    if isinstance(annotation, type):
-        return annotation.__name__
-    return str(annotation)
-
-
-def summarize_tool_signatures(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
-    signatures: list[dict[str, Any]] = []
-    for name, func in getattr(prompt, "function_map", {}).items():
-        callable_obj = getattr(func, "__wrapped__", func)
-        try:
-            sig = inspect.signature(callable_obj)
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            signatures.append({"name": name, "signature": "unavailable"})
-            continue
-
-        params: list[dict[str, Any]] = []
-        for parameter in sig.parameters.values():
-            params.append(
-                helpers.drop_none(
-                    {
-                        "name": parameter.name,
-                        "kind": parameter.kind.name,
-                        "annotation": describe_annotation(parameter.annotation),
-                        "default": (
-                            None
-                            if parameter.default is inspect._empty
-                            else parameter.default
-                        ),
-                    }
-                )
-            )
-
-        signatures.append(
-            helpers.drop_none(
-                {
-                    "name": name,
-                    "parameters": params,
-                    "docstring": inspect.getdoc(callable_obj),
-                }
-            )
-        )
-    return signatures
-
-
-def build_agent_config(
-    *,
-    optimizer: BaseOptimizer,
-    prompt: chat_prompt.ChatPrompt,
-) -> dict[str, Any]:
-    agent_config: dict[str, Any] = dict(prompt.to_dict())
-    agent_config["project_name"] = getattr(prompt, "project_name", None)
-    agent_config["model"] = getattr(prompt, "model", None) or optimizer.model
-    agent_config["tools"] = serialize_tools(prompt)
-    agent_config["optimizer"] = optimizer.__class__.__name__
-    return helpers.drop_none(agent_config)
 
 
 def evaluation_progress(

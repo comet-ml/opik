@@ -379,7 +379,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 context=context,
                 empty_score=best_score,
             )
-            self.record_candidate_entry(
+            candidate_entry = self.record_candidate_entry(
                 prompt_or_payload=best_prompts,
                 score=fallback_score,
                 id=f"trial{context.trials_completed}_fallback",
@@ -389,6 +389,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 best_prompts,
                 score=fallback_score,
                 round_handle=round_handle,
+                candidates=[candidate_entry],
             )
             return best_prompts, fallback_score, fallback_result
 
@@ -401,7 +402,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_samples=n_samples,
             context=context,
         )
-        self.record_candidate_entry(
+        candidate_entry = self.record_candidate_entry(
             prompt_or_payload=best_prompt_bundle,
             score=best_score_local,
             id=f"trial{context.trials_completed}_best0",
@@ -411,6 +412,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             best_prompt_bundle,
             score=best_score_local,
             round_handle=round_handle,
+            candidates=[candidate_entry],
         )
 
         # Evaluate remaining candidates and keep the best-scoring bundle.
@@ -427,7 +429,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     context=context,
                 )
             )
-            self.record_candidate_entry(
+            candidate_entry = self.record_candidate_entry(
                 prompt_or_payload=improved_chat_prompts,
                 score=improved_score,
                 id=f"trial{context.trials_completed}_cand{idx}",
@@ -437,6 +439,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 improved_chat_prompts,
                 score=improved_score,
                 round_handle=round_handle,
+                candidates=[candidate_entry],
             )
 
             if improved_score > best_score_local:

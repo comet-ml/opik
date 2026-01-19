@@ -14,7 +14,11 @@ from opik import Dataset, opik_context
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
-from ...core.state import OptimizationContext, AlgorithmResult
+from ...core.state import (
+    OptimizationContext,
+    AlgorithmResult,
+    prepare_experiment_config,
+)
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
@@ -446,14 +450,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "baseline_score": baseline_score,
             }
         )
-        base_experiment_config = self._prepare_experiment_config(
+        base_experiment_config = prepare_experiment_config(
+            optimizer=self,
             prompt=prompts,
             dataset=dataset,
             validation_dataset=validation_dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
+            additional_metadata=None,
             is_single_prompt_optimization=is_single_prompt_optimization,
+            agent=agent,
+            build_optimizer_version=base_optimizer._OPTIMIZER_VERSION,
         )
 
         # Start Optuna Study
@@ -632,7 +640,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 pruner=pruner_info,
                 study_direction=study.direction.name if study.direction else None,
             )
-            self.record_candidate_entry(
+            candidate_entry = self.record_candidate_entry(
                 prompt_or_payload=prompt_cand_display,
                 score=score_val,
                 id=f"trial{trial.number}",
@@ -650,6 +658,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 score=score_val,
                 round_handle=round_handle,
                 timestamp=timestamp,
+                candidates=[candidate_entry],
             )
             self.set_selection_meta(
                 {

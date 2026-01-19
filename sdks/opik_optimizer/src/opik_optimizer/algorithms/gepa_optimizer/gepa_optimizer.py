@@ -3,7 +3,11 @@ from typing import Any, cast
 
 
 from ...base_optimizer import BaseOptimizer
-from ...core.state import AlgorithmResult, OptimizationContext
+from ...core.state import (
+    AlgorithmResult,
+    OptimizationContext,
+    build_optimization_metadata,
+)
 from ...utils.reporting import (
     convert_tqdm_to_rich,
     suppress_opik_logs,
@@ -394,6 +398,7 @@ class GepaOptimizer(BaseOptimizer):
                             "candidate_id": candidate_id,
                         },
                         round_handle=round_handle,
+                        candidates=[candidate_entry],
                     )
                     debug_log(
                         "candidate_end",
@@ -608,4 +613,4 @@ class GepaOptimizer(BaseOptimizer):
         return "<no content>"
 
     def _build_optimization_config(self) -> dict[str, Any]:
-        return self._build_optimization_metadata()
+        return build_optimization_metadata(self)

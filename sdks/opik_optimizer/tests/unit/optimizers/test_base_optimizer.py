@@ -5,10 +5,10 @@ Unit tests for opik_optimizer.base_optimizer module.
 
 Tests cover:
 - _validate_optimization_inputs: Input validation
-- _deep_merge_dicts: Dictionary merging
-- _serialize_tools: Tool serialization
-- _build_agent_config: Config building
-- get_optimizer_metadata: Metadata generation
+- utils.tool_helpers.deep_merge_dicts: Dictionary merging
+- utils.tool_helpers.serialize_tools: Tool serialization
+- core.agent.build_agent_config: Config building
+- core.state.build_optimizer_metadata: Metadata generation
 - Counter and history management
 """
 
@@ -26,10 +26,13 @@ from opik_optimizer.base_optimizer import (
     OptimizationContext,
     AlgorithmResult,
 )
+from opik_optimizer.core import agent as agent_utils
+from opik_optimizer.core import state as state_utils
 from opik_optimizer.core.state import get_current_context
 from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer import ChatPrompt
+from opik_optimizer.utils import tool_helpers as tool_utils
 from tests.unit.test_helpers import (
     make_candidate_agent,
     make_fake_evaluator,
@@ -654,14 +657,14 @@ def test_evaluate_sets_finish_reason_on_max_trials(simple_chat_prompt) -> None:
 
 
 class TestDeepMergeDicts:
-    """Tests for _deep_merge_dicts static method."""
+    """Tests for utils.tool_helpers.deep_merge_dicts."""
 
     def test_merges_flat_dicts(self) -> None:
         """Should merge two flat dictionaries."""
         base = {"a": 1, "b": 2}
         overrides = {"b": 3, "c": 4}
 
-        result = BaseOptimizer._deep_merge_dicts(base, overrides)
+        result = tool_utils.deep_merge_dicts(base, overrides)
 
         assert result == {"a": 1, "b": 3, "c": 4}
 
@@ -670,7 +673,7 @@ class TestDeepMergeDicts:
         base = {"level1": {"a": 1, "b": 2}, "other": "value"}
         overrides = {"level1": {"b": 3, "c": 4}}
 
-        result = BaseOptimizer._deep_merge_dicts(base, overrides)
+        result = tool_utils.deep_merge_dicts(base, overrides)
 
         assert result == {"level1": {"a": 1, "b": 3, "c": 4}, "other": "value"}
 
@@ -679,7 +682,7 @@ class TestDeepMergeDicts:
         base = {"key": "string_value"}
         overrides = {"key": {"nested": "value"}}
 
-        result = BaseOptimizer._deep_merge_dicts(base, overrides)
+        result = tool_utils.deep_merge_dicts(base, overrides)
 
         assert result == {"key": {"nested": "value"}}
 
@@ -688,7 +691,7 @@ class TestDeepMergeDicts:
         base = {"key": {"nested": "value"}}
         overrides = {"key": "string_value"}
 
-        result = BaseOptimizer._deep_merge_dicts(base, overrides)
+        result = tool_utils.deep_merge_dicts(base, overrides)
 
         assert result == {"key": "string_value"}
 
@@ -697,28 +700,28 @@ class TestDeepMergeDicts:
         base = {"a": {"b": 1}}
         overrides = {"a": {"c": 2}}
 
-        BaseOptimizer._deep_merge_dicts(base, overrides)
+        tool_utils.deep_merge_dicts(base, overrides)
 
         assert base == {"a": {"b": 1}}
         assert overrides == {"a": {"c": 2}}
 
     def test_handles_empty_base(self) -> None:
         """Should handle empty base dictionary."""
-        result = BaseOptimizer._deep_merge_dicts({}, {"a": 1})
+        result = tool_utils.deep_merge_dicts({}, {"a": 1})
         assert result == {"a": 1}
 
     def test_handles_empty_overrides(self) -> None:
         """Should handle empty overrides dictionary."""
-        result = BaseOptimizer._deep_merge_dicts({"a": 1}, {})
+        result = tool_utils.deep_merge_dicts({"a": 1}, {})
         assert result == {"a": 1}
 
 
 class TestSerializeTools:
-    """Tests for _serialize_tools static method."""
+    """Tests for utils.tool_helpers.serialize_tools."""
 
     def test_serializes_tools_list(self, chat_prompt_with_tools) -> None:
         """Should return deep copy of tools list."""
-        result = BaseOptimizer._serialize_tools(chat_prompt_with_tools)
+        result = tool_utils.serialize_tools(chat_prompt_with_tools)
 
         assert isinstance(result, list)
         assert len(result) == 2
@@ -726,13 +729,13 @@ class TestSerializeTools:
 
     def test_returns_empty_list_when_no_tools(self, simple_chat_prompt) -> None:
         """Should return empty list when prompt has no tools."""
-        result = BaseOptimizer._serialize_tools(simple_chat_prompt)
+        result = tool_utils.serialize_tools(simple_chat_prompt)
 
         assert result == []
 
     def test_returns_deep_copy(self, chat_prompt_with_tools) -> None:
         """Should return a deep copy, not reference original."""
-        result = BaseOptimizer._serialize_tools(chat_prompt_with_tools)
+        result = tool_utils.serialize_tools(chat_prompt_with_tools)
 
         # Modify the result
         result[0]["function"]["name"] = "modified"
@@ -742,7 +745,7 @@ class TestSerializeTools:
 
 
 class TestBuildAgentConfig:
-    """Tests for _build_agent_config method."""
+    """Tests for core.agent.build_agent_config."""
 
     @pytest.fixture
     def optimizer(self) -> ConcreteOptimizer:
@@ -750,7 +753,9 @@ class TestBuildAgentConfig:
 
     def test_includes_prompt_dict(self, optimizer, simple_chat_prompt) -> None:
         """Should include prompt content from to_dict()."""
-        config = optimizer._build_agent_config(simple_chat_prompt)
+        config = agent_utils.build_agent_config(
+            optimizer=optimizer, prompt=simple_chat_prompt
+        )
 
         # Config should include prompt content - simple_chat_prompt has system and user
         # Verify at least one content key exists and has valid content
@@ -774,32 +779,38 @@ class TestBuildAgentConfig:
 
     def test_includes_model(self, optimizer, simple_chat_prompt) -> None:
         """Should include model name."""
-        config = optimizer._build_agent_config(simple_chat_prompt)
+        config = agent_utils.build_agent_config(
+            optimizer=optimizer, prompt=simple_chat_prompt
+        )
 
         assert "model" in config
 
     def test_includes_optimizer_name(self, optimizer, simple_chat_prompt) -> None:
         """Should include optimizer class name."""
-        config = optimizer._build_agent_config(simple_chat_prompt)
+        config = agent_utils.build_agent_config(
+            optimizer=optimizer, prompt=simple_chat_prompt
+        )
 
         assert config["optimizer"] == "ConcreteOptimizer"
 
     def test_includes_tools(self, optimizer, chat_prompt_with_tools) -> None:
         """Should include serialized tools."""
-        config = optimizer._build_agent_config(chat_prompt_with_tools)
+        config = agent_utils.build_agent_config(
+            optimizer=optimizer, prompt=chat_prompt_with_tools
+        )
 
         assert "tools" in config
         assert len(config["tools"]) == 2
 
 
 class TestGetOptimizerMetadata:
-    """Tests for get_optimizer_metadata and _build_optimizer_metadata."""
+    """Tests for get_optimizer_metadata and build_optimizer_metadata."""
 
     def test_subclass_metadata_is_included(self) -> None:
         """Subclass metadata should be included via get_optimizer_metadata."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        metadata = optimizer._build_optimizer_metadata()
+        metadata = state_utils.build_optimizer_metadata(optimizer)
 
         assert "parameters" in metadata
         assert metadata["parameters"]["test_param"] == "test_value"
@@ -813,7 +824,7 @@ class TestGetOptimizerMetadata:
             model_parameters={"temperature": 0.5},
         )
 
-        metadata = optimizer._build_optimizer_metadata()
+        metadata = state_utils.build_optimizer_metadata(optimizer)
 
         assert metadata["name"] == "ConcreteOptimizer"
         assert metadata["model"] == "gpt-4"
@@ -824,19 +835,19 @@ class TestGetOptimizerMetadata:
         """Should include optimizer version."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        metadata = optimizer._build_optimizer_metadata()
+        metadata = state_utils.build_optimizer_metadata(optimizer)
 
         assert "version" in metadata
 
 
 class TestBuildOptimizationMetadata:
-    """Tests for _build_optimization_metadata method."""
+    """Tests for build_optimization_metadata."""
 
     def test_includes_optimizer_name(self) -> None:
         """Should include optimizer class name."""
         optimizer = ConcreteOptimizer(model="gpt-4")
 
-        metadata = optimizer._build_optimization_metadata()
+        metadata = state_utils.build_optimization_metadata(optimizer)
 
         assert metadata["optimizer"] == "ConcreteOptimizer"
 
@@ -844,7 +855,7 @@ class TestBuildOptimizationMetadata:
         """Should include custom name when provided."""
         optimizer = ConcreteOptimizer(model="gpt-4", name="my-optimization")
 
-        metadata = optimizer._build_optimization_metadata()
+        metadata = state_utils.build_optimization_metadata(optimizer)
 
         assert metadata["name"] == "my-optimization"
 
@@ -864,7 +875,9 @@ class TestBuildOptimizationMetadata:
             ) -> str:
                 return "output"
 
-        metadata = optimizer._build_optimization_metadata(agent_class=CustomAgent)
+        metadata = state_utils.build_optimization_metadata(
+            optimizer, agent_class=CustomAgent
+        )
 
         assert metadata["agent_class"] == "CustomAgent"
 
@@ -1167,25 +1180,25 @@ class TestOptimizerInitialization:
 
 
 class TestDescribeAnnotation:
-    """Tests for _describe_annotation static method."""
+    """Tests for utils.tool_helpers.describe_annotation."""
 
     def test_returns_none_for_empty_annotation(self) -> None:
         """Should return None for inspect._empty."""
         import inspect
 
-        result = BaseOptimizer._describe_annotation(inspect._empty)
+        result = tool_utils.describe_annotation(inspect._empty)
 
         assert result is None
 
     def test_returns_name_for_type(self) -> None:
         """Should return __name__ for type objects."""
-        result = BaseOptimizer._describe_annotation(str)
+        result = tool_utils.describe_annotation(str)
 
         assert result == "str"
 
     def test_returns_string_for_other(self) -> None:
         """Should return string representation for other objects."""
-        result = BaseOptimizer._describe_annotation("custom_annotation")
+        result = tool_utils.describe_annotation("custom_annotation")
 
         assert result == "custom_annotation"
 

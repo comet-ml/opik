@@ -322,6 +322,44 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
         return result
 
+    def _post_population_candidates(
+        self,
+        *,
+        context: OptimizationContext,
+        population: list[Any],
+        generation_idx: int,
+        round_handle: Any,
+        use_valid_index: bool,
+    ) -> None:
+        """Record and post candidate entries for a population."""
+        valid_idx = 0
+        for idx, ind in enumerate(population):
+            if not ind.fitness.valid:
+                continue
+            candidate_prompts = self._individual_to_prompts(ind)
+            primary_score = ind.fitness.values[0]
+            metrics: dict[str, Any] | None = None
+            if self.enable_moo and len(ind.fitness.values) > 1:
+                metrics = {
+                    "primary": ind.fitness.values[0],
+                    "length": ind.fitness.values[1],
+                }
+            entry = self.record_candidate_entry(
+                prompt_or_payload=candidate_prompts,
+                score=primary_score,
+                id=f"gen{generation_idx}_ind{valid_idx if use_valid_index else idx}",
+                metrics=metrics,
+            )
+            self.post_trial(
+                context,
+                candidate_prompts,
+                score=primary_score,
+                metrics=metrics,
+                candidates=[entry],
+                round_handle=round_handle,
+            )
+            valid_idx += 1
+
     def _get_adaptive_mutation_rate(self) -> float:
         """Calculate adaptive mutation rate based on population diversity and progress."""
         if not self.adaptive_mutation or len(self._best_fitness_history) < 2:
@@ -657,31 +695,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.set_default_dataset_split(context.dataset_split or "train")
         round_handle = self.pre_round(context)
         generation_idx = 0
-        for idx, ind in enumerate(deap_population):
-            if not ind.fitness.valid:
-                continue
-            candidate_prompts = self._individual_to_prompts(ind)
-            primary_score = ind.fitness.values[0]
-            metrics: dict[str, Any] | None = None
-            if self.enable_moo and len(ind.fitness.values) > 1:
-                metrics = {
-                    "primary": ind.fitness.values[0],
-                    "length": ind.fitness.values[1],
-                }
-            entry = self.record_candidate_entry(
-                prompt_or_payload=candidate_prompts,
-                score=primary_score,
-                id=f"gen0_ind{idx}",
-                metrics=metrics,
-            )
-            self.post_trial(
-                context,
-                candidate_prompts,
-                score=primary_score,
-                metrics=metrics,
-                candidates=[entry],
-                round_handle=round_handle,
-            )
+        self._post_population_candidates(
+            context=context,
+            population=deap_population,
+            generation_idx=generation_idx,
+            round_handle=round_handle,
+            use_valid_index=False,
+        )
         selection_meta = None
         pareto_front = None
         if self.enable_moo:
@@ -834,33 +854,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     )
 
                     # History logging for this transition
-                    posted_idx = 0
-                    for ind in deap_population:
-                        if not ind.fitness.valid:
-                            continue
-                        candidate_prompts = self._individual_to_prompts(ind)
-                        primary_score = ind.fitness.values[0]
-                        cand_metrics: dict[str, Any] | None = None
-                        if self.enable_moo and len(ind.fitness.values) > 1:
-                            cand_metrics = {
-                                "primary": ind.fitness.values[0],
-                                "length": ind.fitness.values[1],
-                            }
-                        entry = self.record_candidate_entry(
-                            prompt_or_payload=candidate_prompts,
-                            score=primary_score,
-                            id=f"gen{generation_idx}_ind{posted_idx}",
-                            metrics=cand_metrics,
-                        )
-                        self.post_trial(
-                            context,
-                            candidate_prompts,
-                            score=primary_score,
-                            metrics=cand_metrics,
-                            candidates=[entry],
-                            round_handle=round_handle,
-                        )
-                        posted_idx += 1
+                    self._post_population_candidates(
+                        context=context,
+                        population=deap_population,
+                        generation_idx=generation_idx,
+                        round_handle=round_handle,
+                        use_valid_index=True,
+                    )
 
                     pareto_front = None
                     selection_meta = None

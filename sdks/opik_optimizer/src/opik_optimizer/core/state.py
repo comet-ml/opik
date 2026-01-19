@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from collections.abc import Sequence
 from contextvars import ContextVar
 
@@ -12,6 +12,13 @@ from ..api_objects import chat_prompt
 from ..api_objects.types import MetricFunction
 from ..agents import OptimizableAgent
 from .results import OptimizationRound
+from ..utils.tool_helpers import (
+    deep_merge_dicts,
+    serialize_tools,
+    summarize_tool_signatures,
+)
+from .. import helpers
+from . import agent as agent_utils
 
 # Valid reasons for optimization to finish
 FinishReason = Literal[
@@ -129,3 +136,144 @@ def require_current_context() -> OptimizationContext:
     if context is None:
         raise RuntimeError("No active optimization context is set.")
     return context
+
+
+def get_optimizer_metadata(optimizer: Any) -> dict[str, Any]:
+    method = getattr(optimizer, "get_optimizer_metadata", None)
+    if callable(method):
+        return method()
+    return {}
+
+
+def build_optimizer_metadata(
+    optimizer: Any, version: str | None = None
+) -> dict[str, Any]:
+    metadata = {
+        "name": optimizer.__class__.__name__,
+        "version": version or "unknown",
+        "model": optimizer.model,
+        "model_parameters": optimizer.model_parameters or None,
+        "seed": getattr(optimizer, "seed", None),
+        "num_threads": getattr(optimizer, "num_threads", None),
+    }
+
+    if metadata["num_threads"] is None and hasattr(optimizer, "n_threads"):
+        metadata["num_threads"] = getattr(optimizer, "n_threads")
+
+    if hasattr(optimizer, "reasoning_model"):
+        metadata["reasoning_model"] = getattr(optimizer, "reasoning_model")
+
+    extra_parameters = get_optimizer_metadata(optimizer)
+    if extra_parameters:
+        metadata["parameters"] = extra_parameters
+
+    return helpers.drop_none(metadata)
+
+
+def build_optimization_metadata(
+    optimizer: Any, agent_class: type[OptimizableAgent] | None = None
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"optimizer": optimizer.__class__.__name__}
+    if getattr(optimizer, "name", None):
+        metadata["name"] = optimizer.name
+
+    agent_class_name: str | None = None
+    if agent_class is not None:
+        agent_class_name = getattr(agent_class, "__name__", None)
+    elif hasattr(optimizer, "agent_class") and optimizer.agent_class is not None:
+        agent_class_name = getattr(optimizer.agent_class, "__name__", None)
+
+    if agent_class_name:
+        metadata["agent_class"] = agent_class_name
+
+    return metadata
+
+
+def prepare_experiment_config(
+    *,
+    optimizer: Any,
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    agent: OptimizableAgent | None,
+    validation_dataset: Dataset | None,
+    experiment_config: dict[str, Any] | None,
+    configuration_updates: dict[str, Any] | None,
+    additional_metadata: dict[str, Any] | None,
+    is_single_prompt_optimization: bool,
+    build_optimizer_version: str,
+) -> dict[str, Any]:
+    project_name = optimizer.project_name
+
+    prompt_messages: list[dict[str, Any]] | dict[str, list[dict[str, Any]]]
+    prompt_name: str | None | dict[str, str | None]
+    prompt_project_name: str | None | dict[str, str | None]
+
+    if isinstance(prompt, dict):
+        first_prompt = next(iter(prompt.values()))
+        agent_config = agent_utils.build_agent_config(
+            optimizer=optimizer, prompt=first_prompt
+        )
+        tool_signatures = summarize_tool_signatures(first_prompt)
+
+        if is_single_prompt_optimization:
+            prompt_messages = first_prompt.get_messages()
+            prompt_name = getattr(first_prompt, "name", None)
+            prompt_project_name = getattr(first_prompt, "project_name", None)
+        else:
+            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+            prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
+            prompt_name = {k: getattr(p, "name", None) for k, p in prompt_dict.items()}
+            prompt_project_name = {
+                k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
+            }
+
+        tools = serialize_tools(first_prompt)
+    else:
+        agent_config = agent_utils.build_agent_config(
+            optimizer=optimizer, prompt=prompt
+        )
+        tool_signatures = summarize_tool_signatures(prompt)
+        prompt_messages = prompt.get_messages()
+        prompt_name = getattr(prompt, "name", None)
+        tools = serialize_tools(prompt)
+        prompt_project_name = getattr(prompt, "project_name", None)
+
+    base_config: dict[str, Any] = {
+        "project_name": project_name,
+        "agent_config": agent_config,
+        "metric": metric.__name__,
+        "dataset_training": dataset.name,
+        "dataset_training_id": dataset.id,
+        "optimizer": optimizer.__class__.__name__,
+        "optimizer_metadata": build_optimizer_metadata(
+            optimizer, build_optimizer_version
+        ),
+        "tool_signatures": tool_signatures,
+        "configuration": {
+            "prompt": prompt_messages,
+            "prompt_name": prompt_name,
+            "tools": tools,
+            "prompt_project_name": prompt_project_name,
+        },
+    }
+
+    if agent is not None:
+        base_config["agent"] = agent.__class__.__name__
+
+    if configuration_updates:
+        base_config["configuration"] = deep_merge_dicts(
+            base_config["configuration"], configuration_updates
+        )
+
+    if additional_metadata:
+        base_config = deep_merge_dicts(base_config, additional_metadata)
+
+    if experiment_config:
+        base_config = deep_merge_dicts(base_config, experiment_config)
+
+    if validation_dataset is not None:
+        base_config["dataset_validation"] = validation_dataset.name
+        base_config["dataset_validation_id"] = validation_dataset.id
+
+    return base_config

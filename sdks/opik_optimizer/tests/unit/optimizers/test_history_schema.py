@@ -42,6 +42,9 @@ from opik_optimizer.core.state import AlgorithmResult
 
 def _assert_candidate_schema(entry: dict[str, Any]) -> None:
     candidates = entry.get("candidates") or []
+    trials = entry.get("trials") or []
+    if trials:
+        assert candidates, "candidates should be recorded for trialed rounds"
     for cand in candidates:
         assert "candidate" in cand
         assert "score" in cand or "metrics" in cand
@@ -77,7 +80,7 @@ def test_algorithm_result_accepts_typed_rounds(
         metric=metric_fn,
         agent=MagicMock(),
     )
-    trial = OptimizationTrial(trial_index=None, score=0.1, candidate="candidate")
+    trial = OptimizationTrial(trial_index=None, score=0.1, candidate=simple_chat_prompt)
     round_entry = OptimizationRound(round_index=0, trials=[trial], best_score=0.1)
     algo_result = AlgorithmResult(
         best_prompts=context.prompts,
@@ -142,7 +145,13 @@ def test_history_schema_smoke(
     monkeypatch.setattr(
         BaseOptimizer, "_calculate_baseline", lambda self, ctx: 0.1, raising=False
     )
-    dummy_history = [{"round_index": 0, "trials": [{"trial_index": 0, "score": 0.1}]}]
+    dummy_history = [
+        {
+            "round_index": 0,
+            "trials": [{"trial_index": 0, "score": 0.1}],
+            "candidates": [{"candidate": simple_chat_prompt, "score": 0.1}],
+        }
+    ]
     monkeypatch.setattr(
         optimizer,
         "run_optimization",

@@ -10,6 +10,8 @@ from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 from opik import Dataset
 
 from ... import helpers
+from ...core.state import prepare_experiment_config
+from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -108,6 +110,40 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         except Exception:
             pass
 
+    def _record_and_post_candidate(
+        self,
+        *,
+        prompt_variants: dict[str, chat_prompt.ChatPrompt],
+        score: float,
+        candidate_id: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        """Record adapter metric call and post candidate/round to history."""
+        self._record_adapter_metric_call()
+        candidate_entry = self._optimizer.record_candidate_entry(
+            prompt_or_payload=prompt_variants,
+            score=score,
+            id=candidate_id,
+            metrics=metrics,
+            extra=extra,
+        )
+        round_handle = self._optimizer.pre_round(self._context)
+        self._optimizer.post_trial(
+            self._context,
+            prompt_variants,
+            score=score,
+            metrics=candidate_entry.get("metrics"),
+            extras=candidate_entry.get("extra"),
+            round_handle=round_handle,
+            candidates=[candidate_entry],
+        )
+        self._optimizer.post_round(
+            round_handle,
+            best_score=score,
+            best_prompt=prompt_variants,
+        )
+
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
     ) -> dict[str, chat_prompt.ChatPrompt]:
@@ -167,12 +203,20 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
             }
         )
-        experiment_config = self._optimizer._prepare_experiment_config(
+        experiment_config = prepare_experiment_config(
+            optimizer=self._optimizer,
             prompt=prompt_variants,
             dataset=target_dataset,
             metric=self._metric,
             experiment_config=self._experiment_config,
             configuration_updates=configuration_updates,
+            additional_metadata=None,
+            validation_dataset=None,
+            is_single_prompt_optimization=isinstance(
+                prompt_variants, chat_prompt.ChatPrompt
+            ),
+            agent=None,
+            build_optimizer_version=_OPTIMIZER_VERSION,
         )
         project_name = experiment_config.get("project_name") or getattr(
             self._optimizer, "project_name", None
@@ -220,24 +264,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
                 outputs.append({"output": raw_output})
                 scores.append(score)
-                self._record_adapter_metric_call()
-                candidate_entry = self._optimizer.record_candidate_entry(
-                    prompt_or_payload=prompt_variants,
+                self._record_and_post_candidate(
+                    prompt_variants=prompt_variants,
                     score=score,
                     metrics={"adapter_metric": score},
-                )
-                round_handle = self._optimizer.pre_round(self._context)
-                self._optimizer.post_trial(
-                    self._context,
-                    prompt_variants,
-                    score=score,
-                    metrics=candidate_entry.get("metrics"),
-                    round_handle=round_handle,
-                )
-                self._optimizer.post_round(
-                    round_handle,
-                    best_score=score,
-                    best_prompt=prompt_variants,
                 )
                 if self._context.should_stop:
                     break
@@ -347,27 +377,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             outputs.append({"output": output_text})
             scores.append(score_value)
-            self._record_adapter_metric_call()
-            candidate_entry = self._optimizer.record_candidate_entry(
-                prompt_or_payload=prompt_variants,
+            self._record_and_post_candidate(
+                prompt_variants=prompt_variants,
                 score=score_value,
-                id=candidate.get("id"),
+                candidate_id=candidate.get("id"),
                 metrics={self._metric_name: score_value, "opik_score": score_value},
                 extra={"output": output_text, "candidate": candidate},
-            )
-            round_handle = self._optimizer.pre_round(self._context)
-            self._optimizer.post_trial(
-                self._context,
-                prompt_variants,
-                score=score_value,
-                metrics=candidate_entry.get("metrics"),
-                extras=candidate_entry.get("extra"),
-                round_handle=round_handle,
-            )
-            self._optimizer.post_round(
-                round_handle,
-                best_score=score_value,
-                best_prompt=prompt_variants,
             )
             if self._context.should_stop:
                 break

@@ -2,6 +2,8 @@ from typing import Any, TYPE_CHECKING, cast
 
 
 from ....core import evaluation as task_evaluator
+from ....core.state import prepare_experiment_config
+from ....base_optimizer import _OPTIMIZER_VERSION
 from .... import helpers
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
@@ -79,7 +81,8 @@ def evaluate_bundle(
         {"evaluation": evaluation_details} if evaluation_details else None
     )
 
-    experiment_config = optimizer._prepare_experiment_config(
+    experiment_config = prepare_experiment_config(
+        optimizer=optimizer,
         prompt=prompts_bundle,
         dataset=dataset,
         metric=metric,
@@ -87,6 +90,9 @@ def evaluate_bundle(
         experiment_config=experiment_config,
         configuration_updates=configuration_updates,
         additional_metadata=additional_metadata,
+        validation_dataset=None,
+        is_single_prompt_optimization=False,
+        build_optimizer_version=_OPTIMIZER_VERSION,
     )
 
     if optimizer.agent is None:

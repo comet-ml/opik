@@ -426,7 +426,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
                 # Record each evaluated candidate as trials
                 for idx, (cand_prompt, cand_score) in enumerate(prompt_scores):
-                    self.record_candidate_entry(
+                    candidate_entry = self.record_candidate_entry(
                         prompt_or_payload=cand_prompt,
                         score=cand_score,
                         id=f"round{round_num}_cand",
@@ -438,6 +438,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         score=cand_score,
                         round_handle=round_handle,
                         extras={"round_num": round_num},
+                        candidates=[candidate_entry],
                     )
                 # Flush round metadata/candidates
                 self.post_round(

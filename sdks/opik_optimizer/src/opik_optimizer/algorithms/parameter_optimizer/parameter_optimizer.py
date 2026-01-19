@@ -317,7 +317,7 @@ class ParameterOptimizer(BaseOptimizer):
             )
             self._history_builder.clear()
             baseline_round = self.pre_round(context, stage="baseline", type="baseline")
-            self.record_candidate_entry(
+            candidate_entry = self.record_candidate_entry(
                 prompt_or_payload=base_prompts
                 if not is_single_prompt_optimization
                 else list(base_prompts.values())[0],
@@ -345,6 +345,7 @@ class ParameterOptimizer(BaseOptimizer):
                     "stage": "baseline",
                 },
                 round_handle=baseline_round,
+                candidates=[candidate_entry],
             )
             self.post_round(
                 baseline_round,
@@ -417,7 +418,7 @@ class ParameterOptimizer(BaseOptimizer):
         first_prompt = list(base_prompts.values())[0]
         self._history_builder.clear()
         baseline_round = self.pre_round(context, stage="baseline", type="baseline")
-        self.record_candidate_entry(
+        candidate_entry = self.record_candidate_entry(
             prompt_or_payload=base_prompts
             if not is_single_prompt_optimization
             else first_prompt,
@@ -443,6 +444,7 @@ class ParameterOptimizer(BaseOptimizer):
                 "stage": "baseline",
             },
             round_handle=baseline_round,
+            candidates=[candidate_entry],
         )
         self.post_round(
             baseline_round,
@@ -710,7 +712,7 @@ class ParameterOptimizer(BaseOptimizer):
                 local_trials=trial.user_attrs.get("local_trials"),
                 global_trials=trial.user_attrs.get("global_trials"),
             )
-            self.record_candidate_entry(
+            candidate_entry = self.record_candidate_entry(
                 prompt_or_payload=trial.user_attrs.get("model_kwargs"),
                 score=float(trial.value) if trial.value is not None else None,
                 id=f"trial{trial.number}",
@@ -728,6 +730,7 @@ class ParameterOptimizer(BaseOptimizer):
                 extras=None,
                 round_handle=round_handle,
                 timestamp=timestamp_source.isoformat(),
+                candidates=[candidate_entry],
             )
             self.post_round(
                 round_handle=round_handle,

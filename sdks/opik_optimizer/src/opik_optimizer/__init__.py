@@ -26,6 +26,11 @@ from .algorithms import (
     FewShotBayesianOptimizer,
     ParameterOptimizer,
 )
+from .algorithms.parameter_optimizer import (
+    ParameterSearchSpace,
+    ParameterSpec,
+    ParameterType,
+)
 from .utils.logging import setup_logging
 from .core.results import OptimizationResult
 from .metrics.multi_metric_objective import MultiMetricObjective
@@ -60,6 +65,9 @@ __all__ = [
     "HierarchicalReflectiveOptimizer",
     "HRPO",
     "ParameterOptimizer",
+    "ParameterSearchSpace",
+    "ParameterSpec",
+    "ParameterType",
     # API Objects
     "BaseOptimizer",
     "ChatPrompt",

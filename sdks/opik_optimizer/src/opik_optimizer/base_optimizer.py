@@ -18,7 +18,6 @@ from opik.evaluation.evaluation_result import EvaluationResult
 
 from .core import evaluation as task_evaluator
 from .core import runtime
-from . import helpers
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
@@ -36,7 +35,8 @@ from .core.results import (
 from .core.state import (
     AlgorithmResult,
     OptimizationContext,
-    get_current_context,
+    build_optimization_metadata,
+    prepare_experiment_config,
     require_current_context,
     set_current_context,
 )
@@ -236,6 +236,18 @@ class BaseOptimizer(ABC):
         """
         return self._prompts.keys()
 
+    # ------------------------------------------------------------------
+    # Metadata plumbing (default implementation)
+    # ------------------------------------------------------------------
+
+    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer metadata for reporting and experiment tracking."""
+        return {}
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer configuration for logging and experiment metadata."""
+        return {}
+
     def get_default_prompt(self, key: str) -> str:
         """Get the original default prompt (before overrides).
 
@@ -302,7 +314,7 @@ class BaseOptimizer(ABC):
                 # TODO(opik_optimizer/#dataset-splits): support dict of datasets (train/val/test) once API allows.
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
-                metadata=self._build_optimization_metadata(),
+                metadata=build_optimization_metadata(self),
                 name=self.name,
                 optimization_id=optimization_id,
             )
@@ -466,13 +478,18 @@ class BaseOptimizer(ABC):
                 n_threads=getattr(self, "n_threads", None),
                 verbose=self.verbose,
                 allow_tool_use=context.allow_tool_use,
-                experiment_config=self._prepare_experiment_config(
+                experiment_config=prepare_experiment_config(
+                    optimizer=self,
                     prompt=context.prompts,
                     dataset=context.evaluation_dataset,
                     metric=context.metric,
                     agent=context.agent,
                     experiment_config=context.experiment_config,
                     is_single_prompt_optimization=context.is_single_prompt_optimization,
+                    configuration_updates=None,
+                    additional_metadata=None,
+                    validation_dataset=context.validation_dataset,
+                    build_optimizer_version=_OPTIMIZER_VERSION,
                 ),
             )
             coerced_score = self._coerce_score(baseline_score)
@@ -700,38 +717,6 @@ class BaseOptimizer(ABC):
             support_content_parts=support_content_parts,
         )
 
-    def _setup_agent_class(
-        self, prompt: chat_prompt.ChatPrompt, agent_class: Any = None
-    ) -> Any:
-        """Resolve the agent class used for prompt evaluations.
-
-        Ensures custom implementations inherit from :class:`OptimizableAgent` and that
-        the optimizer reference is always available to track metrics.
-
-        Args:
-            prompt: The chat prompt driving the agent instance.
-            agent_class: Optional custom agent class supplied by the caller.
-
-        Returns:
-            The agent class to instantiate for dataset evaluations.
-        """
-        return runtime.setup_agent_class(self, prompt, agent_class=agent_class)
-
-    def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
-        """Attach this optimizer to the agent instance without mutating the class."""
-        return runtime.bind_optimizer(self, agent)
-
-    def _instantiate_agent(
-        self,
-        *args: Any,
-        agent_class: type[OptimizableAgent] | None = None,
-        **kwargs: Any,
-    ) -> OptimizableAgent:
-        """
-        Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
-        """
-        return runtime.instantiate_agent(self, *args, agent_class=agent_class, **kwargs)
-
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
     ) -> dict[str, str] | None:
@@ -746,131 +731,6 @@ class BaseOptimizer(ABC):
         """
         return runtime.extract_tool_prompts(tools)
 
-    # ------------------------------------------------------------------
-    # Experiment metadata helpers
-    # FIXME: Refactor, move to helpers.py or utils.py away from base optimizer
-    # These are metadata helpers for annotation of calls, could go into a separate module.
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _deep_merge_dicts(
-        base: dict[str, Any], overrides: dict[str, Any]
-    ) -> dict[str, Any]:
-        return runtime.deep_merge_dicts(base, overrides)
-
-    @staticmethod
-    def _serialize_tools(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
-        return runtime.serialize_tools(prompt)
-
-    @staticmethod
-    def _describe_annotation(annotation: Any) -> str | None:
-        return runtime.describe_annotation(annotation)
-
-    def _summarize_tool_signatures(
-        self, prompt: chat_prompt.ChatPrompt
-    ) -> list[dict[str, Any]]:
-        return runtime.summarize_tool_signatures(prompt)
-
-    def _build_agent_config(self, prompt: chat_prompt.ChatPrompt) -> dict[str, Any]:
-        return runtime.build_agent_config(optimizer=self, prompt=prompt)
-
-    # FIXME: Should we not use get_metadata or get_config instead
-    def get_optimizer_metadata(self) -> dict[str, Any]:
-        """Override in subclasses to expose optimizer-specific parameters."""
-        return {}
-
-    # FIXME: Should we not use get_metadata or get_config instead
-    def _build_optimizer_metadata(self) -> dict[str, Any]:
-        metadata = {
-            "name": self.__class__.__name__,
-            "version": _OPTIMIZER_VERSION,
-            "model": self.model,
-            "model_parameters": self.model_parameters or None,
-            "seed": getattr(self, "seed", None),
-            "num_threads": getattr(self, "num_threads", None),
-        }
-
-        # n_threads is used by some optimizers instead of num_threads
-        if metadata["num_threads"] is None and hasattr(self, "n_threads"):
-            metadata["num_threads"] = getattr(self, "n_threads")
-
-        if hasattr(self, "reasoning_model"):
-            metadata["reasoning_model"] = getattr(self, "reasoning_model")
-
-        extra_parameters = self.get_optimizer_metadata()
-        if extra_parameters:
-            metadata["parameters"] = extra_parameters
-
-        return helpers.drop_none(metadata)
-
-    def _build_optimization_metadata(
-        self, agent_class: type[OptimizableAgent] | None = None
-    ) -> dict[str, Any]:
-        """
-        Build metadata dictionary for optimization creation to be used when
-        creating Opik optimizations.
-
-        Args:
-            agent_class: Optional agent class. If None, will try to get from self.agent_class.
-
-        Returns:
-            Dictionary with 'optimizer' and optionally 'agent_class' keys.
-        """
-        metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
-        if self.name:
-            metadata["name"] = self.name
-
-        # Try to get agent_class name from parameter or instance
-        agent_class_name: str | None = None
-        if agent_class is not None:
-            agent_class_name = getattr(agent_class, "__name__", None)
-        elif hasattr(self, "agent_class") and self.agent_class is not None:
-            agent_class_name = getattr(self.agent_class, "__name__", None)
-
-        if agent_class_name:
-            metadata["agent_class"] = agent_class_name
-
-        return metadata
-
-    def _prepare_experiment_config(
-        self,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        dataset: Dataset,
-        metric: MetricFunction,
-        agent: OptimizableAgent | None = None,
-        validation_dataset: Dataset | None = None,
-        experiment_config: dict[str, Any] | None = None,
-        configuration_updates: dict[str, Any] | None = None,
-        additional_metadata: dict[str, Any] | None = None,
-        is_single_prompt_optimization: bool = False,
-    ) -> dict[str, Any]:
-        """
-        Prepare experiment configuration with dataset tracking.
-
-        Args:
-            dataset_training: Training dataset (used for feedback/context)
-            validation_dataset: Optional validation dataset (used for ranking)
-        """
-        return runtime.prepare_experiment_config(
-            optimizer=self,
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            agent=agent,
-            validation_dataset=validation_dataset,
-            experiment_config=experiment_config,
-            configuration_updates=configuration_updates,
-            additional_metadata=additional_metadata,
-            is_single_prompt_optimization=is_single_prompt_optimization,
-        )
-
-    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
-        """
-        Return optimizer-specific configuration for display.
-
-        Subclasses can override this to provide their configuration
-        parameters that will be displayed to the user.
-
         Args:
             context: The optimization context
 
@@ -878,7 +738,6 @@ class BaseOptimizer(ABC):
             Dictionary of configuration parameters to display
         """
         return {}
-
     # ------------------------------------------------------------------
     # Hooks (subclass extension points)
     # ------------------------------------------------------------------
@@ -914,29 +773,7 @@ class BaseOptimizer(ABC):
             f"{self.__class__.__name__} must implement run_optimization()"
         )
 
-    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
-        """
-        Return optimizer-specific metadata for the optimization result.
-
-        This method is called to collect additional metadata about the
-        optimization run. Subclasses can override to provide optimizer-specific
         fields that will be included in OptimizationResult.details.
-
-        The optimizer should NOT know or care whether this is called for:
-        - Early stop scenarios
-        - Successful completion
-        - Error handling
-
-        Returns:
-            Dictionary of optimizer-specific metadata fields.
-            Common fields to include:
-            - trials_completed: int
-            - rounds_completed: int (if applicable)
-            - iterations_completed: int (if applicable)
-            Plus any optimizer-specific fields (e.g., hall_of_fame_size)
-        """
-        return {}
-
     def pre_optimize(self, context: OptimizationContext) -> None:
         """
         Hook called before running the optimization algorithm.
@@ -1007,9 +844,8 @@ class BaseOptimizer(ABC):
         """Hook fired after a trial to record history."""
         if hasattr(self._history_builder, "record_trial"):
             stop_reason = None
-            context_obj = get_current_context()
-            if context_obj is not None and context_obj.should_stop:
-                stop_reason = getattr(context_obj, "finish_reason", None)
+            if context.should_stop:
+                stop_reason = context.finish_reason
             self._history_builder.record_trial(
                 round_handle=round_handle,
                 score=score,
@@ -1501,8 +1337,7 @@ class BaseOptimizer(ABC):
         random.seed(seed)
         n_threads = normalize_eval_threads(n_threads)
         if allow_tool_use is None:
-            context = get_current_context()
-            allow_tool_use = context.allow_tool_use if context is not None else True
+            allow_tool_use = True
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
@@ -1602,12 +1437,18 @@ class BaseOptimizer(ABC):
             }
             return result
 
-        experiment_config = self._prepare_experiment_config(
+        experiment_config = prepare_experiment_config(
+            optimizer=self,
             prompt=prompt,
             agent=agent,
             dataset=dataset,
             metric=metric,
             experiment_config=experiment_config,
+            configuration_updates=None,
+            additional_metadata=None,
+            validation_dataset=None,
+            is_single_prompt_optimization=isinstance(prompt, chat_prompt.ChatPrompt),
+            build_optimizer_version=_OPTIMIZER_VERSION,
         )
 
         if n_samples is not None:
