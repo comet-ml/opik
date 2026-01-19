@@ -11,15 +11,16 @@ import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPage
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAppStore, { useSetAppUser } from "@/store/AppStore";
-import useSegment from "./analytics/useSegment";
+import { usePostHog } from "posthog-js/react";
 import Logo from "./Logo";
+import { identifyReoUser } from "./analytics/reo";
+import useSegment from "./analytics/useSegment";
+import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
+import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import { usePostHog } from "posthog-js/react";
-import useOrganizations from "./useOrganizations";
-import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -77,12 +78,45 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     posthog?.identify(user.userName, {
       email: user.email,
     });
+
+    // Reo.Dev user identification for usage tracking
+    // Prefer GitHub handle if available, otherwise use email
+    const workspace = allWorkspaces?.find(
+      (ws) => ws.workspaceName === workspaceNameFromURL,
+    );
+    const organization = organizations?.find(
+      (org) => org.id === workspace?.organizationId,
+    );
+
+    if (user.gitHub) {
+      identifyReoUser({
+        username: user.userName,
+        type: "github",
+        other_identities: [
+          {
+            username: user.email,
+            type: "email",
+          },
+        ],
+        company: organization?.name,
+      });
+    } else {
+      identifyReoUser({
+        username: user.email,
+        type: "email",
+        company: organization?.name,
+      });
+    }
   }, [
     posthog,
     user?.loggedIn,
     user?.userName,
     user?.email,
     user?.apiKeys,
+    user?.gitHub,
+    allWorkspaces,
+    organizations,
+    workspaceNameFromURL,
     setAppUser,
   ]);
 
