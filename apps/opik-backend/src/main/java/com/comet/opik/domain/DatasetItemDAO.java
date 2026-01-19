@@ -199,62 +199,55 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private static final String SELECT_DATASET_ITEMS_COUNT = """
-            SELECT
-                count(id) AS count,
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
-                ) AS columns
-            FROM (
+            WITH items AS (
                 SELECT
                     id,
-                    data
-                FROM dataset_items
+                    column_types
+                FROM dataset_items FINAL
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
                 <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS lastRows
+            )
+            SELECT
+                (SELECT count(id) FROM items) AS count,
+                mapFromArrays(
+                    groupArray(key),
+                    groupArray(types)
+                ) AS columns
+            FROM (
+                SELECT
+                    key,
+                    arrayDistinct(groupArray(type)) AS types
+                FROM items
+                ARRAY JOIN mapKeys(column_types) AS key
+                ARRAY JOIN column_types[key] AS type
+                GROUP BY key
+            )
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private static final String SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID = """
             SELECT
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
+                mapFromArrays(
+                    groupArray(key),
+                    groupArray(types)
                 ) AS columns
             FROM (
                 SELECT
-                    id,
-                    data
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    key,
+                    arrayDistinct(groupArray(type)) AS types
+                FROM (
+                    SELECT
+                        id,
+                        column_types
+                    FROM dataset_items FINAL
+                    WHERE dataset_id = :datasetId
+                    AND workspace_id = :workspace_id
+                )
+                ARRAY JOIN mapKeys(column_types) AS key
+                ARRAY JOIN column_types[key] AS type
+                GROUP BY key
             )
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -792,12 +785,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID = """
             WITH dataset_item_final AS (
                 SELECT
-                    id
+                    DISTINCT id
                 FROM dataset_items
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :dataset_id
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), experiment_items_final AS (
                 SELECT DISTINCT
                     ei.trace_id,
