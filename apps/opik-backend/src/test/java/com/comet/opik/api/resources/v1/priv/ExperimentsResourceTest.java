@@ -4973,7 +4973,7 @@ class ExperimentsResourceTest {
             assertThat(longKeyValue.length())
                     .as("long_key value should be truncated to max size")
                     .isLessThanOrEqualTo(10001);
-            
+
             // Verify the truncated value starts with the original string
             assertThat(longKeyValue)
                     .as("long_key value should start with original content")
