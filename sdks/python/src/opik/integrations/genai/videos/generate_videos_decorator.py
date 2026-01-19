@@ -75,7 +75,14 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 input_data["config"] = {
                     k: v for k, v in config.items() if v is not None
                 }
-            metadata["config"] = config
+            metadata = dict(metadata)
+            metadata["config"] = (
+                config.model_dump(mode="json", exclude_none=True)
+                if hasattr(config, "model_dump")
+                else {k: v for k, v in config.items() if v is not None}
+                if isinstance(config, dict)
+                else config
+            )
 
         model = input_data.get("model", None)
 
