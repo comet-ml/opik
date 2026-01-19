@@ -668,7 +668,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     "primary": ind.fitness.values[0],
                     "length": ind.fitness.values[1],
                 }
-            self.record_candidate_entry(
+            entry = self.record_candidate_entry(
                 prompt_or_payload=candidate_prompts,
                 score=primary_score,
                 id=f"gen0_ind{idx}",
@@ -678,6 +678,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 candidate_prompts,
                 score=primary_score,
                 metrics=metrics,
+                candidates=[entry],
                 round_handle=round_handle,
             )
         selection_meta = None
@@ -844,7 +845,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                                 "primary": ind.fitness.values[0],
                                 "length": ind.fitness.values[1],
                             }
-                        self.record_candidate_entry(
+                        entry = self.record_candidate_entry(
                             prompt_or_payload=candidate_prompts,
                             score=primary_score,
                             id=f"gen{generation_idx}_ind{posted_idx}",
@@ -854,6 +855,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             candidate_prompts,
                             score=primary_score,
                             metrics=cand_metrics,
+                            candidates=[entry],
                             round_handle=round_handle,
                         )
                         posted_idx += 1
@@ -1022,7 +1024,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         history_entries = self.get_history_entries()
         if not history_entries:
             fallback_round = self.begin_round()
-            self.record_candidate_entry(
+            entry = self.record_candidate_entry(
                 prompt_or_payload=final_best_prompts,
                 score=final_primary_score,
                 id="final_best",
@@ -1030,6 +1032,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             self.post_candidate(
                 final_best_prompts,
                 score=final_primary_score,
+                candidates=[entry],
                 round_handle=fallback_round,
             )
             self.post_round(

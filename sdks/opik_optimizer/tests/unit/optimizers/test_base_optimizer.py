@@ -26,6 +26,7 @@ from opik_optimizer.base_optimizer import (
     OptimizationContext,
     AlgorithmResult,
 )
+from opik_optimizer.core.state import get_current_context
 from opik_optimizer.constants import MIN_EVAL_THREADS, MAX_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer import ChatPrompt
@@ -491,8 +492,10 @@ def test_evaluate_coerces_infinite_scores(
     score = optimizer.evaluate({"main": simple_chat_prompt})
 
     assert score == float("inf")
-    assert optimizer._context.current_best_score == float("inf")
-    assert optimizer._context.trials_completed == 1
+    context = get_current_context()
+    assert context is not None
+    assert context.current_best_score == float("inf")
+    assert context.trials_completed == 1
 
 
 def test_coerce_score_rejects_nan() -> None:
@@ -2441,22 +2444,33 @@ class TestReusingOptimizerInstances:
 
         # Contexts should be independent
         assert context1 is not context2
-        assert optimizer._trials_completed == 0  # Reset between runs
+        assert context1.trials_completed == 0
+        assert context2.trials_completed == 0
 
     def test_reuse_counters_reset(
         self,
         optimizer: ConcreteOptimizer,
     ) -> None:
         """Counters should reset between runs."""
-        optimizer._trials_completed = 5
-        optimizer._rounds_completed = 3
+        optimizer.llm_call_counter = 5
+        optimizer.llm_call_tools_counter = 3
+        optimizer.llm_cost_total = 1.5
+        optimizer.llm_token_usage_total = {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+        }
 
-        # Simulate new run
-        optimizer._trials_completed = 0
-        optimizer._rounds_completed = 0
+        optimizer._reset_counters()
 
-        assert optimizer._trials_completed == 0
-        assert optimizer._rounds_completed == 0
+        assert optimizer.llm_call_counter == 0
+        assert optimizer.llm_call_tools_counter == 0
+        assert optimizer.llm_cost_total == 0.0
+        assert optimizer.llm_token_usage_total == {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
     def test_reuse_history_cleared(
         self,

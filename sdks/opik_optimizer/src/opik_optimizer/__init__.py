@@ -8,7 +8,15 @@ from . import datasets
 from .agents.optimizable_agent import OptimizableAgent
 from .api_objects.chat_prompt import ChatPrompt
 from .base_optimizer import BaseOptimizer
-from .core.state import AlgorithmResult
+from .core import llm_calls
+from .core.results import (
+    OptimizationHistoryState,
+    OptimizationRound,
+    OptimizationTrial,
+    build_candidate_entry,
+)
+from .core.state import AlgorithmResult, OptimizationContext
+from .core.llm_calls import build_llm_call_metadata, requested_multiple_candidates
 from .algorithms import (
     GepaOptimizer,
     MetaPromptOptimizer,
@@ -57,7 +65,16 @@ __all__ = [
     "ChatPrompt",
     "AlgorithmResult",
     "OptimizationResult",
+    "OptimizationContext",
+    "OptimizationHistoryState",
+    "OptimizationRound",
+    "OptimizationTrial",
     "OptimizableAgent",
+    # Core helpers
+    "llm_calls",
+    "build_candidate_entry",
+    "build_llm_call_metadata",
+    "requested_multiple_candidates",
     # Metrics
     "MultiMetricObjective",
     # Datasets

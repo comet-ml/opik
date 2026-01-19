@@ -663,9 +663,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             self.post_round(
                 round_handle,
-                stop_reason=getattr(self._context, "finish_reason", None)
-                if self._context is not None
-                else None,
+                stop_reason=context.finish_reason,
             )
 
         best_trial = study.best_trial

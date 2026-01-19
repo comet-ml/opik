@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer, OptimizationResult
-from opik_optimizer.core.state import AlgorithmResult
+from opik_optimizer.core.state import AlgorithmResult, get_current_context
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import (
     population_ops,
@@ -59,7 +59,7 @@ def _minimize_generation_work(monkeypatch: pytest.MonkeyPatch) -> None:
         hof: Any,
         best_primary_score_overall: float,
     ) -> tuple[list[Any], int]:
-        context = getattr(self, "_context", None)
+        context = get_current_context()
         if context is not None:
             context.trials_completed += 1
             if context.current_best_score is None:

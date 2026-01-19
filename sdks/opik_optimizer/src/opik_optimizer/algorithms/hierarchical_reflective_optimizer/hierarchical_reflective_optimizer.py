@@ -157,13 +157,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         keep BaseOptimizer stop logic aligned with actual scoring events.
         """
         coerced_score = self._coerce_score(score)
-        context.trials_completed += 1
-        if (
-            context.current_best_score is None
-            or coerced_score > context.current_best_score
-        ):
-            context.current_best_score = coerced_score
-            context.current_best_prompt = prompts
+        self._on_evaluation(
+            context=context,
+            prompts=prompts,
+            score=coerced_score,
+            prev_best_score=context.current_best_score,
+        )
         self._should_stop_context(context)
 
     def _evaluate_prompts_with_result(

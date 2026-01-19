@@ -446,9 +446,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     stop_reason=context.finish_reason if context.should_stop else None,
                     extras={
                         "improvement": improvement,
-                        "best_so_far": self._context.current_best_score
-                        if self._context is not None
-                        else None,
+                        "best_so_far": context.current_best_score,
                     },
                 )
 

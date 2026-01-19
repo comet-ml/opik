@@ -458,6 +458,26 @@ class ParameterOptimizer(BaseOptimizer):
         best_tuned_prompts: dict[str, chat_prompt.ChatPrompt] = copy.deepcopy(
             base_prompts
         )
+        context = OptimizationContext(
+            prompts=base_prompts,
+            initial_prompts=copy.deepcopy(base_prompts),
+            is_single_prompt_optimization=is_single_prompt_optimization,
+            dataset=dataset,
+            evaluation_dataset=evaluation_dataset,
+            validation_dataset=validation_dataset,
+            metric=metric,
+            agent=agent,
+            optimization=optimization,
+            optimization_id=self.current_optimization_id,
+            experiment_config=experiment_config,
+            n_samples=n_samples,
+            max_trials=total_trials,
+            project_name=project_name,
+            allow_tool_use=True,
+            baseline_score=baseline_score,
+            extra_params={},
+        )
+        context.current_best_score = baseline_score
 
         def objective(trial: Trial) -> float:
             nonlocal current_best_score, best_tuned_prompts
@@ -482,12 +502,11 @@ class ParameterOptimizer(BaseOptimizer):
                     tuned_prompts
                 ),
             ) as trial_reporter:
-                context = getattr(self, "_context", None)
                 self._set_reporter(trial_reporter)
                 debug_log(
                     "trial_start",
                     trial_index=trial.number + 1,
-                    trials_completed=context.trials_completed if context else None,
+                    trials_completed=context.trials_completed,
                     max_trials=total_trials,
                 )
                 score = self.evaluate_prompt(
@@ -513,7 +532,7 @@ class ParameterOptimizer(BaseOptimizer):
                     "trial_end",
                     trial_index=trial.number + 1,
                     score=score,
-                    trials_completed=context.trials_completed if context else None,
+                    trials_completed=context.trials_completed,
                 )
 
             # Store per-prompt model_kwargs in trial attrs
@@ -702,9 +721,7 @@ class ParameterOptimizer(BaseOptimizer):
             )
             self.post_round(
                 round_handle=round_handle,
-                stop_reason=getattr(self._context, "finish_reason", None)
-                if self._context is not None
-                else None,
+                stop_reason=context.finish_reason,
             )
 
         try:
