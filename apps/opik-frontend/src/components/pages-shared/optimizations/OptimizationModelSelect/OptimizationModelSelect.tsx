@@ -61,7 +61,10 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
         providerType,
         label: providerConfig.label,
         icon: providerConfig.icon,
-        options: filteredModels.map((m) => ({ label: m.label, value: m.value })),
+        options: filteredModels.map((m) => ({
+          label: m.label,
+          value: m.value,
+        })),
       };
     });
   }, []);

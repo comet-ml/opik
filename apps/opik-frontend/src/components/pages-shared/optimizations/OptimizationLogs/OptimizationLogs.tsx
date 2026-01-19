@@ -1,5 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownToLine, Clock, ListEnd, Maximize2, RotateCw } from "lucide-react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ArrowDownToLine,
+  Clock,
+  ListEnd,
+  Maximize2,
+  RotateCw,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Optimization } from "@/types/optimizations";
@@ -81,7 +93,8 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
 
   const openFullscreen = useCallback(() => {
     if (scrollContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+      const { scrollTop, scrollHeight, clientHeight } =
+        scrollContainerRef.current;
       const maxScroll = scrollHeight - clientHeight;
       const ratio = maxScroll > 0 ? scrollTop / maxScroll : 1;
       setInitialScrollRatio(ratio);
@@ -170,7 +183,6 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
               </TooltipWrapper>
             )}
             {isInProgress && logContent && <Spinner size="xs" />}
-
           </div>
 
           <div className="flex items-center gap-1">
@@ -206,11 +218,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
             </TooltipWrapper>
             {logContent && (
               <TooltipWrapper content="Fullscreen">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={openFullscreen}
-                >
+                <Button variant="ghost" size="icon-xs" onClick={openFullscreen}>
                   <Maximize2 className="size-3.5" />
                 </Button>
               </TooltipWrapper>

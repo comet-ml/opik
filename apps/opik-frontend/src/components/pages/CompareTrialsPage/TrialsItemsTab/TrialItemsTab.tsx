@@ -330,9 +330,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     const colorMap =
       objectiveName && sortedScoreNames.length > 0
         ? generateDistinctColorMap(
-          objectiveName,
-          sortedScoreNames.filter((name) => name !== objectiveName),
-        )
+            objectiveName,
+            sortedScoreNames.filter((name) => name !== objectiveName),
+          )
         : {};
 
     // Get score value from the first experiment (same as CompareTrialsDetails)

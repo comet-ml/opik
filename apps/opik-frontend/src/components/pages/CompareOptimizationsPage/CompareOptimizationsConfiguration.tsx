@@ -110,7 +110,7 @@ const CompareOptimizationsConfiguration: React.FC<
 
       <Separator className="my-2 shrink-0" />
 
-      <CardHeader className="shrink-0 py-1.5 px-6">
+      <CardHeader className="shrink-0 px-6 py-1.5">
         <CardTitle className="text-sm">Initial prompt</CardTitle>
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-auto">

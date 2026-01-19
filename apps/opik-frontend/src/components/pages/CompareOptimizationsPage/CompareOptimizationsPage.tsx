@@ -81,9 +81,7 @@ const CompareOptimizationsPage: React.FC = () => {
     isStudioOptimization &&
     Boolean(optimization?.id) &&
     optimization?.status &&
-    !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
-      optimization.status,
-    );
+    !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
   const showTrialsView =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
 
