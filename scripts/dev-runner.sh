@@ -88,6 +88,49 @@ start_docker_services() {
     log_info "Starting Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     
+    # For local development modes, always rebuild python-backend to ensure latest code
+    if [[ "$mode" == "--local-be-fe" ]] || [[ "$mode" == "--local-be" ]]; then
+        log_info "Rebuilding Python backend container to ensure latest code..."
+        local compose_cmd
+        if docker compose version >/dev/null 2>&1; then
+            compose_cmd="docker compose"
+        elif docker-compose version >/dev/null 2>&1; then
+            compose_cmd="docker-compose"
+        else
+            log_error "Neither 'docker compose' nor 'docker-compose' is available"
+            exit 1
+        fi
+        
+        local compose_files="-f deployment/docker-compose/docker-compose.yaml"
+        if [[ "$mode" == "--local-be-fe" ]]; then
+            compose_files="$compose_files -f deployment/docker-compose/docker-compose.local-be-fe.yaml"
+            compose_files="$compose_files -f deployment/docker-compose/docker-compose.override.yaml"
+            if $compose_cmd $compose_files --profile local-be-fe build --no-cache python-backend >/dev/null 2>&1; then
+                log_success "Python backend rebuilt successfully"
+            else
+                log_warning "Python backend rebuild failed, trying without --no-cache..."
+                if $compose_cmd $compose_files --profile local-be-fe build python-backend >/dev/null 2>&1; then
+                    log_success "Python backend rebuilt successfully (with cache)"
+                else
+                    log_warning "Python backend rebuild failed, continuing with existing image"
+                fi
+            fi
+        elif [[ "$mode" == "--local-be" ]]; then
+            compose_files="$compose_files -f deployment/docker-compose/docker-compose.local-be.yaml"
+            compose_files="$compose_files -f deployment/docker-compose/docker-compose.override.yaml"
+            if $compose_cmd $compose_files --profile local-be build --no-cache python-backend >/dev/null 2>&1; then
+                log_success "Python backend rebuilt successfully"
+            else
+                log_warning "Python backend rebuild failed, trying without --no-cache..."
+                if $compose_cmd $compose_files --profile local-be build python-backend >/dev/null 2>&1; then
+                    log_success "Python backend rebuilt successfully (with cache)"
+                else
+                    log_warning "Python backend rebuild failed, continuing with existing image"
+                fi
+            fi
+        fi
+    fi
+    
     if ./opik.sh "$mode"; then
         log_success "Docker services started successfully"
     else

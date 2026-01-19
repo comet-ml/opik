@@ -28,12 +28,14 @@ OPTIMIZER_RUNTIME_PARAMS = {
     # Generic parameters (all optimizers)
     "max_trials": int(os.getenv("OPTIMIZER_MAX_TRIALS", "10")),
     "n_samples": DATASET_SAMPLES,
-    
+    "verbose": 1,  # 0=off, 1=on, 2=debug
     # GEPA-specific parameters (ignored by other optimizers)
-    "reflection_minibatch_size": int(os.getenv("OPTIMIZER_GEPA_REFLECTION_BATCH_SIZE", "5")),
-    "candidate_selection_strategy": os.getenv("OPTIMIZER_GEPA_CANDIDATE_SELECTION", "pareto"),  # "pareto" or "best"
-    
+    "reflection_minibatch_size": int(
+        os.getenv("OPTIMIZER_GEPA_REFLECTION_BATCH_SIZE", "5")
+    ),
+    "candidate_selection_strategy": os.getenv(
+        "OPTIMIZER_GEPA_CANDIDATE_SELECTION", "pareto"
+    ),  # "pareto" or "best"
     # Hierarchical-specific parameters (ignored by other optimizers)
     "max_retries": int(os.getenv("OPTIMIZER_HIERARCHICAL_MAX_RETRIES", "2")),
 }
-

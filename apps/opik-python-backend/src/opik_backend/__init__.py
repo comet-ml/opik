@@ -27,11 +27,12 @@ from opik_backend.http_utils import build_error_response
 
 # Note: All auto-instrumentation is handled by 'opentelemetry-instrument' command in entrypoint.sh
 
+
 def create_app(test_config=None, should_init_executor=True):
     app = Flask(__name__, instance_relative_config=True)
 
     # Configure logging
-    gunicorn_logger = logging.getLogger('gunicorn.error')
+    gunicorn_logger = logging.getLogger("gunicorn.error")
     if gunicorn_logger.handlers and len(gunicorn_logger.handlers) > 0:
         app.logger.handlers = gunicorn_logger.handlers
         app.logger.setLevel(gunicorn_logger.level)
@@ -42,7 +43,7 @@ def create_app(test_config=None, should_init_executor=True):
         if not app.logger.handlers:
             console_handler = logging.StreamHandler(sys.stderr)
             formatter = logging.Formatter(
-                '%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s'
+                "%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s"
             )
             console_handler.setFormatter(formatter)
             app.logger.addHandler(console_handler)
@@ -50,7 +51,7 @@ def create_app(test_config=None, should_init_executor=True):
 
     if test_config is None:
         # load the instance config, if it exists, when not testing
-        app.config.from_pyfile('config.py', silent=True)
+        app.config.from_pyfile("config.py", silent=True)
     else:
         # load the test config if passed in
         app.config.from_mapping(test_config)
@@ -58,12 +59,14 @@ def create_app(test_config=None, should_init_executor=True):
     # Log SDK versions at startup for debugging
     try:
         import opik
+
         app.logger.info(f"opik SDK version: {opik.__version__}")
     except Exception as e:
         app.logger.warning(f"Could not determine opik SDK version: {e}")
-    
+
     try:
         import opik_optimizer
+
         app.logger.info(f"opik_optimizer SDK version: {opik_optimizer.__version__}")
     except Exception as e:
         app.logger.warning(f"Could not determine opik_optimizer SDK version: {e}")
@@ -75,6 +78,7 @@ def create_app(test_config=None, should_init_executor=True):
     from opik_backend.evaluator import evaluator, init_executor
     from opik_backend.post_user_signup import post_user_signup
     from opik_backend.healthcheck import healthcheck
+    from opik_backend.studio_endpoints import studio
     from opik_backend.rq_worker_manager import init_rq_worker
 
     # Initialize the code executor if needed - some of the tests override the executor and therefore don't initialize it
@@ -84,12 +88,15 @@ def create_app(test_config=None, should_init_executor=True):
     app.register_blueprint(healthcheck)
     app.register_blueprint(evaluator)
     app.register_blueprint(post_user_signup)
+    app.register_blueprint(studio)
 
     # Initialize Redis connection at application startup if RQ worker enabled (non-fatal)
     from opik_backend.utils.env_utils import is_rq_worker_enabled
+
     if is_rq_worker_enabled():
         try:
             from opik_backend.utils.redis_utils import get_redis_client
+
             get_redis_client().ping()
             app.logger.info("Redis client initialized at startup")
 
@@ -129,15 +136,17 @@ def create_app(test_config=None, should_init_executor=True):
     @app.errorhandler(Exception)
     def handle_exception(exception):
         app.logger.exception("Unhandled exception occurred")
-        message = str(exception) if app.debug else "Something went wrong. Please try again later."
-        response = jsonify({
-            "error": "Internal Server Error",
-            "message": message
-        })
+        message = (
+            str(exception)
+            if app.debug
+            else "Something went wrong. Please try again later."
+        )
+        response = jsonify({"error": "Internal Server Error", "message": message})
         response.status_code = 500
         return response
 
     return app
+
 
 def setup_otel_metrics(app, resource):
     """Configure OpenTelemetry metrics export."""
@@ -146,51 +155,63 @@ def setup_otel_metrics(app, resource):
     metrics.set_meter_provider(provider)
     app.logger.debug("OpenTelemetry metrics configured")
 
+
 def setup_otel_traces(app, resource):
-    """Configure OpenTelemetry traces export.""" 
+    """Configure OpenTelemetry traces export."""
     trace_provider = TracerProvider(resource=resource)
     trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(trace_provider)
     app.logger.debug("OpenTelemetry traces configured")
+
 
 def setup_otel_logs(app, resource):
     """Configure OpenTelemetry logs export and return the logging handler."""
     logger_provider = LoggerProvider(resource=resource)
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
     set_logger_provider(logger_provider)
-    
+
     # Create and configure OpenTelemetry logging handler
     handler = LoggingHandler(logger_provider=logger_provider)
-    
+
     # Set OpenTelemetry handler level based on environment or app debug mode
-    otel_log_level_str = os.getenv('OTEL_PYTHON_LOG_LEVEL', 'DEBUG' if app.debug else 'INFO')
+    otel_log_level_str = os.getenv(
+        "OTEL_PYTHON_LOG_LEVEL", "DEBUG" if app.debug else "INFO"
+    )
     try:
         otel_log_level = getattr(logging, otel_log_level_str.upper())
     except AttributeError:
         otel_log_level = logging.INFO
-        app.logger.warning(f"Invalid OTEL_PYTHON_LOG_LEVEL '{otel_log_level_str}', defaulting to INFO")
-    
+        app.logger.warning(
+            f"Invalid OTEL_PYTHON_LOG_LEVEL '{otel_log_level_str}', defaulting to INFO"
+        )
+
     handler.setLevel(otel_log_level)
-    app.logger.info(f"OpenTelemetry log level set to: {logging.getLevelName(otel_log_level)}")
-    
+    app.logger.info(
+        f"OpenTelemetry log level set to: {logging.getLevelName(otel_log_level)}"
+    )
+
     return handler
+
 
 def setup_console_logging(app):
     """Configure console logging levels to control verbosity."""
-    console_log_level_str = os.getenv('OPIK_CONSOLE_LOG_LEVEL', 'INFO')
+    console_log_level_str = os.getenv("OPIK_CONSOLE_LOG_LEVEL", "INFO")
     try:
         console_log_level = getattr(logging, console_log_level_str.upper())
     except AttributeError:
         console_log_level = logging.INFO
-        app.logger.warning(f"Invalid OPIK_CONSOLE_LOG_LEVEL '{console_log_level_str}', defaulting to INFO")
-    
+        app.logger.warning(
+            f"Invalid OPIK_CONSOLE_LOG_LEVEL '{console_log_level_str}', defaulting to INFO"
+        )
+
     # Set root logger level to control all third-party library logging
     # This is cleaner than maintaining hardcoded logger lists
     root_logger = logging.getLogger()
     if console_log_level > root_logger.level or root_logger.level == logging.NOTSET:
         root_logger.setLevel(console_log_level)
-        app.logger.info(f"Console log level set to: {logging.getLevelName(console_log_level)}")
-
+        app.logger.info(
+            f"Console log level set to: {logging.getLevelName(console_log_level)}"
+        )
 
 
 def setup_telemetry(app):
@@ -201,7 +222,9 @@ def setup_telemetry(app):
         app.logger.warning("No OTLP endpoint configured. Metrics will not be exported.")
         return
 
-    app.logger.info(f"Configured OTLP endpoint: {otlp_endpoint}. Will push metrics to this endpoint.")
+    app.logger.info(
+        f"Configured OTLP endpoint: {otlp_endpoint}. Will push metrics to this endpoint."
+    )
 
     # Create shared resource for all telemetry signals
     resource = Resource.create()
@@ -210,7 +233,7 @@ def setup_telemetry(app):
     setup_otel_metrics(app, resource)
     setup_otel_traces(app, resource)
     otel_handler = setup_otel_logs(app, resource)
-    
+
     # Configure logging handlers
     # Set root logger to NOTSET to allow all messages through to handlers
     # This ensures OpenTelemetry can receive all log levels, as recommended by:
@@ -218,12 +241,12 @@ def setup_telemetry(app):
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.NOTSET)
     root_logger.addHandler(otel_handler)
-    
+
     # Also add handler to Flask app logger for guaranteed coverage
     app.logger.addHandler(otel_handler)
-    
+
     # Configure console logging levels
     setup_console_logging(app)
-    
+
     # Note: Auto-instrumentation is handled by 'opentelemetry-instrument' command in entrypoint.sh
     # No manual instrumentation needed here

@@ -205,13 +205,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      python-backend:
+        condition: service_healthy
     tmpfs:
       - /tmp
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     # change to 'build' when developing python-backend
-    pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-always}
+    pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-if_not_present}
     profiles:
       - backend
       - opik
@@ -222,6 +224,8 @@ services:
       dockerfile: Dockerfile
     hostname: python-backend
     privileged: true # Required for Docker-in-Docker, so it can launch containers
+    ports:
+      - "${PYTHON_BACKEND_PORT:-8000}:${PYTHON_BACKEND_PORT:-8000}" # Exposing Python backend HTTP port to host for local development
     environment:
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
