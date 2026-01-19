@@ -65,7 +65,9 @@ const CompareOptimizationsPage: React.FC = () => {
     isStudioOptimization &&
     Boolean(optimization?.id) &&
     optimization?.status &&
-    [OPTIMIZATION_STATUS.COMPLETED, OPTIMIZATION_STATUS.CANCELLED].includes(
+    [OPTIMIZATION_STATUS.COMPLETED,
+    OPTIMIZATION_STATUS.CANCELLED,
+    OPTIMIZATION_STATUS.ERROR].includes(
       optimization.status,
     );
   const showTrialsView =
