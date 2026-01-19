@@ -571,6 +571,12 @@ navigation:
           - section: Gateways
             skip-slug: true
             contents:
+              - page: Opik LLM Gateway
+                path: docs/tracing/integrations/opik-llm-gateway.mdx
+                slug: opik-llm-gateway
+              - page: Kong AI Gateway
+                path: docs/tracing/integrations/kong-ai-gateway.mdx
+                slug: kong-ai-gateway
               - page: AISuite
                 path: docs/tracing/integrations/aisuite.mdx
                 slug: aisuite
