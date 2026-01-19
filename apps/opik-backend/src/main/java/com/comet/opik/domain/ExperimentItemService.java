@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemWithExperimentInfo;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
@@ -130,6 +131,11 @@ public class ExperimentItemService {
         log.info("Getting experiment item by id '{}'", id);
         return experimentItemDAO.get(id)
                 .switchIfEmpty(Mono.error(newNotFoundException(id)));
+    }
+
+    public Flux<ExperimentItemWithExperimentInfo> getByTraceId(@NonNull UUID traceId) {
+        log.info("Getting experiment items by trace_id '{}'", traceId);
+        return experimentItemDAO.getByTraceId(traceId);
     }
 
     private NotFoundException newNotFoundException(UUID id) {

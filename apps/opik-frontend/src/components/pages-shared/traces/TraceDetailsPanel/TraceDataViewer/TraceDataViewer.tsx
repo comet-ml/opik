@@ -6,6 +6,7 @@ import {
   Brain,
   Clock,
   Coins,
+  FlaskConical,
   Hash,
   MessageSquareMore,
   PenLine,
@@ -39,6 +40,9 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import useExperimentItemsByTraceId from "@/api/datasets/useExperimentItemsByTraceId";
+import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -65,6 +69,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
+  const isTrace = type === TRACE_TYPE_FOR_TREE;
+
+  // Fetch experiment items for this trace (only for traces, not spans)
+  const { data: experimentItems } = useExperimentItemsByTraceId(
+    { traceId },
+    { enabled: isTrace && Boolean(traceId) },
+  );
+
+  // Get the first experiment item (a trace can be associated with multiple experiments)
+  const experimentItem = experimentItems?.[0];
 
   const agentGraphData = get(
     data,
@@ -94,7 +108,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
-  const isTrace = type === TRACE_TYPE_FOR_TREE;
 
   /**
    * Type guard function to safely check if data is a Trace.
@@ -268,6 +281,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   <div className="truncate">
                     {provider} {model}
                   </div>
+                </div>
+              </TooltipWrapper>
+            )}
+            {experimentItem && (
+              <TooltipWrapper
+                content={`Navigate to experiment: ${experimentItem.experiment_name}`}
+              >
+                <div
+                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  data-testid="data-viewer-experiment"
+                >
+                  <FlaskConical className="size-3 shrink-0" />
+                  <NavigationTag
+                    id={experimentItem.dataset_id}
+                    name={experimentItem.experiment_name}
+                    resource={RESOURCE_TYPE.experiment}
+                    search={{ experiments: [experimentItem.experiment_id] }}
+                  />
                 </div>
               </TooltipWrapper>
             )}

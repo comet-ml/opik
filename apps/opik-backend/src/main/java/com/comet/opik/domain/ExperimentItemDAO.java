@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemWithExperimentInfo;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -84,6 +85,28 @@ class ExperimentItemDAO {
             AND workspace_id = :workspace_id
             ORDER BY last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_BY_TRACE_ID = """
+            SELECT
+                ei.id,
+                ei.experiment_id,
+                ei.dataset_item_id,
+                ei.trace_id,
+                ei.created_at,
+                ei.last_updated_at,
+                ei.created_by,
+                ei.last_updated_by,
+                e.name AS experiment_name,
+                e.dataset_id AS dataset_id
+            FROM experiment_items ei
+            INNER JOIN experiments e ON ei.experiment_id = e.id AND e.workspace_id = :workspace_id
+            WHERE ei.trace_id = :trace_id
+            AND ei.workspace_id = :workspace_id
+            ORDER BY ei.last_updated_at DESC
+            LIMIT 1 BY ei.id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -423,6 +446,22 @@ class ExperimentItemDAO {
 
         Statement statement = connection.createStatement(SELECT)
                 .bind("id", id);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    @WithSpan
+    public Flux<ExperimentItemWithExperimentInfo> getByTraceId(@NonNull UUID traceId) {
+        log.info("Getting experiment items by trace_id '{}'", traceId);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> getByTraceId(traceId, connection))
+                .flatMap(ExperimentItemMapper::mapToExperimentItemWithExperimentInfo);
+    }
+
+    private Publisher<? extends Result> getByTraceId(UUID traceId, Connection connection) {
+        var template = getSTWithLogComment(SELECT_BY_TRACE_ID, "get_experiment_items_by_trace_id", null, 0);
+        Statement statement = connection.createStatement(template.render())
+                .bind("trace_id", traceId);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }

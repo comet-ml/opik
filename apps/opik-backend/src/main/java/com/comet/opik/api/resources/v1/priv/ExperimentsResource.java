@@ -10,6 +10,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
 import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
+import com.comet.opik.api.ExperimentItemWithExperimentInfo;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -367,6 +368,22 @@ public class ExperimentsResource {
                 experimentItem.datasetItemId(),
                 experimentItem.traceId());
         return Response.ok().entity(experimentItem).build();
+    }
+
+    @GET
+    @Path("/items/by-trace/{traceId}")
+    @Operation(operationId = "getExperimentItemsByTraceId", summary = "Get experiment items by trace id", description = "Get experiment items associated with a trace, including experiment information", responses = {
+            @ApiResponse(responseCode = "200", description = "List of experiment items with experiment info", content = @Content(array = @ArraySchema(schema = @Schema(implementation = ExperimentItemWithExperimentInfo.class))))})
+    public Response getExperimentItemsByTraceId(@PathParam("traceId") UUID traceId) {
+
+        log.info("Getting experiment items by trace_id '{}'", traceId);
+        var experimentItems = experimentItemService.getByTraceId(traceId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .collectList()
+                .block();
+
+        log.info("Got '{}' experiment items by trace_id '{}'", experimentItems.size(), traceId);
+        return Response.ok().entity(experimentItems).build();
     }
 
     @POST

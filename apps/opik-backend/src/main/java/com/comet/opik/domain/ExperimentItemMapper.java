@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemWithExperimentInfo;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
 import io.r2dbc.spi.Result;
@@ -61,6 +62,21 @@ class ExperimentItemMapper {
                         ? null
                         : VisibilityMode.fromString(row.get("trace_visibility_mode", String.class))
                                 .orElse(null))
+                .build());
+    }
+
+    public static Publisher<ExperimentItemWithExperimentInfo> mapToExperimentItemWithExperimentInfo(Result result) {
+        return result.map((row, rowMetadata) -> ExperimentItemWithExperimentInfo.builder()
+                .id(row.get("id", UUID.class))
+                .experimentId(row.get("experiment_id", UUID.class))
+                .datasetItemId(row.get("dataset_item_id", UUID.class))
+                .traceId(row.get("trace_id", UUID.class))
+                .experimentName(row.get("experiment_name", String.class))
+                .datasetId(row.get("dataset_id", UUID.class))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdAt(row.get("created_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build());
     }
 
