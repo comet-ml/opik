@@ -75,7 +75,7 @@ export const useExperimentsGroupsAndFilters = ({
           },
           defaultOperator: "=",
           operators: [{ label: "=", value: "=" }],
-          sortingMessage: "Last experiment created",
+          sortingMessage: "Last updated at",
         },
         [COLUMN_DATASET_ID]: {
           keyComponent: DatasetSelectBox,
