@@ -68,6 +68,7 @@ const CompareOptimizationsMainContent: React.FC<
       {showConfigurationView && optimization?.studio_config && (
         <CompareOptimizationsConfiguration
           studioConfig={optimization.studio_config}
+          datasetId={optimization.dataset_id}
         />
       )}
     </div>
