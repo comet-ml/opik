@@ -2346,10 +2346,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> ensureLazyMigration(UUID datasetId, String workspaceId, String userName) {
         if (!migrationConfig.isLazyEnabled()) {
+            log.info("Lazy migration is disabled, skipping");
             return Mono.empty();
         }
 
-        log.debug("Lazy migration is enabled, ensuring dataset '{}' is migrated", datasetId);
+        log.info("Lazy migration is enabled, ensuring dataset '{}' is migrated", datasetId);
         return migrationService.ensureDatasetMigrated(datasetId, workspaceId, userName);
     }
 
