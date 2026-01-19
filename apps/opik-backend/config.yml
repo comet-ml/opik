@@ -844,8 +844,8 @@ datasetVersioningMigration:
   # Description: Whether to run the dataset versioning migration on startup
   enabled: ${DATASET_VERSIONING_MIGRATION_ENABLED:-"false"}
   # Default: 100
-  # Description: Number of datasets to process in each batch
-  batchSize: ${DATASET_VERSIONING_MIGRATION_BATCH_SIZE:-100}
+  # Description: Number of workspaces to process in each batch (for pagination through 150K+ workspaces)
+  workspaceBatchSize: ${DATASET_VERSIONING_MIGRATION_WORKSPACE_BATCH_SIZE:-100}
   # Default: 3600 (1 hour)
   # Description: Lock timeout in seconds for the migration process
   lockTimeoutSeconds: ${DATASET_VERSIONING_MIGRATION_LOCK_TIMEOUT:-3600}

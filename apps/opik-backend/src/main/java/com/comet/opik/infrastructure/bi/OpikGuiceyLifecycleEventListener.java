@@ -222,7 +222,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 com.comet.opik.domain.DatasetVersioningMigrationService.class);
 
         migrationService.runMigration(
-                config.getBatchSize(),
+                config.getWorkspaceBatchSize(),
                 java.time.Duration.ofSeconds(config.getLockTimeoutSeconds()))
                 .subscribe(
                         unused -> {

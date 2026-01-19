@@ -30,15 +30,16 @@ public class DatasetVersioningMigrationService {
     private final @NonNull Provider<RequestContext> requestContext;
 
     private static final Lock MIGRATION_LOCK = new Lock("dataset_versioning_migration");
-    private static final UUID UUID_MIN = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    private static final String WORKSPACE_CURSOR_MIN = ""; // Empty string is less than any workspace_id
 
-    public Mono<Void> runMigration(int batchSize, Duration lockTimeout) {
-        log.info("Starting dataset versioning migration with batch size '{}' and lock timeout '{}'", batchSize,
-                lockTimeout);
+    public Mono<Void> runMigration(int workspaceBatchSize, Duration lockTimeout) {
+        log.info(
+                "Starting workspace-based dataset versioning migration with workspace batch size '{}' and lock timeout '{}'",
+                workspaceBatchSize, lockTimeout);
 
         return lockService.executeWithLockCustomExpire(
                 MIGRATION_LOCK,
-                Mono.defer(() -> migrateAllDatasets(batchSize, UUID_MIN)),
+                Mono.defer(() -> migrateAllWorkspaces(workspaceBatchSize, WORKSPACE_CURSOR_MIN)),
                 lockTimeout);
     }
 
@@ -137,30 +138,79 @@ public class DatasetVersioningMigrationService {
 
     private static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(30);
 
-    private Mono<Void> migrateAllDatasets(int batchSize, UUID lastSeenDatasetId) {
+    private Mono<Void> migrateAllWorkspaces(int workspaceBatchSize, String lastSeenWorkspaceId) {
         return Mono.defer(() -> {
-            log.debug("Fetching batch of unmigrated datasets (cursor: '{}')", lastSeenDatasetId);
+            log.debug("Fetching batch of workspaces (cursor: '{}')", lastSeenWorkspaceId);
 
-            // Cursor-based pagination using UUIDv7 ordering
-            return datasetItemVersionDAO.findDatasetsWithHashMismatch(batchSize, lastSeenDatasetId)
-                    .collectList()
-                    .flatMap(datasetIds -> {
-                        if (datasetIds.isEmpty()) {
-                            log.info("Dataset versioning migration complete - no more datasets to migrate");
+            return Mono.fromCallable(() -> {
+                // Fetch workspace IDs in batches (handles 150K+ workspaces)
+                return template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.findWorkspaceIdsBatch(lastSeenWorkspaceId, workspaceBatchSize);
+                });
+            })
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(workspaceIds -> {
+                        if (workspaceIds.isEmpty()) {
+                            log.info("Dataset versioning migration complete - no more workspaces to process");
                             return Mono.empty();
                         }
 
-                        log.info("Migrating batch of '{}' datasets (cursor: '{}')",
-                                datasetIds.size(), lastSeenDatasetId);
+                        log.info("Processing batch of '{}' workspaces (cursor: '{}')",
+                                workspaceIds.size(), lastSeenWorkspaceId);
 
-                        UUID nextCursor = datasetIds.get(datasetIds.size() - 1); // Last ID in batch
+                        String nextCursor = workspaceIds.get(workspaceIds.size() - 1); // Last workspace ID in batch
 
-                        return Flux.fromIterable(datasetIds)
-                                .flatMap(this::migrateDataset, 1) // Sequential processing
+                        return Flux.fromIterable(workspaceIds)
+                                .concatMap(this::migrateWorkspace) // Sequential processing
                                 .then()
-                                .then(Mono.defer(() -> migrateAllDatasets(batchSize, nextCursor))); // Next batch
+                                .then(Mono.defer(() -> migrateAllWorkspaces(workspaceBatchSize, nextCursor))); // Next batch
                     });
         });
+    }
+
+    private Mono<Void> migrateWorkspace(String workspaceId) {
+        log.info("Migrating workspace '{}'", workspaceId);
+
+        return datasetItemVersionDAO.findDatasetsWithHashMismatchInWorkspace(workspaceId)
+                .collectList()
+                .flatMap(datasetIds -> {
+                    if (datasetIds.isEmpty()) {
+                        log.info("No datasets to migrate in workspace '{}'", workspaceId);
+                        return Mono.empty();
+                    }
+
+                    log.info("Migrating '{}' datasets in workspace '{}'", datasetIds.size(), workspaceId);
+
+                    return Flux.fromIterable(datasetIds)
+                            .concatMap(datasetId -> migrateDatasetInWorkspace(datasetId, workspaceId))
+                            .then()
+                            .doOnSuccess(unused -> log.info("Successfully migrated workspace '{}'", workspaceId));
+                });
+    }
+
+    private Mono<Void> migrateDatasetInWorkspace(UUID datasetId, String workspaceId) {
+        return Mono.fromCallable(() -> {
+            return template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetDAO.class);
+                var dataset = dao.findById(datasetId, workspaceId);
+
+                if (dataset.isEmpty()) {
+                    log.warn("Dataset '{}' not found in workspace '{}' - skipping",
+                            datasetId, workspaceId);
+                    return null;
+                }
+
+                return new DatasetInfo(dataset.get().createdBy(), workspaceId);
+            });
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(datasetInfo -> {
+                    if (datasetInfo == null) {
+                        return Mono.empty();
+                    }
+                    return migrateSingleDataset(datasetId, workspaceId, datasetInfo.userName());
+                });
     }
 
     /**
@@ -193,45 +243,6 @@ public class DatasetVersioningMigrationService {
                 .then(ensureLatestTagExists(datasetId, versionId, workspaceId))
                 .doOnSuccess(unused -> log.info("Successfully migrated dataset '{}'", datasetId))
                 .doOnError(error -> log.error("Failed to migrate dataset '{}'", datasetId, error));
-    }
-
-    private Mono<Void> migrateDataset(UUID datasetId) {
-        return Mono.fromCallable(() -> {
-            // Fetch workspace ID first, then get full dataset info
-            return template.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(DatasetDAO.class);
-
-                // First get workspace ID
-                var workspaceIdOpt = dao.findWorkspaceIdByDatasetId(datasetId);
-                if (workspaceIdOpt.isEmpty()) {
-                    // Dataset doesn't exist in MySQL (orphaned data in ClickHouse)
-                    log.warn("Dataset '{}' not found in MySQL - skipping migration (orphaned data in ClickHouse)",
-                            datasetId);
-                    return null;
-                }
-
-                String workspaceId = workspaceIdOpt.get();
-
-                // Now get full dataset with workspace ID
-                var dataset = dao.findById(datasetId, workspaceId);
-                if (dataset.isEmpty()) {
-                    log.warn("Dataset '{}' not found in workspace '{}' - skipping migration",
-                            datasetId, workspaceId);
-                    return null;
-                }
-
-                return new DatasetInfo(dataset.get().createdBy(), workspaceId);
-            });
-        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(datasetInfo -> {
-                    if (datasetInfo == null) {
-                        // Skip orphaned datasets
-                        return Mono.empty();
-                    }
-
-                    return migrateSingleDataset(datasetId, datasetInfo.workspaceId(), datasetInfo.userName());
-                });
     }
 
     private record DatasetInfo(String userName, String workspaceId) {

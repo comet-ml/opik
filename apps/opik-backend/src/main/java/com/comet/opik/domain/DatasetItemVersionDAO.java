@@ -258,14 +258,13 @@ public interface DatasetItemVersionDAO {
     }
 
     /**
-     * Finds datasets with hash/count mismatches between legacy and versioned tables.
-     * Uses cursor-based pagination with UUIDv7 ordering.
+     * Finds datasets in a specific workspace that need migration by comparing hash and count
+     * between legacy and versioned tables.
      *
-     * @param batchSize the number of dataset IDs to return
-     * @param lastSeenDatasetId the cursor for pagination (UUID_MIN for first call)
-     * @return Flux emitting dataset IDs that need migration
+     * @param workspaceId the workspace ID to filter by
+     * @return Flux emitting dataset IDs that need migration in the specified workspace
      */
-    Flux<UUID> findDatasetsWithHashMismatch(int batchSize, UUID lastSeenDatasetId);
+    Flux<UUID> findDatasetsWithHashMismatchInWorkspace(String workspaceId);
 
     /**
      * Soft deletes all items from a specific dataset version.
@@ -1491,12 +1490,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     // Migration queries
-    private static final String FIND_DATASETS_WITH_HASH_MISMATCH = """
+    private static final String FIND_DATASETS_WITH_HASH_MISMATCH_IN_WORKSPACE = """
             WITH legacy AS (
                 SELECT dataset_id,
                        groupBitXor(data_hash) as hash,
                        count(DISTINCT id) as cnt
                 FROM dataset_items
+                WHERE workspace_id = :workspaceId
                 GROUP BY dataset_id
             ),
             versioned AS (
@@ -1504,7 +1504,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                        groupBitXor(data_hash) as hash,
                        count(DISTINCT id) as cnt
                 FROM dataset_item_versions
-                WHERE dataset_version_id = dataset_id
+                WHERE workspace_id = :workspaceId
+                  AND dataset_version_id = dataset_id
                 GROUP BY dataset_id
             )
             SELECT COALESCE(l.dataset_id, v.dataset_id) as dataset_id
@@ -1512,9 +1513,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FULL OUTER JOIN versioned v ON l.dataset_id = v.dataset_id
             WHERE (COALESCE(l.hash, 0) != COALESCE(v.hash, 0)
                    OR COALESCE(l.cnt, 0) != COALESCE(v.cnt, 0))
-              AND COALESCE(l.dataset_id, v.dataset_id) > :lastSeenDatasetId
             ORDER BY dataset_id ASC
-            LIMIT :batchSize
             """;
 
     private static final String DELETE_ITEMS_FROM_VERSION_MIGRATION = """
@@ -2706,16 +2705,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     @Override
-    public Flux<UUID> findDatasetsWithHashMismatch(int batchSize, UUID lastSeenDatasetId) {
-        log.debug("Finding datasets with hash mismatch, batchSize='{}', lastSeenDatasetId='{}'", batchSize,
-                lastSeenDatasetId);
+    public Flux<UUID> findDatasetsWithHashMismatchInWorkspace(String workspaceId) {
+        log.debug("Finding datasets with hash mismatch in workspace '{}'", workspaceId);
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(FIND_DATASETS_WITH_HASH_MISMATCH)
-                    .bind("lastSeenDatasetId", lastSeenDatasetId.toString())
-                    .bind("batchSize", batchSize);
+            var statement = connection.createStatement(FIND_DATASETS_WITH_HASH_MISMATCH_IN_WORKSPACE)
+                    .bind("workspaceId", workspaceId);
 
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "find_datasets_with_hash_mismatch");
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "find_datasets_with_hash_mismatch_in_workspace");
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> {
@@ -2723,7 +2721,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         return UUID.fromString(datasetIdStr);
                     }))
                     .collectList()
-                    .doOnSuccess(datasets -> log.debug("Found '{}' datasets with hash mismatch", datasets.size()))
+                    .doOnSuccess(datasets -> log.debug("Found '{}' datasets with hash mismatch in workspace '{}'",
+                            datasets.size(), workspaceId))
                     .doFinally(signalType -> endSegment(segment));
         }).flatMapMany(Flux::fromIterable);
     }
