@@ -1229,6 +1229,13 @@ class BaseOptimizer(ABC):
         selection_meta: dict[str, Any] | None = None,
     ) -> None:
         """Finalize a history round."""
+        if stop_reason is None:
+            try:
+                context = self._context
+            except Exception:
+                context = None
+            if context is not None and context.should_stop:
+                stop_reason = context.finish_reason or "stopped"
         if hasattr(self._history_builder, "end_round"):
             self._history_builder.end_round(
                 round_handle=round_handle,
