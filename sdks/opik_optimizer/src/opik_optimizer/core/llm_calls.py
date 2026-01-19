@@ -11,8 +11,8 @@ from litellm.exceptions import BadRequestError
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
-from .utils import throttle as _throttle
-from .utils.helpers import json_to_dict
+from ..utils import throttle as _throttle
+from ..utils.helpers import json_to_dict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -112,7 +112,7 @@ def _increment_llm_counter_if_in_optimizer() -> None:
     Walk up the call stack and increment the first optimizer's counter if found.
     """
     try:
-        from .base_optimizer import BaseOptimizer
+        from ..base_optimizer import BaseOptimizer
     except Exception:
         return
 
@@ -134,7 +134,7 @@ def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     Walk up the call stack and increment the first optimizer's counter if found.
     """
     try:
-        from .base_optimizer import BaseOptimizer
+        from ..base_optimizer import BaseOptimizer
     except Exception:
         return
 
@@ -154,7 +154,7 @@ def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
 def _get_project_name_from_optimizer() -> str | None:
     """Return project_name from the nearest optimizer on the call stack."""
     try:
-        from .base_optimizer import BaseOptimizer
+        from ..base_optimizer import BaseOptimizer
     except Exception:
         return None
 

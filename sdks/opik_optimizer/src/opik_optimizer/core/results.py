@@ -9,19 +9,19 @@ from contextlib import contextmanager
 
 import pydantic
 import rich.panel
-from .utils.reporting import get_console, get_optimization_run_url_by_id
-from .utils.display import (
+from ..utils.reporting import get_console, get_optimization_run_url_by_id
+from ..utils.display import (
     format_prompt_for_plaintext,
     build_plaintext_summary,
     render_rich_result,
 )
 
-from .api_objects import chat_prompt
-from .constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
-from .utils.logging import debug_log
+from ..api_objects import chat_prompt
+from ..constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
+from ..utils.logging import debug_log
 
 
-from .utils.time import now_iso
+from ..utils.time import now_iso
 
 
 # FIXME: Move to helpers.py if we add a time utilities module.

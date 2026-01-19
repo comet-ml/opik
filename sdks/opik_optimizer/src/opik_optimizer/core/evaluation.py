@@ -4,12 +4,12 @@ from typing import Any, overload, Literal
 from collections.abc import Callable
 
 import opik
-from .api_objects.types import MetricFunction
-from .utils.reporting import suppress_experiment_reporting
+from ..api_objects.types import MetricFunction
+from ..utils.reporting import suppress_experiment_reporting
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
-from .metrics.multi_metric_objective import MultiMetricObjective
+from ..metrics.multi_metric_objective import MultiMetricObjective
 
 logger = logging.getLogger(__name__)
 
