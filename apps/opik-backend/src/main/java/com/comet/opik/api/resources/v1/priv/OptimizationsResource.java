@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationStudioLog;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -11,6 +12,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.OptimizationSearchCriteria;
 import com.comet.opik.domain.OptimizationService;
+import com.comet.opik.domain.optimization.OptimizationStudioService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -62,6 +64,7 @@ public class OptimizationsResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull OptimizationStudioService optimizationStudioService;
 
     @PUT
     @Operation(operationId = "upsertOptimization", summary = "Upsert optimization", description = "Upsert optimization", responses = {
@@ -225,5 +228,25 @@ public class OptimizationsResource {
 
         log.info("Generated logs URL for Studio optimization id: '{}'", id);
         return Response.ok(logs).build();
+    }
+
+    @POST
+    @Path("/studio/code")
+    @Produces(MediaType.TEXT_PLAIN)
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "generateOptimizationCode", summary = "Generate Python code for optimization", description = "Generate Python code from optimization configuration for user download", responses = {
+            @ApiResponse(responseCode = "200", description = "Generated Python code", content = @Content(mediaType = MediaType.TEXT_PLAIN)),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response generateCode(
+            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationStudioConfig.class))) @NotNull @Valid OptimizationStudioConfig studioConfig) {
+        log.info("Generating code for optimization configuration");
+        var code = optimizationStudioService.generateCode(studioConfig).block();
+        log.info("Generated code successfully");
+        return Response.ok(code)
+                .header("Content-Disposition", "attachment; filename=\"optimization.py\"")
+                .build();
     }
 }
