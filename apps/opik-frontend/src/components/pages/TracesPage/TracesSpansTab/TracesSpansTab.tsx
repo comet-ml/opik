@@ -89,6 +89,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import ExperimentSelectBox from "@/components/pages-shared/traces/ExperimentSelectBox/ExperimentSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -427,6 +428,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   type: TRACE_DATA_TYPE.spans,
                   placeholder: "Select span score",
                 },
+              },
+              experiment_name: {
+                keyComponent: ExperimentSelectBox,
+                keyComponentProps: {
+                  className: "w-full min-w-72",
+                },
+                defaultOperator: "contains",
+                operators: [{ label: "contains", value: "contains" }],
               },
             }
           : {}),

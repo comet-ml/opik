@@ -1745,4 +1745,32 @@ class ExperimentDAO {
         }
     }
 
+    @WithSpan
+    public Flux<ExperimentReference> findExperimentsByProjectId(@NonNull UUID projectId) {
+        log.info("Finding experiments by project_id '{}'", projectId);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> findExperimentsByProjectId(projectId, connection))
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Found experiments by project_id '{}'", projectId);
+                    }
+                });
+    }
+
+    private Publisher<ExperimentReference> findExperimentsByProjectId(UUID projectId, Connection connection) {
+        var template = new ST(FIND_EXPERIMENTS_BY_PROJECT_ID);
+        template.add("log_comment", "find_experiments_by_project_id");
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", projectId);
+
+        return makeFluxContextAware((userName, workspaceId) -> {
+            statement.bind("workspace_id", workspaceId);
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentReference(
+                            row.get("id", UUID.class),
+                            row.get("name", String.class))));
+        });
+    }
+
 }
