@@ -2948,7 +2948,7 @@ class TraceDAOImpl implements TraceDAO {
             // Field mapping for experiment - sort by experiment name (tuple element 2) or ID (tuple element 1)
             var fieldMapping = Map.of(
                     "experiment", "eaag.experiment.2",
-                    "experiment.id", "eaag.experiment.1");
+                    "experiment_id", "eaag.experiment.1");
             Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), fieldMapping))
                     .ifPresent(sortFields -> {
 
@@ -2961,14 +2961,14 @@ class TraceDAOImpl implements TraceDAO {
                         }
 
                         if (sortFields.contains("experiment") || sortFields.contains("eaag.experiment")
-                                || sortFields.contains("experiment.id") || sortFields.contains("eaag.experiment.1")) {
+                                || sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment.1")) {
                             finalTemplate.add("sort_has_experiment", true);
                         }
 
                         finalTemplate.add("sort_fields", sortFields);
                     });
 
-            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields(), fieldMapping);
+            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
 
             template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
 
@@ -2979,8 +2979,7 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("offset", offset);
 
             if (hasDynamicKeys) {
-                statement = sortingQueryBuilder.bindDynamicKeys(statement, traceSearchCriteria.sortingFields(),
-                        fieldMapping);
+                statement = sortingQueryBuilder.bindDynamicKeys(statement, traceSearchCriteria.sortingFields());
             }
 
             bindTraceThreadSearchCriteria(traceSearchCriteria, statement);

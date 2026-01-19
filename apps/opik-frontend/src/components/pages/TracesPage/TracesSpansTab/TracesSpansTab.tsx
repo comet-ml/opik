@@ -862,7 +862,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               accessorFn: (row: BaseTraceData) => get(row, "experiment"),
             },
             {
-              id: "experiment.id",
+              id: "experiment_id",
               label: "Experiment ID",
               type: COLUMN_TYPE.string,
               cell: IdCell as never,
