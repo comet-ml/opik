@@ -4,7 +4,6 @@ import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.utils.RetryUtils;
-import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -91,7 +90,6 @@ public class OptimizationStudioService {
                 }
             } catch (jakarta.ws.rs.ProcessingException | IllegalStateException parseErrorResponse) {
                 log.warn("Failed to parse error response", parseErrorResponse);
-                }
             }
         }
 
