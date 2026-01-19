@@ -76,17 +76,30 @@ public class SortingQueryBuilder {
     }
 
     public boolean hasDynamicKeys(@NonNull List<SortingField> sorting) {
+        return hasDynamicKeys(sorting, null);
+    }
+
+    public boolean hasDynamicKeys(@NonNull List<SortingField> sorting, Map<String, String> fieldMapping) {
         // Only fields with bindKeyParam need dynamic binding
         // Fields without bindKeyParam use literal keys in field mappings (e.g., JSONExtractRaw)
+        // Exclude fields that are explicitly mapped (like experiment.id -> eaag.experiment.1)
         return sorting.stream()
                 .filter(SortingField::isDynamic)
-                .anyMatch(field -> field.bindKeyParam() != null);
+                .filter(field -> field.bindKeyParam() != null)
+                .anyMatch(field -> fieldMapping == null || !fieldMapping.containsKey(field.field()));
     }
 
     public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting) {
+        return bindDynamicKeys(statement, sorting, null);
+    }
+
+    public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting,
+            Map<String, String> fieldMapping) {
         sorting.stream()
                 .filter(SortingField::isDynamic)
                 .filter(sortingField -> sortingField.bindKeyParam() != null)
+                // Exclude fields that are explicitly mapped (like experiment.id -> eaag.experiment.1)
+                .filter(sortingField -> fieldMapping == null || !fieldMapping.containsKey(sortingField.field()))
                 .forEach(sortingField -> {
                     try {
                         statement.bind(sortingField.bindKey(), sortingField.dynamicKey());

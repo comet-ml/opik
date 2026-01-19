@@ -2968,7 +2968,7 @@ class TraceDAOImpl implements TraceDAO {
                         finalTemplate.add("sort_fields", sortFields);
                     });
 
-            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
+            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields(), fieldMapping);
 
             template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
 
@@ -2979,7 +2979,8 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("offset", offset);
 
             if (hasDynamicKeys) {
-                statement = sortingQueryBuilder.bindDynamicKeys(statement, traceSearchCriteria.sortingFields());
+                statement = sortingQueryBuilder.bindDynamicKeys(statement, traceSearchCriteria.sortingFields(),
+                        fieldMapping);
             }
 
             bindTraceThreadSearchCriteria(traceSearchCriteria, statement);
