@@ -5,7 +5,7 @@ This module contains extracted operations from the main optimizer:
 - halloffame_ops: Hall of Fame pattern extraction and tracking
 - evaluation_ops: Prompt evaluation and selection
 - candidate_ops: Candidate generation and sanitization
-- history_ops: Task context + history recording helpers
+- history_ops: Round history recording helpers
 - context_learning_ops: Dataset-example prompt learning helpers
 - result_ops: Result calculation and formatting
 """

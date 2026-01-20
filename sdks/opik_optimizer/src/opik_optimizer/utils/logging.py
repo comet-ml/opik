@@ -247,12 +247,14 @@ def debug_tool_call(
     ):
         result_text = result_text[:clip_limit] + "..."
     call_text = f"{tool_name}({arg_text})"
+    call_text = compact_debug_text(call_text, limit=DEFAULT_TOOL_DEBUG_CLIP)
     parts = [f"{DEFAULT_TOOL_DEBUG_PREFIX}event=tool_call", f"call={call_text}"]
     if tool_call_id:
         trimmed_id = tool_call_id.replace("call_", "", 1)
         parts.append(f"call_id={trimmed_id}")
     if isinstance(result_text, str):
-        safe_response = result_text.replace('"', '\\"')
+        safe_response = compact_debug_text(result_text, limit=DEFAULT_TOOL_DEBUG_CLIP)
+        safe_response = safe_response.replace('"', '\\"')
     else:
         safe_response = str(result_text)
     parts.append(f'response="{safe_response}"')

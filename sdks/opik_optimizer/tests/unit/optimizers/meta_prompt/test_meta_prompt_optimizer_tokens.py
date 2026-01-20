@@ -24,9 +24,7 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_with_known_model(self) -> None:
         """Test token calculation with a known model (gpt-4)."""
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
-        ) as mock_get_max_tokens:
+        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 128000  # gpt-4 context window
 
             optimizer = MetaPromptOptimizer(model="gpt-4")
@@ -37,9 +35,7 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_with_smaller_model(self) -> None:
         """Test token calculation with a smaller model."""
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
-        ) as mock_get_max_tokens:
+        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 16000  # gpt-3.5-turbo context
 
             optimizer = MetaPromptOptimizer(model="gpt-3.5-turbo")
@@ -50,9 +46,7 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_custom_model_fallback(self) -> None:
         """Test fallback to absolute max for custom models."""
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
-        ) as mock_get_max_tokens:
+        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.side_effect = Exception("Model not found")
 
             optimizer = MetaPromptOptimizer(model="custom-model-xyz")
@@ -62,9 +56,7 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_applies_absolute_max(self) -> None:
         """Test that absolute max is always applied as safety cap."""
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
-        ) as mock_get_max_tokens:
+        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
             # Simulate a model with huge context (e.g., Claude 3.5 with 200k)
             mock_get_max_tokens.return_value = 200000
 
@@ -279,9 +271,7 @@ class TestMetadataMapping:
 
     def test_optimizer_metadata_includes_token_budget(self) -> None:
         """Test that optimizer metadata includes max_context_tokens."""
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
-        ) as mock_get_max_tokens:
+        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 16000
 
             optimizer = MetaPromptOptimizer(model="gpt-3.5-turbo")

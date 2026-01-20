@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, cast
+import json
 
 from ...api_objects import chat_prompt
 from ..candidate_selection import DEFAULT_SELECTION_POLICY
@@ -78,6 +79,22 @@ def format_prompt_for_plaintext(
             snippet = "[multimodal content]"
         single_parts.append(f"  {role}: {snippet}")
     return "\n".join(single_parts)
+
+
+def format_prompt_messages(
+    messages: list[dict[str, Any]],
+    *,
+    pretty: bool = True,
+) -> str:
+    """Format chat messages for history/context rendering."""
+    if pretty:
+        lines: list[str] = []
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            msg_content = msg.get("content", "")
+            lines.append("  [" + role.upper() + "]: " + msg_content)
+        return "\n".join(lines)
+    return json.dumps(messages, indent=2)
 
 
 def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:

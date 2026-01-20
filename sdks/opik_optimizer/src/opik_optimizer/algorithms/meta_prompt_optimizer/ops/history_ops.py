@@ -9,6 +9,7 @@ from ....core import runtime
 from ....core.results import OptimizationRound, round_payload
 from ....core.state import OptimizationContext
 from .... import constants
+from ....utils.display import format as display_format
 from . import halloffame_ops
 
 
@@ -31,17 +32,27 @@ def record_round_history(
             "candidate_count": len(prompt_scores),
         }
     )
-    for cand_prompt, cand_score in prompt_scores:
+    metadata_by_bundle = getattr(optimizer, "_candidate_metadata_by_bundle_id", {})
+    for idx, (cand_prompt, cand_score) in enumerate(prompt_scores, start=1):
+        metadata = metadata_by_bundle.get(id(cand_prompt), {})
+        improvement_focus = metadata.get("improvement_focus")
+        reasoning = metadata.get("reasoning")
+        extra: dict[str, Any] = {"round_num": round_num}
+        if improvement_focus is not None:
+            extra["improvement_focus"] = improvement_focus
+        if reasoning is not None:
+            extra["reasoning"] = reasoning
         runtime.record_and_post_trial(
             optimizer=optimizer,
             context=context,
             prompt_or_payload=cand_prompt,
             score=cand_score,
-            candidate_id=f"round{round_num}_cand",
+            candidate_id=f"round{round_num}_cand{idx}",
             metrics={"selection_score": cand_score},
+            notes=improvement_focus,
             round_handle=round_handle,
             post_metrics=None,
-            post_extras={"round_num": round_num},
+            post_extras=extra,
         )
     optimizer.post_round(
         round_handle=round_handle,
@@ -116,18 +127,10 @@ def build_history_context(
                 context += f"- Score {score:.4f}:\n"
 
                 if isinstance(prompt_data, list):
-                    if pretty_mode:
-                        lines: list[str] = []
-                        for msg in prompt_data:
-                            role = msg.get("role", "unknown")
-                            msg_content = msg.get("content", "")
-                            lines.append("  [" + role.upper() + "]: " + msg_content)
-                        context += "\n".join(lines) + "\n\n"
-                    else:
-                        import json
-
-                        context += json.dumps(prompt_data, indent=2)
-                        context += "\n\n"
+                    context += display_format.format_prompt_messages(
+                        prompt_data, pretty=pretty_mode
+                    )
+                    context += "\n\n"
                 else:
                     context += f"{prompt_data}\n\n"
 

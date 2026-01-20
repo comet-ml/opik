@@ -16,6 +16,7 @@ import logging
 from .. import prompts as meta_prompts
 from ..types import HallOfFameEntry
 from ....utils.prompt_library import PromptLibrary
+from ....utils.display import format as display_format
 
 logger = logging.getLogger(__name__)
 
@@ -312,15 +313,15 @@ def build_hall_of_fame_context(
 
         if pretty_mode:
             context += "Full Prompt Messages:\n"
-            prompt_lines: list[str] = []
-            for msg in entry.prompt_messages:
-                role = msg.get("role", "unknown")
-                msg_content = msg.get("content", "")
-                prompt_lines.append("  [" + role.upper() + "]: " + msg_content)
-            context += "\n".join(prompt_lines) + "\n\n"
+            context += display_format.format_prompt_messages(
+                entry.prompt_messages, pretty=True
+            )
+            context += "\n\n"
         else:
             context += "Prompt:\n"
-            context += json.dumps(entry.prompt_messages, indent=2)
+            context += display_format.format_prompt_messages(
+                entry.prompt_messages, pretty=False
+            )
             context += "\n"
 
         if entry.extracted_patterns:
@@ -361,9 +362,4 @@ def add_best_candidate_to_hof(
         ),
         metric_name=metric_name,
     )
-    if optimizer.hall_of_fame.add(entry):
-        logger.debug(
-            "Added to hall of fame: score=%.3f, trial=%s",
-            best_cand_score_avg,
-            current_trial,
-        )
+    optimizer.hall_of_fame.add(entry)

@@ -359,6 +359,15 @@ class OptimizationHistoryState:
             trial.trial_index = self._next_trial_index(entry)
         if isinstance(candidate_payload, dict):
             candidate_id = candidate_payload.get("id")
+        if candidate_id is None and candidates:
+            candidate_id = next(
+                (
+                    candidate.get("id")
+                    for candidate in candidates
+                    if isinstance(candidate, dict)
+                ),
+                None,
+            )
         if candidate_id is None and candidate_id_prefix is not None:
             candidate_id = self._next_candidate_id(candidate_id_prefix)
         if candidate_id is not None:

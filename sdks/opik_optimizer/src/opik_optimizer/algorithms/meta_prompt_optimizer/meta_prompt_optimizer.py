@@ -351,14 +351,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_score = best_cand_score_avg
                     best_prompts = best_candidate_this_round
 
-                # Increment round counter
-                round_num += 1
+                # Log round completion before increment to keep indices consistent.
                 debug_log(
                     "round_end",
-                    round_index=round_num,
+                    round_index=round_num + 1,
                     best_score=best_score,
                     trials_completed=context.trials_completed,
                 )
+                # Increment round counter
+                round_num += 1
         finally:
             # finish_reason, stopped_early, stop_reason are handled by base class
             self._clear_reporter()

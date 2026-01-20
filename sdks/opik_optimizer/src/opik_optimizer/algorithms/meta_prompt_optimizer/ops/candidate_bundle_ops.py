@@ -50,6 +50,7 @@ def generate_agent_bundle_candidates(
     optimization_id: str | None = None,
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
+    expected_count: int | None = None,
 ) -> list[AgentBundleCandidate]:
     """
     Generate updated prompts for multiple named agents in a single meta-prompt pass.
@@ -59,13 +60,15 @@ def generate_agent_bundle_candidates(
         and strongly-typed metadata for all agents in the bundle.
     """
     with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round,
+        expected_count or optimizer.prompts_per_round,
         verbose=optimizer.verbose,
         selection_summary=display_utils.summarize_selection_policy(current_prompts),
     ) as candidate_generation_report:
-        logger.debug("\nGenerating agent bundle prompts for round %s", round_num + 1)
-        logger.debug("Generating from agents: %s", list(current_prompts.keys()))
-        logger.debug("Current best score: %.4f", best_score)
+        reporting.log_generation_start(
+            round_num=round_num,
+            best_score=best_score,
+            source=current_prompts,
+        )
 
         pattern_guidance = ""
         if winning_patterns and random.random() < optimizer.pattern_injection_rate:
@@ -76,7 +79,7 @@ def generate_agent_bundle_candidates(
             for i, pattern in enumerate(winning_patterns, 1):
                 pattern_guidance += f"{i}. {pattern}\n"
             pattern_guidance += "\nAdapt these patterns per agent where appropriate."
-            logger.info("Injecting %s patterns into generation", len(winning_patterns))
+            reporting.log_pattern_injection(winning_patterns)
 
         history_context = build_history_context_fn(previous_rounds)
         task_context_str = ""
@@ -144,21 +147,7 @@ def generate_agent_bundle_candidates(
 
             candidates: list[AgentBundleCandidate] = []
             for response_item in responses:
-                logger.debug(
-                    "Bundle LLM response: %d candidate bundles",
-                    len(response_item.candidates),
-                )
-                for idx, cand in enumerate(response_item.candidates, start=1):
-                    agents = [a.name for a in cand.agents]
-                    focus = cand.bundle_improvement_focus
-                    logger.debug(
-                        "  Candidate %d: agents=%s focus=%s",
-                        idx,
-                        agents,
-                        (focus[:120] + "...")
-                        if isinstance(focus, str) and len(focus) > 120
-                        else focus,
-                    )
+                reporting.log_bundle_candidates_summary(response_item.candidates)
 
                 for candidate_response in response_item.candidates:
                     updated_prompts: dict[str, chat_prompt.ChatPrompt] = {}
@@ -212,7 +201,7 @@ def generate_agent_bundle_candidates(
             if not candidates:
                 raise ValueError("No valid agent prompts returned from response.")
 
-            candidate_generation_report.set_generated_prompts()
+            candidate_generation_report.set_generated_prompts(len(candidates))
             return candidates
 
         except Exception as exc:

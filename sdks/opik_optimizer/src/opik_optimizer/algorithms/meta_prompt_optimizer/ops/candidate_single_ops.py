@@ -17,7 +17,6 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from ....utils import display as display_utils
-from ....utils.logging import compact_debug_text
 from ....utils.text import normalize_llm_text
 from .. import prompts as meta_prompts
 from .. import reporting
@@ -113,18 +112,24 @@ def generate_candidate_prompts(
     optimization_id: str | None = None,
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
+    expected_count: int | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """
     Generate candidate prompts using meta-prompting.
     """
+    optimizer._candidate_metadata_by_prompt_id = getattr(
+        optimizer, "_candidate_metadata_by_prompt_id", {}
+    )
     with reporting.display_candidate_generation_report(
-        optimizer.prompts_per_round,
+        expected_count or optimizer.prompts_per_round,
         verbose=optimizer.verbose,
         selection_summary=display_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
-        logger.debug("\nGenerating candidate prompts for round %s", round_num + 1)
-        logger.debug("Generating from prompt: %s", current_prompt.get_messages())
-        logger.debug("Current best score: %.4f", best_score)
+        reporting.log_generation_start(
+            round_num=round_num,
+            best_score=best_score,
+            source=current_prompt,
+        )
 
         pattern_guidance = ""
         if winning_patterns and random.random() < optimizer.pattern_injection_rate:
@@ -138,7 +143,7 @@ def generate_candidate_prompts(
                 "\nConsider incorporating these patterns where appropriate, "
             )
             pattern_guidance += "but adapt them to fit the current prompt's needs."
-            logger.info("Injecting %s patterns into generation", len(winning_patterns))
+            reporting.log_pattern_injection(winning_patterns)
 
         history_context = build_history_context_fn(previous_rounds)
         task_context_str = ""
@@ -208,13 +213,6 @@ def generate_candidate_prompts(
                 normalize_llm_text(item) if isinstance(item, str) else item
                 for item in contents
             ]
-            if logger.isEnabledFor(logging.DEBUG):
-                cleaned = [
-                    compact_debug_text(item) if isinstance(item, str) else item
-                    for item in contents
-                ]
-                logger.debug("Raw response from reasoning model: %s", cleaned)
-
             valid_prompts: list[chat_prompt.ChatPrompt] = []
             metric_name = metric.__name__
 
@@ -280,6 +278,8 @@ def generate_candidate_prompts(
                         and "prompt" in item
                         and isinstance(item["prompt"], list)
                     ):
+                        improvement_focus = item.get("improvement_focus")
+                        reasoning = item.get("reasoning")
                         system_content = None
                         user_content = None
 
@@ -319,12 +319,17 @@ def generate_candidate_prompts(
                                 model_parameters=current_prompt.model_kwargs,
                             )
                         )
-
-                        focus = item.get("improvement_focus", "N/A")
-                        reasoning = item.get("reasoning", "N/A")
-                        logger.debug("Generated prompt: %s", item["prompt"])
-                        logger.debug("  Improvement focus: %s", focus)
-                        logger.debug("  Reasoning: %s", reasoning)
+                        prompt_ref = valid_prompts[-1]
+                        optimizer._candidate_metadata_by_prompt_id[id(prompt_ref)] = {
+                            "improvement_focus": improvement_focus,
+                            "reasoning": reasoning,
+                        }
+                        reporting.log_candidate_generated(
+                            round_num=round_num,
+                            prompt_messages=prompt_ref.get_messages(),
+                            improvement_focus=improvement_focus,
+                            reasoning=reasoning,
+                        )
                     else:
                         logger.warning(
                             "Skipping invalid prompt item structure in JSON response: %s",
@@ -336,7 +341,7 @@ def generate_candidate_prompts(
                     "No valid prompts found in the parsed JSON response after validation."
                 )
 
-            candidate_generation_report.set_generated_prompts()
+            candidate_generation_report.set_generated_prompts(len(valid_prompts))
 
             return valid_prompts
 

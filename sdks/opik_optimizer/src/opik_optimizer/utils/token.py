@@ -27,3 +27,12 @@ def count_tokens(text: str, model: str = "gpt-4") -> int:
             logger.debug("litellm token_counter failed: %s, using fallback", exc)
 
     return len(text) // 4
+
+
+def get_max_tokens(model: str) -> int:
+    """Return the model's max tokens via litellm."""
+    try:
+        from litellm import get_max_tokens as _get_max_tokens
+    except Exception as exc:
+        raise RuntimeError("litellm.get_max_tokens is unavailable") from exc
+    return _get_max_tokens(model)

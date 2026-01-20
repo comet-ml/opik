@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from typing import Any
 from collections.abc import Iterator
+import logging
 
 
 from ...api_objects import chat_prompt
@@ -13,6 +14,10 @@ from ...utils.display import (
     display_prefixed_block,
     display_text_block,
 )
+from ...utils.display import format as display_format
+from ...utils.logging import compact_debug_text, debug_log
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -139,10 +144,10 @@ class CandidateGenerationReporter:
         self.num_prompts = num_prompts
         self.selection_summary = selection_summary
 
-    def set_generated_prompts(self) -> None:
+    def set_generated_prompts(self, generated_count: int) -> None:
         summary = f" ({self.selection_summary})" if self.selection_summary else ""
         display_text_block(
-            f"│      Successfully generated {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
+            f"│      Successfully generated {generated_count} of {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
             style="dim",
         )
         display_text_block("│")
@@ -154,7 +159,7 @@ def display_candidate_generation_report(
 ) -> Iterator[CandidateGenerationReporter]:
     if verbose >= 1:
         display_text_block(
-            f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:",
+            f"│    Generating up to {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}:",
         )
         if selection_summary:
             display_text_block(
@@ -165,6 +170,78 @@ def display_candidate_generation_report(
         yield CandidateGenerationReporter(num_prompts, selection_summary)
     finally:
         pass
+
+
+def log_generation_start(
+    *,
+    round_num: int,
+    best_score: float,
+    source: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+) -> None:
+    """Log a standardized start message for candidate generation."""
+    logger.debug("Generating candidate prompts for round %s", round_num + 1)
+    if isinstance(source, dict):
+        logger.debug("Generating from agents: %s", list(source.keys()))
+    else:
+        prompt_text = display_format.format_prompt_messages(
+            source.get_messages(), pretty=True
+        )
+        logger.debug(
+            "Generating from prompt: %s",
+            compact_debug_text(prompt_text, limit=240),
+        )
+    logger.debug("Current best score: %.4f", best_score)
+
+
+def log_pattern_injection(patterns: list[str] | None) -> None:
+    """Log winning pattern injection details."""
+    if patterns:
+        logger.info("Injecting %s patterns into generation", len(patterns))
+
+
+def log_bundle_candidates_summary(candidates: list[Any]) -> None:
+    """Log bundle candidate summaries for debugging."""
+    logger.debug("Bundle LLM response: %d candidate bundles", len(candidates))
+    for idx, cand in enumerate(candidates, start=1):
+        agents = [a.name for a in cand.agents]
+        focus = cand.bundle_improvement_focus
+        logger.debug(
+            "  Candidate %d: agents=%s focus=%s",
+            idx,
+            agents,
+            (focus[:120] + "...")
+            if isinstance(focus, str) and len(focus) > 120
+            else focus,
+        )
+
+
+def log_candidate_generated(
+    *,
+    round_num: int,
+    prompt_messages: list[dict[str, Any]],
+    improvement_focus: str | None,
+    reasoning: str | None,
+) -> None:
+    """Log a concise candidate generation event with clipped previews."""
+    prompt_preview = compact_debug_text(
+        display_format.format_prompt_messages(prompt_messages, pretty=True),
+        limit=240,
+    )
+    focus_preview = (
+        compact_debug_text(improvement_focus, limit=120)
+        if isinstance(improvement_focus, str)
+        else None
+    )
+    reasoning_preview = (
+        compact_debug_text(reasoning, limit=160) if isinstance(reasoning, str) else None
+    )
+    debug_log(
+        "candidate_generated",
+        round_index=round_num + 1,
+        prompt_preview=prompt_preview,
+        improvement_focus=focus_preview,
+        reasoning_preview=reasoning_preview,
+    )
 
 
 @contextmanager

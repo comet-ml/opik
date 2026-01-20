@@ -13,22 +13,11 @@ import opik
 
 from ....api_objects.types import MetricFunction
 from ....utils import token as token_utils
+from ....utils.logging import compact_debug_text, debug_log
 from .... import constants
 from .. import prompts as meta_prompts
 
 logger = logging.getLogger(__name__)
-
-try:
-    from litellm import get_max_tokens as _get_max_tokens
-except Exception:  # pragma: no cover - optional dependency
-    _get_max_tokens = None
-
-
-def get_max_tokens(model: str) -> int:
-    """Wrapper for litellm.get_max_tokens to simplify patching in tests."""
-    if _get_max_tokens is None:
-        raise RuntimeError("litellm.get_max_tokens is unavailable")
-    return _get_max_tokens(model)
 
 
 def get_task_context(
@@ -152,31 +141,37 @@ def get_task_context(
         token_count = token_utils.count_tokens(context, model)
 
         if token_count <= max_tokens:
-            logger.debug(
-                "Task context: %s tokens, %s examples, %s fields, max_value_length=%s",
-                token_count,
-                current_num_examples,
-                len(input_fields),
-                max_value_length,
+            debug_log(
+                "context_learning",
+                tokens=token_count,
+                examples=current_num_examples,
+                fields=len(input_fields),
+                max_value_length=max_value_length,
+                max_tokens=max_tokens,
+                clipped=0,
+            )
+            debug_log(
+                "context_learning_preview",
+                text=compact_debug_text(context, limit=240),
             )
             return context, token_count
 
         if current_num_examples > 1:
             current_num_examples -= 1
-            logger.debug(
-                "Reducing examples to %s (was %s tokens)",
-                current_num_examples,
-                token_count,
+            debug_log(
+                "context_learning_reduce_examples",
+                examples=current_num_examples,
+                tokens=token_count,
             )
         elif max_value_length > constants.META_PROMPT_MIN_VALUE_LENGTH:
             max_value_length = max(
                 constants.META_PROMPT_MIN_VALUE_LENGTH,
                 max_value_length - constants.META_PROMPT_VALUE_LENGTH_REDUCTION_STEP,
             )
-            logger.debug(
-                "Reducing truncation to %s chars (was %s tokens)",
-                max_value_length,
-                token_count,
+            debug_log(
+                "context_learning_reduce_truncation",
+                max_value_length=max_value_length,
+                tokens=token_count,
             )
         else:
             logger.warning(
@@ -197,7 +192,7 @@ def calculate_max_context_tokens(model: str) -> int:
     Falls back to absolute max for custom models where litellm can't determine limits.
     """
     try:
-        model_max_tokens: int = get_max_tokens(model)  # type: ignore[assignment]
+        model_max_tokens: int = token_utils.get_max_tokens(model)  # type: ignore[assignment]
         calculated_max = int(
             model_max_tokens * constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_RATIO
         )
@@ -216,6 +211,4 @@ def calculate_max_context_tokens(model: str) -> int:
         )
         calculated_max = constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS
 
-    return min(
-        calculated_max, constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS
-    )
+    return min(calculated_max, constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS)

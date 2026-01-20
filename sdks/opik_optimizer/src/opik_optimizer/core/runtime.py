@@ -163,6 +163,7 @@ def record_and_post_trial(
     score: float | None,
     candidate_id: str | None = None,
     metrics: dict[str, Any] | None = None,
+    notes: str | None = None,
     extra: dict[str, Any] | None = None,
     candidate_handle: Any | None = None,
     round_handle: Any | None = None,
@@ -185,6 +186,7 @@ def record_and_post_trial(
         score=score,
         id=candidate_id,
         metrics=metrics,
+        notes=notes,
         extra=extra,
     )
     if post_metrics is _INHERIT:

@@ -56,6 +56,8 @@ def generate_round_candidates(
     Returns a list of prompt bundles (dict[str, ChatPrompt]) for evaluation.
     """
     try:
+        optimizer._candidate_metadata_by_prompt_id = {}
+        optimizer._candidate_metadata_by_bundle_id = {}
         if is_single_prompt_optimization:
             single_candidates = generate_candidate_prompts(
                 optimizer=optimizer,
@@ -69,12 +71,22 @@ def generate_round_candidates(
                 build_history_context_fn=build_history_context_fn,
                 get_task_context_fn=get_task_context_fn,
                 winning_patterns=winning_patterns,
+                expected_count=prompts_this_round,
             )
             prompt_key = next(iter(best_prompts.keys()))
             candidate_prompts = [
                 {prompt_key: prompt}
                 for prompt in single_candidates[:prompts_this_round]
             ]
+            for candidate in candidate_prompts:
+                prompt = candidate.get(prompt_key)
+                metadata = (
+                    optimizer._candidate_metadata_by_prompt_id.get(id(prompt))
+                    if prompt is not None
+                    else None
+                )
+                if metadata:
+                    optimizer._candidate_metadata_by_bundle_id[id(candidate)] = metadata
         else:
             bundle_candidates = generate_agent_bundle_candidates(
                 optimizer=optimizer,
@@ -87,10 +99,26 @@ def generate_round_candidates(
                 project_name=project_name,
                 build_history_context_fn=build_history_context_fn,
                 get_task_context_fn=get_task_context_fn,
+                expected_count=prompts_this_round,
             )
             candidate_prompts = [
                 bundle.prompts for bundle in bundle_candidates[:prompts_this_round]
             ]
+            for bundle in bundle_candidates[:prompts_this_round]:
+                focus_parts = []
+                reasoning_parts = []
+                for agent_name, meta in bundle.metadata.items():
+                    if meta.improvement_focus:
+                        focus_parts.append(f"{agent_name}: {meta.improvement_focus}")
+                    if meta.reasoning:
+                        reasoning_parts.append(f"{agent_name}: {meta.reasoning}")
+                metadata = {
+                    "improvement_focus": "; ".join(focus_parts) or None,
+                    "reasoning": "; ".join(reasoning_parts) or None,
+                }
+                optimizer._candidate_metadata_by_bundle_id[id(bundle.prompts)] = (
+                    metadata
+                )
 
         synthesis_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
         if (

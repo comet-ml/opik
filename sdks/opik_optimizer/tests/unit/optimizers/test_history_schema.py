@@ -60,6 +60,17 @@ def _assert_trial_indices(history: list[dict[str, Any]]) -> None:
     assert seen == sorted(seen)
 
 
+def _assert_unique_candidate_ids(history: list[dict[str, Any]]) -> None:
+    for entry in history:
+        candidates = entry.get("candidates") or []
+        ids = [
+            cand.get("id")
+            for cand in candidates
+            if isinstance(cand, dict) and cand.get("id") is not None
+        ]
+        assert len(ids) == len(set(ids)), "candidate ids must be unique within a round"
+
+
 def test_algorithm_result_accepts_typed_rounds(
     simple_chat_prompt: Any,
     mock_dataset: Any,
@@ -230,6 +241,7 @@ def test_history_schema_smoke(
     assert isinstance(history, list) and history
     _assert_candidate_schema(history[0])
     _assert_trial_indices(history)
+    _assert_unique_candidate_ids(history)
     trials_completed = result.details.get("trials_completed")
     assert isinstance(trials_completed, int) and trials_completed >= 1
     # Ensure candidates follow the spec

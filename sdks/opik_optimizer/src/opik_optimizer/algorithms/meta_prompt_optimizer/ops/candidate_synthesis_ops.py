@@ -240,7 +240,7 @@ def generate_synthesis_prompts(
             if not valid_prompts:
                 raise ValueError("No valid synthesis prompts generated")
 
-            candidate_generation_report.set_generated_prompts()
+            candidate_generation_report.set_generated_prompts(len(valid_prompts))
             return valid_prompts
 
         except Exception as exc:

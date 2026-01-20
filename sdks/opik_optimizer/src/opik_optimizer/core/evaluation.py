@@ -251,7 +251,7 @@ def _evaluate_internal(
                 if _normalize_id(item.get("id")) in dataset_item_ids
             ]
             logger.debug(
-                "Evaluating %s items after filtering by dataset_item_ids.",
+                "Evaluating %s items (filtered by dataset_item_ids).",
                 len(items),
             )
 
