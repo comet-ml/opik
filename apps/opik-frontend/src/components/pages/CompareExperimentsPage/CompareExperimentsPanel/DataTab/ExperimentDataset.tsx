@@ -102,7 +102,7 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
           {datasetItemId && (
             <NavigationTag
               id={datasetId}
-              name="View item"
+              name="View in dataset"
               resource={RESOURCE_TYPE.datasetItem}
               search={{
                 row: datasetItemId,
