@@ -10,6 +10,7 @@ import {
   isDashboardChanged,
   createDefaultWidgetConfig,
   DASHBOARD_VERSION,
+  DEFAULT_MAX_EXPERIMENTS,
 } from "./utils";
 import {
   DashboardWidget,
@@ -17,6 +18,7 @@ import {
   DashboardState,
   WIDGET_TYPE,
   WidgetResolver,
+  EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
 
 describe("generateEmptySection", () => {
@@ -320,7 +322,14 @@ describe("isDashboardChanged", () => {
       },
     ],
     lastModified: Date.now(),
-    config: { dateRange: "7d", projectIds: ["project-1"], experimentIds: [] },
+    config: {
+      dateRange: "7d",
+      projectIds: ["project-1"],
+      experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+    },
   };
 
   it("should return true when previous is null", () => {
@@ -351,7 +360,14 @@ describe("isDashboardChanged", () => {
   it("should return true for different configs", () => {
     const current = {
       ...baseDashboard,
-      config: { dateRange: "7d", projectIds: ["project-2"], experimentIds: [] },
+      config: {
+        dateRange: "7d",
+        projectIds: ["project-2"],
+        experimentIds: [],
+        experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+        experimentFilters: [],
+        maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+      },
     };
     const previous = { ...baseDashboard };
     expect(isDashboardChanged(current, previous)).toBe(true);

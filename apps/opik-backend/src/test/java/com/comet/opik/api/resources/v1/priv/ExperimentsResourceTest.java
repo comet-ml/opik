@@ -5194,101 +5194,94 @@ class ExperimentsResourceTest {
         @ValueSource(booleans = {true, false})
         @DisplayName("when get feedback score names, then return feedback score names")
         void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(boolean userExperimentId) {
-
-            // given
-            var apiKey = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // when
-            String projectName = UUID.randomUUID().toString();
-
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
-
-            List<String> names = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            project = project.toBuilder().id(projectId).build();
+            var names = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var otherNames = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
 
             // Create multiple values feedback scores
-            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+            var multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+            var multipleValuesFeedbackScoreList = traceResourceClient.createMultiValueScores(
+                    multipleValuesFeedbackScores, project, apiKey, workspaceName);
+            var singleValueScores = traceResourceClient.createMultiValueScores(
+                    List.of(names.getLast()), project, apiKey, workspaceName);
 
-            List<List<FeedbackScoreBatchItem>> multipleValuesFeedbackScoreList = traceResourceClient
-                    .createMultiValueScores(
-                            multipleValuesFeedbackScores, project, apiKey, workspaceName);
+            // Create experiment, including experiment feedback scores
+            var experiment = createExperimentsItems(
+                    apiKey, workspaceName, multipleValuesFeedbackScoreList, singleValueScores);
 
-            List<List<FeedbackScoreBatchItem>> singleValueScores = traceResourceClient.createMultiValueScores(
-                    List.of(names.getLast()),
-                    project, apiKey, workspaceName);
-
-            UUID experimentId = createExperimentsItems(apiKey, workspaceName, multipleValuesFeedbackScoreList,
-                    singleValueScores);
-
-            // Create unexpected feedback scores
+            // Create unexpected feedback scores, both feedback and experiment scores
             var unexpectedProject = podamFactory.manufacturePojo(Project.class);
-
-            List<List<FeedbackScoreBatchItem>> unexpectedScores = traceResourceClient.createMultiValueScores(
-                    otherNames,
-                    unexpectedProject,
-                    apiKey, workspaceName);
-
+            var unexpectedScores = traceResourceClient.createMultiValueScores(
+                    otherNames, unexpectedProject, apiKey, workspaceName);
             createExperimentsItems(apiKey, workspaceName, unexpectedScores, List.of());
 
-            fetchAndAssertResponse(userExperimentId, experimentId, names, otherNames, apiKey, workspaceName);
+            fetchAndAssertResponse(userExperimentId, experiment, names, otherNames, apiKey, workspaceName);
         }
     }
 
-    private void fetchAndAssertResponse(boolean userExperimentId, UUID experimentId, List<String> names,
-            List<String> otherNames, String apiKey, String workspaceName) {
-
-        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
+    private void fetchAndAssertResponse(
+            boolean userExperimentId,
+            Experiment experiment,
+            List<String> names,
+            List<String> otherNames,
+            String apiKey,
+            String workspaceName) {
+        var webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names");
-
         if (userExperimentId) {
-            var ids = JsonUtils.writeValueAsString(List.of(experimentId));
+            var ids = JsonUtils.writeValueAsString(List.of(experiment.id()));
             webTarget = webTarget.queryParam("experiment_ids", ids);
         }
-
-        List<String> expectedNames = userExperimentId
-                ? names
-                : Stream.of(names, otherNames).flatMap(List::stream).toList();
-
-        try (var actualResponse = webTarget
-                .request()
+        try (var actualResponse = webTarget.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
-
-            // then
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
+            if (userExperimentId) {
+                var actualExperimentScores = actualEntity.scores().stream()
+                        .filter(score -> "experiment_scores".equals(score.type()))
+                        .map(FeedbackScoreNames.ScoreName::name)
+                        .toList();
+                var expectedExperimentScores = experiment.experimentScores().stream()
+                        .map(ExperimentScore::name)
+                        .toList();
+                assertThat(actualExperimentScores).containsExactlyInAnyOrderElementsOf(expectedExperimentScores);
+            }
+            var expectedNames = userExperimentId
+                    ? names
+                    : Stream.of(names, otherNames).flatMap(List::stream).toList();
             assertFeedbackScoreNames(actualEntity, expectedNames);
         }
     }
 
-    private UUID createExperimentsItems(String apiKey, String workspaceName,
+    private Experiment createExperimentsItems(String apiKey,
+            String workspaceName,
             List<List<FeedbackScoreBatchItem>> multipleValuesFeedbackScoreList,
             List<List<FeedbackScoreBatchItem>> singleValueScores) {
-
-        UUID experimentId = experimentResourceClient.create(apiKey, workspaceName);
-
-        Stream.of(multipleValuesFeedbackScoreList, singleValueScores)
+        var experiment = experimentResourceClient.createPartialExperiment().build();
+        experimentResourceClient.create(experiment, apiKey, workspaceName);
+        var experimentId = experiment.id();
+        var experimentItems = Stream.of(multipleValuesFeedbackScoreList, singleValueScores)
                 .flatMap(List::stream)
                 .flatMap(List::stream)
                 .map(FeedbackScoreItem::id)
                 .distinct()
-                .forEach(traceId -> {
-                    var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
-                            .traceId(traceId)
-                            .experimentId(experimentId)
-                            .build();
-
-                    experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
-                });
-
-        return experimentId;
+                .map(traceId -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .traceId(traceId)
+                        .experimentId(experimentId)
+                        .build())
+                .collect(Collectors.toSet());
+        experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
+        return experiment;
     }
 
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {

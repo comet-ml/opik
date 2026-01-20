@@ -1,1 +1,1 @@
-export * from "./GetWebhookExamplesRequestAlertType";
+export * from "./GetWebhookExamplesRequestAlertType.js";
