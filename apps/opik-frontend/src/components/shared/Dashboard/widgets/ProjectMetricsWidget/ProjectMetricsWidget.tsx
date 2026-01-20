@@ -138,8 +138,14 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const breakdown = widget.config?.breakdown as BreakdownConfig | undefined;
 
     // Only pass breakdown if it's enabled (field is not NONE)
+    // Also skip if METADATA is selected but no metadataKey is provided
     const effectiveBreakdown =
-      breakdown && breakdown.field !== BREAKDOWN_FIELD.NONE
+      breakdown &&
+      breakdown.field !== BREAKDOWN_FIELD.NONE &&
+      !(
+        breakdown.field === BREAKDOWN_FIELD.METADATA &&
+        (!breakdown.metadataKey || breakdown.metadataKey.trim() === "")
+      )
         ? breakdown
         : undefined;
 

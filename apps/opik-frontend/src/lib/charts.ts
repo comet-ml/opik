@@ -4,6 +4,45 @@ import { ChartConfig } from "@/components/ui/chart";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 
+/**
+ * Ordered list of colors for breakdown groups to ensure visual distinction.
+ * Colors are ordered to maximize visual contrast between adjacent items.
+ */
+const BREAKDOWN_GROUP_COLORS = [
+  "var(--color-blue)",
+  "var(--color-orange)",
+  "var(--color-green)",
+  "var(--color-purple)",
+  "var(--color-pink)",
+  "var(--color-turquoise)",
+  "var(--color-yellow)",
+  "var(--color-burgundy)",
+  "var(--color-gray)",
+  "var(--color-primary)",
+];
+
+/**
+ * Generate a color map for breakdown groups ensuring each group gets a distinct color.
+ * Groups are sorted alphabetically to guarantee consistent color assignment across renders.
+ */
+export const generateBreakdownColorMap = (
+  groupNames: string[],
+): Record<string, string> => {
+  // Sort alphabetically for consistent color assignment
+  const sortedGroups = [...groupNames].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+
+  const colorMap: Record<string, string> = {};
+  sortedGroups.forEach((groupName, index) => {
+    // Use modulo to cycle through colors if we have more groups than colors
+    colorMap[groupName] =
+      BREAKDOWN_GROUP_COLORS[index % BREAKDOWN_GROUP_COLORS.length];
+  });
+
+  return colorMap;
+};
+
 export const getDefaultHashedColorsChartConfig = (
   lines: string[],
   labelsMap?: Record<string, string>,
