@@ -21,40 +21,10 @@ jobs:
         run: |
           echo "Skipping deployment of test environment for this PR"
 
-  start:
+  notify-started:
     if: github.event.label.name == 'test-environment'
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get-tag.outputs.version }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref }}
-      
-      - name: Get latest tag from main at merge-base
-        id: get-tag
-        run: |
-          # Fetch main branch
-          git fetch origin main
-          
-          # Find the merge-base (where this branch diverged from main)
-          MERGE_BASE=$(git merge-base HEAD origin/main)
-          echo "Merge base: $MERGE_BASE"
-          
-          # Get the tag at or before the merge-base
-          BASE_TAG=$(git describe --tags --abbrev=0 $MERGE_BASE 2>/dev/null || echo "")
-          
-          if [ -z "$BASE_TAG" ]; then
-            echo "❌ No tag found at merge-base"
-            exit 1
-          fi
-          
-          echo "The tag at merge-base: $BASE_TAG"
-          echo "version=${BASE_TAG}" | tee -a $GITHUB_OUTPUT
-          echo "**Base Version**: \`${BASE_TAG}\`" >> $GITHUB_STEP_SUMMARY
-
       - name: Comment on PR - Deployment Started
         uses: actions/github-script@v7
         with:
@@ -64,19 +34,17 @@ jobs:
               issue_number: Number('${{ github.event.number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🔄 **Test environment deployment process has started**
+              body: `🔄 **Test environment deployment started**
               
-              **Phase 1**: Deploying base version \`${{ steps.get-tag.outputs.version }}\` (from main branch) if environment doesn't exist
-              **Phase 2**: Building new images from PR branch \`${{ github.event.pull_request.head.ref }}\`
-              **Phase 3**: Will deploy newly built version after build completes
+              Building images for PR #${{ github.event.number }}...
               
-              You can monitor the progress [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
+              You can monitor the build progress [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
             });
 
   build-apps:
     if: github.event.label.name == 'test-environment'
     needs:
-      - start
+      - notify-started
     uses: ./.github/workflows/build_apps.yml
     secrets: inherit
     with:
@@ -86,59 +54,13 @@ jobs:
       build_guardrails: false
       ref: ${{ github.event.pull_request.head.ref }}
 
-  trigger-deploy-base-version:
-    if: github.event.label.name == 'test-environment'
-    needs:
-      - start
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger deployment with base version
-        uses: actions/github-script@v7
-        env:
-          VERSION_NAME: ${{ needs.start.outputs.version }}
-        with:
-          github-token: ${{ secrets.DEPLOYMENT_TRIGGER_TOKEN }}
-          script: |
-            const response = await github.rest.repos.createDispatchEvent({
-              owner: 'comet-ml',
-              repo: 'comet-deployment',
-              event_type: 'deploy-opik-test-env',
-              client_payload: {
-                pr_number: '${{ github.event.number }}',
-                version_name: process.env.VERSION_NAME,
-                is_base_version: true
-              }
-            });
-            
-            console.log('✅ Repository dispatch sent successfully:', response.status);
-            console.log('📦 Deploying base version:', process.env.VERSION_NAME);
-            console.log('⚠️  Will skip if namespace already exists');
-            console.log('📊 Monitor deployment progress: https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml');
-            console.log('🔗 Deployment will verify the version');
-
-      - name: Handle trigger failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: Number('${{ github.event.number }}'),
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `❌ **Failed to trigger base version deployment**
-              
-              Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details.`
-            });
-
-  trigger-deploy-new-version:
+  trigger_deployment:
     if: github.event.label.name == 'test-environment'
     needs:
       - build-apps
-      - trigger-deploy-base-version
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger deployment with new version
+      - name: Trigger deployment via repository dispatch
         uses: actions/github-script@v7
         env:
           VERSION_NAME: ${{ needs.build-apps.outputs.version }}
@@ -151,14 +73,11 @@ jobs:
               event_type: 'deploy-opik-test-env',
               client_payload: {
                 pr_number: '${{ github.event.number }}',
-                version_name: process.env.VERSION_NAME,
-                is_base_version: false
+                version_name: process.env.VERSION_NAME
               }
             });
             
             console.log('✅ Repository dispatch sent successfully:', response.status);
-            console.log('📦 Deploying new version:', process.env.VERSION_NAME);
-            console.log('🔄 This will update the existing environment');
             console.log('📊 Monitor deployment progress: https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml');
             console.log('🔗 Deployment will verify the version and post a comment on this PR when complete');
 
@@ -172,7 +91,7 @@ jobs:
               issue_number: Number('${{ github.event.number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `❌ **Failed to trigger deployment with new version**
+              body: `❌ **Failed to trigger test environment deployment**
               
               Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details.`
             });
