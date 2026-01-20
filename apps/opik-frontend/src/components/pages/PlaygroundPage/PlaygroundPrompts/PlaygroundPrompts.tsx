@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import { usePostHog } from "posthog-js/react";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
@@ -25,6 +26,11 @@ import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+
+const PLAYGROUND_DEFAULT_MESSAGE_FEATURE_FLAG =
+  "playground-default-prompt-message";
+const DEFAULT_MESSAGE_CONTENT =
+  "In 2-3 sentences, describe what an LLM is and the main challenge of using them.";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
@@ -66,6 +72,10 @@ const PlaygroundPrompts = ({
       defaultValue: null,
     },
   );
+
+  // A/B test: control shows empty message, test shows default message
+  // Get PostHog client to call feature flag directly in useEffect (only when needed)
+  const posthog = usePostHog();
 
   const handleAddPrompt = () => {
     const newPrompt = generateDefaultPrompt({
@@ -111,9 +121,44 @@ const PlaygroundPrompts = ({
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed
     if (promptCount === 0 && !isPendingProviderKeys) {
-      resetPlayground();
+      // A/B test: Only evaluate feature flag when actually creating a new playground
+      // This ensures PostHog is ONLY called for users who need a fresh playground,
+      // not for users loading existing state from storage. Those users wouldn't see
+      // the default message, skewing the results.
+      let showDefaultMessage = false;
+      try {
+        // PostHog may not be initialized (e.g., on-premise deployments without config)
+        // getFeatureFlag returns undefined if not initialized or flag doesn't exist
+        const variant = posthog.getFeatureFlag(
+          PLAYGROUND_DEFAULT_MESSAGE_FEATURE_FLAG,
+        );
+        showDefaultMessage = variant === "test";
+      } catch (error) {
+        // PostHog not initialized or error occurred - default to control (empty message)
+        // Silently fail to not break the user experience
+      }
+
+      const newPrompt = generateDefaultPrompt({
+        setupProviders: providerKeys,
+        lastPickedModel,
+        providerResolver: calculateModelProvider,
+        modelResolver: calculateDefaultModel,
+        initialMessageContent: showDefaultMessage
+          ? DEFAULT_MESSAGE_CONTENT
+          : undefined,
+      });
+      setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
     }
-  }, [promptCount, isPendingProviderKeys, resetPlayground]);
+  }, [
+    promptCount,
+    isPendingProviderKeys,
+    providerKeys,
+    lastPickedModel,
+    calculateModelProvider,
+    calculateDefaultModel,
+    setPromptMap,
+    posthog,
+  ]);
 
   return (
     <div className="flex h-full flex-col">
