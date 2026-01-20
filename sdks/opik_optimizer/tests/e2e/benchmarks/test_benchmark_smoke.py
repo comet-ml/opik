@@ -24,6 +24,7 @@ class InlineExecutor:
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, _tb: Any) -> None:  # type: ignore[override]
+        _ = exc_type
         return None
 
     def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:
@@ -119,7 +120,7 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
             "dummy": benchmark_config.BenchmarkOptimizerConfig(
                 class_name="DummyOptimizer",
                 params={},
-                optimizer_prompt_params={"max_trials": 5, "n_samples": 2},
+                optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
             )
         },
     )

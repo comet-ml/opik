@@ -4,8 +4,8 @@ import unittest.mock as mock
 
 import pytest
 
-from opik_optimizer.utils import dataset_utils
-from opik_optimizer.utils.dataset_utils import record_matches_filter_by
+from opik_optimizer.utils import dataset
+from opik_optimizer.utils.dataset import record_matches_filter_by
 
 
 def test_record_matches_filter_by_supports_common_predicates() -> None:
@@ -36,13 +36,13 @@ def test_load_hf_dataset_slice_appends_filter_suffix(
         return mock.Mock(name="dataset")
 
     monkeypatch.setattr(
-        dataset_utils, "fetch_records_for_slice", _fake_fetch_records_for_slice
+        dataset, "fetch_records_for_slice", _fake_fetch_records_for_slice
     )
     monkeypatch.setattr(
-        dataset_utils, "create_dataset_from_records", _fake_create_dataset_from_records
+        dataset, "create_dataset_from_records", _fake_create_dataset_from_records
     )
 
-    dataset_utils.load_hf_dataset_slice(
+    dataset.load_hf_dataset_slice(
         base_name="arc_agi2",
         requested_split="train",
         presets={

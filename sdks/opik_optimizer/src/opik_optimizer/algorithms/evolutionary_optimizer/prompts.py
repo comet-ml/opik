@@ -97,6 +97,19 @@ All generated prompts must aim for eliciting answers in the style: '{style}'.
 Return two child prompts as "child_1" and "child_2". Each child is a list of LLM messages with role ("system", "user", or "assistant") and content.
 """
 
+SEMANTIC_CROSSOVER_SYSTEM_PROMPT_TEMPLATE = """You are an expert at semantically blending prompts.
+Given two parent prompts, create two distinct children that combine their core instructions and constraints coherently.
+Prioritize semantic consistency over surface-level copying, and preserve the desired output style: '{style}'.
+
+Guidelines:
+- Identify key objectives, constraints, and structure in each parent.
+- Blend complementary elements to create meaningful variations.
+- Ensure both children are distinct from each other and from the parents.
+
+Return a JSON object with "child_1" and "child_2". Each child is a list of LLM messages
+with role ("system", "user", or "assistant") and content.
+"""
+
 LLM_CROSSOVER_USER_PROMPT_TEMPLATE = """Parent Prompt 1:
 '''{parent1_messages}'''
 
@@ -107,6 +120,18 @@ Desired output style from target LLM for children prompts: '{style}'
 
 Please generate TWO child prompts by intelligently blending the ideas, styles, or structures from these two parents, ensuring the children aim to elicit the desired output style.
 Follow the instructions provided in the system prompt regarding the JSON output format.
+"""
+
+SEMANTIC_CROSSOVER_USER_PROMPT_TEMPLATE = """Parent Prompt 1:
+'''{parent1_messages}'''
+
+Parent Prompt 2:
+'''{parent2_messages}'''
+
+Desired output style from target LLM for children prompts: '{style}'
+
+Please generate TWO semantically blended child prompts, preserving the desired output style.
+Follow the system prompt regarding the JSON output format.
 """
 
 RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer and a creative problem solver.

@@ -4,6 +4,8 @@ import copy
 import json
 import logging
 import random
+import sys
+import types
 
 from deap import creator as _creator
 
@@ -13,13 +15,83 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
-from .... import utils, _llm_calls
-from .. import reporting, helpers
+from ....core import llm_calls as _llm_calls
+from .. import helpers
+from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
+from ..types import MutationResponse
 
 
 logger = logging.getLogger(__name__)
 creator = _creator
+
+_reporting_module: Any = types.ModuleType(__name__ + ".reporting")
+_reporting_module.display_error = display_error
+_reporting_module.display_success = display_success
+sys.modules[_reporting_module.__name__] = _reporting_module
+reporting = _reporting_module
+
+
+def compute_adaptive_mutation_rate(
+    *,
+    current_rate: float,
+    best_fitness_history: list[float],
+    current_population: list[Any],
+    generations_without_improvement: int,
+    adaptive_mutation: bool,
+    restart_threshold: float,
+    restart_generations: int,
+    min_rate: float,
+    max_rate: float,
+    diversity_threshold: float,
+) -> tuple[float, int]:
+    if not adaptive_mutation or len(best_fitness_history) < 2:
+        return current_rate, generations_without_improvement
+
+    previous_best = best_fitness_history[-2]
+    recent_improvement = (
+        (best_fitness_history[-1] - previous_best) / abs(previous_best)
+        if previous_best != 0
+        else 0.0
+    )
+    current_diversity = helpers.calculate_population_diversity(current_population)
+
+    if recent_improvement < restart_threshold:
+        generations_without_improvement += 1
+    else:
+        generations_without_improvement = 0
+
+    base_rate = current_rate
+    diversity_bonus = 0.0
+    if current_diversity < diversity_threshold:
+        diversity_gap = diversity_threshold - current_diversity
+        diversity_bonus = diversity_gap * 0.5
+        logger.debug(
+            "Low diversity detected (%.3f), diversity_bonus=%.3f",
+            current_diversity,
+            diversity_bonus,
+        )
+
+    if generations_without_improvement >= restart_generations:
+        adjusted_rate = min(base_rate * 2.5 + diversity_bonus, max_rate)
+    elif recent_improvement < 0.01 and current_diversity < diversity_threshold:
+        adjusted_rate = min(base_rate * 2.0 + diversity_bonus, max_rate)
+    elif recent_improvement < 0.01:
+        adjusted_rate = min(base_rate * 1.5 + diversity_bonus * 0.5, max_rate)
+    elif recent_improvement > 0.05:
+        adjusted_rate = max(base_rate * 0.8 + diversity_bonus * 0.3, min_rate)
+    else:
+        adjusted_rate = min(base_rate + diversity_bonus, max_rate)
+
+    if adjusted_rate != base_rate:
+        logger.debug(
+            "Adaptive mutation: base=%.3f adjusted=%.3f diversity=%.3f",
+            base_rate,
+            adjusted_rate,
+            current_diversity,
+        )
+
+    return adjusted_rate, generations_without_improvement
 
 
 def _get_synonym(
@@ -291,20 +363,13 @@ def _semantic_mutation(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            response_model=MutationResponse,
             return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
 
         response_item = response[0] if isinstance(response, list) else response
         try:
-            if isinstance(response_item, list):
-                messages = response_item
-            elif isinstance(response_item, dict):
-                if "messages" in response_item:
-                    messages = response_item["messages"]
-                else:
-                    messages = [response_item]
-            else:
-                messages = utils.json_to_dict(response_item.strip())
+            messages = helpers.parse_llm_messages(response_item)
         except Exception as parse_exc:
             raise RuntimeError(
                 "Error parsing semantic mutation response as JSON. "
@@ -361,14 +426,18 @@ def _radical_innovation_mutation(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            response_model=MutationResponse,
             return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
         response_item = (
             new_prompt_str[0] if isinstance(new_prompt_str, list) else new_prompt_str
         )
-        logger.info(f"Radical innovation LLM result (truncated): {response_item[:200]}")
+        if isinstance(response_item, str):
+            logger.info(
+                "Radical innovation LLM result (truncated): %s", response_item[:200]
+            )
         try:
-            new_messages = utils.json_to_dict(response_item)
+            new_messages = helpers.parse_llm_messages(response_item)
         except Exception as parse_exc:
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."

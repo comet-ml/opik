@@ -19,7 +19,7 @@ from opik_optimizer.datasets.rag_hallucinations import RAG_HALLU_SPEC
 from opik_optimizer.datasets.ragbench import RAGBENCH_SPEC
 from opik_optimizer.datasets.tiny_test import TINY_TEST_SPEC
 from opik_optimizer.datasets.truthful_qa import TRUTHFUL_QA_SPEC
-from opik_optimizer.utils.dataset_utils import (
+from opik_optimizer.utils.dataset import (
     DatasetHandle,
     fetch_records_for_slice,
     resolve_dataset_seed,

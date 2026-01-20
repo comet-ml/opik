@@ -3,72 +3,51 @@ import json
 import pytest
 from pytest import MonkeyPatch
 
-from opik_optimizer.utils import (
-    format_prompt,
-    json_to_dict,
-    validate_prompt,
-    get_random_seed,
-    setup_logging,
-    get_optimization_run_url_by_id,
+from opik_optimizer.utils.helpers import json_to_dict
+from opik_optimizer.utils.display.format import format_prompt
+from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
+from opik_optimizer.utils.logging import setup_logging
+
+
+@pytest.mark.parametrize(
+    "prompt_template,kwargs,expected_result,should_raise",
+    [
+        ("Hello {name}!", {"name": "World"}, "Hello World!", None),
+        ("{greeting} {name}!", {"greeting": "Hi", "name": "World"}, "Hi World!", None),
+        ("{greeting} {name}!", {"greeting": "Hi"}, None, ValueError),
+    ],
 )
-
-
-def test_format_prompt() -> None:
+def test_format_prompt(
+    prompt_template: str,
+    kwargs: dict[str, str],
+    expected_result: str | None,
+    should_raise: type[Exception] | None,
+) -> None:
     """Test the format_prompt function."""
-    # Test basic formatting
-    prompt = "Hello {name}!"
-    result = format_prompt(prompt, name="World")
-    assert result == "Hello World!"
-
-    # Test with multiple variables
-    prompt = "{greeting} {name}!"
-    result = format_prompt(prompt, greeting="Hi", name="World")
-    assert result == "Hi World!"
-
-    # Test with missing variable
-    with pytest.raises(ValueError) as exc_info:
-        format_prompt(prompt, greeting="Hi")
-    assert "Missing required key in prompt: 'name'" in str(exc_info.value)
+    if should_raise:
+        with pytest.raises(should_raise) as exc_info:
+            format_prompt(prompt_template, **kwargs)
+        assert "Missing required key in prompt" in str(exc_info.value)
+    else:
+        result = format_prompt(prompt_template, **kwargs)
+        assert result == expected_result
 
 
-def test_validate_prompt() -> None:
-    # Test valid prompt
-    assert validate_prompt("Hello World!") is True
-
-    # Test empty prompt
-    assert validate_prompt("") is False
-
-    # Test prompt with only whitespace
-    assert validate_prompt("   ") is False
-
-    # Test prompt with newlines
-    assert validate_prompt("Hello\nWorld") is True
-
-
-def test_get_random_seed() -> None:
-    # Test that seed is an integer
-    seed = get_random_seed()
-    assert isinstance(seed, int)
-
-    # Test that seed is within reasonable range
-    assert 0 <= seed <= 2**32 - 1
-
-    # Test that seed is different on subsequent calls
-    seed1 = get_random_seed()
-    seed2 = get_random_seed()
-    assert seed1 != seed2
-
-
-def test_setup_logging() -> None:
-    # Test that setup_logging doesn't raise any errors
-    setup_logging()
-
-    # Test with custom log level
-    setup_logging(log_level="DEBUG")
-
-    # Test with invalid log level
-    with pytest.raises(ValueError):
-        setup_logging(log_level="INVALID")
+@pytest.mark.parametrize(
+    "level,should_raise",
+    [
+        ("INFO", False),
+        ("DEBUG", False),
+        ("INVALID", True),
+    ],
+)
+def test_setup_logging(level: str, should_raise: bool) -> None:
+    """Test setup_logging with different log levels."""
+    if should_raise:
+        with pytest.raises(ValueError):
+            setup_logging(level=level, force=True)
+    else:
+        setup_logging(level=level, force=True)
 
 
 def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
@@ -123,12 +102,16 @@ def test_json_to_dict_handles_python_literal(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Ensure python-style reprs are parsed via literal_eval fallback."""
+    # Clear any leftover output from previous tests (e.g., optimizer cleanup logging)
+    capsys.readouterr()
+
     payload = """[{'role': 'system', 'content': 'Do not forget to cite sources.'}]"""
 
     result = json_to_dict(payload)
 
     assert result == [{"role": "system", "content": "Do not forget to cite sources."}]
 
+    # Check that json_to_dict didn't produce any output
     captured = capsys.readouterr()
     assert captured.out == ""
 
@@ -152,123 +135,33 @@ def test_json_to_dict_handles_code_block_without_json_tag() -> None:
     assert result == [{"role": "user", "content": "Test"}]
 
 
-class TestOptimizationContextManager:
-    """Tests for OptimizationContextManager class."""
-
-    def test_context_manager_creates_optimization(
-        self, monkeypatch: MonkeyPatch
-    ) -> None:
-        """Should create optimization on enter."""
-        from opik_optimizer.utils.core import OptimizationContextManager
-        from unittest.mock import MagicMock
-
-        mock_client = MagicMock()
-        mock_optimization = MagicMock()
-        mock_optimization.id = "opt-123"
-        mock_client.create_optimization.return_value = mock_optimization
-
-        ctx = OptimizationContextManager(
-            client=mock_client,
-            dataset_name="test-dataset",
-            objective_name="accuracy",
-        )
-
-        with ctx as opt:
-            assert opt is mock_optimization
-            mock_client.create_optimization.assert_called_once()
-
-    def test_context_manager_handles_exception_on_enter(
-        self, monkeypatch: MonkeyPatch
-    ) -> None:
-        """Should return None if optimization creation fails."""
-        from opik_optimizer.utils.core import OptimizationContextManager
-        from unittest.mock import MagicMock
-
-        mock_client = MagicMock()
-        mock_client.create_optimization.side_effect = Exception("Server error")
-
-        ctx = OptimizationContextManager(
-            client=mock_client,
-            dataset_name="test-dataset",
-            objective_name="accuracy",
-        )
-
-        with ctx as opt:
-            assert opt is None
-
-    def test_context_manager_marks_completed_on_success(
-        self, monkeypatch: MonkeyPatch
-    ) -> None:
-        """Should mark optimization as completed on normal exit."""
-        from opik_optimizer.utils.core import OptimizationContextManager
-        from unittest.mock import MagicMock
-
-        mock_client = MagicMock()
-        mock_optimization = MagicMock()
-        mock_client.create_optimization.return_value = mock_optimization
-
-        ctx = OptimizationContextManager(
-            client=mock_client,
-            dataset_name="test-dataset",
-            objective_name="accuracy",
-        )
-
-        with ctx:
-            pass
-
-        mock_optimization.update.assert_called_with(status="completed")
-
-    def test_context_manager_marks_cancelled_on_error(
-        self, monkeypatch: MonkeyPatch
-    ) -> None:
-        """Should mark optimization as cancelled on exception."""
-        from opik_optimizer.utils.core import OptimizationContextManager
-        from unittest.mock import MagicMock
-
-        mock_client = MagicMock()
-        mock_optimization = MagicMock()
-        mock_client.create_optimization.return_value = mock_optimization
-
-        ctx = OptimizationContextManager(
-            client=mock_client,
-            dataset_name="test-dataset",
-            objective_name="accuracy",
-        )
-
-        with pytest.raises(ValueError):
-            with ctx:
-                raise ValueError("Test error")
-
-        mock_optimization.update.assert_called_with(status="cancelled")
-
-
 class TestConvertLiteralsToJsonCompatible:
     """Tests for _convert_literals_to_json_compatible function."""
 
     def test_converts_dict(self) -> None:
         """Should recursively convert dicts."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible({"key": "value"})
         assert result == {"key": "value"}
 
     def test_converts_list(self) -> None:
         """Should recursively convert lists."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible([1, 2, 3])
         assert result == [1, 2, 3]
 
     def test_converts_tuple_to_list(self) -> None:
         """Should convert tuples to lists."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible((1, 2, 3))
         assert result == [1, 2, 3]
 
     def test_converts_set_to_sorted_list(self) -> None:
         """Should convert sets to sorted lists."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         result = _convert_literals_to_json_compatible({3, 1, 2})
         # Set conversion sorts by repr
@@ -277,7 +170,7 @@ class TestConvertLiteralsToJsonCompatible:
 
     def test_passes_through_primitives(self) -> None:
         """Should pass through primitive types."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         assert _convert_literals_to_json_compatible("string") == "string"
         assert _convert_literals_to_json_compatible(42) == 42
@@ -287,7 +180,7 @@ class TestConvertLiteralsToJsonCompatible:
 
     def test_converts_unknown_to_string(self) -> None:
         """Should convert unknown types to string."""
-        from opik_optimizer.utils.core import _convert_literals_to_json_compatible
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
 
         class CustomClass:
             def __str__(self) -> str:
@@ -298,145 +191,22 @@ class TestConvertLiteralsToJsonCompatible:
 
 
 class TestFunctionToToolDefinition:
-    """Tests for function_to_tool_definition function."""
-
-    def test_creates_tool_definition(self) -> None:
-        """Should create valid tool definition from function."""
-        from opik_optimizer.utils.core import function_to_tool_definition
-
-        def sample_func(query: str, limit: int = 10) -> str:
-            """Search for items."""
-            return f"{query}:{limit}"
-
-        result = function_to_tool_definition(sample_func)
-
-        assert result["type"] == "function"
-        assert result["function"]["name"] == "sample_func"
-        assert "Search for items" in result["function"]["description"]
-        assert "query" in result["function"]["parameters"]["properties"]
-        assert "query" in result["function"]["parameters"]["required"]
-        assert "limit" not in result["function"]["parameters"]["required"]
-
-    def test_uses_custom_description(self) -> None:
-        """Should use custom description if provided."""
-        from opik_optimizer.utils.core import function_to_tool_definition
-
-        def func() -> None:
-            """Original doc."""
-            pass
-
-        result = function_to_tool_definition(func, description="Custom description")
-        assert result["function"]["description"] == "Custom description"
-
-    def test_handles_no_docstring(self) -> None:
-        """Should handle functions without docstrings."""
-        from opik_optimizer.utils.core import function_to_tool_definition
-
-        def func_no_doc() -> None:
-            pass
-
-        result = function_to_tool_definition(func_no_doc)
-        assert result["function"]["description"] == ""
-
-
-class TestPythonTypeToJsonType:
-    """Tests for python_type_to_json_type function."""
-
-    def test_maps_str_to_string(self) -> None:
-        """Should map str to string."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        assert python_type_to_json_type(str) == "string"
-
-    def test_maps_int_to_integer(self) -> None:
-        """Should map int to integer."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        assert python_type_to_json_type(int) == "integer"
-
-    def test_maps_float_to_number(self) -> None:
-        """Should map float to number."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        assert python_type_to_json_type(float) == "number"
-
-    def test_maps_bool_to_boolean(self) -> None:
-        """Should map bool to boolean."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        assert python_type_to_json_type(bool) == "boolean"
-
-    def test_maps_dict_to_object(self) -> None:
-        """Should map dict to object."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        assert python_type_to_json_type(dict) == "object"
-
-    def test_maps_list_to_array(self) -> None:
-        """Should map list to array."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        assert python_type_to_json_type(list) == "array"
-
-    def test_defaults_to_string_for_unknown(self) -> None:
-        """Should default to string for unknown types."""
-        from opik_optimizer.utils.core import python_type_to_json_type
-
-        class CustomType:
-            pass
-
-        assert python_type_to_json_type(CustomType) == "string"
-
-
-class TestDeprecationWarnings:
-    """Tests for deprecation warnings in __getattr__."""
-
-    def test_search_wikipedia_deprecation_warning(self) -> None:
-        """Should emit deprecation warning for search_wikipedia."""
-        import warnings
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            try:
-                from opik_optimizer.utils import core
-
-                _ = core.search_wikipedia  # noqa: F841
-            except AttributeError:
-                pass  # May not be available
-
-            # Check if deprecation warning was raised
-            # If the function exists, a warning should be raised
-            # If not, AttributeError is expected
-            assert (
-                any(issubclass(warning.category, DeprecationWarning) for warning in w)
-                or True
-            )  # Pass if function doesn't exist
-
-    def test_raises_attribute_error_for_unknown(self) -> None:
-        """Should raise AttributeError for unknown attributes."""
-        from opik_optimizer.utils import core
-
-        with pytest.raises(AttributeError, match="has no attribute"):
-            _ = core.nonexistent_function  # noqa: F841
+    """Legacy function_to_tool_definition tests removed with deprecated API."""
 
 
 class TestEnsureEndingSlash:
     """Tests for ensure_ending_slash function."""
 
-    def test_adds_slash_when_missing(self) -> None:
-        """Should add trailing slash when missing."""
-        from opik_optimizer.utils.core import ensure_ending_slash
+    @pytest.mark.parametrize(
+        "input_url,expected",
+        [
+            ("http://example.com", "http://example.com/"),
+            ("http://example.com/", "http://example.com/"),
+            ("http://example.com///", "http://example.com/"),
+        ],
+    )
+    def test_ensure_ending_slash(self, input_url: str, expected: str) -> None:
+        """Should ensure exactly one trailing slash."""
+        from opik_optimizer.utils.reporting import ensure_ending_slash
 
-        assert ensure_ending_slash("http://example.com") == "http://example.com/"
-
-    def test_does_not_duplicate_slash(self) -> None:
-        """Should not duplicate trailing slash."""
-        from opik_optimizer.utils.core import ensure_ending_slash
-
-        assert ensure_ending_slash("http://example.com/") == "http://example.com/"
-
-    def test_handles_multiple_trailing_slashes(self) -> None:
-        """Should handle multiple trailing slashes."""
-        from opik_optimizer.utils.core import ensure_ending_slash
-
-        assert ensure_ending_slash("http://example.com///") == "http://example.com/"
+        assert ensure_ending_slash(input_url) == expected

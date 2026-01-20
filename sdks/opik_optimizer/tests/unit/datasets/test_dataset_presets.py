@@ -5,7 +5,7 @@ import unittest.mock as mock
 import pytest
 
 import opik_optimizer.datasets as dataset_module
-from opik_optimizer.utils import dataset_utils
+from opik_optimizer.utils import dataset as dataset_utils
 
 
 CURATED_DATASETS = [
@@ -18,7 +18,7 @@ CURATED_DATASETS = [
     ("medhallu", "train", 150),
     ("rag_hallucinations", "train", 150),
     ("tiny_test", "train", 5),
-    ("halu_eval_300", "train", 150),
+    ("halu_eval", "train", 150),
     ("arc_agi2", "train", 200),
 ]
 

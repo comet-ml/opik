@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
 import random
 
@@ -10,28 +9,22 @@ import logging
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 from opik import Dataset
 
-from ... import helpers, task_evaluator
+from ... import helpers
+from ...core.state import prepare_experiment_config
+from ...base_optimizer import _OPTIMIZER_VERSION
+from ...core import evaluation as task_evaluator
+from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+from .types import OpikDataInst
+
+if TYPE_CHECKING:
+    from ...core.state import OptimizationContext
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class OpikDataInst:
-    """Data instance handed to GEPA.
-
-    We keep the original Opik dataset item so metrics and prompt formatting can use it
-    directly without duplicated bookkeeping.
-    """
-
-    input_text: str
-    answer: str
-    additional_context: dict[str, str]
-    opik_item: dict[str, Any]
 
 
 class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]):
@@ -46,6 +39,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         base_prompts: dict[str, chat_prompt.ChatPrompt],
         agent: OptimizableAgent,
         optimizer: Any,
+        context: OptimizationContext,
         metric: MetricFunction,
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
@@ -54,6 +48,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._base_prompts = base_prompts
         self._agent = agent
         self._optimizer = optimizer
+        self._context = context
         self._metric = metric
         self._dataset = dataset
         self._validation_dataset = validation_dataset
@@ -108,6 +103,48 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
             ]
         return [str(c).strip() for c in candidates if c is not None and str(c).strip()]
+
+    def _record_adapter_metric_call(self) -> None:
+        """Increment adapter metric counters while tolerating missing attributes."""
+        try:
+            self._optimizer._adapter_metric_calls += 1
+        except Exception:
+            pass
+
+    def _record_and_post_candidate(
+        self,
+        *,
+        prompt_variants: dict[str, chat_prompt.ChatPrompt],
+        score: float,
+        candidate_id: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        """Record adapter metric call and post candidate/round to history."""
+        self._record_adapter_metric_call()
+        merged_extra = {"score_label": "per_item"}
+        if extra:
+            merged_extra.update(extra)
+        merged_metrics = dict(metrics or {})
+        merged_metrics.setdefault("per_item_score", score)
+        round_handle = self._optimizer.pre_round(self._context)
+        runtime.record_and_post_trial(
+            optimizer=self._optimizer,
+            context=self._context,
+            prompt_or_payload=prompt_variants,
+            score=None,
+            candidate_id=candidate_id,
+            metrics=merged_metrics,
+            extra=merged_extra,
+            round_handle=round_handle,
+        )
+        self._optimizer.post_round(
+            round_handle,
+            context=self._context,
+            best_score=None,
+            best_prompt=prompt_variants,
+            extras={"score_label": "per_item"},
+        )
 
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
@@ -168,12 +205,20 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
             }
         )
-        experiment_config = self._optimizer._prepare_experiment_config(
+        experiment_config = prepare_experiment_config(
+            optimizer=self._optimizer,
             prompt=prompt_variants,
             dataset=target_dataset,
             metric=self._metric,
             experiment_config=self._experiment_config,
             configuration_updates=configuration_updates,
+            additional_metadata=None,
+            validation_dataset=None,
+            is_single_prompt_optimization=isinstance(
+                prompt_variants, chat_prompt.ChatPrompt
+            ),
+            agent=None,
+            build_optimizer_version=_OPTIMIZER_VERSION,
         )
         project_name = experiment_config.get("project_name") or getattr(
             self._optimizer, "project_name", None
@@ -181,6 +226,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         def _local_evaluation() -> EvaluationBatch[dict[str, Any], dict[str, Any]]:
             """Fallback to direct evaluation without task_evaluator."""
+            # TODO(opik_optimizer/#gepa-adapter): Remove this local scoring path once GEPA provides a native Opik adapter.
             outputs: list[dict[str, Any]] = []
             scores: list[float] = []
             trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
@@ -220,10 +266,13 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
                 outputs.append({"output": raw_output})
                 scores.append(score)
-                try:
-                    self._optimizer._gepa_live_metric_calls += 1
-                except Exception:
-                    pass
+                self._record_and_post_candidate(
+                    prompt_variants=prompt_variants,
+                    score=score,
+                    metrics={"adapter_metric": score},
+                )
+                if self._context.should_stop:
+                    break
 
                 if trajectories is not None:
                     trajectories.append(
@@ -249,6 +298,8 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             # Choose the best candidate output before passing into Opik evaluation.
             candidates = self._collect_candidates(prompt_variants, dataset_item)
+            if not candidates:
+                raise RuntimeError("No candidates produced by agent")
 
             best_output = candidates[0]
             best_score = float("-inf")
@@ -330,10 +381,15 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             outputs.append({"output": output_text})
             scores.append(score_value)
-            try:
-                self._optimizer._gepa_live_metric_calls += 1
-            except Exception:
-                pass
+            self._record_and_post_candidate(
+                prompt_variants=prompt_variants,
+                score=score_value,
+                candidate_id=candidate.get("id"),
+                metrics={self._metric_name: score_value, "opik_score": score_value},
+                extra={"output": output_text, "candidate": candidate},
+            )
+            if self._context.should_stop:
+                break
 
             if trajectories is not None:
                 trajectories.append(

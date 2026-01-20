@@ -14,13 +14,23 @@ Usage:
     and its subdirectories via pytest's conftest.py discovery mechanism.
 """
 
-import pytest
 import logging
+import os
 from unittest.mock import MagicMock
 from typing import Any
 
-from opik import Dataset
+import pytest
+from opik_optimizer.constants import OPIK_OPTIMIZER_NO_BANNER_ENV
+
+os.environ.setdefault(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
+
 from opik_optimizer import ChatPrompt
+from tests.unit.fixtures.builders import make_mock_dataset
+
+
+@pytest.fixture(autouse=True)
+def _disable_display_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
 
 
 # ============================================================
@@ -34,7 +44,7 @@ def mock_llm_call(monkeypatch: pytest.MonkeyPatch):
     Factory fixture for mocking synchronous LLM calls.
 
     This is the most commonly used mock in the test suite. It intercepts
-    calls to `opik_optimizer._llm_calls.call_model()` and returns the
+    calls to `opik_optimizer.core.llm_calls.call_model()` and returns the
     configured response.
 
     Usage:
@@ -71,7 +81,7 @@ def mock_llm_call(monkeypatch: pytest.MonkeyPatch):
                 return side_effect(**kwargs)
             return response
 
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
         fake_call_model.calls = captured_calls  # type: ignore[attr-defined]
         return fake_call_model
 
@@ -84,7 +94,7 @@ def mock_llm_call_async(monkeypatch: pytest.MonkeyPatch):
     Factory fixture for mocking asynchronous LLM calls.
 
     Similar to mock_llm_call but for async contexts. Intercepts calls to
-    `opik_optimizer._llm_calls.call_model_async()`.
+    `opik_optimizer.core.llm_calls.call_model_async()`.
 
     Usage:
         async def test_something(mock_llm_call_async):
@@ -115,7 +125,7 @@ def mock_llm_call_async(monkeypatch: pytest.MonkeyPatch):
             return response
 
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model_async", fake_call_model_async
+            "opik_optimizer.core.llm_calls.call_model_async", fake_call_model_async
         )
         fake_call_model_async.calls = captured_calls  # type: ignore[attr-defined]
         return fake_call_model_async
@@ -159,7 +169,7 @@ def mock_llm_sequence(monkeypatch: pytest.MonkeyPatch):
                 raise result
             return result
 
-        monkeypatch.setattr("opik_optimizer._llm_calls.call_model", fake_call_model)
+        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
         call_count["calls"] = captured_calls
         return call_count
 
@@ -196,7 +206,7 @@ def mock_llm_sequence_async(monkeypatch: pytest.MonkeyPatch):
             return result
 
         monkeypatch.setattr(
-            "opik_optimizer._llm_calls.call_model_async", fake_call_model_async
+            "opik_optimizer.core.llm_calls.call_model_async", fake_call_model_async
         )
         call_count["calls"] = captured_calls
         return call_count
@@ -289,18 +299,7 @@ def mock_dataset():
         name: str = "test-dataset",
         dataset_id: str = "dataset-123",
     ):
-        mock = MagicMock(spec=Dataset)
-        mock.name = name
-        mock.id = dataset_id
-
-        # Handle both get_items() and get_items(nb_samples=N)
-        def get_items_impl(nb_samples: int | None = None):
-            if nb_samples is not None:
-                return items[:nb_samples]
-            return items
-
-        mock.get_items = MagicMock(side_effect=get_items_impl)
-        return mock
+        return make_mock_dataset(items, name=name, dataset_id=dataset_id)
 
     return _create
 
@@ -334,9 +333,11 @@ def disable_rate_limiting(monkeypatch: pytest.MonkeyPatch):
     def passthrough_factory():
         return passthrough_decorator
 
-    monkeypatch.setattr("opik_optimizer._throttle.rate_limited", passthrough_factory)
     monkeypatch.setattr(
-        "opik_optimizer._throttle.rate_limited_async", passthrough_factory
+        "opik_optimizer.utils.throttle.rate_limited", passthrough_factory
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.utils.throttle.rate_limited_async", passthrough_factory
     )
 
 
@@ -750,7 +751,7 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch):
     """
     Mock the task evaluator to return configurable scores.
 
-    This fixture mocks `opik_optimizer.task_evaluator.evaluate` to return
+    This fixture mocks `opik_optimizer.core.evaluation.evaluate` to return
     predictable scores without running actual evaluations.
 
     Usage:
@@ -834,7 +835,7 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch):
 
             return current_score
 
-        monkeypatch.setattr("opik_optimizer.task_evaluator.evaluate", fake_evaluate)
+        monkeypatch.setattr("opik_optimizer.core.evaluation.evaluate", fake_evaluate)
 
         class Evaluator:
             pass

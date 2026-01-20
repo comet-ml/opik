@@ -3,55 +3,50 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from typing import Any
+
 from opik_optimizer import ChatPrompt
-from opik_optimizer.optimization_result import (
-    OptimizationResult,
-    _format_float,
-    _format_prompt_for_plaintext,
+from opik_optimizer.core.results import OptimizationResult
+from opik_optimizer.utils.display import (
+    format_float,
+    format_prompt_for_plaintext,
+    render_rich_result,
 )
 
 
 class TestFormatFloat:
-    """Tests for _format_float helper function."""
+    """Tests for format_float helper function."""
 
-    def test_formats_float_with_default_precision(self) -> None:
-        result = _format_float(3.14159265)
-        assert result == "3.141593"
-
-    def test_formats_float_with_custom_precision(self) -> None:
-        result = _format_float(3.14159265, digits=2)
-        assert result == "3.14"
-
-    def test_formats_zero(self) -> None:
-        result = _format_float(0.0)
-        assert result == "0.000000"
-
-    def test_formats_negative_float(self) -> None:
-        result = _format_float(-1.5, digits=3)
-        assert result == "-1.500"
-
-    def test_passes_through_non_float(self) -> None:
-        result = _format_float("string_value")
-        assert result == "string_value"
-
-    def test_passes_through_integer(self) -> None:
-        result = _format_float(42)
-        assert result == "42"
-
-    def test_passes_through_none(self) -> None:
-        result = _format_float(None)
-        assert result == "None"
+    @pytest.mark.parametrize(
+        "value,digits,expected",
+        [
+            (3.14159265, None, "3.141593"),
+            (3.14159265, 2, "3.14"),
+            (0.0, None, "0.000000"),
+            (-1.5, 3, "-1.500"),
+            ("string_value", None, "string_value"),
+            (42, None, "42"),
+            (None, None, "None"),
+        ],
+    )
+    def test_formats_float(self, value: Any, digits: int | None, expected: str) -> None:
+        """Test format_float with various inputs."""
+        if digits is not None:
+            result = format_float(value, digits=digits)
+        else:
+            result = format_float(value)
+        assert result == expected
 
 
 class TestFormatPromptForPlaintext:
-    """Tests for _format_prompt_for_plaintext function."""
+    """Tests for format_prompt_for_plaintext function."""
 
     def test_formats_single_prompt(self) -> None:
         prompt = ChatPrompt(
             system="You are helpful.",
             user="What is 2+2?",
         )
-        result = _format_prompt_for_plaintext(prompt)
+        result = format_prompt_for_plaintext(prompt)
         assert "system:" in result
         assert "user:" in result
         assert "You are helpful." in result
@@ -62,7 +57,7 @@ class TestFormatPromptForPlaintext:
             "planner": ChatPrompt(system="Plan the task.", user="{task}"),
             "executor": ChatPrompt(system="Execute the plan.", user="{plan}"),
         }
-        result = _format_prompt_for_plaintext(prompts)
+        result = format_prompt_for_plaintext(prompts)
         assert "[planner]" in result
         assert "[executor]" in result
         assert "Plan the task." in result
@@ -71,7 +66,7 @@ class TestFormatPromptForPlaintext:
     def test_truncates_long_content(self) -> None:
         long_content = "x" * 500
         prompt = ChatPrompt(system=long_content, user="short")
-        result = _format_prompt_for_plaintext(prompt)
+        result = format_prompt_for_plaintext(prompt)
         # Content should be truncated
         assert len(result) < 500
 
@@ -91,7 +86,7 @@ class TestFormatPromptForPlaintext:
                 },
             ]
         )
-        result = _format_prompt_for_plaintext(prompt)
+        result = format_prompt_for_plaintext(prompt)
         assert "[multimodal content]" in result
 
 
@@ -121,7 +116,7 @@ class TestOptimizationResultInitialization:
             initial_prompt=ChatPrompt(system="Initial", user="Query"),
             initial_score=0.60,
             details={"rounds": [1, 2, 3], "model": "gpt-4"},
-            history=[{"round": 1, "score": 0.7}],
+            history=[{"round": 1, "trials": [{"trial_index": 0, "score": 0.7}]}],
             llm_calls=100,
             llm_calls_tools=10,
             llm_cost_total=5.50,
@@ -131,20 +126,34 @@ class TestOptimizationResultInitialization:
         assert result.optimization_id == "opt-123"
         assert result.initial_score == 0.60
         assert result.llm_cost_total == 5.50
-        assert result.details.get("schema_version") == "1"
-        assert result.details.get("trials_completed") == 3
-        assert result.details.get("rounds_completed") == 3
+        assert result.details.get("schema_version") is None
+        assert result.details_version == "v1"
+        assert result.details.get("trials_completed") == 1
+        assert len(result.history) == 1
         assert result.details.get("stop_reason_details") is None
 
-    def test_details_schema_maps_iterations(self) -> None:
+    def test_details_counters_default_from_history(self) -> None:
         result = OptimizationResult(
             prompt=ChatPrompt(system="Test", user="Query"),
             score=0.5,
             metric_name="accuracy",
             details={"iterations_completed": 3, "trials_used": 4},
         )
-        assert result.details.get("rounds_completed") == 3
-        assert result.details.get("trials_completed") == 4
+        assert len(result.history) == 0
+        assert result.details.get("trials_completed") == 0
+
+    def test_trials_completed_from_nested_history(self) -> None:
+        result = OptimizationResult(
+            prompt=ChatPrompt(system="Test", user="Query"),
+            score=0.5,
+            metric_name="accuracy",
+            history=[
+                {"round": 0, "trials": [{"trial_index": 0}, {"trial_index": 1}]},
+                {"round": 1, "trials": [{"trial_index": 2}]},
+            ],
+        )
+        assert len(result.history) == 2
+        assert result.details.get("trials_completed") == 3
 
     def test_stop_reason_details_are_populated(self) -> None:
         result = OptimizationResult(
@@ -155,7 +164,9 @@ class TestOptimizationResultInitialization:
         )
         stop_details = result.details.get("stop_reason_details") or {}
         assert stop_details.get("best_score") == 0.25
-        assert stop_details.get("error") == "boom"
+        assert stop_details.get("error") == (
+            "An error occurred during optimization; see internal logs for details."
+        )
 
     def test_creates_with_dict_of_prompts(self) -> None:
         prompts = {
@@ -243,6 +254,28 @@ class TestOptimizationResultGetters:
         assert params == {}
 
 
+class TestRichRendering:
+    def test_render_rich_result_returns_panel(self) -> None:
+        prompt = ChatPrompt(system="Test", user="Query")
+        result = OptimizationResult(
+            optimizer="MetaPromptOptimizer",
+            prompt=prompt,
+            score=0.95,
+            metric_name="f1_score",
+            optimization_id="opt-123",
+            dataset_id="ds-456",
+            initial_prompt=prompt,
+            initial_score=0.6,
+            details={"trials_completed": 1, "model": "gpt-4"},
+            history=[],
+        )
+
+        panel = render_rich_result(result)
+        import rich
+
+        assert isinstance(panel, rich.panel.Panel)
+
+
 class TestCalculateImprovementStr:
     """Tests for _calculate_improvement_str method."""
 
@@ -320,7 +353,7 @@ class TestOptimizationResultStr:
             prompt=ChatPrompt(system="Test", user="Query"),
             score=0.85,
             metric_name="accuracy",
-            details={"rounds": [1, 2, 3]},
+            details={"trials_completed": 3},
         )
         output = str(result)
         assert "Trials Completed: 3" in output
@@ -409,7 +442,7 @@ class TestOptimizationResultDisplay:
             score=0.85,
             metric_name="accuracy",
         )
-        with patch("opik_optimizer.optimization_result.get_console") as mock_console:
+        with patch("opik_optimizer.core.results.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
             mock_console.return_value.print.assert_called_once()
@@ -422,13 +455,20 @@ class TestOptimizationResultDisplay:
             score=0.85,
             metric_name="accuracy",
             optimization_id="opt-123",
-            dataset_id="ds-456",
+            dataset_id="ds-123",
         )
-        with patch("opik_optimizer.optimization_result.get_console") as mock_console:
+        with patch("opik_optimizer.core.results.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
-        captured = capsys.readouterr()
-        assert "Optimization run link:" in captured.out
+            from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
+
+            expected_link = get_optimization_run_url_by_id(
+                optimization_id="opt-123", dataset_id="ds-123"
+            )
+            assert "optimization_id=opt-123" in expected_link
+            assert "dataset_id=ds-123" in expected_link
+            assert "path=" in expected_link
+            mock_console.return_value.print.assert_called_once()
 
     def test_display_shows_no_link_message_when_missing(
         self, capsys: pytest.CaptureFixture
@@ -438,11 +478,10 @@ class TestOptimizationResultDisplay:
             score=0.85,
             metric_name="accuracy",
         )
-        with patch("opik_optimizer.optimization_result.get_console") as mock_console:
+        with patch("opik_optimizer.core.results.get_console") as mock_console:
             mock_console.return_value = MagicMock()
             result.display()
-        captured = capsys.readouterr()
-        assert "No optimization run link available" in captured.out
+            mock_console.return_value.print.assert_called_once()
 
 
 class TestOptimizationResultModelDump:

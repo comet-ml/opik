@@ -1,4 +1,4 @@
-from typing import Any, Literal, Protocol, Union
+from typing import Any, Literal, Protocol, Union, TypedDict
 from collections.abc import Callable
 
 import pydantic
@@ -176,3 +176,50 @@ class DatasetSpec(pydantic.BaseModel):
     records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = (
         None
     )
+
+
+class TrialEntry(TypedDict, total=False):
+    trial_index: int | None
+    score: float | None
+    candidate: Any
+    metrics: dict[str, Any] | None
+    dataset: str | None
+    dataset_split: str | None
+    extra: dict[str, Any] | None
+    timestamp: str
+    candidate_id: str | None
+
+
+class RoundEntry(TypedDict, total=False):
+    round_index: int
+    trials: list[TrialEntry]
+    best_score: float | None
+    best_prompt: Any
+    best_candidate: Any
+    best_so_far: float | None
+    candidates: list[dict[str, Any]]
+    generated_prompts: list[dict[str, Any]]
+    stop_reason: str | None
+    stopped: bool
+    extra: dict[str, Any]
+    timestamp: str
+    trials_completed: int
+
+
+class OptimizationDetails(TypedDict, total=False):
+    schema_version: str
+    details_version: str
+    initial_score: float
+    model: str
+    temperature: float
+    trials_completed: int
+    rounds_completed: int
+    finish_reason: str
+    stop_reason: str
+    stopped_early: bool
+    stop_reason_details: dict[str, Any]
+    error: Any
+    perfect_score: float
+    skip_perfect_score: bool
+    n_trials: int
+    custom_field: Any

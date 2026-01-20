@@ -8,13 +8,15 @@ from utils.metrics import answer_correctness_score
 
 
 # Load dataset
-dataset = hotpot(count=300)
+dataset = hotpot(split="train", count=50)
+validation_dataset = hotpot(split="validation", count=25)
 
 # Define initial prompt
-system_prompt = """Answer the question with a direct, accurate response.
-You have access to a Wikipedia search tool - use it to find relevant information before answering.
-Provide concise answers based on the search results."""
-
+system_prompt = (
+    "Answer the question with a direct, accurate response."
+    + " You have access to a Wikipedia search tool, use it to find relevant information before answering."
+    + " Provide concise answers based on the search results."
+)
 
 prompt = ChatPrompt(
     system=system_prompt,
@@ -61,6 +63,7 @@ optimizer = MetaPromptOptimizer(
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
+    validation_dataset=validation_dataset,
     metric=optimization_metric,
     max_trials=5,
     n_samples=10,

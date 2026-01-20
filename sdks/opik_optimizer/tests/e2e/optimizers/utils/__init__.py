@@ -22,6 +22,11 @@ from .assertions import (
     assert_multimodal_structure_preserved,
     assert_multi_prompt_changed,
 )
+from .config import (
+    create_optimizer_config,
+    get_parameter_space,
+    levenshtein_metric,
+)
 
 __all__ = [
     # Mock tools
@@ -38,4 +43,8 @@ __all__ = [
     "assert_prompt_changed",
     "assert_multimodal_structure_preserved",
     "assert_multi_prompt_changed",
+    # Config helpers
+    "create_optimizer_config",
+    "get_parameter_space",
+    "levenshtein_metric",
 ]

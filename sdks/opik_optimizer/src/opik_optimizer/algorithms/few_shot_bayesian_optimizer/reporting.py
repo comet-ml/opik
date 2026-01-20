@@ -1,6 +1,5 @@
-from contextlib import contextmanager
 from io import StringIO
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from rich.panel import Panel
 from rich.text import Text
@@ -8,60 +7,13 @@ from rich.text import Text
 if TYPE_CHECKING:
     from ...api_objects.chat_prompt import ChatPrompt
 
-from ...reporting_utils import (  # noqa: F401
-    convert_tqdm_to_rich,
-    display_configuration,
-    display_header,
+from ...utils.display import (
+    DEFAULT_PANEL_WIDTH,
     display_messages,
-    display_result,
-    get_console,
-    suppress_opik_logs,
+    display_text_block,
 )
-
-PANEL_WIDTH = 70
-console = get_console()
-
-
-@contextmanager
-def display_evaluation(
-    message: str = "First we will establish the baseline performance:",
-    verbose: int = 1,
-    selection_summary: str | None = None,
-) -> Any:
-    """Context manager to display messages during an evaluation phase."""
-    score = None
-
-    # Entry point
-    if verbose >= 1:
-        console.print(Text(f"> {message}"))
-        if selection_summary:
-            console.print(
-                Text(f"  Evaluation settings: {selection_summary}", style="dim")
-            )
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def set_score(self, s: float) -> None:
-            nonlocal score
-            score = s
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich(verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                if verbose >= 1:
-                    if score is not None:
-                        console.print(
-                            Text(
-                                f"\r  Baseline score was: {score:.4f}.\n", style="green"
-                            )
-                        )
-                    else:
-                        console.print(
-                            Text("\r  Baseline score was: None\n", style="red")
-                        )
+from ...utils.display.format import format_score_progress
+from ...utils.reporting import get_console
 
 
 def display_few_shot_prompt_template(
@@ -74,27 +26,27 @@ def display_few_shot_prompt_template(
     if verbose < 1:
         return
 
-    console.print(
-        Text("> Let's add a placeholder for few-shot examples in the messages:")
+    display_text_block(
+        "> Let's add a placeholder for few-shot examples in the messages:"
     )
-    console.print(Text("│    Created the prompt template:\n│", style="dim yellow"))
+    display_text_block("│    Created the prompt template:\n│", style="dim yellow")
 
     # Display all prompts with placeholders
     for name, prompt in prompts_with_placeholder.items():
-        console.print(Text(f"│    {name}:"))
+        display_text_block(f"│    {name}:")
         display_messages(prompt.get_messages(), prefix="│    ")
-        console.print(Text("│"))
+        display_text_block("│")
 
-    console.print(Text(f"│\n│   With the {placeholder} following the format:"))
+    display_text_block(f"│\n│   With the {placeholder} following the format:")
 
     panel = Panel(
         Text(fewshot_template),
-        width=PANEL_WIDTH,
+        width=DEFAULT_PANEL_WIDTH,
         border_style="dim",
     )
     # Use a temporary buffer to render the panel
     buffer = StringIO()
-    temp_console = get_console(file=buffer, width=console.width)
+    temp_console = get_console(file=buffer, width=get_console().width)
     temp_console.print(panel)
 
     # Add prefix to each line
@@ -102,15 +54,15 @@ def display_few_shot_prompt_template(
     prefixed = "\n".join(f"│    {line}" for line in panel_output.splitlines())
 
     # Print the final result
-    console.print(Text(prefixed))
-    console.print()
+    display_text_block(prefixed)
+    display_text_block("")
 
 
 def start_optimization_run(verbose: int = 1) -> None:
     """Start the optimization run"""
     if verbose >= 1:
-        console.print(Text("\n> Starting the optimization run"))
-        console.print(Text("│"))
+        display_text_block("\n> Starting the optimization run")
+        display_text_block("│")
 
 
 def display_trial_start(
@@ -124,16 +76,12 @@ def display_trial_start(
     if verbose < 1:
         return
 
-    console.print(
-        Text(f"│ - Starting optimization round {trial_number + 1} of {total_trials}")
-    )
+    display_text_block(f"│ - Starting trial {trial_number + 1} of {total_trials}")
     if selection_summary:
-        console.print(
-            Text(f"│   Evaluation settings: {selection_summary}", style="dim")
-        )
-    console.print(Text("│"))
+        display_text_block(f"│   Evaluation settings: {selection_summary}", style="dim")
+    display_text_block("│")
     display_messages(messages, prefix="│    ")
-    console.print("│")
+    display_text_block("│")
 
 
 def display_trial_score(
@@ -146,31 +94,8 @@ def display_trial_score(
     if verbose < 1:
         return
 
-    if baseline_score == 0:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was: {score:.4f}\n│",
-                style="green",
-            )
-        )
-    elif score is not None and score > baseline_score:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
-                style="green",
-            )
-        )
-    elif score is not None and score <= baseline_score:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
-                style="red",
-            )
-        )
-    else:
-        console.print(
-            Text(
-                f"│    Trial {trial_number + 1} - score was not set.\n│",
-                style="dim yellow",
-            )
-        )
+    score_text, style = format_score_progress(score, baseline_score)
+    display_text_block(
+        f"│    Trial {trial_number + 1} - score was: {score_text}\n│",
+        style=style,
+    )

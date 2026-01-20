@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -149,95 +149,67 @@ class TestLiteLLMAgentInvoke:
                 dataset_item={"input": "formatted input"},
             )
 
-            # Check that {input} was replaced
-            user_message = next(m for m in captured_messages if m["role"] == "user")
-            assert user_message["content"] == "formatted input"
-
-
-class TestLiteLLMAgentToolCalling:
-    """Test LiteLLMAgent tool calling functionality."""
-
-    def test_tool_call_loop(
-        self, agent: LiteLLMAgent, tool_prompt: chat_prompt.ChatPrompt
+    def test_tool_loop_returns_last_tool_response_when_capped(
+        self, agent: LiteLLMAgent
     ) -> None:
-        """Test the tool calling loop."""
-        # First response: tool call
-        # The code accesses msg.tool_calls (attribute) and msg["tool_calls"] (dict)
-        tool_calls_data = [
+        """Tool loop should return the last tool response when max iterations hit."""
+        tool_called: list[dict[str, Any]] = []
+
+        def tool_fn(**kwargs: Any) -> str:
+            tool_called.append(kwargs)
+            return "tool-response"
+
+        prompt = chat_prompt.ChatPrompt(system="s", user="u")
+        prompt.tools = [
             {
-                "id": "call_123",
+                "type": "function",
                 "function": {
-                    "name": "get_weather",
-                    "arguments": '{"location": "NYC"}',
+                    "name": "search",
+                    "description": "search",
+                    "parameters": {"type": "object", "properties": {"q": {}}},
                 },
             }
         ]
+        prompt.function_map = {"search": tool_fn}
 
-        tool_call_msg = MagicMock()
-        tool_call_msg.tool_calls = tool_calls_data
-        tool_call_msg.__getitem__ = (
-            lambda self, key: tool_calls_data if key == "tool_calls" else None
-        )
-        tool_call_msg.to_dict = lambda: {
-            "role": "assistant",
-            "tool_calls": tool_calls_data,
-        }
+        class _ToolMessage:
+            def __init__(self) -> None:
+                self.tool_calls = [
+                    {
+                        "id": "call_1",
+                        "function": {"name": "search", "arguments": '{"q": "x"}'},
+                    }
+                ]
+                self.content = ""
 
-        tool_call_response = MagicMock()
-        tool_call_response.choices = [MagicMock()]
-        tool_call_response.choices[0].message = tool_call_msg
-        tool_call_response.cost = 0.001
-        tool_call_response.usage = MagicMock()
-        tool_call_response.usage.prompt_tokens = 20
-        tool_call_response.usage.completion_tokens = 10
-        tool_call_response.usage.total_tokens = 30
+            def to_dict(self) -> dict[str, Any]:
+                return {"tool_calls": self.tool_calls, "content": self.content}
 
-        # Second response: final answer
-        final_msg = MagicMock()
-        final_msg.tool_calls = None
-        final_msg.__getitem__ = (
-            lambda self, key: "The weather is Sunny in NYC"
-            if key == "content"
-            else None
-        )
-        final_msg.to_dict = lambda: {
-            "role": "assistant",
-            "content": "The weather is Sunny in NYC",
-        }
+            def __getitem__(self, key: str) -> Any:
+                return {"tool_calls": self.tool_calls, "content": self.content}[key]
 
-        final_response = MagicMock()
-        final_response.choices = [MagicMock()]
-        final_response.choices[0].message = final_msg
-        final_response.cost = 0.001
-        final_response.usage = MagicMock()
-        final_response.usage.prompt_tokens = 30
-        final_response.usage.completion_tokens = 10
-        final_response.usage.total_tokens = 40
+        message = _ToolMessage()
 
-        call_count = 0
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = message
 
-        def mock_complete(*args: Any, **kwargs: Any) -> MagicMock:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return tool_call_response
-            return final_response
+        with patch.object(
+            agent,
+            "_llm_complete",
+            return_value=mock_response,
+        ), patch(
+            "opik_optimizer.agents.litellm_agent.tool_call_max_iterations",
+            return_value=1,
+        ):
+            result = agent.invoke_agent(
+                prompts={"p": prompt},
+                dataset_item={"input": "x"},
+                allow_tool_use=True,
+            )
 
-        with patch.object(agent, "_llm_complete", side_effect=mock_complete):
-            with patch(
-                "opik_optimizer._llm_calls._increment_llm_counter_if_in_optimizer"
-            ):
-                with patch(
-                    "opik_optimizer._llm_calls._increment_tool_counter_if_in_optimizer"
-                ):
-                    result = agent.invoke_agent(
-                        prompts={"tool-prompt": tool_prompt},
-                        dataset_item={"input": "What's the weather?"},
-                        allow_tool_use=True,
-                    )
-
-                    assert "Sunny" in result
-                    assert call_count == 2
+        assert tool_called
+        assert result == "tool-response"
 
 
 class TestLiteLLMAgentCostTracking:
@@ -270,20 +242,6 @@ class TestLiteLLMAgentCostTracking:
                 assert result._opik_usage["prompt_tokens"] == 100
                 assert result._opik_usage["completion_tokens"] == 50
                 assert result._opik_usage["total_tokens"] == 150
-
-    def test_apply_cost_usage_to_owner(self, agent: LiteLLMAgent) -> None:
-        """Test that cost/usage is propagated to optimizer owner."""
-        mock_optimizer = MagicMock()
-        cast(Any, agent)._optimizer_owner = mock_optimizer
-
-        mock_response = MagicMock()
-        mock_response._opik_cost = 0.01
-        mock_response._opik_usage = {"total_tokens": 100}
-
-        agent._apply_cost_usage_to_owner(mock_response)
-
-        mock_optimizer._add_llm_cost.assert_called_once_with(0.01)
-        mock_optimizer._add_llm_usage.assert_called_once_with({"total_tokens": 100})
 
     def test_apply_cost_handles_missing_owner(self, agent: LiteLLMAgent) -> None:
         """Test that missing optimizer owner doesn't raise error."""

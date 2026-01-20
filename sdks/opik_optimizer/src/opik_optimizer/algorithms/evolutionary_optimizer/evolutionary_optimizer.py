@@ -3,32 +3,35 @@ import json
 import logging
 import random
 from typing import Any, cast
+from collections.abc import Callable
 import sys
 import warnings
 
 import numpy as np
-import opik
 
 # DEAP imports
-from deap import base, tools
-from deap import creator as _creator
-from opik.api_objects import optimization
+try:
+    from deap import base, tools
+    from deap import creator as _creator
 
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+    _DEAP_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
+    base = None
+    tools = None
+    _creator = None
+    _DEAP_IMPORT_ERROR = exc
+
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
 from opik_optimizer.utils.prompt_library import PromptOverrides
+from opik_optimizer import constants
 from ...api_objects import chat_prompt
-from ...api_objects.types import MetricFunction
-from opik_optimizer.optimization_result import OptimizationResult
-from opik_optimizer.agents import OptimizableAgent, LiteLLMAgent
 
-from . import reporting, helpers
 from . import prompts as evo_prompts
-from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
+from .ops import generation_ops, mutation_ops, result_ops
 
 logger = logging.getLogger(__name__)
 creator = cast(Any, _creator)  # type: ignore[assignment]
-
-DEFAULT_DIVERSITY_THRESHOLD = 0.7
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
@@ -63,6 +66,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         adaptive_mutation: Whether to use adaptive mutation that adjusts based on population diversity
         enable_moo: Whether to enable multi-objective optimization (optimizes metric and prompt length)
         enable_llm_crossover: Whether to enable LLM-based crossover operations
+        enable_semantic_crossover: Whether to use semantic crossover before standard LLM crossover
         output_style_guidance: Optional guidance for output style in generated prompts
         infer_output_style: Whether to automatically infer output style from the dataset
         n_threads: Number of threads for parallel evaluation
@@ -72,6 +76,21 @@ class EvolutionaryOptimizer(BaseOptimizer):
             Dict: {"prompt_key": "new_template"} to override specific prompts.
             Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    DEFAULT_EARLY_STOPPING_GENERATIONS = (
+        constants.EVOLUTIONARY_DEFAULT_EARLY_STOPPING_GENERATIONS
+    )
+    DEFAULT_OUTPUT_STYLE_GUIDANCE = constants.EVOLUTIONARY_DEFAULT_OUTPUT_STYLE_GUIDANCE
+    DEFAULT_MOO_WEIGHTS = constants.EVOLUTIONARY_DEFAULT_MOO_WEIGHTS
+    DEFAULT_HALL_OF_FAME_SIZE = constants.EVOLUTIONARY_DEFAULT_HALL_OF_FAME_SIZE
+    DEFAULT_MIN_MUTATION_RATE = constants.EVOLUTIONARY_DEFAULT_MIN_MUTATION_RATE
+    DEFAULT_MAX_MUTATION_RATE = constants.EVOLUTIONARY_DEFAULT_MAX_MUTATION_RATE
+    DEFAULT_RESTART_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_RESTART_THRESHOLD
+    DEFAULT_RESTART_GENERATIONS = constants.EVOLUTIONARY_DEFAULT_RESTART_GENERATIONS
+    DEFAULT_DIVERSITY_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_DIVERSITY_THRESHOLD
+    DEFAULT_ENABLE_SEMANTIC_CROSSOVER = (
+        constants.EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER
+    )
 
     # Prompt templates for this optimizer
     # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
@@ -88,6 +107,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         "variation_user_prompt_template": evo_prompts.VARIATION_USER_PROMPT_TEMPLATE,
         "llm_crossover_system_prompt_template": evo_prompts.LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE,
         "llm_crossover_user_prompt_template": evo_prompts.LLM_CROSSOVER_USER_PROMPT_TEMPLATE,
+        "semantic_crossover_system_prompt_template": evo_prompts.SEMANTIC_CROSSOVER_SYSTEM_PROMPT_TEMPLATE,
+        "semantic_crossover_user_prompt_template": evo_prompts.SEMANTIC_CROSSOVER_USER_PROMPT_TEMPLATE,
         "radical_innovation_system_prompt_template": evo_prompts.RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE,
         "radical_innovation_user_prompt_template": evo_prompts.RADICAL_INNOVATION_USER_PROMPT_TEMPLATE,
         "mutation_strategy_rephrase": evo_prompts.MUTATION_STRATEGY_REPHRASE,
@@ -98,50 +119,98 @@ class EvolutionaryOptimizer(BaseOptimizer):
         "mutation_strategy_increase_complexity_and_detail": evo_prompts.MUTATION_STRATEGY_INCREASE_COMPLEXITY,
     }
 
-    DEFAULT_POPULATION_SIZE = 30
-    DEFAULT_NUM_GENERATIONS = 15
-    DEFAULT_MUTATION_RATE = 0.2
-    DEFAULT_CROSSOVER_RATE = 0.8
-    DEFAULT_TOURNAMENT_SIZE = 4
-    DEFAULT_NUM_THREADS = 12
-    DEFAULT_HALL_OF_FAME_SIZE = 10
-    DEFAULT_ELITISM_SIZE = 3
-    DEFAULT_MIN_MUTATION_RATE = 0.1
-    DEFAULT_MAX_MUTATION_RATE = 0.4
-    DEFAULT_ADAPTIVE_MUTATION = True
-    DEFAULT_RESTART_THRESHOLD = 0.01
-    DEFAULT_RESTART_GENERATIONS = 3
-    DEFAULT_EARLY_STOPPING_GENERATIONS = 5
-    DEFAULT_ENABLE_MOO = True
-    DEFAULT_ENABLE_LLM_CROSSOVER = True
-    DEFAULT_SEED = 42
-    DEFAULT_OUTPUT_STYLE_GUIDANCE = (
-        "Produce clear, effective, and high-quality responses suitable for the task."
-    )
-    DEFAULT_MOO_WEIGHTS = (1.0, -1.0)  # (Maximize Score, Minimize Length)
+    def pre_optimize(self, context: OptimizationContext) -> None:
+        """Store agent reference for use in evaluation."""
+        self.agent = context.agent
+
+    def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+        """Return optimizer-specific configuration for display."""
+        return {
+            "optimizer": f"Evolutionary Optimization ({'DEAP MOO' if self.enable_moo else 'DEAP SO'})",
+            "population_size": self.population_size,
+            "generations": self.num_generations,
+            "mutation_rate": self.mutation_rate,
+            "crossover_rate": self.crossover_rate,
+            "semantic_crossover": self.enable_semantic_crossover,
+        }
+
+    def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
+        """
+        Return Evolutionary-specific metadata for the optimization result.
+
+        Provides algorithm-specific configuration. Trial counts come from context.
+        """
+        return {
+            "population_size": self.population_size,
+            "num_generations": self.num_generations,
+            "mutation_rate": self.mutation_rate,
+            "crossover_rate": self.crossover_rate,
+            "enable_moo": self.enable_moo,
+            "enable_semantic_crossover": self.enable_semantic_crossover,
+        }
+
+    def _finalize_finish_reason(self, context: OptimizationContext) -> None:
+        """
+        Set finish_reason with evolutionary-specific stagnation detection.
+
+        Adds "no_improvement" finish reason when generations without improvement
+        exceeds the early stopping threshold.
+        """
+        if context.finish_reason is None:
+            if context.trials_completed >= context.max_trials:
+                context.finish_reason = "max_trials"
+            elif (
+                self._generations_without_overall_improvement
+                >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
+            ):
+                context.finish_reason = "no_improvement"
+            else:
+                context.finish_reason = "completed"
+
+    def _ensure_deap_available(self) -> None:
+        if base is None or tools is None or _creator is None:
+            raise RuntimeError(
+                "DEAP is required for EvolutionaryOptimizer. "
+                "Install the optimizer extras that include DEAP."
+            ) from _DEAP_IMPORT_ERROR
+
+    def _seed_rngs(self) -> None:
+        """
+        Seed random number generators used by this optimizer.
+
+        DEAP's built-in operators rely on Python's `random` module, while some
+        surrounding code (and potential user extensions) may use NumPy RNG.
+        """
+        if self.seed is None:
+            return
+        random.seed(self.seed)
+        np.random.seed(self.seed)
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = constants.DEFAULT_MODEL,
         model_parameters: dict[str, Any] | None = None,
-        population_size: int = DEFAULT_POPULATION_SIZE,
-        num_generations: int = DEFAULT_NUM_GENERATIONS,
-        mutation_rate: float = DEFAULT_MUTATION_RATE,
-        crossover_rate: float = DEFAULT_CROSSOVER_RATE,
-        tournament_size: int = DEFAULT_TOURNAMENT_SIZE,
-        elitism_size: int = DEFAULT_ELITISM_SIZE,
-        adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
-        enable_moo: bool = DEFAULT_ENABLE_MOO,
-        enable_llm_crossover: bool = DEFAULT_ENABLE_LLM_CROSSOVER,
+        population_size: int = constants.EVOLUTIONARY_DEFAULT_POPULATION_SIZE,
+        num_generations: int = constants.EVOLUTIONARY_DEFAULT_NUM_GENERATIONS,
+        mutation_rate: float = constants.EVOLUTIONARY_DEFAULT_MUTATION_RATE,
+        crossover_rate: float = constants.EVOLUTIONARY_DEFAULT_CROSSOVER_RATE,
+        tournament_size: int = constants.EVOLUTIONARY_DEFAULT_TOURNAMENT_SIZE,
+        elitism_size: int = constants.EVOLUTIONARY_DEFAULT_ELITISM_SIZE,
+        adaptive_mutation: bool = constants.EVOLUTIONARY_DEFAULT_ADAPTIVE_MUTATION,
+        enable_moo: bool = constants.EVOLUTIONARY_DEFAULT_ENABLE_MOO,
+        enable_llm_crossover: bool = constants.EVOLUTIONARY_DEFAULT_ENABLE_LLM_CROSSOVER,
+        enable_semantic_crossover: bool = (
+            constants.EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER
+        ),
         output_style_guidance: str | None = None,
         infer_output_style: bool = False,
-        n_threads: int = DEFAULT_NUM_THREADS,
+        n_threads: int = constants.DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = DEFAULT_SEED,
+        seed: int = constants.DEFAULT_SEED,
         name: str | None = None,
         prompt_overrides: PromptOverrides = None,
-        skip_perfect_score: bool = True,
-        perfect_score: float = 0.95,
+        skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
+        perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
         # Initialize base class first
         if sys.version_info >= (3, 13):
@@ -150,6 +219,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "You may see asyncio teardown warnings. Prefer Python 3.12.",
                 RuntimeWarning,
             )
+
+        self._ensure_deap_available()
 
         super().__init__(
             model=model,
@@ -171,7 +242,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
+        self.enable_semantic_crossover = enable_semantic_crossover
         self.seed = seed
+        self.selection_policy = "tournament"
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
@@ -184,13 +257,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._generations_without_overall_improvement = 0
         self._best_primary_score_history: list[float] = []
         self._gens_since_pop_improvement: int = 0
+        self._reporter: Any = None
+        self._deap_evaluate_individual_fitness: Callable[[Any], tuple[float, ...]] = (
+            lambda _ind: (0.0,)
+        )
 
         if self.seed is not None:
-            random.seed(self.seed)
-            np.random.seed(self.seed)
+            self._seed_rngs()
             logger.info(f"Global random seed set to: {self.seed}")
-            # Note: DEAP tools generally respect random.seed().
-            # TODO investigate if specific DEAP components require separate seeding
+            # Note: DEAP operators use Python's `random`, so seeding `random`
+            # (and NumPy for any NumPy-based operations) is sufficient here.
 
         if self.enable_moo:
             if not hasattr(creator, "FitnessMulti"):
@@ -211,6 +287,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 del creator.Individual
             creator.create("Individual", dict, fitness=fitness_attr)
 
+        # TODO: Use log on get metadata instead.
         logger.debug(
             f"Initialized EvolutionaryOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
             f"LLM_Crossover: {self.enable_llm_crossover}, Seed: {self.seed}, "
@@ -220,6 +297,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
+        # FIXME: Should we not use get_metadata or get_config instead?
         return {
             "population_size": self.population_size,
             "num_generations": self.num_generations,
@@ -276,42 +354,22 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
     def _get_adaptive_mutation_rate(self) -> float:
         """Calculate adaptive mutation rate based on population diversity and progress."""
-        if not self.adaptive_mutation or len(self._best_fitness_history) < 2:
-            return self.mutation_rate
-
-        # Calculate improvement rate
-        recent_improvement = (
-            self._best_fitness_history[-1] - self._best_fitness_history[-2]
-        ) / abs(self._best_fitness_history[-2])
-
-        # Calculate population diversity
-        current_diversity = helpers.calculate_population_diversity(
-            self._current_population
+        mutation_rate, generations_without_improvement = (
+            mutation_ops.compute_adaptive_mutation_rate(
+                current_rate=self.mutation_rate,
+                best_fitness_history=self._best_fitness_history,
+                current_population=self._current_population,
+                generations_without_improvement=self._generations_without_improvement,
+                adaptive_mutation=self.adaptive_mutation,
+                restart_threshold=self.DEFAULT_RESTART_THRESHOLD,
+                restart_generations=self.DEFAULT_RESTART_GENERATIONS,
+                min_rate=self.DEFAULT_MIN_MUTATION_RATE,
+                max_rate=self.DEFAULT_MAX_MUTATION_RATE,
+                diversity_threshold=self.DEFAULT_DIVERSITY_THRESHOLD,
+            )
         )
-
-        # Check for stagnation
-        if recent_improvement < self.DEFAULT_RESTART_THRESHOLD:
-            self._generations_without_improvement += 1
-        else:
-            self._generations_without_improvement = 0
-
-        # Adjust mutation rate based on both improvement and diversity
-        if self._generations_without_improvement >= self.DEFAULT_RESTART_GENERATIONS:
-            # Significant stagnation - increase mutation significantly
-            return min(self.mutation_rate * 2.5, self.DEFAULT_MAX_MUTATION_RATE)
-        elif (
-            recent_improvement < 0.01
-            and current_diversity < DEFAULT_DIVERSITY_THRESHOLD
-        ):
-            # Both stagnating and low diversity - increase mutation significantly
-            return min(self.mutation_rate * 2.0, self.DEFAULT_MAX_MUTATION_RATE)
-        elif recent_improvement < 0.01:
-            # Stagnating but good diversity - moderate increase
-            return min(self.mutation_rate * 1.5, self.DEFAULT_MAX_MUTATION_RATE)
-        elif recent_improvement > 0.05:
-            # Good progress - decrease mutation
-            return max(self.mutation_rate * 0.8, self.DEFAULT_MIN_MUTATION_RATE)
-        return self.mutation_rate
+        self._generations_without_improvement = generations_without_improvement
+        return mutation_rate
 
     def _run_generation(
         self,
@@ -319,103 +377,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
         population: list[Any],
         initial_prompts: dict[str, chat_prompt.ChatPrompt],
         hof: tools.HallOfFame,
-        report: Any,
         best_primary_score_overall: float,
     ) -> tuple[list[Any], int]:
-        """Execute mating, mutation, evaluation and HoF update."""
-        best_gen_score = 0.0
-
-        # --- selection -------------------------------------------------
-        if self.enable_moo:
-            offspring = tools.selNSGA2(population, self.population_size)
-        else:
-            elites = tools.selBest(population, self.elitism_size)
-            rest = tools.selTournament(
-                population,
-                len(population) - self.elitism_size,
-                tournsize=self.tournament_size,
-            )
-            offspring = elites + rest
-
-        # --- crossover -------------------------------------------------
-        report.performing_crossover()
-        offspring = [copy.deepcopy(ind) for ind in offspring]
-        for i in range(0, len(offspring), 2):
-            if i + 1 < len(offspring):
-                c1, c2 = offspring[i], offspring[i + 1]
-                if random.random() < self.crossover_rate:
-                    if self.enable_llm_crossover:
-                        c1_new, c2_new = crossover_ops.llm_deap_crossover(
-                            c1,
-                            c2,
-                            output_style_guidance=self.output_style_guidance,
-                            model=self.model,
-                            model_parameters=self.model_parameters,
-                            verbose=self.verbose,
-                            prompts=self._prompts,
-                        )
-                    else:
-                        c1_new, c2_new = crossover_ops.deap_crossover(
-                            c1,
-                            c2,
-                            verbose=self.verbose,
-                        )
-                    offspring[i], offspring[i + 1] = c1_new, c2_new
-                    del offspring[i].fitness.values, offspring[i + 1].fitness.values
-        reporting.display_success(
-            "      Crossover successful, prompts have been combined and edited.\n│",
-            verbose=self.verbose,
+        return generation_ops.run_generation(
+            self,
+            generation_idx=generation_idx,
+            population=population,
+            initial_prompts=initial_prompts,
+            hof=hof,
+            best_primary_score_overall=best_primary_score_overall,
         )
-
-        # --- mutation --------------------------------------------------
-        report.performing_mutation()
-        mut_rate = self._get_adaptive_mutation_rate()
-        n_mutations = 0
-        for i, ind in enumerate(offspring):
-            if random.random() < mut_rate:
-                new_ind = mutation_ops.deap_mutation(
-                    individual=ind,
-                    current_population=self._current_population,
-                    output_style_guidance=self.output_style_guidance,
-                    initial_prompts=initial_prompts,
-                    model=self.model,
-                    model_parameters=self.model_parameters,
-                    diversity_threshold=DEFAULT_DIVERSITY_THRESHOLD,
-                    optimization_id=self.current_optimization_id,
-                    verbose=self.verbose,
-                    prompts=self._prompts,
-                )
-                offspring[i] = new_ind
-                del offspring[i].fitness.values
-                n_mutations += 1
-        reporting.display_success(
-            f"      Mutation successful, {n_mutations} prompts have been edited.\n│",
-            verbose=self.verbose,
-        )
-
-        # --- evaluation ------------------------------------------------
-        invalid = [ind for ind in offspring if not ind.fitness.valid]
-        report.performing_evaluation(len(invalid))
-        for ind_idx, ind in enumerate(invalid):
-            fit = self._deap_evaluate_individual_fitness(ind)
-            if self.enable_moo:
-                ind.fitness.values = fit
-            else:
-                ind.fitness.values = tuple([fit[0]])
-            best_gen_score = max(best_gen_score, fit[0])
-
-            report.performed_evaluation(ind_idx, ind.fitness.values[0])
-
-        # --- update HoF & reporter ------------------------------------
-        hof.update(offspring)
-        reporting.end_gen(
-            generation_idx,
-            best_gen_score,
-            best_primary_score_overall,
-            verbose=self.verbose,
-        )
-
-        return offspring, len(invalid)
 
     def _population_best_score(self, population: list[Any]) -> float:
         """Return highest primary-objective score among *valid* individuals."""
@@ -424,313 +395,66 @@ class EvolutionaryOptimizer(BaseOptimizer):
         ]
         return max(valid_scores, default=0.0)
 
-    def optimize_prompt(
+    def run_optimization(
         self,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        dataset: opik.Dataset,
-        metric: MetricFunction,
-        agent: OptimizableAgent | None = None,
-        experiment_config: dict | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        project_name: str = "Optimization",
-        optimization_id: str | None = None,
-        validation_dataset: opik.Dataset | None = None,
-        max_trials: int = 10,
-        *args: Any,
-        **kwargs: Any,
-    ) -> OptimizationResult:
+        context: OptimizationContext,
+    ) -> AlgorithmResult:
         """
+        Run the Evolutionary optimization algorithm.
+
+        Uses genetic algorithms (via DEAP) to evolve prompts through:
+        1. Selection (tournament or NSGA-II for MOO)
+        2. Crossover (LLM-based or traditional)
+        3. Mutation (adaptive rate based on population diversity)
+        4. Evaluation and hall of fame tracking
+
         Args:
-            prompt: The prompt to optimize (single ChatPrompt or dict of ChatPrompts).
-            dataset: Dataset used to evaluate each candidate prompt.
-            metric: Objective function receiving `(dataset_item, llm_output)`.
-            agent: Optional agent instance for executing prompts. If None, uses LiteLLMAgent.
-            experiment_config: Optional experiment configuration metadata.
-            n_samples: Optional number of dataset items to evaluate per prompt.
-            auto_continue: Whether to continue automatically after each generation.
-            project_name: Opik project name for logging traces (default: "Optimization").
-            optimization_id: Optional ID for the Opik optimization run; when provided it
-                must be a valid UUIDv7 string.
-            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
-            max_trials: Maximum number of prompt evaluations allowed.
+            context: The optimization context with prompts, dataset, metric, etc.
+
+        Returns:
+            AlgorithmResult with best prompts, score, history, and metadata.
         """
-        # Convert single prompt to dict format for internal processing
-        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
-        is_single_prompt_optimization: bool
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            optimizable_prompts = {prompt.name: prompt}
-            is_single_prompt_optimization = True
-        else:
-            optimizable_prompts = prompt
-            is_single_prompt_optimization = False
+        self._ensure_deap_available()
+        # Ensure deterministic behavior per optimization run (important when
+        # reusing the same optimizer instance across multiple runs).
+        self._seed_rngs()
+        optimizable_prompts = context.prompts
+        experiment_config = context.experiment_config
+        max_trials = context.max_trials
 
-        # Logic on which dataset to use for scoring
-        if validation_dataset is not None:
-            logger.warning(
-                f"{self.__class__.__name__} currently does not support validation dataset. "
-                f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
-            )
-        evaluation_dataset = (
-            validation_dataset if validation_dataset is not None else dataset
-        )
+        # Initialize progress tracking for display
+        self._current_round = 0
+        self._total_rounds = self.num_generations
 
-        # Use base class validation and setup methods
-        self._validate_optimization_inputs(
-            optimizable_prompts, dataset, metric, support_content_parts=True
-        )
-
-        if agent is None:
-            agent = LiteLLMAgent(project_name=project_name)
-        self.agent = agent
-        evaluation_kwargs: dict[str, Any] = {}
-
-        # Set project name from parameter
-        self.project_name = project_name
-
-        # Step 0. Start Opik optimization run
-        opik_optimization_run: optimization.Optimization | None = None
-        try:
-            opik_optimization_run = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata=self._build_optimization_metadata(),
-                name=self.name,
-                optimization_id=optimization_id,
-            )
-            self.current_optimization_id = (
-                opik_optimization_run.id if opik_optimization_run is not None else None
-            )
-        except Exception as e:
-            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
-            self.current_optimization_id = None
-
-        reporting.display_header(
-            algorithm=self.__class__.__name__,
-            optimization_id=self.current_optimization_id,
-            dataset_id=dataset.id,
-            verbose=self.verbose,
-        )
-
-        reporting.display_configuration(
-            optimizable_prompts,
-            {
-                "optimizer": f"{'DEAP MOO' if self.enable_moo else 'DEAP SO'} Evolutionary Optimization",
-                "population_size": self.population_size,
-                "generations": self.num_generations,
-                "mutation_rate": self.mutation_rate,
-                "crossover_rate": self.crossover_rate,
-            },
-            verbose=self.verbose,
-        )
-
-        # Step 1. Step variables and define fitness function
-        self._reset_counters()  # Reset counters for run
-        trials_used = [0]  # Use list for closure mutability
-        self._history: list[OptimizationRound] = []
+        self._history_builder.clear()
         self._best_fitness_history = []
         self._generations_without_improvement = 0
         self._current_population = []
         self._generations_without_overall_improvement = 0
 
-        # Store prompts metadata for fitness evaluation (closure capture)
-        prompts_metadata = {
-            name: {
-                "tools": copy.deepcopy(p.tools),
-                "function_map": p.function_map,
-                "name": p.name,
-            }
-            for name, p in optimizable_prompts.items()
+        generation_ops.build_deap_evaluator(
+            self, context=context, experiment_config=experiment_config
+        )
+
+        # Use baseline score from context (computed by base class)
+        initial_primary_score = cast(float, context.baseline_score)
+        initial_prompts_messages = {
+            name: p.get_messages() for name, p in optimizable_prompts.items()
         }
+        initial_length = float(len(json.dumps(initial_prompts_messages)))
 
-        if self.enable_moo:
+        best_primary_score_overall = initial_primary_score
+        best_prompts_overall = optimizable_prompts
 
-            def _deap_evaluate_individual_fitness(
-                individual: Any,
-            ) -> tuple[float, ...]:
-                # Check if we've hit the limit
-                if trials_used[0] >= max_trials:
-                    logger.debug(
-                        f"Skipping evaluation - max_trials ({max_trials}) reached"
-                    )
-                    return (-float("inf"), float("inf"))  # Worst possible fitness
+        effective_output_style_guidance = generation_ops.resolve_output_style_guidance(
+            self, dataset=context.dataset
+        )
 
-                trials_used[0] += 1
-
-                # Individual is a dict mapping prompt_name -> messages
-                primary_fitness_score = evaluation_ops.evaluate_bundle(
-                    self,
-                    bundle_messages=dict(individual),
-                    prompts_metadata=prompts_metadata,
-                    dataset=evaluation_dataset,
-                    metric=metric,
-                    n_samples=n_samples,
-                    experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self.current_optimization_id,
-                    verbose=0,
-                    **evaluation_kwargs,
-                )
-                prompt_length = float(len(str(json.dumps(dict(individual)))))
-                return (primary_fitness_score, prompt_length)
-
-        else:
-            # Single-objective
-            def _deap_evaluate_individual_fitness(
-                individual: Any,
-            ) -> tuple[float, ...]:
-                # Check if we've hit the limit
-                if trials_used[0] >= max_trials:
-                    logger.debug(
-                        f"Skipping evaluation - max_trials ({max_trials}) reached"
-                    )
-                    return (-float("inf"),)  # Worst possible fitness
-
-                trials_used[0] += 1
-
-                # Individual is a dict mapping prompt_name -> messages
-                fitness_score = evaluation_ops.evaluate_bundle(
-                    self,
-                    bundle_messages=dict(individual),
-                    prompts_metadata=prompts_metadata,
-                    dataset=evaluation_dataset,
-                    metric=metric,
-                    n_samples=n_samples,
-                    experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self.current_optimization_id,
-                    verbose=0,
-                    **evaluation_kwargs,
-                )
-                return (fitness_score,)
-
-        self._deap_evaluate_individual_fitness = _deap_evaluate_individual_fitness
-
-        # Step 2. Compute the initial performance of the prompt
-        with reporting.baseline_performance(
-            verbose=self.verbose
-        ) as report_baseline_performance:
-            # Create initial individual from all prompts
-            initial_individual = self._create_individual_from_prompts(
-                optimizable_prompts
-            )
-            initial_eval_result = self._deap_evaluate_individual_fitness(
-                initial_individual
-            )
-            initial_primary_score = initial_eval_result[0]
-            initial_prompts_messages = {
-                name: p.get_messages() for name, p in optimizable_prompts.items()
-            }
-            initial_length = (
-                initial_eval_result[1]
-                if self.enable_moo
-                else float(len(json.dumps(initial_prompts_messages)))
-            )
-
-            trials_used[0] = 0
-            best_primary_score_overall = initial_primary_score
-            best_prompts_overall = optimizable_prompts
-            report_baseline_performance.set_score(initial_primary_score)
-
-        if self._should_skip_optimization(initial_primary_score):
-            logger.info(
-                "Baseline score %.4f >= %.4f; skipping evolutionary optimization.",
-                initial_primary_score,
-                self.perfect_score,
-            )
-            early_result_prompt, early_initial_prompt = self._select_result_prompts(
-                best_prompts=optimizable_prompts,
-                initial_prompts=optimizable_prompts,
-                is_single_prompt_optimization=is_single_prompt_optimization,
-            )
-
-            reporting.display_result(
-                initial_score=initial_primary_score,
-                best_score=initial_primary_score,
-                prompt=early_result_prompt,
-                verbose=self.verbose,
-            )
-
-            early_details: dict[str, Any] = {
-                "initial_primary_score": initial_primary_score,
-                "initial_length": initial_length,
-                "final_prompts": optimizable_prompts,
-                "final_score": initial_primary_score,
-                "stopped_early": True,
-                "stop_reason": "baseline_score_met_threshold",
-                "stop_reason_details": {"best_score": initial_primary_score},
-                "perfect_score": self.perfect_score,
-                "skip_perfect_score": self.skip_perfect_score,
-                "trials_used": 0,
-            }
-            return self._build_early_result(
-                optimizer_name=self.__class__.__name__,
-                prompt=early_result_prompt,
-                initial_prompt=early_initial_prompt,
-                score=initial_primary_score,
-                metric_name=metric.__name__,
-                details=early_details,
-                history=[],
-                llm_calls=self.llm_call_counter,
-                llm_calls_tools=self.llm_calls_tools_counter,
-                dataset_id=dataset.id,
-                optimization_id=self.current_optimization_id,
-            )
-
-        # Step 3. Define the output style guide
-        effective_output_style_guidance = self.output_style_guidance
-        if self.infer_output_style and (
-            self.output_style_guidance is None
-            or self.output_style_guidance == self.DEFAULT_OUTPUT_STYLE_GUIDANCE
-        ):
-            # If user wants inference AND hasn't provided a specific custom guidance
-            inferred_style = style_ops.infer_output_style_from_dataset(
-                dataset=dataset,
-                model=self.model,
-                model_parameters=self.model_parameters,
-                verbose=self.verbose,
-                prompts=self._prompts,
-            )
-            if inferred_style:
-                effective_output_style_guidance = inferred_style
-                # Update self.output_style_guidance for this run so dynamic prompt methods use it
-                self.output_style_guidance = inferred_style
-            else:
-                logger.warning(
-                    "Failed to infer output style, using default or user-provided guidance."
-                )
-
-        # Ensure self.output_style_guidance is set to the effective one for the rest of the methods for this run
-        # (It might have been None if user passed None and infer_output_style was False)
-        if self.output_style_guidance is None:
-            # Fallback if still None
-            self.output_style_guidance = self.DEFAULT_OUTPUT_STYLE_GUIDANCE
-
-        # Step 4. Initialize population
-        # Generate variations for each prompt in the dict
-        prompt_variations: dict[str, list[chat_prompt.ChatPrompt]] = {}
-        for prompt_name, prompt_obj in optimizable_prompts.items():
-            variations = population_ops.initialize_population(
-                prompt=prompt_obj,
-                output_style_guidance=effective_output_style_guidance,
-                model=self.model,
-                model_parameters=self.model_parameters,
-                optimization_id=self.current_optimization_id,
-                population_size=self.population_size,
-                verbose=self.verbose,
-                prompts=self._prompts,
-            )
-            prompt_variations[prompt_name] = variations
-
-        # Combine variations into individuals (zip variations together)
-        deap_population = []
-        for i in range(self.population_size):
-            prompts_for_individual = {
-                name: variations[i % len(variations)]
-                for name, variations in prompt_variations.items()
-            }
-            deap_population.append(
-                self._create_individual_from_prompts(prompts_for_individual)
-            )
-        deap_population = deap_population[: self.population_size]
+        deap_population = generation_ops.initialize_population(
+            self,
+            optimizable_prompts=optimizable_prompts,
+            output_style_guidance=effective_output_style_guidance,
+        )
 
         # Step 5. Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
         if self.enable_moo:
@@ -739,364 +463,62 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # Single-objective
             hof = tools.HallOfFame(self.DEFAULT_HALL_OF_FAME_SIZE)
 
-        # Step 6. Evaluate the initial population
-        with reporting.evaluate_initial_population(
-            verbose=self.verbose
-        ) as report_initial_population:
-            fitnesses: list[Any] = list(
-                map(self._deap_evaluate_individual_fitness, deap_population)
+        best_primary_score_overall, best_prompts_overall = (
+            generation_ops.evaluate_initial_population(
+                self,
+                context=context,
+                deap_population=deap_population,
+                hof=hof,
+                best_primary_score_overall=best_primary_score_overall,
+                best_prompts_overall=best_prompts_overall,
             )
-            _best_score = max(
-                best_primary_score_overall, max([x[0] for x in fitnesses])
-            )
-
-            for i, ind, fit in zip(
-                range(len(deap_population)), deap_population, fitnesses
-            ):
-                if self.enable_moo:
-                    ind.fitness.values = fit
-                else:
-                    ind.fitness.values = tuple([fit[0]])
-                report_initial_population.set_score(i, fit[0], _best_score)
-
-        hof.update(deap_population)
-
-        if hof and len(hof) > 0:
-            if self.enable_moo:
-                current_best_for_primary: Any = max(
-                    hof, key=lambda ind: ind.fitness.values[0]
-                )
-                best_primary_score_overall = current_best_for_primary.fitness.values[0]
-                best_prompts_overall = self._individual_to_prompts(
-                    current_best_for_primary
-                )
-            else:
-                # Single-objective
-                current_best_on_front = hof[0]
-                best_primary_score_overall = current_best_on_front.fitness.values[0]
-                best_prompts_overall = self._individual_to_prompts(
-                    current_best_on_front
-                )
-
-            # Use first prompt as representative for logging
-            representative_prompt = list(best_prompts_overall.values())[0]
-            if self.enable_moo:
-                logger.info(
-                    f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompts: {len(best_prompts_overall)}"
-                )
-            else:
-                logger.info(
-                    f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
-                )
-
-            # Simplified history logging for this transition
-            initial_round_data = OptimizationRound(
-                round_number=0,
-                current_prompt=representative_prompt,  # Representative best
-                current_score=best_primary_score_overall,
-                generated_prompts=[
-                    {
-                        "prompt": representative_prompt,
-                        "score": best_primary_score_overall,
-                        "trial_scores": [best_primary_score_overall],
-                    }
-                ],
-                best_prompt=representative_prompt,
-                best_score=best_primary_score_overall,
-                improvement=0.0,
-            )
-            self._add_to_history(initial_round_data)
-
-        with reporting.start_evolutionary_algo(
-            verbose=self.verbose
-        ) as report_evolutionary_algo:
-            for generation_idx in range(1, self.num_generations + 1):
-                # Check if we've exhausted our evaluation budget
-                if trials_used[0] >= max_trials:
-                    logger.info(
-                        f"Stopping optimization: max_trials ({max_trials}) reached after {generation_idx - 1} generations"
-                    )
-                    break
-
-                report_evolutionary_algo.start_gen(generation_idx, self.num_generations)
-
-                curr_best_score = self._population_best_score(deap_population)
-
-                # ---------- restart logic -------------------------------------
-                (
-                    should_restart,
-                    gens_since_pop_improvement,
-                    best_primary_score_history,
-                ) = population_ops.should_restart_population(
-                    curr_best=curr_best_score,
-                    best_primary_score_history=self._best_primary_score_history,
-                    gens_since_pop_improvement=self._gens_since_pop_improvement,
-                    default_restart_threshold=self.DEFAULT_RESTART_THRESHOLD,
-                    default_restart_generations=self.DEFAULT_RESTART_GENERATIONS,
-                )
-                self._gens_since_pop_improvement = gens_since_pop_improvement
-                self._best_primary_score_history = best_primary_score_history
-
-                if should_restart:
-                    report_evolutionary_algo.restart_population(
-                        self.DEFAULT_RESTART_GENERATIONS
-                    )
-                    deap_population = population_ops.restart_population(
-                        optimizer=self,
-                        hof=hof,
-                        population=deap_population,
-                        best_prompts_so_far=best_prompts_overall,
-                    )
-
-                # ---------- run one generation --------------------------------
-                deap_population, _ = self._run_generation(
-                    generation_idx,
-                    deap_population,
-                    optimizable_prompts,
-                    hof,
-                    report_evolutionary_algo,
-                    best_primary_score_overall,
-                )
-
-                # -------- update best-prompt bookkeeping -------------------------
-                previous_best_primary_score_for_gen = best_primary_score_overall
-                if hof:
-                    if self.enable_moo:
-                        current_best_ind = max(
-                            hof, key=lambda ind: ind.fitness.values[0]
-                        )
-                    else:
-                        current_best_ind = hof[0]
-
-                    updated_best_primary_score = current_best_ind.fitness.values[0]
-                    if updated_best_primary_score > best_primary_score_overall:
-                        best_primary_score_overall = updated_best_primary_score
-                        best_prompts_overall = self._individual_to_prompts(
-                            current_best_ind
-                        )
-                        self._generations_without_overall_improvement = 0
-                    elif (
-                        updated_best_primary_score
-                        == previous_best_primary_score_for_gen
-                    ):
-                        self._generations_without_overall_improvement += 1
-                    else:
-                        self._generations_without_overall_improvement += 1
-                else:
-                    self._generations_without_overall_improvement += 1
-
-                # ---------- early-stopping check ------------------------------
-                if (
-                    self._generations_without_overall_improvement
-                    >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
-                ):
-                    logger.info(
-                        "No overall improvement for %d generations – early stopping at gen %d.",
-                        self.DEFAULT_EARLY_STOPPING_GENERATIONS,
-                        generation_idx,
-                    )
-                    break
-
-                # History logging for this transition
-                representative_prompt = list(best_prompts_overall.values())[0]
-                gen_round_data = OptimizationRound(
-                    round_number=generation_idx,
-                    current_prompt=representative_prompt,  # Representative best
-                    current_score=best_primary_score_overall,
-                    generated_prompts=[
-                        {"prompt": str(dict(ind)), "score": ind.fitness.values[0]}
-                        for ind in deap_population
-                        if ind.fitness.valid
-                    ],
-                    best_prompt=representative_prompt,
-                    best_score=best_primary_score_overall,
-                    improvement=(
-                        (best_primary_score_overall - initial_primary_score)
-                        / abs(initial_primary_score)
-                        if initial_primary_score and initial_primary_score != 0
-                        else (1.0 if best_primary_score_overall > 0 else 0.0)
-                    ),
-                )
-                self._add_to_history(gen_round_data)
-
-        stopped_early_flag = (
-            self._generations_without_overall_improvement
-            >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
-        )
-        final_details = {}
-        initial_score_for_display = initial_primary_score
-
-        if self.enable_moo:
-            final_results_log = "Pareto Front Solutions:\n"
-            if hof and len(hof) > 0:
-                sorted_hof = sorted(
-                    hof, key=lambda ind: ind.fitness.values[0], reverse=True
-                )
-                for i, sol in enumerate(sorted_hof):
-                    final_results_log += f"  Solution {i + 1}: Primary Score={sol.fitness.values[0]:.4f}, Length={sol.fitness.values[1]:.0f}, Prompts={len(sol)}\n"
-                best_overall_solution = sorted_hof[0]
-                final_best_prompts = self._individual_to_prompts(best_overall_solution)
-                final_primary_score = best_overall_solution.fitness.values[0]
-                final_length = best_overall_solution.fitness.values[1]
-                logger.info(final_results_log)
-                logger.info(
-                    f"Best prompts (highest primary score from Pareto front): {len(final_best_prompts)} prompts"
-                )
-                logger.info(
-                    f"  Primary Score ({metric.__name__}): {final_primary_score:.4f}"
-                )
-                logger.info(f"  Length: {final_length:.0f}")
-                final_details.update(
-                    {
-                        "initial_primary_score": initial_primary_score,
-                        "initial_length": initial_length,
-                        "final_prompts": final_best_prompts,
-                        "final_primary_score_representative": final_primary_score,
-                        "final_length_representative": final_length,
-                        "pareto_front_solutions": (
-                            [
-                                {
-                                    "prompt": str(dict(ind)),
-                                    "score": ind.fitness.values[0],
-                                    "length": ind.fitness.values[1],
-                                }
-                                for ind in hof
-                            ]
-                            if hof
-                            else []
-                        ),
-                    }
-                )
-            else:
-                # MOO: ParetoFront is empty. Reporting last known best and fallback values
-                logger.warning("MOO: ParetoFront is empty. Reporting last known best.")
-                final_best_prompts = best_prompts_overall
-                final_primary_score = best_primary_score_overall
-                all_messages = {
-                    name: p.get_messages() for name, p in final_best_prompts.items()
-                }
-                final_length = float(len(json.dumps(all_messages)))
-                final_details.update(
-                    {
-                        "initial_primary_score": initial_primary_score,
-                        "initial_length": initial_length,
-                        "final_prompts": final_best_prompts,
-                        "final_primary_score_representative": final_primary_score,
-                        "final_length_representative": final_length,
-                        "pareto_front_solutions": [],
-                    }
-                )
-        else:
-            # Single-objective
-            final_best_prompts = best_prompts_overall
-            final_primary_score = best_primary_score_overall
-            logger.info(
-                f"Final best prompts from Hall of Fame: {len(final_best_prompts)} prompts"
-            )
-            logger.info(
-                f"Final best score ({metric.__name__}): {final_primary_score:.4f}"
-            )
-            initial_messages = {
-                name: p.get_messages() for name, p in optimizable_prompts.items()
-            }
-            final_details.update(
-                {
-                    "initial_prompts": initial_messages,
-                    "initial_score": initial_primary_score,
-                    "initial_score_for_display": initial_primary_score,
-                    "final_prompts": final_best_prompts,
-                    "final_score": final_primary_score,
-                }
-            )
-
-        logger.info(f"Total LLM calls during optimization: {self.llm_call_counter}")
-        logger.info(f"Total prompt evaluations: {trials_used[0]}")
-        if opik_optimization_run:
-            try:
-                opik_optimization_run.update(status="completed")
-                logger.info(
-                    f"Opik Optimization run {self.current_optimization_id} status updated to completed."
-                )
-            except Exception as e:
-                logger.warning(f"Failed to update Opik Optimization run status: {e}")
-
-        # Add final details
-        final_details.update(
-            {
-                "total_generations_run": generation_idx + 1,
-                "num_generations": self.num_generations,
-                "population_size": self.population_size,
-                "mutation_probability": self.mutation_rate,
-                "crossover_probability": self.crossover_rate,
-                "elitism_size": (
-                    self.elitism_size
-                    if not self.enable_moo
-                    else "N/A (MOO uses NSGA-II)"
-                ),
-                "adaptive_mutation": self.adaptive_mutation,
-                "metric_name": metric.__name__,
-                "model": self.model,
-                "moo_enabled": self.enable_moo,
-                "llm_crossover_enabled": self.enable_llm_crossover,
-                "seed": self.seed,
-                "prompt_type": "single_string_ga",
-                "initial_score_for_display": initial_score_for_display,
-                "temperature": self.model_parameters.get("temperature"),
-                "stopped_early": stopped_early_flag,
-                "rounds": self.get_history(),
-                "user_output_style_guidance": self.output_style_guidance,
-                "infer_output_style_requested": self.infer_output_style,
-                "final_effective_output_style_guidance": effective_output_style_guidance,
-                "infer_output_style": self.infer_output_style,
-                "trials_used": trials_used[0],
-                "trials_requested": max_trials,
-                "trials_completed": trials_used[0],
-                "rounds_completed": len(self.get_history()),
-                "stop_reason": "max_trials" if trials_used[0] >= max_trials else None,
-                "stop_reason_details": {"best_score": final_primary_score},
-            }
         )
 
-        # Return the OptimizationResult
-        # Display result - show single prompt or all prompts based on optimization type
-        display_prompt, _ = self._select_result_prompts(
-            best_prompts=final_best_prompts,
-            initial_prompts=final_best_prompts,
-            is_single_prompt_optimization=is_single_prompt_optimization,
+        dataset_split = context.dataset_split or (
+            "validation" if context.validation_dataset is not None else "train"
         )
-        reporting.display_result(
-            initial_score=initial_score_for_display,
-            best_score=final_primary_score,
-            prompt=display_prompt,
-            verbose=self.verbose,
-        )
-
-        # Collect tools from all final prompts
-        all_final_tools = {}
-        for name, p in final_best_prompts.items():
-            if p.tools:
-                all_final_tools[name] = p.tools
-        if all_final_tools:
-            final_details["final_tools"] = all_final_tools
-
-        # Convert result format based on input type
-        result_prompt, result_initial_prompt = self._select_result_prompts(
-            best_prompts=final_best_prompts,
-            initial_prompts=optimizable_prompts,
-            is_single_prompt_optimization=is_single_prompt_optimization,
+        self.set_default_dataset_split(dataset_split)
+        context.dataset_split = dataset_split
+        round_handle = self.pre_round(context)
+        generation_ops.post_population_round(
+            self,
+            context=context,
+            population=deap_population,
+            hof=hof,
+            generation_idx=0,
+            round_handle=round_handle,
+            initial_primary_score=initial_primary_score,
+            best_primary_score_overall=best_primary_score_overall,
+            best_prompts_overall=best_prompts_overall,
+            use_valid_index=False,
         )
 
-        return OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_prompt,
-            score=final_primary_score,
-            initial_prompt=result_initial_prompt,
-            initial_score=initial_primary_score,
-            metric_name=metric.__name__,
-            details=final_details,
-            history=[x.model_dump() for x in self.get_history()],
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_calls_tools_counter,
-            dataset_id=dataset.id,
-            optimization_id=self.current_optimization_id,
+        (
+            deap_population,
+            best_primary_score_overall,
+            best_prompts_overall,
+            generation_idx,
+        ) = generation_ops.run_generations(
+            self,
+            context=context,
+            deap_population=deap_population,
+            hof=hof,
+            optimizable_prompts=optimizable_prompts,
+            best_primary_score_overall=best_primary_score_overall,
+            best_prompts_overall=best_prompts_overall,
+            initial_primary_score=initial_primary_score,
+            max_trials=max_trials,
+        )
+
+        return result_ops.build_algorithm_result(
+            self,
+            context=context,
+            optimizable_prompts=optimizable_prompts,
+            best_prompts_overall=best_prompts_overall,
+            best_primary_score_overall=best_primary_score_overall,
+            initial_primary_score=initial_primary_score,
+            initial_length=initial_length,
+            hof=hof,
+            effective_output_style_guidance=effective_output_style_guidance,
+            generation_idx=generation_idx,
         )

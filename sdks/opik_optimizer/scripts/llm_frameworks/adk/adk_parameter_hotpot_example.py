@@ -1,10 +1,6 @@
 from typing import Any
 
-from opik_optimizer import (
-    ChatPrompt,
-    ParameterOptimizer,
-    ParameterSearchSpace,
-)
+from opik_optimizer import ChatPrompt, ParameterOptimizer, ParameterSearchSpace
 from opik_optimizer.datasets import hotpot
 
 from opik.evaluation.metrics import LevenshteinRatio
