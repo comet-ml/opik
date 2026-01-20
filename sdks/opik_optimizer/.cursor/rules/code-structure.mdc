@@ -76,7 +76,15 @@ See `src/opik_optimizer/algorithms/template_optimizer/` for a complete working t
 ```
 src/opik_optimizer/
 ├── base_optimizer.py
+├── core/
+│   ├── __init__.py
+│   ├── evaluation.py
+│   ├── llm_calls.py
+│   ├── results.py
+│   └── state.py
 ├── optimization_result.py
+├── task_evaluator.py
+├── _llm_calls.py
 ├── agents/
 │   └── optimizable_agent.py
 ├── optimization_config/
@@ -104,6 +112,7 @@ src/opik_optimizer/
 - Split new logic into focused modules when a file grows beyond ~300 lines or mixes concerns
 - Keep algorithm-specific helpers inside the corresponding optimizer package
 - Shared utilities that are reused across optimizers live in top-level directories (`utils/`, `optimization_config/`, `metrics/`, `mcp_utils/`)
+- `optimization_result.py`, `task_evaluator.py`, and `_llm_calls.py` are compatibility shims that re-export from `core/` for legacy imports; new code should prefer `core/` modules.
 
 ## Public Surface
 
