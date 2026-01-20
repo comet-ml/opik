@@ -53,3 +53,4 @@ def test_call_model_retries_with_json_instructions_live(
 
     assert isinstance(result, JsonRetryResponse)
     assert isinstance(result.value, int)
+    assert result.value == 2
