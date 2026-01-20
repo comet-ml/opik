@@ -185,7 +185,7 @@ def _generate_fresh_start_prompts(
         num_to_generate=num_fresh_starts,
     )
     try:
-        response_content = _llm_calls.call_model(
+        response_items = _call_and_normalize_model_response(
             messages=[
                 {
                     "role": "system",
@@ -198,23 +198,8 @@ def _generate_fresh_start_prompts(
             ],
             model=model,
             model_parameters=model_parameters,
-            is_reasoning=True,
-            return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+            debug_tag="population_fresh_start_response",
         )
-        response_items = (
-            response_content
-            if isinstance(response_content, list)
-            else [response_content]
-        )
-        response_items = [
-            normalize_llm_text(item) if isinstance(item, str) else item
-            for item in response_items
-        ]
-        cleaned = [
-            compact_debug_text(item) if isinstance(item, str) else item
-            for item in response_items
-        ]
-        debug_log("population_fresh_start_response", prompts=cleaned)
 
         parsed_prompts: list[list[dict[str, Any]]] = []
         for response_item in response_items:
@@ -246,7 +231,7 @@ def _generate_fresh_start_prompts(
     except json.JSONDecodeError as exc:
         init_pop_report.failed_fresh_prompts(
             num_fresh_starts,
-            f"JSONDecodeError generating fresh start prompts: {exc}. LLM response: '{response_content}'. Skipping fresh start prompts.",
+            f"JSONDecodeError generating fresh start prompts: {exc}. Skipping fresh start prompts.",
         )
         return []
     except Exception as exc:
@@ -280,7 +265,7 @@ def _generate_variation_prompts(
         num_variations=num_variations_on_initial,
     )
     try:
-        response_content_variations = _llm_calls.call_model(
+        response_items = _call_and_normalize_model_response(
             messages=[
                 {
                     "role": "system",
@@ -293,23 +278,8 @@ def _generate_variation_prompts(
             ],
             model=model,
             model_parameters=model_parameters,
-            is_reasoning=True,
-            return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+            debug_tag="population_variation_response",
         )
-        response_items = (
-            response_content_variations
-            if isinstance(response_content_variations, list)
-            else [response_content_variations]
-        )
-        response_items = [
-            normalize_llm_text(item) if isinstance(item, str) else item
-            for item in response_items
-        ]
-        cleaned = [
-            compact_debug_text(item) if isinstance(item, str) else item
-            for item in response_items
-        ]
-        debug_log("population_variation_response", prompts=cleaned)
         generated_prompts_variations: list[list[dict[str, Any]]] = []
         for response_item in response_items:
             json_response_variations = json.loads(normalize_llm_text(response_item))
@@ -371,6 +341,35 @@ def _dedupe_population(
             final_population_set.add(serialized)
             final_population_list.append(prompt)
     return final_population_list
+
+
+def _call_and_normalize_model_response(
+    *,
+    messages: list[dict[str, Any]],
+    model: str,
+    model_parameters: dict[str, Any],
+    debug_tag: str,
+) -> list[Any]:
+    response_content = _llm_calls.call_model(
+        messages=messages,
+        model=model,
+        model_parameters=model_parameters,
+        is_reasoning=True,
+        return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+    )
+    response_items = (
+        response_content if isinstance(response_content, list) else [response_content]
+    )
+    response_items = [
+        normalize_llm_text(item) if isinstance(item, str) else item
+        for item in response_items
+    ]
+    cleaned = [
+        compact_debug_text(item) if isinstance(item, str) else item
+        for item in response_items
+    ]
+    debug_log(debug_tag, prompts=cleaned)
+    return response_items
 
 
 def should_restart_population(

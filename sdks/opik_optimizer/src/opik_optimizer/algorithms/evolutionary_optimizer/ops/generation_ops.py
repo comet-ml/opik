@@ -275,6 +275,11 @@ def run_generation(
 
     if optimizer._reporter:
         optimizer._reporter.performing_mutation()
+    optimizer._current_population = list(offspring)
+    if hasattr(optimizer, "_best_fitness_history"):
+        valid_scores = [ind.fitness.values[0] for ind in offspring if ind.fitness.valid]
+        if valid_scores:
+            optimizer._best_fitness_history.append(max(valid_scores))
     mut_rate = optimizer._get_adaptive_mutation_rate()
     for i, ind in enumerate(offspring):
         if random.random() < mut_rate:

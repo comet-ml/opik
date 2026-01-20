@@ -2,6 +2,8 @@ from ...api_objects import chat_prompt
 from typing import Any
 import copy
 import rapidfuzz
+from ...utils.helpers import json_to_dict
+from ...utils.text import normalize_llm_text
 
 
 # FIXME: Refactor and move to prompts.py and prompt library.
@@ -55,3 +57,14 @@ def update_individual_with_prompt(
     setattr(individual, "model", prompt_candidate.model)
     setattr(individual, "model_kwargs", copy.deepcopy(prompt_candidate.model_kwargs))
     return individual
+
+
+def parse_llm_messages(response_item: Any) -> list[Any]:
+    """Normalize LLM responses into a list of message dicts."""
+    if hasattr(response_item, "model_dump"):
+        response_item = response_item.model_dump()
+    if isinstance(response_item, list):
+        return response_item
+    if isinstance(response_item, dict):
+        return response_item.get("messages") or [response_item]
+    return json_to_dict(normalize_llm_text(response_item))

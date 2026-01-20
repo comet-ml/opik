@@ -16,8 +16,6 @@ from ....api_objects.types import (
     rebuild_content_with_new_text,
 )
 from ....core import llm_calls as _llm_calls
-from ....utils.helpers import json_to_dict
-from ....utils.text import normalize_llm_text
 from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
@@ -349,14 +347,7 @@ def _semantic_mutation(
 
         response_item = response[0] if isinstance(response, list) else response
         try:
-            if hasattr(response_item, "model_dump"):
-                response_item = response_item.model_dump()
-            if isinstance(response_item, list):
-                messages = response_item
-            elif isinstance(response_item, dict):
-                messages = response_item.get("messages") or [response_item]
-            else:
-                messages = json_to_dict(normalize_llm_text(response_item))
+            messages = helpers.parse_llm_messages(response_item)
         except Exception as parse_exc:
             raise RuntimeError(
                 "Error parsing semantic mutation response as JSON. "
@@ -419,24 +410,12 @@ def _radical_innovation_mutation(
         response_item = (
             new_prompt_str[0] if isinstance(new_prompt_str, list) else new_prompt_str
         )
-        if hasattr(response_item, "model_dump"):
-            response_item = response_item.model_dump()
         if isinstance(response_item, str):
             logger.info(
-                f"Radical innovation LLM result (truncated): {response_item[:200]}"
+                "Radical innovation LLM result (truncated): %s", response_item[:200]
             )
         try:
-            if isinstance(response_item, dict) and "messages" in response_item:
-                new_messages = response_item["messages"]
-            elif isinstance(response_item, list):
-                new_messages = response_item
-            else:
-                response_text = (
-                    response_item
-                    if isinstance(response_item, str)
-                    else str(response_item)
-                )
-                new_messages = json_to_dict(normalize_llm_text(response_text))
+            new_messages = helpers.parse_llm_messages(response_item)
         except Exception as parse_exc:
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."
