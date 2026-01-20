@@ -15,7 +15,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import { Separator } from "@/components/ui/separator";
 import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
 import DashboardSaveActions from "@/components/pages-shared/dashboards/DashboardSaveActions/DashboardSaveActions";
-import DashboardProjectSettingsButton from "@/components/pages-shared/dashboards/DashboardProjectSettingsButton/DashboardProjectSettingsButton";
+import DashboardConfigButton from "@/components/pages-shared/dashboards/DashboardConfigButton/DashboardConfigButton";
 import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 
@@ -95,7 +95,7 @@ const DashboardPage: React.FunctionComponent = () => {
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ShareDashboardButton />
-          <DashboardProjectSettingsButton />
+          <DashboardConfigButton />
         </div>
       </div>
       <div className="pb-4 pt-1">

@@ -22,6 +22,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { getJSONPaths } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import { parseScoreColumnId } from "@/components/pages-shared/experiments/scoresUtils";
+import { DEFAULT_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 
 export {
   parseScoreColumnId,
@@ -51,10 +52,6 @@ export const getExperimentListParams = ({
     isEnabled: isSelectMode ? experimentIds.length > 0 : true,
   };
 };
-
-export const DEFAULT_MAX_ROWS = 20;
-export const MIN_MAX_ROWS = 1;
-export const MAX_MAX_ROWS = 100;
 
 export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   {
@@ -168,7 +165,7 @@ export const getDefaultConfig = () => ({
   scoresColumnsOrder: [],
   metadataColumnsOrder: [],
   columnsWidth: {},
-  maxRows: DEFAULT_MAX_ROWS,
+  maxRows: DEFAULT_MAX_EXPERIMENTS,
   sorting: [],
 });
 

@@ -5,7 +5,11 @@ import {
   TEMPLATE_SCOPE,
   EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
-import { DASHBOARD_VERSION, createTemplateId } from "@/lib/dashboard/utils";
+import {
+  DASHBOARD_VERSION,
+  createTemplateId,
+  DEFAULT_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import { CHART_TYPE } from "@/constants/chart";
@@ -80,6 +84,9 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
     },
   },
 };
@@ -353,6 +360,9 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
     },
   },
 };
@@ -656,6 +666,9 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
     },
   },
 };
