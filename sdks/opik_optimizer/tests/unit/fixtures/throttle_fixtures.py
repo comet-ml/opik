@@ -19,7 +19,9 @@ def disable_rate_limiting(monkeypatch: pytest.MonkeyPatch) -> None:
     def passthrough_decorator(func: Callable[..., object]) -> Callable[..., object]:
         return func
 
-    def passthrough_factory() -> Callable[[Callable[..., object]], Callable[..., object]]:
+    def passthrough_factory() -> Callable[
+        [Callable[..., object]], Callable[..., object]
+    ]:
         return passthrough_decorator
 
     monkeypatch.setattr(
@@ -28,4 +30,3 @@ def disable_rate_limiting(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "opik_optimizer.utils.throttle.rate_limited_async", passthrough_factory
     )
-

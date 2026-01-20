@@ -34,4 +34,3 @@ def mock_token_counter(
         return fake_counter
 
     return _configure
-

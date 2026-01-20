@@ -87,7 +87,9 @@ def mock_full_optimization_flow(
 
         mock_agent_instance = MagicMock()
         mock_agent_instance.invoke_agent.return_value = "Mock agent response"
-        mock_agent_instance.invoke_agent_candidates.return_value = ["Mock agent response"]
+        mock_agent_instance.invoke_agent_candidates.return_value = [
+            "Mock agent response"
+        ]
 
         def mock_litellm_agent_init(*_args: Any, **_kwargs: Any) -> Any:
             return mock_agent_instance
@@ -113,4 +115,3 @@ def mock_full_optimization_flow(
 def optimizer_test_params() -> dict[str, Any]:
     """Standard test parameters for fast optimizer testing."""
     return {"max_trials": 1, "n_samples": 2, "verbose": 0}
-

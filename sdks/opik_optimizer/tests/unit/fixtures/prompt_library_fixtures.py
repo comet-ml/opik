@@ -12,4 +12,3 @@ def evo_prompts():
     from opik_optimizer.utils.prompt_library import PromptLibrary
 
     return PromptLibrary(EvolutionaryOptimizer.DEFAULT_PROMPTS)
-

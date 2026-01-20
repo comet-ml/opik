@@ -33,4 +33,3 @@ def mock_agent() -> Callable[..., MagicMock]:
         return mock
 
     return _create
-

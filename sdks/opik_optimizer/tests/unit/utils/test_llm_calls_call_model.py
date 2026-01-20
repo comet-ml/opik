@@ -269,4 +269,3 @@ class TestCounterIncrement:
         inner_call(optimizer)
 
         assert optimizer.llm_call_tools_counter == initial_count + 1
-

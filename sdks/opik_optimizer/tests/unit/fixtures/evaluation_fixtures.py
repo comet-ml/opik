@@ -130,4 +130,3 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Any]:
         return evaluator
 
     return _configure
-

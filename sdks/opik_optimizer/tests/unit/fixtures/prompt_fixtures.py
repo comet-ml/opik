@@ -96,4 +96,3 @@ def chat_prompt_with_tools() -> ChatPrompt:
             },
         ],
     )
-

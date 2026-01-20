@@ -15,4 +15,3 @@ os.environ.setdefault(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
 @pytest.fixture(autouse=True)
 def _disable_display_output(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
-

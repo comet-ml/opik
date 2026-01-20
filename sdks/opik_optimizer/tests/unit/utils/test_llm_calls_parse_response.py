@@ -101,7 +101,9 @@ class TestParseResponse:
             assert "max_tokens" in str(exc_info.value)
 
     def test_does_not_raise_on_truncation_with_non_empty_content(self) -> None:
-        mock_response = make_mock_response("Some partial content", finish_reason="length")
+        mock_response = make_mock_response(
+            "Some partial content", finish_reason="length"
+        )
         assert _parse_response(mock_response) == "Some partial content"
 
     def test_raises_structured_output_parsing_error_on_invalid_json(self) -> None:
@@ -137,7 +139,9 @@ class TestParseResponse:
         mock_response.choices[1].message.content = "invalid"
         mock_response.choices[1].message.parsed = {"name": "second"}
 
-        result = _parse_response(mock_response, response_model=_NameModel, return_all=True)
+        result = _parse_response(
+            mock_response, response_model=_NameModel, return_all=True
+        )
 
         parsed_results = cast(list[_NameModel], result)
         assert [item.name for item in parsed_results] == ["first", "second"]
@@ -170,7 +174,9 @@ class TestStructuredOutputModels:
     def test_mutation_response_normalizes_payloads(
         self, payload: Any, expected_len: int, expected_first_role: str
     ) -> None:
-        from opik_optimizer.algorithms.evolutionary_optimizer.types import MutationResponse
+        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
+            MutationResponse,
+        )
 
         parsed = MutationResponse.model_validate(payload)
 
@@ -253,20 +259,26 @@ class TestStructuredOutputModels:
 class TestStructuredOutputParsingError:
     def test_stores_content_and_error(self) -> None:
         original_error = ValueError("Original error")
-        exc = StructuredOutputParsingError(content="failed content", error=original_error)
+        exc = StructuredOutputParsingError(
+            content="failed content", error=original_error
+        )
         assert exc.content == "failed content"
         assert exc.error is original_error
 
     def test_message_includes_content_and_error(self) -> None:
         original_error = ValueError("Parse failed")
-        exc = StructuredOutputParsingError(content="{'bad': json}", error=original_error)
+        exc = StructuredOutputParsingError(
+            content="{'bad': json}", error=original_error
+        )
         message = str(exc)
         assert "Parse failed" in message
         assert "{'bad': json}" in message
 
     def test_can_be_caught_as_exception(self) -> None:
         with pytest.raises(Exception):
-            raise StructuredOutputParsingError(content="content", error=ValueError("error"))
+            raise StructuredOutputParsingError(
+                content="content", error=ValueError("error")
+            )
 
 
 class TestParseResponseEdgeCases:
@@ -300,4 +312,3 @@ class TestParseResponseEdgeCases:
     def test_parse_response_handles_unicode_content(self) -> None:
         mock_response = make_mock_response("Hello, 世界! 🌍")
         assert _parse_response(mock_response) == "Hello, 世界! 🌍"
-

@@ -4,7 +4,6 @@ Unit tests for parameter-building helpers in opik_optimizer.core.llm_calls.
 
 from __future__ import annotations
 
-from typing import Any
 
 import pytest
 from pydantic import BaseModel
@@ -222,4 +221,3 @@ class TestBuildCallTimeParamsEdgeCases:
         """Should include empty metadata dict if provided."""
         result = _build_call_time_params(metadata={})
         assert result == {"metadata": {}}
-
