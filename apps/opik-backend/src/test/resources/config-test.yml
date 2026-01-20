@@ -541,6 +541,23 @@ datasetVersioningMigration:
   # Description: Whether to enable lazy migration (migrate datasets on first access)
   lazyEnabled: false
 
+# Dataset Version Items Total Migration configuration
+# This migration calculates and updates the items_total field for dataset versions
+# that were created by the Liquibase migration (where dataset_id = dataset_version_id)
+datasetVersionItemsTotalMigration:
+  # Default: false for testing
+  # Description: Whether to run the items_total migration on startup
+  # Set to true to enable the migration, false to disable after completion
+  enabled: false
+  # Default: 100
+  # Description: Number of dataset versions to process in each batch
+  # Smaller batches reduce memory usage but increase total migration time
+  batchSize: 100
+  # Default: 3600 (1 hour)
+  # Description: Lock timeout in seconds for the migration process
+  # Should be long enough to complete the migration
+  lockTimeoutSeconds: 3600
+
 # Job timeout configuration
 jobTimeout:
   # Default: 30s

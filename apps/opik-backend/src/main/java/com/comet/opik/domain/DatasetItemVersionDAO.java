@@ -305,6 +305,17 @@ public interface DatasetItemVersionDAO {
      */
     Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId);
 
+    /**
+     * Counts items for multiple dataset versions in a single query.
+     * This is used for batch migration of items_total field.
+     * Uses workspace_id, dataset_id, and dataset_version_id to optimize the query
+     * according to the table's ordering key: (workspace_id, dataset_id, dataset_version_id, id).
+     *
+     * @param versions list of version info (workspace_id, dataset_id, version_id) to count items for
+     * @return Flux emitting item counts for each version
+     */
+    Flux<DatasetVersionItemsCount> countItemsInVersionsBatch(List<DatasetVersionInfo> versions);
+
 }
 
 @Singleton
@@ -1568,6 +1579,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
               AND dataset_version_id = :versionId
             """;
 
+    /**
+     * Query to count items for multiple versions in a single statement.
+     * Uses (workspace_id, dataset_id, dataset_version_id) tuples to optimize the query
+     * according to the table's ordering key: (workspace_id, dataset_id, dataset_version_id, id).
+     * This allows ClickHouse to efficiently skip irrelevant data partitions.
+     */
+    private static final String COUNT_ITEMS_IN_VERSIONS_BATCH = """
+            SELECT
+                dataset_version_id,
+                count(DISTINCT id) as count
+            FROM dataset_item_versions
+            WHERE (workspace_id, dataset_id, dataset_version_id) IN (<version_tuples>)
+            GROUP BY dataset_version_id
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -2823,6 +2849,41 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnSuccess(count -> log.debug("Counted '{}' items in version '{}'", count, versionId))
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    @Override
+    public Flux<DatasetVersionItemsCount> countItemsInVersionsBatch(List<DatasetVersionInfo> versions) {
+        if (versions.isEmpty()) {
+            log.debug("No versions to count items for");
+            return Flux.empty();
+        }
+
+        log.debug("Counting items for '{}' versions in batch", versions.size());
+
+        // Build the tuple IN clause to match ClickHouse ordering key
+        // Format: ('workspace1', 'dataset1', 'version1'), ('workspace2', 'dataset2', 'version2'), ...
+        String versionTuples = versions.stream()
+                .map(v -> "('" + v.workspaceId() + "', '" + v.datasetId() + "', '" + v.versionId() + "')")
+                .collect(java.util.stream.Collectors.joining(", "));
+
+        String query = COUNT_ITEMS_IN_VERSIONS_BATCH.replace("<version_tuples>", versionTuples);
+
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_items_in_versions_batch");
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(query);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        String versionIdStr = row.get("dataset_version_id", String.class);
+                        Long count = row.get("count", Long.class);
+                        return new DatasetVersionItemsCount(UUID.fromString(versionIdStr), count != null ? count : 0L);
+                    }));
+        })
+                .collectList()
+                .doOnSuccess(itemCounts -> log.debug("Completed counting items for '{}' versions", itemCounts.size()))
+                .flatMapMany(Flux::fromIterable);
     }
 
 }

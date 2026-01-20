@@ -422,6 +422,50 @@ public interface DatasetVersionDAO {
     void updateItemsTotal(@Bind("version_id") UUID versionId,
             @Bind("items_total") long itemsTotal);
 
+    /**
+     * Batch update items_total for multiple dataset versions.
+     * Uses JDBI's @SqlBatch to execute multiple updates efficiently in a single batch.
+     *
+     * @param versionIds list of version IDs to update
+     * @param itemsTotals list of items_total values (must match versionIds order and size)
+     */
+    @SqlBatch("""
+            UPDATE dataset_versions
+            SET items_total = :items_total,
+                last_updated_at = NOW()
+            WHERE id = :version_id
+            """)
+    void batchUpdateItemsTotal(@Bind("version_id") List<UUID> versionIds,
+            @Bind("items_total") List<Long> itemsTotals);
+
+    /**
+     * Finds dataset versions that need items_total migration using cursor-based pagination.
+     * These are versions where:
+     * - dataset_id = id (version created by Liquibase migration)
+     * - items_total = 0 (not yet calculated)
+     * - id > lastSeenVersionId (for pagination)
+     *
+     * Returns workspace_id, dataset_id, and version_id to optimize ClickHouse queries
+     * using the table's ordering key (workspace_id, dataset_id, dataset_version_id, id).
+     *
+     * @param lastSeenVersionId cursor for pagination (use empty string for first batch)
+     * @param limit maximum number of versions to return
+     * @return list of version info for migration
+     */
+    @SqlQuery("""
+            SELECT workspace_id, dataset_id, id AS version_id
+            FROM dataset_versions
+            WHERE dataset_id = id
+              AND items_total = 0
+              AND id > :lastSeenVersionId
+            ORDER BY id
+            LIMIT :limit
+            """)
+    @RegisterConstructorMapper(DatasetVersionInfo.class)
+    List<DatasetVersionInfo> findVersionsNeedingItemsTotalMigration(
+            @Bind("lastSeenVersionId") String lastSeenVersionId,
+            @Bind("limit") int limit);
+
     @SqlUpdate("""
             INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id, created_at, last_updated_at)
             SELECT

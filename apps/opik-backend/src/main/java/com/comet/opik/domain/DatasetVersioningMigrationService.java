@@ -15,6 +15,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -30,7 +31,9 @@ public class DatasetVersioningMigrationService {
     private final @NonNull Provider<RequestContext> requestContext;
 
     private static final Lock MIGRATION_LOCK = new Lock("dataset_versioning_migration");
+    private static final Lock ITEMS_TOTAL_MIGRATION_LOCK = new Lock("dataset_version_items_total_migration");
     private static final String WORKSPACE_CURSOR_MIN = ""; // Empty string is less than any workspace_id
+    private static final String VERSION_CURSOR_MIN = "00000000-0000-0000-0000-000000000000"; // Minimum UUID for cursor
 
     public Mono<Void> runMigration(int workspaceBatchSize, Duration lockTimeout) {
         log.info(
@@ -137,6 +140,122 @@ public class DatasetVersioningMigrationService {
     }
 
     private static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(30);
+
+    /**
+     * Runs the items_total migration for dataset versions created by Liquibase.
+     * <p>
+     * This migration calculates and updates the items_total field for dataset versions
+     * where dataset_id = dataset_version_id (indicating they were created by the Liquibase
+     * migration) and items_total is 0.
+     * <p>
+     * The migration is safe to run multiple times and will continue from where it stopped.
+     * It processes versions in batches to avoid memory issues and uses a distributed lock
+     * to prevent concurrent executions.
+     *
+     * @param batchSize number of versions to process in each batch
+     * @param lockTimeout timeout for the distributed lock
+     * @return a Mono that completes when the migration is done
+     */
+    public Mono<Void> runItemsTotalMigration(int batchSize, Duration lockTimeout) {
+        log.info("Starting dataset version items_total migration with batch size '{}' and lock timeout '{}'",
+                batchSize, lockTimeout);
+
+        return lockService.executeWithLockCustomExpire(
+                ITEMS_TOTAL_MIGRATION_LOCK,
+                Mono.defer(() -> migrateItemsTotalInBatches(batchSize, VERSION_CURSOR_MIN)),
+                lockTimeout);
+    }
+
+    /**
+     * Processes dataset versions in batches, calculating and updating items_total.
+     * <p>
+     * This method continuously processes batches until no more versions need migration.
+     * Uses cursor-based pagination to iterate through all versions.
+     * Each batch:
+     * 1. Finds versions where dataset_id = dataset_version_id and items_total = 0
+     * 2. Calculates item counts from ClickHouse in a single query
+     * 3. Updates MySQL with the calculated totals
+     *
+     * @param batchSize number of versions to process per batch
+     * @param lastSeenVersionId cursor for pagination (UUID string)
+     * @return a Mono that completes when all batches are processed
+     */
+    private Mono<Void> migrateItemsTotalInBatches(int batchSize, String lastSeenVersionId) {
+        return Mono.defer(() -> {
+            log.debug("Fetching next batch of '{}' dataset versions for items_total migration (cursor: '{}')",
+                    batchSize, lastSeenVersionId);
+
+            return Mono.fromCallable(() -> {
+                // Find next batch of versions that need migration
+                return template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetVersionDAO.class);
+                    return dao.findVersionsNeedingItemsTotalMigration(lastSeenVersionId, batchSize);
+                });
+            })
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(versions -> {
+                        if (versions.isEmpty()) {
+                            log.info("Dataset version items_total migration complete - no more versions to process");
+                            return Mono.empty();
+                        }
+
+                        log.info("Processing batch of '{}' dataset versions for items_total calculation (cursor: '{}')",
+                                versions.size(), lastSeenVersionId);
+
+                        // Get the last version ID in this batch for the next cursor
+                        String nextCursor = versions.get(versions.size() - 1).versionId().toString();
+
+                        return processBatchItemsTotals(versions)
+                                .then(Mono.defer(() -> migrateItemsTotalInBatches(batchSize, nextCursor))); // Process next batch
+                    });
+        });
+    }
+
+    /**
+     * Processes a batch of dataset versions, calculating and updating their items_total.
+     * <p>
+     * This method:
+     * 1. Executes a single ClickHouse query to count items for all versions
+     * 2. Updates MySQL with the calculated totals in a single transaction
+     *
+     * @param versions list of version info to process
+     * @return a Mono that completes when the batch is processed
+     */
+    private Mono<Void> processBatchItemsTotals(List<DatasetVersionInfo> versions) {
+        log.debug("Calculating items_total for '{}' versions", versions.size());
+
+        // Calculate item counts from ClickHouse
+        return datasetItemVersionDAO.countItemsInVersionsBatch(versions)
+                .collectList()
+                .flatMap(itemCounts -> {
+                    if (itemCounts.isEmpty()) {
+                        log.info("No items found for batch of '{}' versions", versions.size());
+                        return Mono.empty();
+                    }
+
+                    log.info("Updating items_total for '{}' versions in a single batch", itemCounts.size());
+
+                    // Extract version IDs and totals for batch update
+                    List<UUID> versionIds = itemCounts.stream()
+                            .map(DatasetVersionItemsCount::versionId)
+                            .toList();
+                    List<Long> itemsTotals = itemCounts.stream()
+                            .map(DatasetVersionItemsCount::count)
+                            .toList();
+
+                    // Update MySQL with calculated totals in a single batch
+                    return Mono.fromRunnable(() -> {
+                        template.inTransaction(WRITE, handle -> {
+                            var dao = handle.attach(DatasetVersionDAO.class);
+                            dao.batchUpdateItemsTotal(versionIds, itemsTotals);
+                            log.debug("Batch updated '{}' versions with items_total", versionIds.size());
+                            return null;
+                        });
+                    }).subscribeOn(Schedulers.boundedElastic()).then();
+                })
+                .doOnSuccess(unused -> log.info("Successfully processed batch of '{}' versions", versions.size()))
+                .doOnError(error -> log.error("Failed to process batch of '{}' versions", versions.size(), error));
+    }
 
     private Mono<Void> migrateAllWorkspaces(int workspaceBatchSize, String lastSeenWorkspaceId) {
         return Mono.defer(() -> {
