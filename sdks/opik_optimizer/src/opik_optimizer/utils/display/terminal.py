@@ -622,13 +622,7 @@ def _build_parameter_summary_table(
     return summary_table
 
 
-def render_rich_result(result: Any) -> rich.panel.Panel:
-    """Create a rich Panel for the final optimization result."""
-    model_name = _format_model_name(result)
-    trials_completed = result.details.get("trials_completed")
-    stop_reason = result.details.get("stop_reason")
-    rounds_ran = len(result.history)
-    improvement_str = result._calculate_improvement_str()
+def _format_score_strings(result: Any) -> tuple[str, str, str]:
     initial_score = result.initial_score
     initial_score_str = (
         f"{initial_score:.4f}"
@@ -636,55 +630,62 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
         else "[dim]N/A[/dim]"
     )
     final_score_str = f"{result.score:.4f}"
+    improvement_str = result._calculate_improvement_str()
+    return initial_score_str, final_score_str, improvement_str
+
+
+def _collect_result_stats(result: Any) -> dict[str, Any]:
+    trials_completed = result.details.get("trials_completed")
+    stop_reason = result.details.get("stop_reason")
+    rounds_ran = len(result.history)
+    candidates_count = _count_candidates(result.history)
+    best_candidate_id = _find_best_candidate_id(result.history, result.score)
+    return {
+        "trials_completed": trials_completed,
+        "stop_reason": stop_reason,
+        "rounds_ran": rounds_ran,
+        "candidates_count": candidates_count,
+        "best_candidate_id": best_candidate_id,
+        "llm_calls": result.llm_calls,
+        "llm_tools": result.llm_calls_tools,
+    }
+
+
+def _build_result_overview_table(result: Any) -> rich.table.Table:
+    model_name = _format_model_name(result)
+    initial_score_str, final_score_str, improvement_str = _format_score_strings(result)
+    stats = _collect_result_stats(result)
 
     table = rich.table.Table.grid(padding=(0, 1))
     table.add_column(style="dim")
     table.add_column()
 
-    table.add_row(
-        "Optimizer:",
-        f"[bold]{result.optimizer}[/bold]",
-    )
+    table.add_row("Optimizer:", f"[bold]{result.optimizer}[/bold]")
     table.add_row("Model Used:", f"{model_name}")
     table.add_row("Metric Evaluated:", f"[bold]{result.metric_name}[/bold]")
     table.add_row("Initial Score:", initial_score_str)
     table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
     table.add_row("Total Improvement:", improvement_str)
+
     display_trials = (
-        str(trials_completed) if isinstance(trials_completed, int) else str(rounds_ran)
+        str(stats["trials_completed"])
+        if isinstance(stats["trials_completed"], int)
+        else str(stats["rounds_ran"])
     )
     improvement_display = _format_improvement_display(result)
-    stop_display = _format_stop_display(stop_reason)
-    candidates_count = _count_candidates(result.history)
-    llm_calls = result.llm_calls
-    llm_tools = result.llm_calls_tools
-    counter_bits = []
-    counter_bits.append(f"Rounds: {rounds_ran}")
-    counter_bits.append(f"Candidates: {candidates_count}")
-    if isinstance(llm_calls, int):
-        counter_bits.append(f"LLM: {llm_calls}")
-    if isinstance(llm_tools, int):
-        counter_bits.append(f"Tools: {llm_tools}")
+    stop_display = _format_stop_display(stats["stop_reason"])
     table.add_row(
         "Key metrics:",
         _build_key_metrics(final_score_str, improvement_display, stop_display),
     )
     table.add_row(
         "Statistics:",
-        f"Trials: {display_trials} | Rounds: {rounds_ran} | Candidates: {candidates_count}",
+        f"Trials: {display_trials} | Rounds: {stats['rounds_ran']} | Candidates: {stats['candidates_count']}",
     )
-    best_candidate_id = _find_best_candidate_id(result.history, result.score)
-    if best_candidate_id:
-        table.add_row("Best candidate:", best_candidate_id)
-    if (llm_calls is not None or llm_tools is not None) and logging.getLogger(
-        "opik_optimizer"
-    ).isEnabledFor(logging.DEBUG):
-        counters = []
-        if isinstance(llm_calls, int):
-            counters.append(f"LLM Calls: {llm_calls}")
-        if isinstance(llm_tools, int):
-            counters.append(f"Tool Calls: {llm_tools}")
-        table.add_row("Counters:", " | ".join(counters))
+
+    if stats["best_candidate_id"]:
+        table.add_row("Best candidate:", stats["best_candidate_id"])
+    _maybe_add_counters(table, stats)
     table.add_row(
         "Best prompt summary:",
         _summarize_prompt_structure(result.prompt),
@@ -698,24 +699,40 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
             optimization_id=result.optimization_id,
         ),
     )
+    return table
 
-    optimized_params = result.details.get("optimized_parameters") or {}
-    parameter_importance = result.details.get("parameter_importance") or {}
-    search_ranges = result.details.get("search_ranges") or {}
-    precision = result.details.get("parameter_precision", 6)
-    parameter_space = result.details.get("parameter_space") or {}
 
-    prompt_panel = _build_prompt_panel(result)
+def _maybe_add_counters(table: rich.table.Table, stats: dict[str, Any]) -> None:
+    llm_calls = stats.get("llm_calls")
+    llm_tools = stats.get("llm_tools")
+    if (llm_calls is None and llm_tools is None) or not logging.getLogger(
+        "opik_optimizer"
+    ).isEnabledFor(logging.DEBUG):
+        return
 
-    renderables: list[rich.console.RenderableType] = [table, "\n"]
+    counters: list[str] = []
+    if isinstance(llm_calls, int):
+        counters.append(f"LLM Calls: {llm_calls}")
+    if isinstance(llm_tools, int):
+        counters.append(f"Tool Calls: {llm_tools}")
+    if counters:
+        table.add_row("Counters:", " | ".join(counters))
+
+
+def _collect_parameter_names(
+    optimized_params: dict[str, Any],
+    parameter_space: dict[str, Any] | None,
+    search_ranges: dict[str, Any],
+) -> list[str]:
+    if optimized_params:
+        return sorted(optimized_params)
 
     param_names: list[str] = []
-    if optimized_params:
-        param_names = sorted(optimized_params)
-    if not param_names and isinstance(parameter_space, dict):
+    if isinstance(parameter_space, dict):
         for spec in parameter_space.get("parameters", []) or []:
             if isinstance(spec, dict) and isinstance(spec.get("name"), str):
                 param_names.append(spec["name"])
+
     if not param_names and search_ranges:
         seen: set[str] = set()
         for stage_params in search_ranges.values():
@@ -726,31 +743,58 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
                     seen.add(key)
                     param_names.append(key)
 
-    if param_names:
-        total_improvement = None
-        if isinstance(result.initial_score, (int, float)) and isinstance(
-            result.score, (int, float)
-        ):
-            if result.initial_score != 0:
-                total_improvement = (result.score - result.initial_score) / abs(
-                    result.initial_score
-                )
-            else:
-                total_improvement = result.score
+    return param_names
 
-        summary_table = _build_parameter_summary_table(
-            param_names=param_names,
-            optimized_params=optimized_params,
-            parameter_importance=parameter_importance,
-            search_ranges=search_ranges,
-            search_stages=result.details.get("search_stages", []),
-            precision=precision,
-            total_improvement=total_improvement,
-        )
-        renderables.extend([summary_table, "\n"])
+
+def _build_parameter_summary_renderables(
+    result: Any,
+    param_names: list[str],
+) -> list[rich.console.RenderableType]:
+    optimized_params = result.details.get("optimized_parameters") or {}
+    parameter_importance = result.details.get("parameter_importance") or {}
+    search_ranges = result.details.get("search_ranges") or {}
+    precision = result.details.get("parameter_precision", 6)
+
+    total_improvement = None
+    if isinstance(result.initial_score, (int, float)) and isinstance(
+        result.score, (int, float)
+    ):
+        if result.initial_score != 0:
+            total_improvement = (result.score - result.initial_score) / abs(
+                result.initial_score
+            )
+        else:
+            total_improvement = result.score
+
+    summary_table = _build_parameter_summary_table(
+        param_names=param_names,
+        optimized_params=optimized_params,
+        parameter_importance=parameter_importance,
+        search_ranges=search_ranges,
+        search_stages=result.details.get("search_stages", []),
+        precision=precision,
+        total_improvement=total_improvement,
+    )
+    return [summary_table, "\n"]
+
+
+def render_rich_result(result: Any) -> rich.panel.Panel:
+    """Create a rich Panel for the final optimization result."""
+    overview_table = _build_result_overview_table(result)
+    prompt_panel = _build_prompt_panel(result)
+
+    renderables: list[rich.console.RenderableType] = [overview_table, "\n"]
+
+    search_ranges = result.details.get("search_ranges") or {}
+    parameter_space = result.details.get("parameter_space") or {}
+    optimized_params = result.details.get("optimized_parameters") or {}
+    param_names = _collect_parameter_names(
+        optimized_params, parameter_space, search_ranges
+    )
+    if param_names:
+        renderables.extend(_build_parameter_summary_renderables(result, param_names))
 
     renderables.append(prompt_panel)
-
     content_group = rich.console.Group(*renderables)
 
     return rich.panel.Panel(

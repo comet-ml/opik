@@ -99,6 +99,113 @@ def _render_shape_summary(
     return "\n".join(parts)
 
 
+def _extract_task_id(record: Mapping[str, Any]) -> str:
+    return (
+        record.get("task_id")
+        or record.get("id")
+        or record.get("uuid")
+        or record.get("hash")
+        or "unknown_task"
+    )
+
+
+def _extract_train_test_examples(
+    record: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], list[list[list[int]]], list[Any] | None]:
+    train_examples = record.get("train") or record.get("training_examples") or []
+    test_examples_raw = record.get("test") or record.get("test_inputs") or []
+
+    if test_examples_raw and isinstance(test_examples_raw[0], dict):
+        test_inputs = [ex.get("input") for ex in test_examples_raw]
+        inferred_outputs = [
+            ex.get("output") for ex in test_examples_raw if "output" in ex
+        ]
+    else:
+        test_inputs = list(test_examples_raw)
+        inferred_outputs = []
+
+    test_outputs = record.get("test_outputs") or record.get("outputs") or None
+    if test_outputs is None and inferred_outputs:
+        test_outputs = inferred_outputs
+
+    return train_examples, test_inputs, test_outputs
+
+
+def _copy_text_fields(record: Mapping[str, Any], record_out: dict[str, Any]) -> None:
+    test_text_fields = (
+        "test_input_texts",
+        "test_output_texts",
+        "test_prompts",
+        "test_targets",
+        "test_conversations",
+    )
+    for field in test_text_fields:
+        values = _normalize_list_field(record.get(field))
+        if values is not None:
+            record_out[field] = values
+
+
+def _copy_image_fields(
+    record: Mapping[str, Any],
+    record_out: dict[str, Any],
+    *,
+    image_format: str,
+) -> None:
+    image_fields = (
+        "train_input_image_color",
+        "train_input_image_annotated",
+        "train_output_image_color",
+        "train_output_image_annotated",
+        "test_input_image_color",
+        "test_input_image_annotated",
+        "test_output_image_color",
+        "test_output_image_annotated",
+    )
+    for field in image_fields:
+        values = _normalize_list_field(record.get(field))
+        if values is not None:
+            record_out[field] = _encode_image_list(values, image_format=image_format)
+
+    def _first_list(names: list[str]) -> list[Any] | None:
+        for name in names:
+            vals = record_out.get(name) or record.get(name)
+            if isinstance(vals, list) and vals:
+                return _encode_image_list(vals, image_format=image_format)
+        return None
+
+    train_images = _first_list(
+        [
+            "train_input_image_color",
+            "train_input_image_annotated",
+            "train_images",
+            "train_input_images",
+        ]
+    )
+    if train_images:
+        record_out["train_images"] = train_images
+
+    train_output_images = _first_list(
+        [
+            "train_output_image_color",
+            "train_output_image_annotated",
+            "train_output_images",
+        ]
+    )
+    if train_output_images:
+        record_out["train_output_images"] = train_output_images
+
+    test_images = _first_list(
+        [
+            "test_input_image_color",
+            "test_input_image_annotated",
+            "test_images",
+            "test_input_images",
+        ]
+    )
+    if test_images:
+        record_out["test_images"] = test_images
+
+
 def _normalize_record(
     record: Mapping[str, Any],
     *,
@@ -115,31 +222,10 @@ def _normalize_record(
     }
     Derived text fields are added by `_finalize_record`.
     """
-    task_id = (
-        record.get("task_id")
-        or record.get("id")
-        or record.get("uuid")
-        or record.get("hash")
-        or "unknown_task"
-    )
+    task_id = _extract_task_id(record)
     row_id = record.get("id")
     split = record.get("split")
-    train_examples = record.get("train") or record.get("training_examples") or []
-    test_examples_raw = record.get("test") or record.get("test_inputs") or []
-
-    # Ensure test_inputs is a list of grids
-    if test_examples_raw and isinstance(test_examples_raw[0], dict):
-        test_inputs = [ex.get("input") for ex in test_examples_raw]
-        inferred_outputs = [
-            ex.get("output") for ex in test_examples_raw if "output" in ex
-        ]
-    else:
-        test_inputs = list(test_examples_raw)
-        inferred_outputs = []
-
-    test_outputs = record.get("test_outputs") or record.get("outputs") or None
-    if test_outputs is None and inferred_outputs:
-        test_outputs = inferred_outputs
+    train_examples, test_inputs, test_outputs = _extract_train_test_examples(record)
 
     record_out: dict[str, Any] = {
         "task_id": task_id,
@@ -152,75 +238,9 @@ def _normalize_record(
         record_out["test_ids"] = [row_id]
     if split:
         record_out["split"] = split
-    test_text_fields = (
-        "test_input_texts",
-        "test_output_texts",
-        "test_prompts",
-        "test_targets",
-        "test_conversations",
-    )
-    for field in test_text_fields:
-        values = _normalize_list_field(record.get(field))
-        if values is not None:
-            record_out[field] = values
+    _copy_text_fields(record, record_out)
     if include_images:
-        # Preserve raw image fields (encoded to data URIs) and build canonical
-        # shortcuts `train_images`, `train_output_images`, `test_images`.
-        image_fields = (
-            "train_input_image_color",
-            "train_input_image_annotated",
-            "train_output_image_color",
-            "train_output_image_annotated",
-            "test_input_image_color",
-            "test_input_image_annotated",
-            "test_output_image_color",
-            "test_output_image_annotated",
-        )
-        for field in image_fields:
-            values = _normalize_list_field(record.get(field))
-            if values is not None:
-                record_out[field] = _encode_image_list(
-                    values, image_format=image_format
-                )
-
-        def _first_list(names: list[str]) -> list[Any] | None:
-            for name in names:
-                vals = record_out.get(name) or record.get(name)
-                if isinstance(vals, list) and vals:
-                    return _encode_image_list(vals, image_format=image_format)
-            return None
-
-        train_images = _first_list(
-            [
-                "train_input_image_color",
-                "train_input_image_annotated",
-                "train_images",
-                "train_input_images",
-            ]
-        )
-        if train_images:
-            record_out["train_images"] = train_images
-
-        train_output_images = _first_list(
-            [
-                "train_output_image_color",
-                "train_output_image_annotated",
-                "train_output_images",
-            ]
-        )
-        if train_output_images:
-            record_out["train_output_images"] = train_output_images
-
-        test_images = _first_list(
-            [
-                "test_input_image_color",
-                "test_input_image_annotated",
-                "test_images",
-                "test_input_images",
-            ]
-        )
-        if test_images:
-            record_out["test_images"] = test_images
+        _copy_image_fields(record, record_out, image_format=image_format)
     return record_out
 
 
@@ -325,6 +345,112 @@ def _merge_test_record(
         )
 
 
+def _init_group_entry(task_id: str) -> dict[str, Any]:
+    return {
+        "task_id": task_id,
+        "training_examples": [],
+        "test_inputs": [],
+        "test_outputs": [],
+    }
+
+
+def _merge_split_value(
+    entry: dict[str, Any],
+    task_id: str,
+    split: str | None,
+    *,
+    log_fn: Callable[[str], None] | None,
+) -> None:
+    if not split:
+        return
+    if "split" not in entry:
+        entry["split"] = split
+    elif entry["split"] != split and log_fn:
+        log_fn(f"ARC-AGI-2 task_id={task_id} has mismatched split values in HF rows.")
+
+
+def _merge_training_examples(
+    entry: dict[str, Any],
+    task_id: str,
+    training_examples: list[dict[str, Any]],
+    *,
+    log_fn: Callable[[str], None] | None,
+) -> None:
+    if not training_examples:
+        return
+    if entry["training_examples"] and entry["training_examples"] != training_examples:
+        if log_fn:
+            log_fn(
+                f"ARC-AGI-2 task_id={task_id} has mismatched training examples in HF rows."
+            )
+        return
+    if not entry["training_examples"]:
+        entry["training_examples"] = training_examples
+
+
+def _merge_image_fields(
+    entry: dict[str, Any],
+    task_id: str,
+    record: dict[str, Any],
+    *,
+    image_fields: tuple[str, ...],
+    log_fn: Callable[[str], None] | None,
+) -> None:
+    for field in image_fields:
+        value = record.get(field)
+        if value is None:
+            continue
+        if field not in entry:
+            entry[field] = value
+        elif entry[field] != value and log_fn:
+            log_fn(
+                f"ARC-AGI-2 task_id={task_id} has mismatched {field} values in HF rows."
+            )
+
+
+def _add_indexed_test(
+    indexed_tests: dict[str, dict[int, dict[str, Any]]],
+    task_id: str,
+    record: dict[str, Any],
+    test_index: int | None,
+    entry: dict[str, Any],
+    *,
+    log_fn: Callable[[str], None] | None,
+) -> None:
+    if test_index is not None and len(record.get("test_inputs") or []) == 1:
+        indexed_tests[task_id][test_index] = record
+        return
+    _merge_test_record(entry, record, log_fn=log_fn)
+
+
+def _build_grouped_records(
+    *,
+    grouped: dict[str, dict[str, Any]],
+    image_fields_train: tuple[str, ...],
+    test_list_fields: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for task_id, entry in grouped.items():
+        training_examples = entry.get("training_examples") or []
+        test_inputs = entry.get("test_inputs") or []
+        record_out: dict[str, Any] = {
+            "task_id": task_id,
+            "training_examples": training_examples,
+            "test_inputs": test_inputs,
+            "test_outputs": entry.get("test_outputs"),
+        }
+        if "split" in entry:
+            record_out["split"] = entry["split"]
+        for field in image_fields_train:
+            if field in entry:
+                record_out[field] = entry[field]
+        for field in test_list_fields:
+            if field in entry:
+                record_out[field] = entry[field]
+        records.append(_finalize_record(record_out))
+    return records
+
+
 def _group_hf_rows_by_task_id(
     rows: list[Mapping[str, Any]],
     *,
@@ -363,78 +489,43 @@ def _group_hf_rows_by_task_id(
         task_id = record.get("task_id") or "unknown_task"
         entry = grouped.get(task_id)
         if entry is None:
-            entry = {
-                "task_id": task_id,
-                "training_examples": [],
-                "test_inputs": [],
-                "test_outputs": [],
-            }
+            entry = _init_group_entry(task_id)
             grouped[task_id] = entry
             indexed_tests[task_id] = {}
 
-        split = record.get("split")
-        if split:
-            if "split" not in entry:
-                entry["split"] = split
-            elif entry["split"] != split and log_fn:
-                log_fn(
-                    f"ARC-AGI-2 task_id={task_id} has mismatched split values in HF rows."
-                )
-
-        training_examples = record.get("training_examples") or []
-        if training_examples:
-            if (
-                entry["training_examples"]
-                and entry["training_examples"] != training_examples
-            ):
-                if log_fn:
-                    log_fn(
-                        f"ARC-AGI-2 task_id={task_id} has mismatched training examples in HF rows."
-                    )
-            if not entry["training_examples"]:
-                entry["training_examples"] = training_examples
-
-        for field in image_fields_train:
-            value = record.get(field)
-            if value is None:
-                continue
-            if field not in entry:
-                entry[field] = value
-            elif entry[field] != value and log_fn:
-                log_fn(
-                    f"ARC-AGI-2 task_id={task_id} has mismatched {field} values in HF rows."
-                )
-
-        test_index = _parse_test_index(row.get("id"))
-        if test_index is not None and len(record.get("test_inputs") or []) == 1:
-            indexed_tests[task_id][test_index] = record
-        else:
-            _merge_test_record(entry, record, log_fn=log_fn)
+        _merge_split_value(entry, task_id, record.get("split"), log_fn=log_fn)
+        _merge_training_examples(
+            entry,
+            task_id,
+            record.get("training_examples") or [],
+            log_fn=log_fn,
+        )
+        _merge_image_fields(
+            entry,
+            task_id,
+            record,
+            image_fields=image_fields_train,
+            log_fn=log_fn,
+        )
+        _add_indexed_test(
+            indexed_tests,
+            task_id,
+            record,
+            _parse_test_index(row.get("id")),
+            entry,
+            log_fn=log_fn,
+        )
 
     for task_id, tests in indexed_tests.items():
         entry = grouped[task_id]
         for idx in sorted(tests):
             _merge_test_record(entry, tests[idx], log_fn=log_fn)
 
-    records: list[dict[str, Any]] = []
-    for task_id, entry in grouped.items():
-        training_examples = entry.get("training_examples") or []
-        test_inputs = entry.get("test_inputs") or []
-        record_out: dict[str, Any] = {
-            "task_id": task_id,
-            "training_examples": training_examples,
-            "test_inputs": test_inputs,
-            "test_outputs": entry.get("test_outputs"),
-        }
-        if "split" in entry:
-            record_out["split"] = entry["split"]
-        for field in image_fields_train:
-            if field in entry:
-                record_out[field] = entry[field]
-        for field in test_list_fields:
-            if field in entry:
-                record_out[field] = entry[field]
-        records.append(_finalize_record(record_out))
+    records = _build_grouped_records(
+        grouped=grouped,
+        image_fields_train=image_fields_train,
+        test_list_fields=test_list_fields,
+    )
 
     if not records:
         raise ValueError("No ARC-AGI-2 records loaded from HF rows.")

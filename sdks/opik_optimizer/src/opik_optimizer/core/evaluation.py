@@ -191,6 +191,131 @@ def evaluate_with_result(
     )
 
 
+def _normalize_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _filter_items_by_ids(
+    *,
+    items: list[dict[str, Any]],
+    dataset_item_ids: list[str] | None,
+    dataset_name: str,
+) -> tuple[list[dict[str, Any]], list[str] | None]:
+    if not dataset_item_ids:
+        return items, None
+
+    available_ids = {
+        normalized_id
+        for item in items
+        if (normalized_id := _normalize_id(item.get("id"))) is not None
+    }
+    normalized_requested = [
+        normalized_id
+        for item_id in dataset_item_ids
+        if (normalized_id := _normalize_id(item_id)) is not None
+    ]
+    missing_ids = [
+        item_id for item_id in normalized_requested if item_id not in available_ids
+    ]
+    if missing_ids:
+        logger.warning(
+            "Dropping %s dataset_item_ids not present in dataset %s (showing first 5): %s",
+            len(missing_ids),
+            dataset_name,
+            missing_ids[:5],
+        )
+    dataset_item_ids = [
+        item_id for item_id in normalized_requested if item_id in available_ids
+    ]
+    if not dataset_item_ids:
+        logger.warning(
+            "All provided dataset_item_ids were missing; evaluating on full dataset instead."
+        )
+        return items, None
+
+    filtered_items = [
+        item for item in items if _normalize_id(item.get("id")) in dataset_item_ids
+    ]
+    logger.debug(
+        "Evaluating %s items (filtered by dataset_item_ids).",
+        len(filtered_items),
+    )
+    return filtered_items, dataset_item_ids
+
+
+def _run_evaluator(
+    *,
+    optimization_id: str | None,
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    project_name: str | None,
+    dataset_item_ids: list[str] | None,
+    scoring_metrics: list[base_metric.BaseMetric],
+    num_threads: int,
+    n_samples: int | None,
+    experiment_config: dict[str, Any] | None,
+    verbose: int,
+) -> opik_evaluation_result.EvaluationResult:
+    if optimization_id is not None:
+        return opik_evaluator.evaluate_optimization_trial(
+            optimization_id=optimization_id,
+            dataset=dataset,
+            task=evaluated_task,
+            project_name=project_name,
+            dataset_item_ids=dataset_item_ids,
+            scoring_metrics=scoring_metrics,
+            task_threads=num_threads,
+            nb_samples=n_samples,
+            experiment_config=experiment_config,
+            verbose=verbose,
+        )
+    return opik_evaluator.evaluate(
+        dataset=dataset,
+        task=evaluated_task,
+        project_name=project_name,
+        dataset_item_ids=dataset_item_ids,
+        scoring_metrics=scoring_metrics,
+        task_threads=num_threads,
+        nb_samples=n_samples,
+        experiment_config=experiment_config,
+        verbose=verbose,
+    )
+
+
+def _extract_objective_scores(
+    evaluation_result: opik_evaluation_result.EvaluationResult,
+    objective_metric_name: str,
+) -> list[score_result.ScoreResult]:
+    objective_score_results: list[score_result.ScoreResult] = []
+    for test_result in evaluation_result.test_results:
+        for score_result_ in test_result.score_results:
+            if score_result_.name == objective_metric_name:
+                objective_score_results.append(score_result_)
+                break
+    return objective_score_results
+
+
+def _average_finite_scores(
+    scores: list[score_result.ScoreResult], *, objective_metric_name: str
+) -> float:
+    finite_values = [
+        score_result_.value
+        for score_result_ in scores
+        if score_result_.value is not None and math.isfinite(score_result_.value)
+    ]
+    if not finite_values:
+        logger.error(
+            "All metric scores were non-finite for metric '%s'; aborting evaluation.",
+            objective_metric_name,
+        )
+        raise ValueError(
+            f"All metric scores were non-finite for metric '{objective_metric_name}'."
+        )
+    return sum(finite_values) / len(finite_values)
+
+
 @suppress_experiment_reporting
 def _evaluate_internal(
     *,
@@ -205,113 +330,45 @@ def _evaluate_internal(
     experiment_config: dict[str, Any] | None,
     verbose: int,
 ) -> tuple[float, opik_evaluation_result.EvaluationResult | None]:
-    def _normalize_id(value: Any) -> str | None:
-        if value is None:
-            return None
-        return str(value)
-
     items = dataset.get_items(n_samples)
     if not items:
         logger.debug("Empty dataset; returning 0.0")
         return 0.0, None
 
-    if dataset_item_ids:
-        available_ids = {
-            normalized_id
-            for item in items
-            if (normalized_id := _normalize_id(item.get("id"))) is not None
-        }
-        normalized_requested = [
-            normalized_id
-            for item_id in dataset_item_ids
-            if (normalized_id := _normalize_id(item_id)) is not None
-        ]
-        missing_ids = [
-            item_id for item_id in normalized_requested if item_id not in available_ids
-        ]
-        if missing_ids:
-            logger.warning(
-                "Dropping %s dataset_item_ids not present in dataset %s (showing first 5): %s",
-                len(missing_ids),
-                getattr(dataset, "name", None) or "<unknown>",
-                missing_ids[:5],
-            )
-        dataset_item_ids = [
-            item_id for item_id in normalized_requested if item_id in available_ids
-        ]
-        if not dataset_item_ids:
-            logger.warning(
-                "All provided dataset_item_ids were missing; evaluating on full dataset instead."
-            )
-            dataset_item_ids = None
-        else:
-            items = [
-                item
-                for item in items
-                if _normalize_id(item.get("id")) in dataset_item_ids
-            ]
-            logger.debug(
-                "Evaluating %s items (filtered by dataset_item_ids).",
-                len(items),
-            )
+    items, dataset_item_ids = _filter_items_by_ids(
+        items=items,
+        dataset_item_ids=dataset_item_ids,
+        dataset_name=getattr(dataset, "name", None) or "<unknown>",
+    )
 
     eval_metrics = [_create_metric_class(metric)]
 
-    if optimization_id is not None:
-        evaluation_result = opik_evaluator.evaluate_optimization_trial(
-            optimization_id=optimization_id,
-            dataset=dataset,
-            task=evaluated_task,
-            project_name=project_name,
-            dataset_item_ids=dataset_item_ids,
-            scoring_metrics=eval_metrics,
-            task_threads=num_threads,
-            nb_samples=n_samples,
-            experiment_config=experiment_config,
-            verbose=verbose,
-        )
-    else:
-        evaluation_result = opik_evaluator.evaluate(
-            dataset=dataset,
-            task=evaluated_task,
-            project_name=project_name,
-            dataset_item_ids=dataset_item_ids,
-            scoring_metrics=eval_metrics,
-            task_threads=num_threads,
-            nb_samples=n_samples,
-            experiment_config=experiment_config,
-            verbose=verbose,
-        )
+    evaluation_result = _run_evaluator(
+        optimization_id=optimization_id,
+        dataset=dataset,
+        evaluated_task=evaluated_task,
+        project_name=project_name,
+        dataset_item_ids=dataset_item_ids,
+        scoring_metrics=eval_metrics,
+        num_threads=num_threads,
+        n_samples=n_samples,
+        experiment_config=experiment_config,
+        verbose=verbose,
+    )
 
     if not evaluation_result.test_results:
         return 0.0, evaluation_result
 
     # Filter score results to only include the objective metric
     objective_metric_name = metric.__name__
-    objective_score_results: list[score_result.ScoreResult] = []
-    for test_result in evaluation_result.test_results:
-        for score_result_ in test_result.score_results:
-            if score_result_.name == objective_metric_name:
-                objective_score_results.append(score_result_)
-                break
+    objective_score_results = _extract_objective_scores(
+        evaluation_result, objective_metric_name
+    )
 
     if not objective_score_results:
         return 0.0, evaluation_result
 
-    finite_values = [
-        score_result_.value
-        for score_result_ in objective_score_results
-        if score_result_.value is not None and math.isfinite(score_result_.value)
-    ]
-    if not finite_values:
-        logger.error(
-            "All metric scores were non-finite for metric '%s'; aborting evaluation.",
-            objective_metric_name,
-        )
-        raise ValueError(
-            f"All metric scores were non-finite for metric '{objective_metric_name}'."
-        )
-
-    avg_score = sum(finite_values) / len(finite_values)
-
+    avg_score = _average_finite_scores(
+        objective_score_results, objective_metric_name=objective_metric_name
+    )
     return avg_score, evaluation_result

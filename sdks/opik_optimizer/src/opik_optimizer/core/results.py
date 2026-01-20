@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 
@@ -315,23 +315,19 @@ class OptimizationHistoryState:
         finally:
             self.set_default_dataset_split(previous)
 
-    def record_trial(
+    def _build_trial(
         self,
-        round_handle: Any,
+        entry: OptimizationRound,
         *,
         score: float | None,
-        candidate: Any | None = None,
-        trial_index: int | None = None,
-        metrics: dict[str, Any] | None = None,
-        dataset: str | None = None,
-        dataset_split: str | None = None,
-        extras: dict[str, Any] | None = None,
-        candidates: list[dict[str, Any]] | None = None,
-        timestamp: str | None = None,
-        stop_reason: str | None = None,
-        candidate_id_prefix: str | None = None,
-    ) -> dict[str, Any]:
-        entry = self._get_open_round(round_handle)
+        candidate: Any | None,
+        trial_index: int | None,
+        metrics: dict[str, Any] | None,
+        dataset: str | None,
+        dataset_split: str | None,
+        extras: dict[str, Any] | None,
+        timestamp: str | None,
+    ) -> tuple[OptimizationTrial, Any, str | None]:
         score_val = self._coerce_float(score) if score is not None else None
         candidate_payload_raw: Any = (
             candidate.to_dict()
@@ -354,9 +350,20 @@ class OptimizationHistoryState:
             extras=extras,
             timestamp=timestamp or now_iso(),
         )
-        candidate_id: str | None = None
         if trial.trial_index is None:
             trial.trial_index = self._next_trial_index(entry)
+        return trial, candidate_payload, dataset_split_val
+
+    @staticmethod
+    def _resolve_candidate_id(
+        trial: OptimizationTrial,
+        *,
+        candidate_payload: Any,
+        candidates: list[dict[str, Any]] | None,
+        candidate_id_prefix: str | None,
+        next_candidate_id: Callable[[str], str],
+    ) -> None:
+        candidate_id: str | None = None
         if isinstance(candidate_payload, dict):
             candidate_id = candidate_payload.get("id")
         if candidate_id is None and candidates:
@@ -369,17 +376,32 @@ class OptimizationHistoryState:
                 None,
             )
         if candidate_id is None and candidate_id_prefix is not None:
-            candidate_id = self._next_candidate_id(candidate_id_prefix)
+            candidate_id = next_candidate_id(candidate_id_prefix)
         if candidate_id is not None:
             trial.candidate_id = candidate_id
-        entry.trials.append(trial)
-        if score_val is not None:
-            self._best_so_far = (
-                score_val
-                if self._best_so_far is None
-                else max(self._best_so_far, score_val)
-            )
-            entry.best_so_far = self._best_so_far
+
+    def _update_best_so_far(
+        self, entry: OptimizationRound, score_val: float | None
+    ) -> None:
+        if score_val is None:
+            return
+        self._best_so_far = (
+            score_val
+            if self._best_so_far is None
+            else max(self._best_so_far, score_val)
+        )
+        entry.best_so_far = self._best_so_far
+
+    def _merge_candidates_into_round(
+        self,
+        entry: OptimizationRound,
+        *,
+        candidates: list[dict[str, Any]] | None,
+        candidate_payload: Any,
+        score_val: float | None,
+        metrics: dict[str, Any] | None,
+        extras: dict[str, Any] | None,
+    ) -> None:
         if candidates is None and candidate_payload is not None:
             candidates = [
                 {
@@ -392,17 +414,67 @@ class OptimizationHistoryState:
         if candidates:
             normalized_candidates = self._normalize_candidates(candidates) or []
             entry.candidates = (entry.candidates or []) + normalized_candidates
+
+    @staticmethod
+    def _apply_stop_reason(entry: OptimizationRound, stop_reason: str | None) -> None:
         if stop_reason is not None:
             entry.stop_reason = stop_reason
             entry.stopped = stop_reason not in (None, "completed")
         else:
             entry.stop_reason = entry.stop_reason or None
             entry.stopped = entry.stopped if entry.stopped is not None else False
+
+    def record_trial(
+        self,
+        round_handle: Any,
+        *,
+        score: float | None,
+        candidate: Any | None = None,
+        trial_index: int | None = None,
+        metrics: dict[str, Any] | None = None,
+        dataset: str | None = None,
+        dataset_split: str | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        timestamp: str | None = None,
+        stop_reason: str | None = None,
+        candidate_id_prefix: str | None = None,
+    ) -> dict[str, Any]:
+        entry = self._get_open_round(round_handle)
+        trial, candidate_payload, dataset_split_val = self._build_trial(
+            entry,
+            score=score,
+            candidate=candidate,
+            trial_index=trial_index,
+            metrics=metrics,
+            dataset=dataset,
+            dataset_split=dataset_split,
+            extras=extras,
+            timestamp=timestamp,
+        )
+        self._resolve_candidate_id(
+            trial,
+            candidate_payload=candidate_payload,
+            candidates=candidates,
+            candidate_id_prefix=candidate_id_prefix,
+            next_candidate_id=self._next_candidate_id,
+        )
+        entry.trials.append(trial)
+        self._update_best_so_far(entry, trial.score)
+        self._merge_candidates_into_round(
+            entry,
+            candidates=candidates,
+            candidate_payload=candidate_payload,
+            score_val=trial.score,
+            metrics=metrics,
+            extras=extras,
+        )
+        self._apply_stop_reason(entry, stop_reason)
         debug_log(
             "trial_recorded",
             round_index=round_handle,
             trial_index=trial.trial_index,
-            score=score_val,
+            score=trial.score,
             dataset_split=dataset_split_val,
             candidate_id=trial.candidate_id,
             score_label=(extras or {}).get("score_label")
@@ -410,6 +482,74 @@ class OptimizationHistoryState:
             else None,
         )
         return trial.to_dict()
+
+    def _apply_best_score_to_round(
+        self, entry: OptimizationRound, best_score: float | None
+    ) -> None:
+        if best_score is None or entry.best_score is not None:
+            return
+        best_score_val = self._coerce_float(best_score)
+        entry.best_score = best_score_val
+        self._update_best_so_far(entry, best_score_val)
+
+    @staticmethod
+    def _apply_best_candidate_to_round(
+        entry: OptimizationRound, best_candidate: Any | None
+    ) -> None:
+        if best_candidate is None:
+            return
+        entry.best_candidate = (
+            best_candidate.to_dict()
+            if isinstance(best_candidate, OptimizerCandidate)
+            else best_candidate
+        )
+
+    @staticmethod
+    def _apply_best_prompt_to_round(
+        entry: OptimizationRound, best_prompt: Any | None
+    ) -> None:
+        if best_prompt is not None:
+            entry.best_prompt = best_prompt
+
+    @staticmethod
+    def _apply_round_extras(
+        entry: OptimizationRound, extras: dict[str, Any] | None
+    ) -> None:
+        if extras:
+            entry.extras = {**(entry.extras or {}), **extras}
+
+    def _apply_round_selection_metadata(
+        self,
+        entry: OptimizationRound,
+        *,
+        pareto_front: list[dict[str, Any]] | None,
+        selection_meta: dict[str, Any] | None,
+    ) -> None:
+        pareto_payload = (
+            pareto_front if pareto_front is not None else self._current_pareto_front
+        )
+        if pareto_payload is not None:
+            entry.extras = {**(entry.extras or {}), "pareto_front": pareto_payload}
+        selection_meta_payload = (
+            selection_meta
+            if selection_meta is not None
+            else self._current_selection_meta
+        )
+        if selection_meta_payload is not None:
+            entry.extras = {
+                **(entry.extras or {}),
+                "selection_meta": selection_meta_payload,
+            }
+
+    @staticmethod
+    def _resolve_round_stop_reason(
+        entry: OptimizationRound, stop_reason: str | None
+    ) -> str:
+        if stop_reason is None:
+            stop_reason = entry.stop_reason
+        if stop_reason is None:
+            stop_reason = "completed"
+        return stop_reason
 
     def end_round(
         self,
@@ -436,51 +576,20 @@ class OptimizationHistoryState:
         if candidates:
             normalized_candidates = self._normalize_candidates(candidates) or []
             entry.candidates = (entry.candidates or []) + normalized_candidates
-        if best_score is not None and entry.best_score is None:
-            best_score_val = self._coerce_float(best_score)
-            entry.best_score = best_score_val
-            if best_score_val is not None:
-                self._best_so_far = (
-                    best_score_val
-                    if self._best_so_far is None
-                    else max(self._best_so_far, best_score_val)
-                )
-        if best_candidate is not None:
-            entry.best_candidate = (
-                best_candidate.to_dict()
-                if isinstance(best_candidate, OptimizerCandidate)
-                else best_candidate
-            )
-        if best_prompt is not None:
-            entry.best_prompt = best_prompt
-        if self._best_so_far is not None:
-            entry.best_so_far = self._best_so_far
-        if extras:
-            entry.extras = {**(entry.extras or {}), **extras}
+        self._apply_best_score_to_round(entry, best_score)
+        self._apply_best_candidate_to_round(entry, best_candidate)
+        self._apply_best_prompt_to_round(entry, best_prompt)
+        self._apply_round_extras(entry, extras)
         if dataset_split_val is not None:
             entry.dataset_split = dataset_split_val
 
-        pareto_payload = pareto_front
-        if pareto_payload is None:
-            pareto_payload = self._current_pareto_front
-        if pareto_payload is not None:
-            entry.extras = {**(entry.extras or {}), "pareto_front": pareto_payload}
-        selection_meta_payload = (
-            selection_meta
-            if selection_meta is not None
-            else self._current_selection_meta
+        self._apply_round_selection_metadata(
+            entry,
+            pareto_front=pareto_front,
+            selection_meta=selection_meta,
         )
-        if selection_meta_payload is not None:
-            entry.extras = {
-                **(entry.extras or {}),
-                "selection_meta": selection_meta_payload,
-            }
-        if stop_reason is None and entry.stop_reason is not None:
-            stop_reason = entry.stop_reason
-        if stop_reason is None:
-            stop_reason = "completed"
-        entry.stop_reason = stop_reason
-        entry.stopped = stop_reason not in (None, "completed")
+        stop_reason = self._resolve_round_stop_reason(entry, stop_reason)
+        self._apply_stop_reason(entry, stop_reason)
         entry.timestamp = timestamp or entry.timestamp or now_iso()
         self._merge_round(entry)
         self._current_selection_meta = None

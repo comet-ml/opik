@@ -71,3 +71,4 @@ result = optimizer.optimize_prompt(
     display_progress_bar=True,
 )
 
+result.display()
