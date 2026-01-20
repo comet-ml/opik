@@ -124,8 +124,8 @@ const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
 
 /**
  * Transform experiment_name filter field to experiment_id for backend.
- * This allows having two separate filters in the UI (dropdown and text input)
- * that both send experiment_id to the backend.
+ * The experiment_name filter uses a dropdown that selects by name but sends ID.
+ * The experiment_id filter is already correct (text input for UUID).
  */
 const transformExperimentFilters = (filters: Filters): Filters => {
   return filters.map((filter: Filter) => {
