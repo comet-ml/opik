@@ -21,4 +21,9 @@ public record ExperimentBatchUpdate(
         @NotEmpty @Size(min = 1, max = 1000) @Schema(description = "List of experiment IDs to update (max 1000)") Set<@NotNull UUID> ids,
         @NotNull @Valid @Schema(description = "Update to apply to all experiments") ExperimentUpdate update,
         @Schema(description = "If true, merge tags with existing tags instead of replacing them. Default: false") Boolean mergeTags) {
+
+    @Override
+    public Boolean mergeTags() {
+        return Boolean.TRUE.equals(mergeTags);
+    }
 }

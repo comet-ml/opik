@@ -605,7 +605,7 @@ public class ExperimentService {
     public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {
         log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
 
-        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        boolean mergeTags = batchUpdate.mergeTags();
         return experimentDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()));
     }
