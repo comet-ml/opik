@@ -31,6 +31,7 @@ from .ops.optuna_ops import (
 )
 from .ops.search_ops import ParameterSearchSpace
 from . import prompts as param_prompts
+from ... import constants
 from . import reporting
 from . import helpers
 
@@ -67,18 +68,18 @@ class ParameterOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = constants.DEFAULT_MODEL,
         *,
         model_parameters: dict[str, Any] | None = None,
-        default_n_trials: int = 20,
-        local_search_ratio: float = 0.3,
-        local_search_scale: float = 0.2,
-        n_threads: int = 4,
+        default_n_trials: int = constants.PARAMETER_DEFAULT_N_TRIALS,
+        local_search_ratio: float = constants.PARAMETER_DEFAULT_LOCAL_SEARCH_RATIO,
+        local_search_scale: float = constants.PARAMETER_DEFAULT_LOCAL_SEARCH_SCALE,
+        n_threads: int = constants.DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = 42,
+        seed: int = constants.DEFAULT_SEED,
         name: str | None = None,
-        skip_perfect_score: bool = True,
-        perfect_score: float = 0.95,
+        skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
+        perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
         super().__init__(
             model=model,

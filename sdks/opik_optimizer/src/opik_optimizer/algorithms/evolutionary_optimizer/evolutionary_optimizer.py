@@ -166,6 +166,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "Install the optimizer extras that include DEAP."
             ) from _DEAP_IMPORT_ERROR
 
+    def _seed_rngs(self) -> None:
+        """
+        Seed random number generators used by this optimizer.
+
+        DEAP's built-in operators rely on Python's `random` module, while some
+        surrounding code (and potential user extensions) may use NumPy RNG.
+        """
+        if self.seed is None:
+            return
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+
     def __init__(
         self,
         model: str = constants.DEFAULT_MODEL,
@@ -239,11 +251,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         if self.seed is not None:
-            random.seed(self.seed)
-            np.random.seed(self.seed)
+            self._seed_rngs()
             logger.info(f"Global random seed set to: {self.seed}")
-            # Note: DEAP tools generally respect random.seed().
-            # TODO investigate if specific DEAP components require separate seeding
+            # Note: DEAP operators use Python's `random`, so seeding `random`
+            # (and NumPy for any NumPy-based operations) is sufficient here.
 
         if self.enable_moo:
             if not hasattr(creator, "FitnessMulti"):
@@ -392,6 +403,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             AlgorithmResult with best prompts, score, history, and metadata.
         """
         self._ensure_deap_available()
+        # Ensure deterministic behavior per optimization run (important when
+        # reusing the same optimizer instance across multiple runs).
+        self._seed_rngs()
         optimizable_prompts = context.prompts
         experiment_config = context.experiment_config
         max_trials = context.max_trials

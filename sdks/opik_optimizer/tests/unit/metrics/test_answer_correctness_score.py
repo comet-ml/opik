@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-import pytest
-
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from typing import Protocol, cast
+from collections.abc import Callable, Mapping
+
+import pytest
 
 
-def _load_metrics_module():
+class _MetricsModule(Protocol):
+    answer_correctness_score: Callable[[Mapping[str, object], str], object]
+
+
+def _load_metrics_module() -> object:
     metrics_path = (
         Path(__file__).resolve().parents[3]
         / "scripts"
@@ -23,7 +29,7 @@ def _load_metrics_module():
 
 
 def test_answer_correctness_score_requires_answer_field() -> None:
-    metrics_module = _load_metrics_module()
+    metrics_module = cast(_MetricsModule, _load_metrics_module())
     dataset_item = {"question": "Q1"}
     with pytest.raises(ValueError, match="requires dataset items with an 'answer'"):
         metrics_module.answer_correctness_score(dataset_item, "output")

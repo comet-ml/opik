@@ -32,8 +32,6 @@ def _require_deap() -> None:
 
 
 # TODO: Decide whether selection policies should be centralized for all optimizers.
-
-
 def select_population(
     *,
     population: list[Any],
@@ -87,8 +85,6 @@ def selection_meta(
 
 
 # TODO: Support configurable tiebreakers when multiple solutions share the same score.
-
-
 def choose_best_from_front(
     *,
     hof: tools.HallOfFame | tools.ParetoFront,

@@ -17,6 +17,10 @@ from ..utils.display import (
 )
 
 from ..api_objects import chat_prompt
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .state import OptimizationContext
 from ..constants import OPTIMIZATION_RESULT_SCHEMA_VERSION
 from ..utils.logging import debug_log
 
@@ -153,13 +157,18 @@ class OptimizationHistoryState:
     OptimizationResult.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, context: OptimizationContext | None = None) -> None:
         self.entries: list[OptimizationRound] = []
         self._best_so_far: float | None = None
         self._open_rounds: dict[Any, OptimizationRound] = {}
         self._default_dataset_split: str | None = None
         self._current_selection_meta: dict[str, Any] | None = None
         self._current_pareto_front: list[dict[str, Any]] | None = None
+        self._context: OptimizationContext | None = context
+
+    def set_context(self, context: OptimizationContext | None) -> None:
+        """Attach the current optimization context for downstream hooks."""
+        self._context = context
 
     @staticmethod
     def _coerce_float(value: Any) -> float | None:
@@ -475,6 +484,7 @@ class OptimizationHistoryState:
             round_index=round_handle,
             trial_index=trial.trial_index,
             score=trial.score,
+            dataset=dataset,
             dataset_split=dataset_split_val,
             candidate_id=trial.candidate_id,
             score_label=(extras or {}).get("score_label")

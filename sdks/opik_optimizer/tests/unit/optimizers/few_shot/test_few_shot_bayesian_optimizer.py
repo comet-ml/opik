@@ -12,6 +12,7 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
     OptimizationResult,
 )
+from opik_optimizer.agents.optimizable_agent import OptimizableAgent
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_simple_metric,
@@ -185,6 +186,39 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, dict)
         assert isinstance(result.initial_prompt, dict)
+
+    def test_custom_task_respects_allow_tool_use(self) -> None:
+        class AgentSpy(OptimizableAgent):
+            def __init__(self) -> None:
+                self.last_allow_tool_use: bool | None = None
+                self.project_name = "test"
+
+            def init_llm(self) -> None:
+                return None
+
+            def invoke_agent(
+                self,
+                prompts: dict[str, ChatPrompt],
+                dataset_item: dict[str, Any],
+                allow_tool_use: bool = False,
+                seed: int | None = None,
+            ) -> str:
+                _ = prompts, dataset_item, seed
+                self.last_allow_tool_use = allow_tool_use
+                return "ok"
+
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        agent = AgentSpy()
+        prompts = {"main": ChatPrompt(system="system", user="{question}")}
+        task = optimizer._build_task_from_messages(
+            agent=agent,
+            prompts=prompts,
+            few_shot_examples="Q: a\nA: b",
+            allow_tool_use=False,
+        )
+
+        task({"question": "Q1"})
+        assert agent.last_allow_tool_use is False
 
     def test_invalid_prompt_raises_error(
         self,

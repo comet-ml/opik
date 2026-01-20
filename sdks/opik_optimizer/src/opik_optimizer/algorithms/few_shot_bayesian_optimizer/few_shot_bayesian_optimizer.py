@@ -16,15 +16,16 @@ from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
 from ...core.llm_calls import StructuredOutputParsingError, BadRequestError
 from ...utils.optuna_runtime import (
+    build_optuna_round,
     configure_optuna_logging,
     extract_optuna_metadata,
-    record_optuna_trial_history,
 )
 from ...core.state import (
     OptimizationContext,
     AlgorithmResult,
     prepare_experiment_config,
 )
+from ... import constants
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
@@ -79,27 +80,27 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         "system_prompt_template": few_shot_prompts.SYSTEM_PROMPT_TEMPLATE,
     }
 
-    _MAX_UNIQUE_COLUMN_VALUES = 25
-    _MAX_COLUMN_VALUE_LENGTH = 120
-    _MISSING_VALUE_SENTINEL = "<missing>"
+    _MAX_UNIQUE_COLUMN_VALUES = constants.FEW_SHOT_MAX_UNIQUE_COLUMN_VALUES
+    _MAX_COLUMN_VALUE_LENGTH = constants.FEW_SHOT_MAX_COLUMN_VALUE_LENGTH
+    _MISSING_VALUE_SENTINEL = constants.FEW_SHOT_MISSING_VALUE_SENTINEL
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = constants.DEFAULT_MODEL,
         model_parameters: dict[str, Any] | None = None,
-        min_examples: int = 2,
-        max_examples: int = 8,
-        n_threads: int = 8,
+        min_examples: int = constants.FEW_SHOT_DEFAULT_MIN_EXAMPLES,
+        max_examples: int = constants.FEW_SHOT_DEFAULT_MAX_EXAMPLES,
+        n_threads: int = constants.DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = 42,
+        seed: int = constants.DEFAULT_SEED,
         name: str | None = None,
-        enable_columnar_selection: bool = True,
-        enable_diversity: bool = True,
-        enable_multivariate_tpe: bool = True,
-        enable_optuna_pruning: bool = True,
+        enable_columnar_selection: bool = constants.FEW_SHOT_DEFAULT_ENABLE_COLUMNAR_SELECTION,
+        enable_diversity: bool = constants.FEW_SHOT_DEFAULT_ENABLE_DIVERSITY,
+        enable_multivariate_tpe: bool = constants.FEW_SHOT_DEFAULT_ENABLE_MULTIVARIATE_TPE,
+        enable_optuna_pruning: bool = constants.FEW_SHOT_DEFAULT_ENABLE_OPTUNA_PRUNING,
         prompt_overrides: PromptOverrides = None,
-        skip_perfect_score: bool = True,
-        perfect_score: float = 0.95,
+        skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
+        perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
         super().__init__(
             model,
@@ -129,6 +130,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Instance state for custom evaluation (used by overridden evaluate_prompt)
         self._custom_evaluated_task: Callable[..., dict[str, Any]] | None = None
         self._custom_eval_item_ids: list[str] | None = None
+        self._custom_allow_tool_use: bool | None = None
 
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
@@ -155,7 +157,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
-        allow_tool_use: bool | None = None,
+        allow_tool_use: bool = False,
     ) -> float:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -172,6 +174,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 n_threads=n_threads,
                 experiment_config=experiment_config,
                 verbose=verbose,
+                allow_tool_use=allow_tool_use,
             )
 
         # Default behavior: delegate to parent
@@ -200,10 +203,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_threads: int | None,
         experiment_config: dict | None,
         verbose: int,
+        allow_tool_use: bool | None,
     ) -> float:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
         if self._custom_evaluated_task is None:
             raise ValueError("Custom evaluated task is not set.")
+        if allow_tool_use is not None:
+            self._custom_allow_tool_use = allow_tool_use
         return task_evaluator.evaluate(
             dataset=dataset,
             evaluated_task=self._custom_evaluated_task,
@@ -515,6 +521,27 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         # Start Optuna Study
+        def _build_prompt_payload(trial: Any) -> Any:
+            trial_config = trial.user_attrs.get("config", {})
+            return trial_config.get("message_list")
+
+        def _build_extra(trial: Any) -> dict[str, Any]:
+            return {
+                "parameters": trial.user_attrs.get("parameters", {}),
+                "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
+                "model": trial.user_attrs.get("model", {}),
+                "stage": trial.user_attrs.get("stage"),
+                "type": trial.user_attrs.get("type"),
+            }
+
+        def _build_round_meta(_: Any) -> dict[str, Any]:
+            return extract_optuna_metadata(study)
+
+        def _timestamp(trial: Any) -> str:
+            if trial.datetime_start:
+                return trial.datetime_start.isoformat()
+            return datetime.now().isoformat()
+
         def optimization_objective(trial: optuna.Trial) -> float:
             # Check should_stop flag at start of each trial
             if context.should_stop:
@@ -564,6 +591,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 agent=agent,
                 prompts=prompts,
                 few_shot_examples=few_shot_examples,
+                allow_tool_use=context.allow_tool_use,
             )
 
             # Build messages for reporting from the prompts with examples
@@ -606,6 +634,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # Clear custom task state
                 self._custom_evaluated_task = None
                 self._custom_eval_item_ids = None
+                self._custom_allow_tool_use = None
 
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
             debug_log(
@@ -629,6 +658,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             trial.set_user_attr("type", "bayesian")
             trial.set_user_attr("score", score)
             trial.set_user_attr("config", trial_result_config)
+
+            build_optuna_round(
+                optimizer=self,
+                context=context,
+                trial=trial,
+                prompt_or_payload=_build_prompt_payload(trial),
+                score=score,
+                extra=_build_extra(trial),
+                timestamp=_timestamp(trial),
+                round_meta=_build_round_meta(trial),
+                candidate_id=f"trial{trial.number}",
+            )
 
             return score
 
@@ -657,48 +698,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         study.optimize(
             optimization_objective, n_trials=n_trials, show_progress_bar=False
-        )
-
-        self._history_builder.clear()
-
-        def _build_prompt_payload(trial: optuna.trial.FrozenTrial) -> Any:
-            trial_config = trial.user_attrs.get("config", {})
-            return trial_config.get("message_list")
-
-        def _build_extra(trial: optuna.trial.FrozenTrial) -> dict[str, Any]:
-            return {
-                "parameters": trial.user_attrs.get("parameters", {}),
-                "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
-                "model": trial.user_attrs.get("model", {}),
-                "stage": trial.user_attrs.get("stage"),
-                "type": trial.user_attrs.get("type"),
-            }
-
-        def _build_round_meta(_: optuna.trial.FrozenTrial) -> dict[str, Any]:
-            return extract_optuna_metadata(study)
-
-        def _timestamp(trial: optuna.trial.FrozenTrial) -> str:
-            if trial.datetime_start:
-                return trial.datetime_start.isoformat()
-            return datetime.now().isoformat()
-
-        def _on_skip(trial: optuna.trial.FrozenTrial) -> None:
-            logger.warning(
-                "Skipping trial %s from history due to state: %s. Value: %s",
-                trial.number,
-                trial.state,
-                trial.value,
-            )
-
-        record_optuna_trial_history(
-            optimizer=self,
-            context=context,
-            study=study,
-            build_prompt_payload=_build_prompt_payload,
-            build_extra=_build_extra,
-            build_round_meta=_build_round_meta,
-            timestamp_provider=_timestamp,
-            on_skip=_on_skip,
         )
 
         selection_meta = extract_optuna_metadata(study)
@@ -742,6 +741,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         context: OptimizationContext,
     ) -> AlgorithmResult:
+        self._history_builder.clear()
         optimizable_prompts = context.prompts
         self.set_default_dataset_split(
             "validation" if context.validation_dataset is not None else "train"
@@ -797,6 +797,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         agent: OptimizableAgent,
         prompts: dict[str, chat_prompt.ChatPrompt],
         few_shot_examples: str,
+        allow_tool_use: bool | None = None,
     ) -> Callable[[dict[str, Any]], dict[str, Any]]:
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """
@@ -813,10 +814,20 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 few_shot_examples=few_shot_examples,
             )
 
+            effective_allow_tool_use = (
+                allow_tool_use
+                if allow_tool_use is not None
+                else (
+                    self._custom_allow_tool_use
+                    if self._custom_allow_tool_use is not None
+                    else False
+                )
+            )
             result = agent.invoke_agent(
                 prompts=prompts_with_examples,
                 dataset_item=dataset_item,
                 seed=self.seed,
+                allow_tool_use=bool(effective_allow_tool_use),
             )
 
             # Add tags to trace for optimization tracking

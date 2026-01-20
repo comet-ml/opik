@@ -66,7 +66,9 @@ def handle_termination(
             module=r"multiprocessing\\.resource_tracker",
         )
         try:
-            stopper = getattr(multiprocessing.resource_tracker._resource_tracker, "_stop", None)
+            stopper = getattr(
+                multiprocessing.resource_tracker._resource_tracker, "_stop", None
+            )
             if callable(stopper):
                 stopper()  # type: ignore[misc]
         except Exception:
@@ -383,6 +385,8 @@ def run_baseline_evaluation(
     debug_log(
         "baseline_start",
         dataset=getattr(context.evaluation_dataset, "name", None),
+        training_dataset=getattr(context.dataset, "name", None),
+        validation_dataset=getattr(context.validation_dataset, "name", None),
         max_trials=context.max_trials,
         n_samples=context.n_samples,
         n_threads=getattr(optimizer, "n_threads", None),

@@ -3,6 +3,7 @@ from typing import Any, cast
 
 
 from ...base_optimizer import BaseOptimizer
+from ... import constants
 from ...core.state import (
     AlgorithmResult,
     OptimizationContext,
@@ -40,14 +41,14 @@ class GepaOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = constants.DEFAULT_MODEL,
         model_parameters: dict[str, Any] | None = None,
-        n_threads: int = 6,
+        n_threads: int = constants.DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = 42,
+        seed: int = constants.DEFAULT_SEED,
         name: str | None = None,
-        skip_perfect_score: bool = True,
-        perfect_score: float = 0.95,
+        skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
+        perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
         prompt_overrides: PromptOverrides = None,
     ) -> None:
         # Validate required parameters

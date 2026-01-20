@@ -440,12 +440,9 @@ def run_generations(
                     pareto_front=pareto_front,
                     selection_meta=selection_meta,
                     extras={
-                        "stopped": context.should_stop,
-                        "stop_reason": context.finish_reason,
                         "improvement": _calculate_improvement(
                             best_primary_score_overall, initial_primary_score
                         ),
-                        "best_so_far": best_primary_score_overall,
                     },
                 )
         finally:

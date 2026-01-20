@@ -8,6 +8,7 @@ from ...core import llm_calls as _llm_calls
 from ...core import runtime
 from ...base_optimizer import BaseOptimizer
 from ...core.state import OptimizationContext, AlgorithmResult
+from ... import constants
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
@@ -59,25 +60,25 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         "improve_prompt_template": hierarchical_prompts.IMPROVE_PROMPT_TEMPLATE,
     }
 
-    DEFAULT_MAX_ITERATIONS = 5
-    DEFAULT_CONVERGENCE_THRESHOLD = 0.01  # Stop if improvement is less than 1%
+    DEFAULT_MAX_ITERATIONS = constants.HRO_DEFAULT_MAX_ITERATIONS
+    DEFAULT_CONVERGENCE_THRESHOLD = constants.HRO_DEFAULT_CONVERGENCE_THRESHOLD
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = constants.DEFAULT_MODEL,
         model_parameters: dict[str, Any] | None = None,
         reasoning_model: str | None = None,
         reasoning_model_parameters: dict[str, Any] | None = None,
-        max_parallel_batches: int = 5,
-        batch_size: int = 25,
-        convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
-        n_threads: int = 12,
+        max_parallel_batches: int = constants.HRO_DEFAULT_MAX_PARALLEL_BATCHES,
+        batch_size: int = constants.HRO_DEFAULT_BATCH_SIZE,
+        convergence_threshold: float = constants.HRO_DEFAULT_CONVERGENCE_THRESHOLD,
+        n_threads: int = constants.DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = 42,
+        seed: int = constants.DEFAULT_SEED,
         name: str | None = None,
         prompt_overrides: PromptOverrides = None,
-        skip_perfect_score: bool = True,
-        perfect_score: float = 0.95,
+        skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
+        perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ):
         super().__init__(
             model=model,

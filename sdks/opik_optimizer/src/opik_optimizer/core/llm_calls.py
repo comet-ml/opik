@@ -1,10 +1,11 @@
-from typing import Any, TypeVar, overload
-from pydantic import BaseModel, ValidationError as PydanticValidationError
-
+import copy
 import json
 import logging
 import sys
 from types import FrameType
+from typing import TYPE_CHECKING, Any, TypeVar, overload
+
+from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 import litellm
 from litellm.exceptions import BadRequestError
@@ -13,7 +14,6 @@ from opik.integrations.litellm import track_completion
 
 from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
@@ -358,6 +358,45 @@ def _parse_response(
     return content
 
 
+def _append_json_format_instructions(
+    messages: list[dict[str, str]],
+    response_model: type[BaseModel],
+) -> list[dict[str, str]]:
+    """
+    Append JSON format instructions to the last user message.
+
+    Args:
+        messages: List of message dictionaries
+        response_model: Pydantic BaseModel class
+
+    Returns:
+        Modified messages list with format instructions appended
+    """
+    schema = response_model.model_json_schema()
+    schema_json = json.dumps(schema, indent=2)
+    format_instructions = f"""
+STRICT OUTPUT FORMAT:
+- Return only the JSON value that conforms to the schema. Do not include any additional text, explanations, headings, or separators.
+- Do not wrap the JSON in Markdown or code fences (no ``` or ```json).
+- Do not prepend or append any text (e.g., do not write "Here is the JSON:").
+- The response must be a single top-level JSON value exactly as required by the schema (object/array/etc.), with no trailing commas or comments.
+The output should be formatted as a JSON instance that conforms to the JSON schema below.
+As an example, for the schema {{"properties": {{"foo": {{"title": "Foo", "description": "a list of strings", "type": "array", "items": {{"type": "string"}}}}}}, "required": ["foo"]}} the object {{"foo": ["bar", "baz"]}} is a well-formatted instance of the schema. The object {{"properties": {{"foo": ["bar", "baz"]}}}} is not well-formatted.
+Here is the output schema (shown in a code block for readability only — do not include any backticks or Markdown in your output):
+```
+{schema_json}
+```"""
+    modified_messages = copy.deepcopy(messages)
+    for i in range(len(modified_messages) - 1, -1, -1):
+        if modified_messages[i].get("role") == "user":
+            modified_messages[i] = modified_messages[i].copy()
+            modified_messages[i]["content"] = (
+                modified_messages[i]["content"] + format_instructions
+            )
+            break
+    return modified_messages
+
+
 def _coerce_parsed(
     response_model: type[BaseModel],
     parsed_obj: Any | None,
@@ -540,28 +579,58 @@ def call_model(
     tracked_completion = track_completion(project_name=effective_project_name)(
         litellm.completion
     )
-    response = tracked_completion(
-        model=model,
-        messages=messages,
-        seed=seed,
-        num_retries=6,
-        **_strip_project_name(final_params_for_litellm),
-    )
-
-    choices = getattr(response, "choices", None)
-    choices_count = len(choices) if isinstance(choices, list) else "unknown"
-    missing_metadata = not bool(final_params_for_litellm.get("metadata"))
-    metadata_note = " metadata=missing" if missing_metadata else ""
-    logger.debug(
-        "call_model: model=%s project=%s n=%s choices=%s%s",
-        model,
-        effective_project_name,
-        final_params_for_litellm.get("n"),
-        choices_count,
-        metadata_note,
-    )
     wants_all = return_all
-    return _parse_response(response, response_model, wants_all)
+    attempts = 2 if response_model is not None else 1
+    last_error: StructuredOutputParsingError | None = None
+    for attempt in range(attempts):
+        attempt_messages = messages
+        attempt_params = final_params_for_litellm
+        if attempt == 1 and response_model is not None:
+            logger.warning(
+                "Structured output parsing failed; retrying with JSON-only prompt injection."
+            )
+            attempt_messages = _append_json_format_instructions(
+                messages, response_model
+            )
+            attempt_params = _prepare_model_params(
+                model_parameters,
+                call_time_params,
+                None,
+                is_reasoning,
+                optimization_id,
+                effective_project_name,
+            )
+
+        response = tracked_completion(
+            model=model,
+            messages=attempt_messages,
+            seed=seed,
+            num_retries=6,
+            **_strip_project_name(attempt_params),
+        )
+
+        choices = getattr(response, "choices", None)
+        choices_count = len(choices) if isinstance(choices, list) else "unknown"
+        missing_metadata = not bool(attempt_params.get("metadata"))
+        metadata_note = " metadata=missing" if missing_metadata else ""
+        logger.debug(
+            "call_model: model=%s project=%s n=%s choices=%s%s",
+            model,
+            effective_project_name,
+            attempt_params.get("n"),
+            choices_count,
+            metadata_note,
+        )
+        try:
+            return _parse_response(response, response_model, wants_all)
+        except StructuredOutputParsingError as exc:
+            last_error = exc
+            if attempt == attempts - 1:
+                raise
+            continue
+    if last_error is not None:
+        raise last_error
+    return ""
 
 
 # Overloads for call_model_async to provide precise return types
@@ -685,17 +754,46 @@ async def call_model_async(
         f"call_model_async: model={model} project={effective_project_name} "
         f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
     )
-    response = await tracked_completion(
-        model=model,
-        messages=messages,
-        seed=seed,
-        num_retries=6,
-        **_strip_project_name(final_params_for_litellm),
-    )
-
-    choices = getattr(response, "choices", None)
-    logger.debug(
-        f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
-    )
     wants_all = return_all
-    return _parse_response(response, response_model, wants_all)
+    attempts = 2 if response_model is not None else 1
+    last_error: StructuredOutputParsingError | None = None
+    for attempt in range(attempts):
+        attempt_messages = messages
+        attempt_params = final_params_for_litellm
+        if attempt == 1 and response_model is not None:
+            logger.warning(
+                "Structured output parsing failed; retrying with JSON-only prompt injection."
+            )
+            attempt_messages = _append_json_format_instructions(
+                messages, response_model
+            )
+            attempt_params = _prepare_model_params(
+                model_parameters=model_parameters,
+                call_time_params=call_time_params,
+                response_model=None,
+                is_reasoning=is_reasoning,
+                optimization_id=optimization_id,
+                project_name=effective_project_name,
+            )
+        response = await tracked_completion(
+            model=model,
+            messages=attempt_messages,
+            seed=seed,
+            num_retries=6,
+            **_strip_project_name(attempt_params),
+        )
+
+        choices = getattr(response, "choices", None)
+        logger.debug(
+            f"call_model_async: choices={len(choices) if isinstance(choices, list) else 'unknown'}"
+        )
+        try:
+            return _parse_response(response, response_model, wants_all)
+        except StructuredOutputParsingError as exc:
+            last_error = exc
+            if attempt == attempts - 1:
+                raise
+            continue
+    if last_error is not None:
+        raise last_error
+    return ""

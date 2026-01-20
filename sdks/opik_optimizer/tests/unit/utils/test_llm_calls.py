@@ -666,6 +666,32 @@ class TestCallModelSync:
             assert isinstance(result, SampleResponseModel)
             assert result.name == "test"
 
+    def test_call_model_retries_with_json_instructions(self) -> None:
+        """Retry once with JSON format injection when parsing fails."""
+        captured_messages: list[list[dict[str, str]]] = []
+        call_count = {"n": 0}
+
+        def mock_completion(**kwargs: Any) -> MagicMock:
+            captured_messages.append(kwargs["messages"])
+            if call_count["n"] == 0:
+                call_count["n"] += 1
+                return make_mock_response("not json")
+            return make_mock_response('{"name": "retry", "score": 1.0}')
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: mock_completion
+
+            result = _llm_calls.call_model(
+                messages=[{"role": "user", "content": "test"}],
+                model="gpt-4o",
+                response_model=SampleResponseModel,
+            )
+
+            assert isinstance(result, SampleResponseModel)
+            assert result.name == "retry"
+            assert len(captured_messages) == 2
+            assert "STRICT OUTPUT FORMAT" in captured_messages[1][-1]["content"]
+
 
 class TestCallModelAsync:
     """Test asynchronous call_model_async function."""
@@ -705,6 +731,33 @@ class TestCallModelAsync:
 
             assert isinstance(result, SampleResponseModel)
             assert result.name == "test"
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_retries_with_json_instructions(self) -> None:
+        """Retry once with JSON format injection when parsing fails."""
+        captured_messages: list[list[dict[str, str]]] = []
+        call_count = {"n": 0}
+
+        async def mock_completion(**kwargs: Any) -> MagicMock:
+            captured_messages.append(kwargs["messages"])
+            if call_count["n"] == 0:
+                call_count["n"] += 1
+                return make_mock_response("not json")
+            return make_mock_response('{"name": "retry", "score": 1.0}')
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: mock_completion
+
+            result = await _llm_calls.call_model_async(
+                messages=[{"role": "user", "content": "test"}],
+                model="gpt-4o",
+                response_model=SampleResponseModel,
+            )
+
+            assert isinstance(result, SampleResponseModel)
+            assert result.name == "retry"
+            assert len(captured_messages) == 2
+            assert "STRICT OUTPUT FORMAT" in captured_messages[1][-1]["content"]
 
     @pytest.mark.asyncio
     async def test_call_model_async_passes_model_parameters(self) -> None:

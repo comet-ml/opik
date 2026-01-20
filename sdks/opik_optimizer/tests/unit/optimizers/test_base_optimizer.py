@@ -924,6 +924,11 @@ class TestHistoryManagement:
         """start/record/end round should add round data via the history state."""
         optimizer = ConcreteOptimizer(model="gpt-4")
         context = MagicMock()
+        context.dataset = MagicMock()
+        context.dataset.name = "train-x"
+        context.evaluation_dataset = MagicMock()
+        context.evaluation_dataset.name = "dataset-x"
+        context.dataset_split = "validation"
 
         handle = optimizer.pre_round(context)
         optimizer.post_trial(
@@ -935,6 +940,7 @@ class TestHistoryManagement:
         )
         optimizer.post_round(
             round_handle=handle,
+            context=context,
             best_score=0.5,
             best_candidate=simple_chat_prompt,
             extras={"improvement": 0.0},
@@ -943,6 +949,10 @@ class TestHistoryManagement:
         history = optimizer.get_history_entries()
         assert len(history) == 1
         assert history[0]["round_index"] == 0
+        assert history[0]["trials"][0]["dataset"] == "dataset-x"
+        assert history[0]["trials"][0]["dataset_split"] == "validation"
+        assert history[0]["extra"]["training_dataset"] == "train-x"
+        assert history[0]["extra"]["evaluation_dataset"] == "dataset-x"
 
     def test_cleanup_clears_history(self, simple_chat_prompt) -> None:
         """cleanup should clear the history."""
@@ -2436,9 +2446,7 @@ class TestValidationDatasetParameter:
     ) -> None:
         """Metrics declaring required_fields should fail when missing in evaluation dataset."""
         mock_opik_client()
-        training_ds = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="training"
-        )
+        training_ds = make_mock_dataset(STANDARD_DATASET_ITEMS, name="training")
         validation_ds = make_mock_dataset(
             [{"id": "2", "question": "Q2"}], name="validation"
         )

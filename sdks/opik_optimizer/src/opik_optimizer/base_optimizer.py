@@ -887,7 +887,60 @@ class BaseOptimizer(ABC):
 
     def pre_round(self, context: OptimizationContext, **extras: Any) -> Any:
         """Hook fired before a round begins."""
-        return self._history_builder.start_round(extras=extras or None)
+        handle = self._history_builder.start_round(extras=extras or None)
+        debug_log(
+            "round_context",
+            round_index=handle,
+            training_dataset=getattr(context.dataset, "name", None),
+            evaluation_dataset=getattr(context.evaluation_dataset, "name", None),
+            dataset_split=context.dataset_split,
+        )
+        return handle
+
+    # Candidate-first aliases
+    def begin_round(self, context: OptimizationContext, **extras: Any) -> Any:
+        """Alias for pre_round."""
+        return self.pre_round(context, **extras)
+
+    def start_candidate(
+        self,
+        context: OptimizationContext,
+        candidate: Any,
+        *,
+        round_handle: Any | None = None,
+    ) -> Any:
+        """Alias for pre_trial."""
+        return self.pre_trial(context, candidate, round_handle=round_handle)
+
+    def finish_candidate(
+        self,
+        context: OptimizationContext,
+        candidate_handle: Any,
+        *,
+        score: float | None,
+        metrics: dict[str, Any] | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        dataset: str | None = None,
+        dataset_split: str | None = None,
+        trial_index: int | None = None,
+        timestamp: str | None = None,
+        round_handle: Any | None = None,
+    ) -> None:
+        """Alias for post_trial."""
+        self.post_trial(
+            context,
+            candidate_handle,
+            score=score,
+            metrics=metrics,
+            extras=extras,
+            candidates=candidates,
+            dataset=dataset,
+            dataset_split=dataset_split,
+            trial_index=trial_index,
+            timestamp=timestamp,
+            round_handle=round_handle,
+        )
 
     def pre_trial(
         self,
@@ -925,6 +978,10 @@ class BaseOptimizer(ABC):
     ) -> None:
         """Hook fired after a trial to record history."""
         if hasattr(self._history_builder, "record_trial"):
+            if dataset is None:
+                dataset = getattr(context.evaluation_dataset, "name", None)
+            if dataset_split is None:
+                dataset_split = context.dataset_split
             stop_reason = None
             if context.should_stop:
                 stop_reason = context.finish_reason
@@ -990,6 +1047,9 @@ class BaseOptimizer(ABC):
             n_samples=n_samples,
             n_threads=getattr(self, "n_threads", None),
         )
+
+        if hasattr(self._history_builder, "set_context"):
+            self._history_builder.set_context(context)
 
         runtime.show_run_start(optimizer=self, context=context)
 
@@ -1324,6 +1384,16 @@ class BaseOptimizer(ABC):
         """Finalize a history round."""
         if stop_reason is None and context is not None and context.should_stop:
             stop_reason = context.finish_reason or "stopped"
+        if context is not None:
+            merged_extras = dict(extras or {})
+            merged_extras.setdefault(
+                "training_dataset", getattr(context.dataset, "name", None)
+            )
+            merged_extras.setdefault(
+                "evaluation_dataset",
+                getattr(context.evaluation_dataset, "name", None),
+            )
+            extras = merged_extras
         if hasattr(self._history_builder, "end_round"):
             self._history_builder.end_round(
                 round_handle=round_handle,
@@ -1338,6 +1408,38 @@ class BaseOptimizer(ABC):
                 pareto_front=pareto_front,
                 selection_meta=selection_meta,
             )
+
+    def finish_round(
+        self,
+        round_handle: Any,
+        *,
+        context: OptimizationContext | None = None,
+        best_score: float | None = None,
+        best_candidate: Any | None = None,
+        best_prompt: Any | None = None,
+        stop_reason: str | None = None,
+        extras: dict[str, Any] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+        timestamp: str | None = None,
+        dataset_split: str | None = None,
+        pareto_front: list[dict[str, Any]] | None = None,
+        selection_meta: dict[str, Any] | None = None,
+    ) -> None:
+        """Alias for post_round."""
+        self.post_round(
+            round_handle,
+            context=context,
+            best_score=best_score,
+            best_candidate=best_candidate,
+            best_prompt=best_prompt,
+            stop_reason=stop_reason,
+            extras=extras,
+            candidates=candidates,
+            timestamp=timestamp,
+            dataset_split=dataset_split,
+            pareto_front=pareto_front,
+            selection_meta=selection_meta,
+        )
 
     def _update_optimization(
         self, optimization: optimization.Optimization, status: str

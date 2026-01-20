@@ -18,7 +18,11 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
     AgentBundleCandidate,
     AgentMetadata,
 )
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops import result_ops
+from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
+    MetaPromptOptimizer,
+)
+from opik_optimizer.core import runtime
+from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -384,16 +388,20 @@ class TestDataLeakagePatterns:
         assert "Clean prompt" in result["prompts"][0]["prompt"][0]["content"]
 
 
-def test_create_round_data_uses_none_trial_indices() -> None:
-    round_data = result_ops.create_round_data(
-        round_num=0,
-        current_best_prompt={"main": ChatPrompt(system="s", user="u")},
-        current_best_score=0.9,
-        best_prompt_overall={"main": ChatPrompt(system="s", user="u")},
-        evaluated_candidates=[({"main": ChatPrompt(system="s", user="u")}, 0.8)],
-        previous_best_score=0.7,
-        improvement_this_round=0.1,
-        trial_index=5,
+def test_history_builder_assigns_trial_indices() -> None:
+    optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    context = make_optimization_context({"main": ChatPrompt(system="s", user="u")})
+    round_handle = optimizer.pre_round(context)
+    runtime.record_and_post_trial(
+        optimizer=optimizer,
+        context=context,
+        prompt_or_payload=context.prompts,
+        score=0.8,
+        round_handle=round_handle,
     )
-    assert round_data.trials
-    assert all(trial.trial_index is None for trial in round_data.trials)
+    optimizer.post_round(round_handle=round_handle, context=context, best_score=0.8)
+    history = optimizer.get_history_entries()
+    assert history
+    trials = history[0].get("trials") or []
+    assert trials
+    assert trials[0].get("trial_index") is not None
