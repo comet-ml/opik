@@ -89,7 +89,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
-import ExperimentSelectBox from "@/components/pages-shared/traces/ExperimentSelectBox/ExperimentSelectBox";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -429,8 +429,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
-              experiment_name: {
-                keyComponent: ExperimentSelectBox,
+              experiment_id: {
+                keyComponent: ExperimentsSelectBox,
                 keyComponentProps: {
                   className: "w-full min-w-72",
                 },
@@ -935,12 +935,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
             {
               id: "experiment_id",
-              label: "Experiment ID",
+              label: "Experiment name",
               type: COLUMN_TYPE.string,
+              customMeta: {
+                keyComponent: (props: {
+                  value: string;
+                  onValueChange: (value: string) => void;
+                }) => (
+                  <ExperimentsSelectBox
+                    {...props}
+                    sorting={[{ id: "name", desc: false }]}
+                    className="w-full min-w-72"
+                  />
+                ),
+                defaultOperator: "=" as FilterOperator,
+                operators: [{ label: "=", value: "=" as FilterOperator }],
+              },
             },
             {
-              id: "experiment_name",
-              label: "Experiment name",
+              id: "experiment_id",
+              label: "Experiment ID",
               type: COLUMN_TYPE.string,
             },
             {
