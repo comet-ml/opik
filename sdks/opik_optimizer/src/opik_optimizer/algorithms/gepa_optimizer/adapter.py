@@ -298,6 +298,8 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             # Choose the best candidate output before passing into Opik evaluation.
             candidates = self._collect_candidates(prompt_variants, dataset_item)
+            if not candidates:
+                raise RuntimeError("No candidates produced by agent")
 
             best_output = candidates[0]
             best_score = float("-inf")

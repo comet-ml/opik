@@ -113,6 +113,8 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, ChatPrompt)
         assert isinstance(result.initial_prompt, ChatPrompt)
+        assert result.score == 0.85
+        assert result.initial_score == 0.5
 
     def test_dict_prompt_returns_dict(
         self,
@@ -186,6 +188,8 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, dict)
         assert isinstance(result.initial_prompt, dict)
+        assert result.score == 0.85
+        assert result.initial_score == 0.5
 
     def test_custom_task_respects_allow_tool_use(self) -> None:
         class AgentSpy(OptimizableAgent):
