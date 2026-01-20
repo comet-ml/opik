@@ -5,7 +5,7 @@ import {
   WIDGET_TYPE,
   EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
-import { DASHBOARD_VERSION } from "./utils";
+import { DASHBOARD_VERSION, DEFAULT_MAX_EXPERIMENTS } from "./utils";
 
 describe("migrateDashboardConfig", () => {
   describe("invalid inputs", () => {
@@ -68,7 +68,14 @@ describe("migrateDashboardConfig", () => {
         },
       ],
       lastModified: Date.now(),
-      config: { dateRange: "7d", projectIds: ["project-1"], experimentIds: [] },
+      config: {
+        dateRange: "7d",
+        projectIds: ["project-1"],
+        experimentIds: [],
+        experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+        experimentFilters: [],
+        maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+      },
     };
 
     it("should return dashboard unchanged when already at current version", () => {
@@ -101,6 +108,9 @@ describe("migrateDashboardConfig", () => {
         dateRange: "30d",
         projectIds: ["legacy-project"],
         experimentIds: [],
+        experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+        experimentFilters: [],
+        maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
       },
     } as DashboardState;
 
@@ -112,7 +122,19 @@ describe("migrateDashboardConfig", () => {
     it("should preserve legacy dashboard data", () => {
       const result = migrateDashboardConfig(legacyDashboard);
       expect(result.sections[0].title).toBe("Legacy Section");
-      expect(result.config).toEqual(legacyDashboard.config);
+      expect(result.config.dateRange).toBe(legacyDashboard.config.dateRange);
+      expect(result.config.projectIds).toEqual(
+        legacyDashboard.config.projectIds,
+      );
+      expect(result.config.experimentIds).toEqual(
+        legacyDashboard.config.experimentIds,
+      );
+      // Migration adds new fields
+      expect(result.config.experimentDataSource).toBe(
+        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+      );
+      expect(result.config.experimentFilters).toEqual([]);
+      expect(result.config.maxExperimentsCount).toBe(10);
     });
   });
 
@@ -129,7 +151,14 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(oldDashboard);
@@ -151,7 +180,14 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(futureDashboard);
@@ -166,7 +202,14 @@ describe("migrateDashboardConfig", () => {
         version: DASHBOARD_VERSION,
         sections: [],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(dashboard);
@@ -185,7 +228,14 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(dashboard);
@@ -227,6 +277,9 @@ describe("migrateDashboardConfig", () => {
           dateRange: "7d",
           projectIds: ["project-1"],
           experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
         },
       };
 
@@ -248,7 +301,14 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: ["test"], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: ["test"],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const originalCopy = JSON.parse(JSON.stringify(dashboard));
@@ -281,7 +341,14 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(dashboard);
@@ -314,11 +381,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
@@ -344,11 +418,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
     });
 
@@ -375,11 +456,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
@@ -405,11 +493,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
     });
 
@@ -435,11 +530,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
     });
 
@@ -479,11 +581,18 @@ describe("migrateDashboardConfig", () => {
             },
           ],
           lastModified: Date.now(),
-          config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+          config: {
+            dateRange: "7d",
+            projectIds: [],
+            experimentIds: [],
+            experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+            experimentFilters: [],
+            maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+          },
         };
 
         const result = migrateDashboardConfig(v1Dashboard);
-        expect(result.version).toBe(2);
+        expect(result.version).toBe(DASHBOARD_VERSION);
         expect(
           result.sections[0].widgets[0].config.overrideDefaults,
           `Failed for ${name}`,
@@ -513,11 +622,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
     });
 
@@ -540,11 +656,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config).toEqual({
         content: "test",
       });
@@ -581,11 +704,18 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(DASHBOARD_VERSION);
       expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
       expect(
         result.sections[0].widgets[1].config.overrideDefaults,
@@ -625,7 +755,14 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
       };
 
       const result = migrateDashboardConfig(v1Dashboard);
@@ -644,6 +781,103 @@ describe("migrateDashboardConfig", () => {
         feedbackScores: ["score-1"],
         overrideDefaults: true,
       });
+    });
+  });
+
+  describe("migration from v2 to v3", () => {
+    it("should migrate dashboard from version 2 to 3 and add default config fields", () => {
+      const v2Dashboard: DashboardState = {
+        version: 2,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [],
+            layout: [],
+          },
+        ],
+        lastModified: Date.now(),
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
+      };
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.version).toBe(DASHBOARD_VERSION);
+      expect(result.config.experimentDataSource).toBe(
+        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+      );
+      expect(result.config.experimentFilters).toEqual([]);
+      expect(result.config.maxExperimentsCount).toBe(10);
+    });
+
+    it("should preserve existing config values", () => {
+      const v2Dashboard: DashboardState = {
+        version: 2,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [],
+            layout: [],
+          },
+        ],
+        lastModified: Date.now(),
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+          experimentFilters: [],
+          maxExperimentsCount: 25,
+        },
+      };
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.config.experimentDataSource).toBe(
+        EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      );
+      expect(result.config.maxExperimentsCount).toBe(25);
+    });
+
+    it("should add maxExperimentsCount to EXPERIMENTS_FEEDBACK_SCORES widgets", () => {
+      const v2Dashboard: DashboardState = {
+        version: 2,
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                },
+              },
+            ],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+          },
+        ],
+        lastModified: Date.now(),
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: [],
+          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
+      };
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.sections[0].widgets[0].config.maxExperimentsCount).toBe(10);
     });
   });
 });

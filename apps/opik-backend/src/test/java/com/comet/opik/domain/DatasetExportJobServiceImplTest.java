@@ -211,13 +211,51 @@ class DatasetExportJobServiceImplTest {
     }
 
     @Test
+    void updateJobToProcessing_shouldUpdateStatusToProcessing() {
+        // Given
+        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any())).thenReturn(1);
+
+        // When
+        Mono<Void> result = service.updateJobToProcessing(JOB_ID)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .verifyComplete();
+
+        // Verify DAO.markPendingJobAsProcessing() was called
+        verify(exportJobDAO, times(1)).markPendingJobAsProcessing(eq(WORKSPACE_ID), eq(JOB_ID), eq(USER_NAME));
+    }
+
+    @Test
+    void updateJobToProcessing_shouldThrowNotFoundException_whenJobNotPending() {
+        // Given - DAO returns 0 because job is not in PENDING state
+        when(exportJobDAO.markPendingJobAsProcessing(any(), any(), any())).thenReturn(0);
+
+        // When
+        Mono<Void> result = service.updateJobToProcessing(JOB_ID)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().contains(JOB_ID.toString()))
+                .verify();
+    }
+
+    @Test
     void updateJobToCompleted_shouldUpdateStatusAndFilePath() {
         // Given
         String filePath = "workspace/exports/dataset-123/job-456.csv";
-        when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any())).thenReturn(1);
+        Instant expiresAt = Instant.now().plus(Duration.ofHours(24));
+        when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any(), any())).thenReturn(1);
 
         // When
-        Mono<Void> result = service.updateJobToCompleted(JOB_ID, filePath)
+        Mono<Void> result = service.updateJobToCompleted(JOB_ID, filePath, expiresAt)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -229,14 +267,14 @@ class DatasetExportJobServiceImplTest {
         // Verify DAO.updateToCompleted() was called
         verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
                 eq(DatasetExportStatus.COMPLETED),
-                eq(filePath), eq(USER_NAME));
+                eq(filePath), eq(expiresAt), eq(USER_NAME));
     }
 
     @Test
     void updateJobToFailed_shouldUpdateStatusAndErrorMessage() {
         // Given
         String errorMessage = "Export failed due to timeout";
-        when(exportJobDAO.updateToFailed(any(), any(), any(), any(), any())).thenReturn(1);
+        when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(1);
 
         // When
         Mono<Void> result = service.updateJobToFailed(JOB_ID, errorMessage)
@@ -249,24 +287,23 @@ class DatasetExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.updateToFailed() was called
-        verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(DatasetExportStatus.FAILED),
-                eq(errorMessage), eq(USER_NAME));
+        verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(errorMessage), eq(USER_NAME));
     }
 
     @ParameterizedTest
     @MethodSource("provideUpdateJobNotFoundScenarios")
     void updateJob_shouldThrowNotFoundException_whenJobDoesNotExist(
-            DatasetExportStatus status, String filePath, String errorMessage) {
+            DatasetExportStatus status, String filePath, Instant expiresAt, String errorMessage) {
         // Given
         if (status == DatasetExportStatus.COMPLETED) {
-            when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any())).thenReturn(0);
+            when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any(), any())).thenReturn(0);
         } else {
-            when(exportJobDAO.updateToFailed(any(), any(), any(), any(), any())).thenReturn(0);
+            when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(0);
         }
 
         // When
         Mono<Void> result = (status == DatasetExportStatus.COMPLETED)
-                ? service.updateJobToCompleted(JOB_ID, filePath)
+                ? service.updateJobToCompleted(JOB_ID, filePath, expiresAt)
                 : service.updateJobToFailed(JOB_ID, errorMessage);
 
         result = result.contextWrite(ctx -> ctx
@@ -282,20 +319,21 @@ class DatasetExportJobServiceImplTest {
         // Verify appropriate DAO method was called
         if (status == DatasetExportStatus.COMPLETED) {
             verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
-                    eq(DatasetExportStatus.COMPLETED), eq(filePath), eq(USER_NAME));
+                    eq(DatasetExportStatus.COMPLETED), eq(filePath), eq(expiresAt), eq(USER_NAME));
         } else {
-            verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID),
-                    eq(DatasetExportStatus.FAILED), eq(errorMessage), eq(USER_NAME));
+            verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(errorMessage),
+                    eq(USER_NAME));
         }
     }
 
     private static Stream<Arguments> provideUpdateJobNotFoundScenarios() {
         String filePath = "workspace/exports/dataset-%s/job-%s.csv".formatted(
                 UUID.randomUUID(), UUID.randomUUID());
+        Instant expiresAt = Instant.now().plus(Duration.ofHours(24));
         String errorMessage = "Export failed due to timeout";
 
         return Stream.of(
-                Arguments.of(DatasetExportStatus.COMPLETED, filePath, null),
-                Arguments.of(DatasetExportStatus.FAILED, null, errorMessage));
+                Arguments.of(DatasetExportStatus.COMPLETED, filePath, expiresAt, null),
+                Arguments.of(DatasetExportStatus.FAILED, null, null, errorMessage));
     }
 }

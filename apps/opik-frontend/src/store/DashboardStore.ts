@@ -259,7 +259,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const newWidget: DashboardWidget = {
             ...widget,
             id: uniqid(),
-            title: `${widget.title} (copy)`,
+            title: `${widget.title || widget.generatedTitle || ""} (copy)`,
           };
 
           const size = getLayoutItemSize(section.layout, widgetId);

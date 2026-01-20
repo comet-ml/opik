@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import Loader from "@/components/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { OPTIMIZATION_VIEW_TYPE } from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
+import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { useCompareOptimizationsData } from "./useCompareOptimizationsData";
 import { useCompareOptimizationsColumns } from "./useCompareOptimizationsColumns";
 import CompareOptimizationsHeader from "./CompareOptimizationsHeader";
@@ -14,7 +15,7 @@ import CompareOptimizationsSidebar from "./CompareOptimizationsSidebar";
 
 const CompareOptimizationsPage: React.FC = () => {
   const [view, setView] = useState<OPTIMIZATION_VIEW_TYPE>(
-    OPTIMIZATION_VIEW_TYPE.LOGS,
+    OPTIMIZATION_VIEW_TYPE.TRIALS,
   );
 
   const {
@@ -55,11 +56,30 @@ const CompareOptimizationsPage: React.FC = () => {
     sortableBy,
   });
 
+  // set initial view based on optimization status when optimization changes
+  useEffect(() => {
+    if (optimization?.status) {
+      const isInProgress = IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
+        optimization.status,
+      );
+      setView(
+        isInProgress
+          ? OPTIMIZATION_VIEW_TYPE.LOGS
+          : OPTIMIZATION_VIEW_TYPE.TRIALS,
+      );
+    }
+  }, [optimizationId, optimization?.status]);
+
   if (isOptimizationPending || isExperimentsPending) {
     return <Loader />;
   }
 
   const isStudioOptimization = Boolean(optimization?.studio_config);
+  const canRerun =
+    isStudioOptimization &&
+    Boolean(optimization?.id) &&
+    optimization?.status &&
+    !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
   const showTrialsView =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
 
@@ -75,6 +95,7 @@ const CompareOptimizationsPage: React.FC = () => {
           status={optimization?.status}
           optimizationId={optimization?.id}
           isStudioOptimization={isStudioOptimization}
+          canRerun={canRerun}
         />
       </PageBodyStickyContainer>
 
@@ -137,6 +158,8 @@ const CompareOptimizationsPage: React.FC = () => {
           onRowClick={handleRowClick}
           onSortChange={setSortedColumns}
           onColumnsWidthChange={setColumnsWidth}
+          highlightedTrialId={bestExperiment?.id}
+          bestExperiment={bestExperiment}
         />
         <CompareOptimizationsSidebar
           optimization={optimization}
