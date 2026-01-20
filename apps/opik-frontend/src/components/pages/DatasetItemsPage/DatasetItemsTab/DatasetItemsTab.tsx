@@ -402,6 +402,11 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     }));
 
     return [
+      {
+        id: "id",
+        label: "ID",
+        type: COLUMN_TYPE.string,
+      },
       ...dataFilterColumns,
       {
         id: "tags",
