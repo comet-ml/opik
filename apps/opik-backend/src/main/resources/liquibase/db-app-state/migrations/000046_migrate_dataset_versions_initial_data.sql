@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:000044_migrate_dataset_versions_initial_data
+--changeset idoberko2:000046_migrate_dataset_versions_initial_data
 --comment: Create version 1 for all existing datasets using dataset_id as version_id
 
 -- Step 1: Create version 1 for datasets that don't have versions yet
