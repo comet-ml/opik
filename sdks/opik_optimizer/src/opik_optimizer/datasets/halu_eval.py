@@ -52,7 +52,7 @@ HALU_EVAL_SPEC = DatasetSpec(
 _HALU_EVAL_HANDLE = DatasetHandle(HALU_EVAL_SPEC)
 
 
-def halu_eval_300(
+def halu_eval(
     *,
     split: str | None = None,
     count: int | None = None,
@@ -66,7 +66,7 @@ def halu_eval_300(
     """
     Load slices of the HaluEval dataset (user query, ChatGPT response, label).
 
-    The default call returns the 300-example slice used in our demos. Override
+    The default call returns the curated slice used in our demos. Override
     ``split``/``count``/``start``/``dataset_name`` to stream other sections of the
     dataset.
     """

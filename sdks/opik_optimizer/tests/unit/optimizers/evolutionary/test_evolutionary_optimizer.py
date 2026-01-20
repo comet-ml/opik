@@ -428,6 +428,11 @@ def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) 
         return 0.5
 
     monkeypatch.setattr(optimizer, "evaluate_prompt", mock_evaluate_prompt)
+    monkeypatch.setattr(
+        population_ops,
+        "initialize_population",
+        lambda **kwargs: [ChatPrompt(system="s", user="u")] * optimizer.population_size,
+    )
 
     prompt = ChatPrompt(system="test", user="{question}")
     optimizer.optimize_prompt(
@@ -440,6 +445,48 @@ def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) 
 
     assert calls, "evaluate_prompt should be invoked"
     assert all(call is dataset_val for call in calls)
+
+
+def test_validation_dataset_sets_history_split(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """History entries should be tagged with validation split when using validation dataset."""
+    dataset_train = make_mock_dataset(
+        STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+    )
+    dataset_val = make_mock_dataset(
+        STANDARD_DATASET_ITEMS, name="validation-dataset", dataset_id="dataset-456"
+    )
+
+    optimizer = EvolutionaryOptimizer(
+        model="gpt-4o",
+        skip_perfect_score=False,
+        population_size=2,
+        num_generations=1,
+    )
+
+    def fake_evaluate(**_kwargs: Any) -> float:
+        return 0.6
+
+    monkeypatch.setattr("opik_optimizer.core.evaluation.evaluate", fake_evaluate)
+    monkeypatch.setattr(
+        population_ops,
+        "initialize_population",
+        lambda **kwargs: [ChatPrompt(system="s", user="u")] * optimizer.population_size,
+    )
+
+    prompt = ChatPrompt(system="test", user="{question}")
+    result = optimizer.optimize_prompt(
+        prompt=prompt,
+        dataset=dataset_train,
+        validation_dataset=dataset_val,
+        metric=make_simple_metric(),
+        max_trials=3,
+    )
+
+    assert result.history
+    first_round = result.history[0]
+    assert first_round.get("dataset_split") == "validation"
 
 
 class TestEvolutionaryOptimizerAgentUsage:

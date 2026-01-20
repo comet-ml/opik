@@ -33,6 +33,7 @@ from ... import helpers as parent_helpers
 from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from ...utils.logging import debug_log
+from ...constants import normalize_eval_threads
 from . import helpers, types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
@@ -165,18 +166,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         """
         if self._custom_evaluated_task is not None:
             # Use the custom task (with few-shot examples already injected)
-            if n_threads is None:
-                n_threads = self.n_threads
-
-            return task_evaluator.evaluate(
+            return self._evaluate_custom_task(
                 dataset=dataset,
-                evaluated_task=self._custom_evaluated_task,
                 metric=metric,
-                num_threads=n_threads,
-                dataset_item_ids=self._custom_eval_item_ids,
-                project_name=self.project_name,
+                n_threads=n_threads,
                 experiment_config=experiment_config,
-                optimization_id=self.current_optimization_id,
                 verbose=verbose,
             )
 
@@ -196,6 +190,30 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             seed=seed,
             return_evaluation_result=False,
             allow_tool_use=allow_tool_use,
+        )
+
+    def _evaluate_custom_task(
+        self,
+        *,
+        dataset: Dataset,
+        metric: MetricFunction,
+        n_threads: int | None,
+        experiment_config: dict | None,
+        verbose: int,
+    ) -> float:
+        n_threads = normalize_eval_threads(n_threads or self.n_threads)
+        if self._custom_evaluated_task is None:
+            raise ValueError("Custom evaluated task is not set.")
+        return task_evaluator.evaluate(
+            dataset=dataset,
+            evaluated_task=self._custom_evaluated_task,
+            metric=metric,
+            num_threads=n_threads,
+            dataset_item_ids=self._custom_eval_item_ids,
+            project_name=self.project_name,
+            experiment_config=experiment_config,
+            optimization_id=self.current_optimization_id,
+            verbose=verbose,
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:

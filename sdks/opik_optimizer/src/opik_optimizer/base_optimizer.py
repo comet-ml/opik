@@ -363,13 +363,23 @@ class BaseOptimizer(ABC):
             optimizable_prompts, dataset, metric, support_content_parts=True
         )
 
-        # Validate n_samples against dataset size
-        total_items = len(dataset.get_items())
+        # Select evaluation dataset early so we validate n_samples against the right split
+        evaluation_dataset = self._select_evaluation_dataset(
+            dataset, validation_dataset
+        )
+
+        self._validate_metric_requirements(evaluation_dataset, metric)
+
+        # Validate n_samples against evaluation dataset size
+        total_items = len(evaluation_dataset.get_items())
         if total_items == 0:
             raise ValueError("dataset is empty")
         if n_samples is not None and n_samples > total_items:
             logger.warning(
-                f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
+                "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
+                "Using full evaluation dataset.",
+                n_samples,
+                total_items,
             )
             n_samples = None
 
@@ -395,10 +405,8 @@ class BaseOptimizer(ABC):
                 dataset, metric, optimization_id
             )
 
-        # Select evaluation dataset
-        evaluation_dataset = self._select_evaluation_dataset(
-            dataset, validation_dataset
-        )
+        # Default dataset split for history/logging (overridden by optimizers as needed)
+        dataset_split = "validation" if validation_dataset is not None else "train"
 
         # Add validation dataset to experiment config if provided
         if validation_dataset is not None:
@@ -414,7 +422,7 @@ class BaseOptimizer(ABC):
         initial_prompts = {name: p.copy() for name, p in optimizable_prompts.items()}
 
         # Return optimization context
-        return OptimizationContext(
+        context = OptimizationContext(
             prompts=optimizable_prompts,
             initial_prompts=initial_prompts,
             is_single_prompt_optimization=is_single_prompt_optimization,
@@ -432,7 +440,12 @@ class BaseOptimizer(ABC):
             allow_tool_use=bool(extra_params.get("allow_tool_use", True)),
             baseline_score=None,
             extra_params=extra_params,
+            dataset_split=dataset_split,
         )
+
+        # Keep history default split aligned with evaluation dataset.
+        self.set_default_dataset_split(dataset_split)
+        return context
 
     def _calculate_baseline(self, context: OptimizationContext) -> float:
         """
@@ -556,6 +569,74 @@ class BaseOptimizer(ABC):
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
         return coerced_score
+
+    def _score_from_evaluation_result(
+        self,
+        evaluation_result: EvaluationResult,
+        *,
+        metric_name: str,
+        empty_score: float | None = None,
+    ) -> float:
+        if not evaluation_result.test_results:
+            return empty_score if empty_score is not None else 0.0
+        objective_scores = task_evaluator._extract_objective_scores(
+            evaluation_result, metric_name
+        )
+        if not objective_scores:
+            return empty_score if empty_score is not None else 0.0
+        return task_evaluator._average_finite_scores(
+            objective_scores, objective_metric_name=metric_name
+        )
+
+    def evaluate_with_result(
+        self,
+        context: OptimizationContext,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        experiment_config: dict[str, Any] | None = None,
+        *,
+        empty_score: float | None = None,
+    ) -> tuple[float, EvaluationResult]:
+        """Evaluate prompts and return both the score and EvaluationResult."""
+        self.pre_trial(context, prompts)
+        try:
+            suppress_progress = bool(
+                (context.extra_params or {}).get("suppress_evaluation_progress", False)
+            )
+            progress_ctx = (
+                nullcontext()
+                if suppress_progress
+                else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
+            )
+            with progress_ctx:
+                evaluation_result = self.evaluate_prompt(
+                    prompt=prompts,
+                    dataset=context.evaluation_dataset,
+                    metric=context.metric,
+                    agent=context.agent,
+                    experiment_config=experiment_config,
+                    n_samples=context.n_samples,
+                    n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
+                    verbose=self.verbose,
+                    allow_tool_use=context.allow_tool_use,
+                    return_evaluation_result=True,
+                )
+        except Exception:
+            context.finish_reason = "error"
+            context.should_stop = True
+            logger.exception("Evaluation failed; stopping optimization.")
+            raise
+        if not isinstance(evaluation_result, EvaluationResult):
+            raise TypeError("Expected EvaluationResult from evaluate_prompt.")
+        score = self._score_from_evaluation_result(
+            evaluation_result,
+            metric_name=context.metric.__name__,
+            empty_score=empty_score,
+        )
+        coerced_score = self._coerce_score(score)
+        prev_best_score = context.current_best_score
+        self.on_trial(context, prompts, coerced_score, prev_best_score)
+        self._should_stop_context(context)
+        return coerced_score, evaluation_result
 
     # ------------------------------------------------------------------
     # Reporting/display
@@ -705,6 +786,26 @@ class BaseOptimizer(ABC):
             metric=metric,
             support_content_parts=support_content_parts,
         )
+
+    def _validate_metric_requirements(
+        self,
+        dataset: Dataset,
+        metric: MetricFunction,
+    ) -> None:
+        required_fields = getattr(metric, "required_fields", None)
+        if not required_fields:
+            return
+
+        items = dataset.get_items(1)
+        if not items:
+            raise ValueError("dataset is empty")
+        sample = items[0]
+        missing = [field for field in required_fields if not sample.get(field)]
+        if missing:
+            raise ValueError(
+                f"Metric {metric.__name__} requires dataset fields {missing} "
+                "but they are missing/empty in the evaluation dataset."
+            )
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -1037,6 +1138,9 @@ class BaseOptimizer(ABC):
             return self.post_optimize(context, result)
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
+            # FIXME(opik): Switch to status="error" once Optimization.update allows it.
+            # REST supports "error" via PUT v1/private/optimizations/{id} (status field),
+            # but Optimization.update() currently restricts to running/completed/cancelled.
             self._finalize_optimization(context, status="cancelled")
             raise
 
@@ -1110,19 +1214,20 @@ class BaseOptimizer(ABC):
                 extra_kwargs=kwargs,
             )
         )
-        baseline_score = self._run_baseline(context)
+        with runtime.handle_termination(optimizer=self, context=context):
+            baseline_score = self._run_baseline(context)
 
-        # Check for early stop if baseline meets threshold
-        if self._should_skip_optimization(baseline_score):
-            return self._build_early_stop_result(
+            # Check for early stop if baseline meets threshold
+            if self._should_skip_optimization(baseline_score):
+                return self._build_early_stop_result(
+                    context=context,
+                    baseline_score=baseline_score,
+                )
+
+            return self._run_algorithm_and_finalize(
                 context=context,
                 baseline_score=baseline_score,
             )
-
-        return self._run_algorithm_and_finalize(
-            context=context,
-            baseline_score=baseline_score,
-        )
 
     def get_history_entries(self) -> list[dict[str, Any]]:
         """

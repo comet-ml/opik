@@ -1,5 +1,4 @@
 import logging
-from contextlib import nullcontext
 
 import opik
 from opik.evaluation.evaluation_result import EvaluationResult
@@ -13,8 +12,6 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
-from ...constants import normalize_eval_threads
-from ...utils.reporting import convert_tqdm_to_rich
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
@@ -180,41 +177,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         context: OptimizationContext,
         empty_score: float | None = None,
     ) -> tuple[float, EvaluationResult]:
-        """Evaluate prompts, update trial state, and return score + result.
-
-        Returns the average score across EvaluationResult test results; when no
-        scores exist, falls back to empty_score (or 0.0).
-        """
-        self.pre_trial(context, prompts)
-        suppress_progress = bool(
-            (context.extra_params or {}).get("suppress_evaluation_progress", False)
+        """Evaluate prompts, update trial state, and return score + result."""
+        return self.evaluate_with_result(
+            context=context,
+            prompts=prompts,
+            experiment_config=context.experiment_config,
+            empty_score=empty_score,
         )
-        progress_ctx = (
-            nullcontext()
-            if suppress_progress
-            else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
-        )
-        with progress_ctx:
-            evaluation_result = self.evaluate_prompt(
-                prompt=prompts,
-                dataset=dataset,
-                metric=metric,
-                agent=agent,
-                n_samples=n_samples,
-                n_threads=normalize_eval_threads(self.n_threads),
-                experiment_config=context.experiment_config,
-                return_evaluation_result=True,
-                allow_tool_use=context.allow_tool_use,
-            )
-        if not isinstance(evaluation_result, EvaluationResult):
-            raise TypeError("Expected EvaluationResult from evaluate_prompt.")
-        scores = [x.score_results[0].value for x in evaluation_result.test_results]
-        if scores:
-            score = sum(scores) / len(scores)
-        else:
-            score = empty_score if empty_score is not None else 0.0
-        self._record_trial_score(context, score, prompts)
-        return score, evaluation_result
 
     def _improve_prompt(
         self,

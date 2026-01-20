@@ -17,7 +17,6 @@ from opik_optimizer.utils.dataset import (
     dataset_name_for_mode,
     default_dataset_name,
     resolve_test_mode_count,
-    warn_deprecated_dataset,
     filter_by_fingerprint,
     record_matches_filter_by,
     FilterBy,
@@ -66,24 +65,12 @@ def driving_hazard(
             "Driving hazard dataset exposes only 'train' and 'test' splits."
         )
 
-    preset_name = None
-    if normalized_split == "train" and count == 50:
-        preset_name = "driving_hazard_50"
-    elif normalized_split == "train" and count == 100:
-        preset_name = "driving_hazard_100"
-    elif normalized_split == "test" and count == 100:
-        preset_name = "driving_hazard_test"
-
     explicit_dataset_name = dataset_name is not None
-    target_name = (
-        dataset_name
-        or preset_name
-        or default_dataset_name(
-            base="driving_hazard",
-            split=normalized_split,
-            start=0,
-            count=count,
-        )
+    target_name = dataset_name or default_dataset_name(
+        base="driving_hazard",
+        split=normalized_split,
+        start=0,
+        count=count,
     )
     if not explicit_dataset_name:
         if filter_by:
@@ -94,68 +81,6 @@ def driving_hazard(
         nb_items=count,
         test_mode=test_mode,
         split=normalized_split,
-        max_image_size=max_image_size,
-        image_quality=image_quality,
-        filter_by=filter_by,
-    )
-
-
-def driving_hazard_50(
-    test_mode: bool = False,
-    max_image_size: tuple[int, int] | None = (512, 384),
-    image_quality: int = 60,
-    *,
-    filter_by: FilterBy | None = None,
-) -> opik.Dataset:
-    """Legacy helper for 50 training samples."""
-    warn_deprecated_dataset("driving_hazard_50", "driving_hazard(count=50)")
-    return driving_hazard(
-        split="train",
-        count=50,
-        dataset_name="driving_hazard_50",
-        test_mode=test_mode,
-        max_image_size=max_image_size,
-        image_quality=image_quality,
-        filter_by=filter_by,
-    )
-
-
-def driving_hazard_100(
-    test_mode: bool = False,
-    max_image_size: tuple[int, int] | None = (512, 384),
-    image_quality: int = 60,
-    *,
-    filter_by: FilterBy | None = None,
-) -> opik.Dataset:
-    """Legacy helper for 100 training samples."""
-    warn_deprecated_dataset("driving_hazard_100", "driving_hazard(count=100)")
-    return driving_hazard(
-        split="train",
-        count=100,
-        dataset_name="driving_hazard_100",
-        test_mode=test_mode,
-        max_image_size=max_image_size,
-        image_quality=image_quality,
-        filter_by=filter_by,
-    )
-
-
-def driving_hazard_test_split(
-    test_mode: bool = False,
-    max_image_size: tuple[int, int] | None = (512, 384),
-    image_quality: int = 60,
-    *,
-    filter_by: FilterBy | None = None,
-) -> opik.Dataset:
-    """Legacy helper for 100 test samples."""
-    warn_deprecated_dataset(
-        "driving_hazard_test_split", 'driving_hazard(split="test", count=100)'
-    )
-    return driving_hazard(
-        split="test",
-        count=100,
-        dataset_name="driving_hazard_test",
-        test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
         filter_by=filter_by,

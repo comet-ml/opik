@@ -2378,6 +2378,7 @@ class TestValidationDatasetParameter:
 
         assert context.validation_dataset is validation_ds
         assert context.evaluation_dataset is validation_ds
+        assert context.dataset_split == "validation"
 
     def test_validation_dataset_none_uses_training(
         self,
@@ -2400,6 +2401,61 @@ class TestValidationDatasetParameter:
 
         assert context.validation_dataset is None
         assert context.evaluation_dataset is training_ds
+        assert context.dataset_split == "train"
+
+    def test_n_samples_validation_uses_evaluation_dataset_size(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt: ChatPrompt,
+        mock_opik_client,
+        mock_metric,
+    ) -> None:
+        """n_samples validation should use evaluation dataset size when validation is provided."""
+        mock_opik_client()
+        training_ds = make_mock_dataset(STANDARD_DATASET_ITEMS, name="training")
+        validation_ds = make_mock_dataset(
+            [{"id": "2", "question": "Q2", "answer": "A2"}], name="validation"
+        )
+
+        context = optimizer._setup_optimization(
+            prompt=simple_chat_prompt,
+            dataset=training_ds,
+            metric=mock_metric,
+            compute_baseline=False,
+            validation_dataset=validation_ds,
+            n_samples=2,
+        )
+
+        assert context.n_samples is None
+
+    def test_metric_required_fields_enforced_on_evaluation_dataset(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt: ChatPrompt,
+        mock_opik_client,
+    ) -> None:
+        """Metrics declaring required_fields should fail when missing in evaluation dataset."""
+        mock_opik_client()
+        training_ds = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="training"
+        )
+        validation_ds = make_mock_dataset(
+            [{"id": "2", "question": "Q2"}], name="validation"
+        )
+
+        def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+            return 0.0
+
+        metric_fn.required_fields = ("answer",)  # type: ignore[attr-defined]
+
+        with pytest.raises(ValueError, match="requires dataset fields"):
+            optimizer._setup_optimization(
+                prompt=simple_chat_prompt,
+                dataset=training_ds,
+                metric=metric_fn,
+                compute_baseline=False,
+                validation_dataset=validation_ds,
+            )
 
     def test_validation_dataset_added_to_experiment_config(
         self,

@@ -448,7 +448,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
         )
 
-        self.set_default_dataset_split(context.dataset_split or "train")
+        dataset_split = context.dataset_split or (
+            "validation" if context.validation_dataset is not None else "train"
+        )
+        self.set_default_dataset_split(dataset_split)
+        context.dataset_split = dataset_split
         round_handle = self.pre_round(context)
         generation_ops.post_population_round(
             self,

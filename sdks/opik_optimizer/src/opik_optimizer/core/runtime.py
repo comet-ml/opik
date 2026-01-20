@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, cast
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 import json
 import logging
 import math
+import os
+import gc
+import signal
+import threading
+import warnings
+import multiprocessing.resource_tracker
 
 from opik import Dataset
 
@@ -20,6 +27,68 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 _INHERIT = object()
+
+
+@contextmanager
+def handle_termination(
+    *,
+    optimizer: BaseOptimizer,
+    context: OptimizationContext,
+    timeout_sec: float = 2.0,
+) -> Any:
+    """Handle SIGINT/SIGTERM by marking the run cancelled and updating Opik."""
+    handled = False
+    previous_handlers: dict[int, Any] = {}
+
+    def _handler(signum: int, _frame: Any) -> None:
+        nonlocal handled
+        if handled:
+            return
+        handled = True
+        logger.warning("Received signal %s; cancelling optimization.", signum)
+        context.should_stop = True
+        context.finish_reason = "cancelled"
+
+        def _finalize() -> None:
+            try:
+                optimizer._finalize_optimization(context, status="cancelled")
+            except Exception:
+                logger.exception(
+                    "Failed to finalize optimization after signal %s", signum
+                )
+
+        finalize_thread = threading.Thread(target=_finalize, daemon=True)
+        finalize_thread.start()
+        finalize_thread.join(timeout=timeout_sec)
+        warnings.filterwarnings(
+            "ignore",
+            message=r"resource_tracker: There appear to be .* leaked semaphore objects.*",
+            module=r"multiprocessing\\.resource_tracker",
+        )
+        try:
+            stopper = getattr(multiprocessing.resource_tracker._resource_tracker, "_stop", None)
+            if callable(stopper):
+                stopper()  # type: ignore[misc]
+        except Exception:
+            pass
+        gc.collect()
+        os._exit(128 + signum)
+
+    signals: list[int] = []
+    if hasattr(signal, "SIGTERM"):
+        signals.append(signal.SIGTERM)
+    if hasattr(signal, "SIGINT"):
+        signals.append(signal.SIGINT)
+
+    for sig in signals:
+        previous_handlers[sig] = signal.getsignal(sig)
+        signal.signal(sig, _handler)
+
+    try:
+        yield
+    finally:
+        for sig, prev in previous_handlers.items():
+            signal.signal(sig, prev)
 
 
 def select_result_prompts(

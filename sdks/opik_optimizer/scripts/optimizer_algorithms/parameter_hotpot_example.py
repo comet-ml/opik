@@ -6,7 +6,8 @@ from utils.metrics import answer_correctness_score
 
 
 # Load dataset
-dataset = hotpot(count=300)
+dataset = hotpot(split="train", count=50)
+validation_dataset = hotpot(split="validation", count=25)
 
 # Define initial prompt
 system_prompt = (
@@ -46,6 +47,7 @@ parameter_space = ParameterSearchSpace.model_validate(
 result = optimizer.optimize_parameter(
     prompt=prompt,
     dataset=dataset,
+    validation_dataset=validation_dataset,
     metric=optimization_metric,
     parameter_space=parameter_space,
     max_trials=2,

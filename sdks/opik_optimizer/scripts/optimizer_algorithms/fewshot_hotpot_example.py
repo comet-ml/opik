@@ -6,7 +6,8 @@ from utils.metrics import answer_correctness_score
 
 
 # Load dataset
-dataset = hotpot(count=300)
+dataset = hotpot(split="train", count=50)
+validation_dataset = hotpot(split="validation", count=25)
 
 # Define initial prompt
 system_prompt = (
@@ -19,30 +20,6 @@ system_prompt = (
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
-    # tools=[
-    #     {
-    #         "type": "function",
-    #         "function": {
-    #             "name": "search_wikipedia",
-    #             "description": "Search Wikipedia for information about a topic. Returns relevant article abstracts.",
-    #             "parameters": {
-    #                 "type": "object",
-    #                 "properties": {
-    #                     "query": {
-    #                         "type": "string",
-    #                         "description": "The search query - a topic, person, place, or concept to look up.",
-    #                     },
-    #                 },
-    #                 "required": ["query"],
-    #             },
-    #         },
-    #     },
-    # ],
-    # function_map={
-    #     "search_wikipedia": opik.track(type="tool")(
-    #         lambda query: search_wikipedia(query, search_type="api")
-    #     )
-    # },
 )
 
 # Define the metric to optimize
@@ -59,6 +36,7 @@ optimizer = FewShotBayesianOptimizer(
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
+    validation_dataset=validation_dataset,
     metric=optimization_metric,
     n_samples=25,
     max_trials=3,
