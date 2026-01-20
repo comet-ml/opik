@@ -139,55 +139,9 @@ class RichGEPAOptimizerLogger:
         if not first.startswith("Best "):
             self._last_best_message = None
 
-        # Track iteration changes and add separation
-        if first.startswith("Iteration "):
-            colon = first.find(":")
-            head = first[:colon] if colon != -1 else first
-            parts = head.split()
-            if len(parts) >= 2 and parts[1].isdigit():
-                try:
-                    iteration = int(parts[1])
-
-                    # Add separator when starting a new iteration (except iteration 0)
-                    if iteration > 0 and iteration != self.current_iteration:
-                        display_text_block("│")
-
-                    self.current_iteration = iteration
-                    self._last_raw_message = first
-
-                    # Update progress bar
-                    if self.progress and self.task_id is not None:
-                        self.progress.update(self.task_id, completed=iteration)
-
-                    # Add explanatory text for iteration start
-                    if "Base program full valset score" in first:
-                        # Extract score
-                        score_match = first.split(":")[-1].strip()
-                        display_text_block(
-                            f"│ Baseline evaluation: {score_match}",
-                            style="bold",
-                        )
-                        return
-                    elif "Selected program" in first:
-                        # Extract program number and score
-                        parts_info = first.split(":")
-                        if "Selected program" in parts_info[1]:
-                            program_info = parts_info[1].strip()
-                            score_info = (
-                                parts_info[2].strip() if len(parts_info) > 2 else ""
-                            )
-                            display_text_block(
-                                f"│ Trial {iteration}: {program_info}, score: {score_info}",
-                                style="bold cyan",
-                            )
-                        else:
-                            display_text_block(
-                                f"│ Trial {iteration}", style="bold cyan"
-                            )
-                        display_text_block("│ ├─ Testing new prompt variant...")
-                        return
-                except Exception:
-                    pass
+        iteration_handled = self._handle_iteration_start(first)
+        if iteration_handled:
+            return
 
         # Check if this message should be suppressed (unless verbose >= 2)
         if self.verbose <= 1:
@@ -199,85 +153,14 @@ class RichGEPAOptimizerLogger:
                 if prefix in first:
                     return
 
-        # Format proposed prompts
-        if "Proposed new text" in first and "system_prompt:" in first:
-            _, _, rest = first.partition("system_prompt:")
-            snippet = format_prompt_snippet(rest, max_length=100)
-            display_text_block(f"│ │  Proposed: {snippet}", style="dim")
-            self._last_raw_message = first
+        if self._handle_candidate_messages(first):
             return
 
-        # Format subsample evaluation results
-        if "New subsample score" in first and "is not better than" in first:
-            display_text_block("│ └─ Rejected - no improvement", style="dim yellow")
-            display_text_block("│")  # Add spacing after rejected trials
-            self._last_raw_message = first
+        if self._handle_score_updates(first):
             return
 
-        elif "New subsample score" in first and "is better than" in first:
-            display_text_block(
-                "│ ├─ Promising! Running full validation...",
-                style="green",
-            )
-            self._last_raw_message = first
+        if self.verbose >= 2 and self._handle_verbose_pareto(first):
             return
-
-        # Format final validation score
-        if "Full valset score for new program" in first:
-            # Extract score
-            parts = first.split(":")
-            if len(parts) >= 2:
-                score = parts[-1].strip()
-                display_text_block(
-                    f"│ ├─ Validation complete: {score}", style="bold green"
-                )
-            else:
-                display_text_block("│ ├─ Validation complete", style="green")
-            self._last_raw_message = first
-            return
-
-        # Format best score updates
-        if "Best score on train_val" in first:
-            parts = first.split(":")
-            if len(parts) >= 2:
-                score = parts[-1].strip()
-                display_text_block(f"│   Best train_val score: {score}", style="cyan")
-                self._last_raw_message = first
-            return
-
-        if (
-            "Best valset aggregate score so far" in first
-            or "Best score on valset" in first
-        ):
-            # Extract score
-            parts = first.split(":")
-            if len(parts) >= 2:
-                score = parts[-1].strip()
-                key = ("new_best", score)
-                if self._last_best_message != key:
-                    display_text_block(f"│ └─ New best: {score} ✓", style="bold green")
-                    display_text_block("│")  # Add spacing after successful trials
-                    self._last_best_message = key
-                    self._last_raw_message = first
-            return
-
-        if self.verbose >= 2:
-            if "New valset pareto front scores" in first:
-                note = first.split(":", 1)[-1].strip()
-                display_text_block(
-                    f"│   Pareto front scores updated: {_format_pareto_note(note)}",
-                    style="cyan",
-                )
-                self._last_raw_message = first
-                return
-            if "Updated valset pareto front programs" in first:
-                display_text_block("│   Pareto front programs updated", style="cyan")
-                self._last_raw_message = first
-                return
-            if "New program is on the linear pareto front" in first:
-                display_text_block("│   Candidate added to Pareto front", style="cyan")
-                self._last_raw_message = first
-                return
 
         # Suppress redundant "Iteration X:" prefix from detailed messages
         if first.startswith(f"Iteration {self.current_iteration}:"):
@@ -292,6 +175,131 @@ class RichGEPAOptimizerLogger:
         if first:
             display_text_block(f"│ {first}", style="dim")
             self._last_raw_message = first
+
+    def _handle_iteration_start(self, first: str) -> bool:
+        if not first.startswith("Iteration "):
+            return False
+
+        colon = first.find(":")
+        head = first[:colon] if colon != -1 else first
+        parts = head.split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            return False
+
+        try:
+            iteration = int(parts[1])
+        except Exception:
+            return False
+
+        if iteration > 0 and iteration != self.current_iteration:
+            display_text_block("│")
+
+        self.current_iteration = iteration
+        self._last_raw_message = first
+
+        if self.progress and self.task_id is not None:
+            self.progress.update(self.task_id, completed=iteration)
+
+        if "Base program full valset score" in first:
+            score_match = first.split(":")[-1].strip()
+            display_text_block(f"│ Baseline evaluation: {score_match}", style="bold")
+            return True
+
+        if "Selected program" in first:
+            parts_info = first.split(":")
+            if len(parts_info) > 1 and "Selected program" in parts_info[1]:
+                program_info = parts_info[1].strip()
+                score_info = parts_info[2].strip() if len(parts_info) > 2 else ""
+                display_text_block(
+                    f"│ Trial {iteration}: {program_info}, score: {score_info}",
+                    style="bold cyan",
+                )
+            else:
+                display_text_block(f"│ Trial {iteration}", style="bold cyan")
+            display_text_block("│ ├─ Testing new prompt variant...")
+            return True
+
+        return False
+
+    def _handle_candidate_messages(self, first: str) -> bool:
+        if "Proposed new text" in first and "system_prompt:" in first:
+            _, _, rest = first.partition("system_prompt:")
+            snippet = format_prompt_snippet(rest, max_length=100)
+            display_text_block(f"│ │  Proposed: {snippet}", style="dim")
+            self._last_raw_message = first
+            return True
+
+        if "New subsample score" in first and "is not better than" in first:
+            display_text_block("│ └─ Rejected - no improvement", style="dim yellow")
+            display_text_block("│")
+            self._last_raw_message = first
+            return True
+
+        if "New subsample score" in first and "is better than" in first:
+            display_text_block(
+                "│ ├─ Promising! Running full validation...", style="green"
+            )
+            self._last_raw_message = first
+            return True
+
+        if "Full valset score for new program" in first:
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                display_text_block(
+                    f"│ ├─ Validation complete: {score}", style="bold green"
+                )
+            else:
+                display_text_block("│ ├─ Validation complete", style="green")
+            self._last_raw_message = first
+            return True
+
+        return False
+
+    def _handle_score_updates(self, first: str) -> bool:
+        if "Best score on train_val" in first:
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                display_text_block(f"│   Best train_val score: {score}", style="cyan")
+                self._last_raw_message = first
+            return True
+
+        if (
+            "Best valset aggregate score so far" in first
+            or "Best score on valset" in first
+        ):
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                key = ("new_best", score)
+                if self._last_best_message != key:
+                    display_text_block(f"│ └─ New best: {score} ✓", style="bold green")
+                    display_text_block("│")
+                    self._last_best_message = key
+                    self._last_raw_message = first
+            return True
+
+        return False
+
+    def _handle_verbose_pareto(self, first: str) -> bool:
+        if "New valset pareto front scores" in first:
+            note = first.split(":", 1)[-1].strip()
+            display_text_block(
+                f"│   Pareto front scores updated: {_format_pareto_note(note)}",
+                style="cyan",
+            )
+            self._last_raw_message = first
+            return True
+        if "Updated valset pareto front programs" in first:
+            display_text_block("│   Pareto front programs updated", style="cyan")
+            self._last_raw_message = first
+            return True
+        if "New program is on the linear pareto front" in first:
+            display_text_block("│   Candidate added to Pareto front", style="cyan")
+            self._last_raw_message = first
+            return True
+        return False
 
 
 @contextmanager

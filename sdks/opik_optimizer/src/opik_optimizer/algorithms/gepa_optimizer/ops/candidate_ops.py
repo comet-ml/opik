@@ -10,6 +10,7 @@ from ....api_objects.types import rebuild_content_with_new_text
 
 # TODO: Promote to a shared optimizer candidate helper once GEPA selection is generalized.
 
+
 def build_seed_candidate(
     *,
     optimizable_prompts: dict[str, Any],

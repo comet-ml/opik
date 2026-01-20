@@ -14,6 +14,7 @@ from ....utils.logging import debug_log
 
 # TODO: Extract a shared candidate-recording helper once other optimizers converge on schema.
 
+
 def record_candidate_round(
     *,
     optimizer: Any,

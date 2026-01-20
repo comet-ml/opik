@@ -23,7 +23,9 @@ def configure_optuna_logging(
 
         optuna.logging.disable_default_handler()
         optuna_logger = logging.getLogger("optuna")
-        optuna_logger.setLevel(level if level is not None else logger.getEffectiveLevel())
+        optuna_logger.setLevel(
+            level if level is not None else logger.getEffectiveLevel()
+        )
         optuna_logger.propagate = False
     except Exception as exc:  # pragma: no cover - defensive safety
         logger.warning("Could not configure Optuna logging: %s", exc)
@@ -43,9 +45,7 @@ def extract_optuna_metadata(study: Any) -> dict[str, Any]:
 
 def _default_trial_timestamp(trial: FrozenTrial) -> str:
     timestamp_source = (
-        trial.datetime_complete
-        or trial.datetime_start
-        or datetime.now(timezone.utc)
+        trial.datetime_complete or trial.datetime_start or datetime.now(timezone.utc)
     )
     return timestamp_source.isoformat()
 

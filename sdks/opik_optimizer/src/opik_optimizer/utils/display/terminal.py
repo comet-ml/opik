@@ -433,8 +433,7 @@ def display_evaluation_progress(
     display_text_block("│")
 
 
-def render_rich_result(result: Any) -> rich.panel.Panel:
-    """Create a rich Panel for the final optimization result."""
+def _format_model_name(result: Any) -> str:
     model_name = result.details.get("model", "[dim]N/A[/dim]")
     model_params = result.details.get("model_parameters") or {}
     params_parts: list[str] = []
@@ -455,6 +454,162 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
         params_parts.append(f"temperature={result.details.get('temperature'):.2f}")
     if params_parts:
         model_name = f"{model_name} ({', '.join(params_parts)})"
+    return model_name
+
+
+def _format_improvement_display(result: Any) -> str:
+    improvement_display = "N/A"
+    if isinstance(result.initial_score, (int, float)):
+        improvement_value, has_percentage = safe_percentage_change(
+            result.score, result.initial_score
+        )
+        if has_percentage and improvement_value is not None:
+            improvement_display = f"{improvement_value:.2%}"
+    return improvement_display
+
+
+def _format_stop_display(stop_reason: str | None) -> str:
+    stop_display = stop_reason or "completed"
+    return {
+        "max_trials": "Budget",
+        "perfect_score": "Perfect",
+        "completed": "Completed",
+        "no_improvement": "No improvement",
+        "error": "Error",
+        "cancelled": "Cancelled",
+    }.get(stop_display, stop_display)
+
+
+def _count_candidates(history: list[dict[str, Any]] | None) -> int:
+    return sum(len(entry.get("candidates") or []) for entry in (history or []))
+
+
+def _find_best_candidate_id(
+    history: list[dict[str, Any]] | None, score: float
+) -> str | None:
+    for entry in history or []:
+        candidates = entry.get("candidates") or []
+        for cand in candidates:
+            if cand.get("score") == score and cand.get("id"):
+                return str(cand.get("id"))
+    return None
+
+
+def _build_key_metrics(
+    final_score_str: str, improvement_display: str, stop_display: str
+) -> rich.text.Text:
+    delta_text = rich.text.Text(improvement_display)
+    if improvement_display.startswith("-"):
+        delta_text.stylize("bold red")
+    elif improvement_display not in ("N/A", "0.00%"):
+        delta_text.stylize("bold green")
+    key_metrics = rich.text.Text(f"Best: {final_score_str} | Δ: ")
+    key_metrics.append(delta_text)
+    key_metrics.append(f" | Stop: {stop_display}")
+    return key_metrics
+
+
+def _build_prompt_panel(result: Any) -> rich.panel.Panel:
+    panel_title = "[bold]Final Optimized Prompt[/bold]"
+    try:
+        prompt_items: list[rich.console.RenderableType] = []
+        if isinstance(result.prompt, dict):
+            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], result.prompt)
+            for key, chat_p in prompt_dict.items():
+                prompt_items.extend(
+                    _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                )
+        else:
+            prompt_items.extend(
+                _display_chat_prompt_messages_and_tools(result.prompt, key=None)
+            )
+        prompt_renderable: rich.console.RenderableType = rich.console.Group(
+            *prompt_items
+        )
+    except Exception:
+        prompt_renderable = rich.text.Text(str(result.prompt or ""), overflow="fold")
+        panel_title = "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
+
+    return rich.panel.Panel(
+        prompt_renderable, title=panel_title, border_style="blue", padding=(1, 2)
+    )
+
+
+def _build_parameter_summary_table(
+    *,
+    optimized_params: dict[str, Any],
+    parameter_importance: dict[str, Any],
+    search_ranges: dict[str, dict[str, Any]],
+    search_stages: list[dict[str, Any]],
+    precision: int,
+    total_improvement: float | None,
+) -> rich.table.Table:
+    summary_table = rich.table.Table(
+        title="Parameter Summary", show_header=True, title_style="bold"
+    )
+    summary_table.add_column("Parameter", justify="left", style="cyan")
+    summary_table.add_column("Value", justify="left")
+    summary_table.add_column("Importance", justify="left", style="magenta")
+    summary_table.add_column("Gain", justify="left", style="dim")
+    summary_table.add_column("Ranges", justify="left")
+
+    stage_order = [
+        record.get("stage")
+        for record in search_stages
+        if record.get("stage") in search_ranges
+    ]
+    if not stage_order:
+        stage_order = sorted(search_ranges)
+
+    def _format_range(desc: dict[str, Any]) -> str:
+        if "min" in desc and "max" in desc:
+            step_str = (
+                f", step={format_float(desc['step'], precision)}"
+                if desc.get("step") is not None
+                else ""
+            )
+            return f"[{format_float(desc['min'], precision)}, {format_float(desc['max'], precision)}{step_str}]"
+        if desc.get("choices"):
+            return ",".join(map(str, desc["choices"]))
+        return str(desc)
+
+    for name in sorted(optimized_params):
+        value_str = format_float(optimized_params[name], precision)
+        contrib_val = parameter_importance.get(name)
+        if contrib_val is not None:
+            contrib_str = f"{contrib_val:.1%}"
+            gain_str = (
+                f"{contrib_val * total_improvement:+.2%}"
+                if total_improvement is not None
+                else "N/A"
+            )
+        else:
+            contrib_str = "N/A"
+            gain_str = "N/A"
+        ranges_parts = []
+        for stage in stage_order:
+            params = search_ranges.get(stage) or {}
+            if name in params:
+                ranges_parts.append(f"{stage}: {_format_range(params[name])}")
+        if not ranges_parts:
+            for stage, params in search_ranges.items():
+                if name in params:
+                    ranges_parts.append(f"{stage}: {_format_range(params[name])}")
+
+        summary_table.add_row(
+            name,
+            value_str,
+            contrib_str,
+            gain_str,
+            "\n".join(ranges_parts) if ranges_parts else "N/A",
+        )
+
+    return summary_table
+
+
+def render_rich_result(result: Any) -> rich.panel.Panel:
+    """Create a rich Panel for the final optimization result."""
+    model_name = _format_model_name(result)
     trials_completed = result.details.get("trials_completed")
     stop_reason = result.details.get("stop_reason")
     rounds_ran = len(result.history)
@@ -483,25 +638,9 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     display_trials = (
         str(trials_completed) if isinstance(trials_completed, int) else str(rounds_ran)
     )
-    improvement_display = "N/A"
-    if isinstance(result.initial_score, (int, float)):
-        improvement_value, has_percentage = safe_percentage_change(
-            result.score, result.initial_score
-        )
-        if has_percentage and improvement_value is not None:
-            improvement_display = f"{improvement_value:.2%}"
-    stop_display = stop_reason or "completed"
-    stop_display = {
-        "max_trials": "Budget",
-        "perfect_score": "Perfect",
-        "completed": "Completed",
-        "no_improvement": "No improvement",
-        "error": "Error",
-        "cancelled": "Cancelled",
-    }.get(stop_display, stop_display)
-    candidates_count = sum(
-        len(entry.get("candidates") or []) for entry in (result.history or [])
-    )
+    improvement_display = _format_improvement_display(result)
+    stop_display = _format_stop_display(stop_reason)
+    candidates_count = _count_candidates(result.history)
     llm_calls = result.llm_calls
     llm_tools = result.llm_calls_tools
     counter_bits = []
@@ -511,30 +650,17 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
         counter_bits.append(f"LLM: {llm_calls}")
     if isinstance(llm_tools, int):
         counter_bits.append(f"Tools: {llm_tools}")
-    delta_text = rich.text.Text(improvement_display)
-    if improvement_display.startswith("-"):
-        delta_text.stylize("bold red")
-    elif improvement_display not in ("N/A", "0.00%"):
-        delta_text.stylize("bold green")
-    key_metrics = rich.text.Text(f"Best: {final_score_str} | Δ: ")
-    key_metrics.append(delta_text)
-    key_metrics.append(f" | Stop: {stop_display}")
-    table.add_row("Key metrics:", key_metrics)
+    table.add_row(
+        "Key metrics:",
+        _build_key_metrics(final_score_str, improvement_display, stop_display),
+    )
     table.add_row(
         "Statistics:",
         f"Trials: {display_trials} | Rounds: {rounds_ran} | Candidates: {candidates_count}",
     )
-    best_candidate_id = None
-    for entry in result.history or []:
-        candidates = entry.get("candidates") or []
-        for cand in candidates:
-            if cand.get("score") == result.score and cand.get("id"):
-                best_candidate_id = cand.get("id")
-                break
-        if best_candidate_id:
-            break
+    best_candidate_id = _find_best_candidate_id(result.history, result.score)
     if best_candidate_id:
-        table.add_row("Best candidate:", str(best_candidate_id))
+        table.add_row("Best candidate:", best_candidate_id)
     if (llm_calls is not None or llm_tools is not None) and logging.getLogger(
         "opik_optimizer"
     ).isEnabledFor(logging.DEBUG):
@@ -563,62 +689,11 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     search_ranges = result.details.get("search_ranges") or {}
     precision = result.details.get("parameter_precision", 6)
 
-    panel_title = "[bold]Final Optimized Prompt[/bold]"
-    try:
-        prompt_items: list[rich.console.RenderableType] = []
-        if isinstance(result.prompt, dict):
-            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], result.prompt)
-            for key, chat_p in prompt_dict.items():
-                prompt_items.extend(
-                    _display_chat_prompt_messages_and_tools(chat_p, key=key)
-                )
-        else:
-            prompt_items.extend(
-                _display_chat_prompt_messages_and_tools(result.prompt, key=None)
-            )
-        prompt_renderable: rich.console.RenderableType = rich.console.Group(
-            *prompt_items
-        )
-    except Exception:
-        prompt_renderable = rich.text.Text(str(result.prompt or ""), overflow="fold")
-        panel_title = "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
-
-    prompt_panel = rich.panel.Panel(
-        prompt_renderable, title=panel_title, border_style="blue", padding=(1, 2)
-    )
+    prompt_panel = _build_prompt_panel(result)
 
     renderables: list[rich.console.RenderableType] = [table, "\n"]
 
     if optimized_params:
-        summary_table = rich.table.Table(
-            title="Parameter Summary", show_header=True, title_style="bold"
-        )
-        summary_table.add_column("Parameter", justify="left", style="cyan")
-        summary_table.add_column("Value", justify="left")
-        summary_table.add_column("Importance", justify="left", style="magenta")
-        summary_table.add_column("Gain", justify="left", style="dim")
-        summary_table.add_column("Ranges", justify="left")
-
-        stage_order = [
-            record.get("stage")
-            for record in result.details.get("search_stages", [])
-            if record.get("stage") in search_ranges
-        ]
-        if not stage_order:
-            stage_order = sorted(search_ranges)
-
-        def _format_range(desc: dict[str, Any]) -> str:
-            if "min" in desc and "max" in desc:
-                step_str = (
-                    f", step={format_float(desc['step'], precision)}"
-                    if desc.get("step") is not None
-                    else ""
-                )
-                return f"[{format_float(desc['min'], precision)}, {format_float(desc['max'], precision)}{step_str}]"
-            if desc.get("choices"):
-                return ",".join(map(str, desc["choices"]))
-            return str(desc)
-
         total_improvement = None
         if isinstance(result.initial_score, (int, float)) and isinstance(
             result.score, (int, float)
@@ -630,37 +705,14 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
             else:
                 total_improvement = result.score
 
-        for name in sorted(optimized_params):
-            value_str = format_float(optimized_params[name], precision)
-            contrib_val = parameter_importance.get(name)
-            if contrib_val is not None:
-                contrib_str = f"{contrib_val:.1%}"
-                gain_str = (
-                    f"{contrib_val * total_improvement:+.2%}"
-                    if total_improvement is not None
-                    else "N/A"
-                )
-            else:
-                contrib_str = "N/A"
-                gain_str = "N/A"
-            ranges_parts = []
-            for stage in stage_order:
-                params = search_ranges.get(stage) or {}
-                if name in params:
-                    ranges_parts.append(f"{stage}: {_format_range(params[name])}")
-            if not ranges_parts:
-                for stage, params in search_ranges.items():
-                    if name in params:
-                        ranges_parts.append(f"{stage}: {_format_range(params[name])}")
-
-            summary_table.add_row(
-                name,
-                value_str,
-                contrib_str,
-                gain_str,
-                "\n".join(ranges_parts) if ranges_parts else "N/A",
-            )
-
+        summary_table = _build_parameter_summary_table(
+            optimized_params=optimized_params,
+            parameter_importance=parameter_importance,
+            search_ranges=search_ranges,
+            search_stages=result.details.get("search_stages", []),
+            precision=precision,
+            total_improvement=total_improvement,
+        )
         renderables.extend([summary_table, "\n"])
 
     renderables.append(prompt_panel)

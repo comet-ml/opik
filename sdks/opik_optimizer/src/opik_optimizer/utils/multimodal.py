@@ -111,13 +111,7 @@ def format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Tex
         if part_type == "text":
             text_content = part.get("text", "")
             if text_content:
-                lines = text_content.split("\n")
-                formatted_lines: list[str] = ["text:"]
-                for line in lines:
-                    formatted_lines.append(f"  | {line}")
-                formatted_parts.append(
-                    rich.text.Text("\n".join(formatted_lines), overflow="fold")
-                )
+                formatted_parts.append(rich.text.Text(text_content, overflow="fold"))
         elif part_type == "image_url":
             url = _extract_url_from_part(part, "image_url")
             formatted_parts.append(

@@ -595,7 +595,7 @@ class BaseOptimizer(ABC):
     def run_optimization(
         self,
         context: OptimizationContext,
-    ) -> AlgorithmResult | OptimizationResult:
+    ) -> AlgorithmResult:
         """
         Run the optimization algorithm.
 
@@ -618,7 +618,7 @@ class BaseOptimizer(ABC):
             context: The optimization context with prompts, dataset, metric, etc.
 
         Returns:
-            AlgorithmResult (preferred) or OptimizationResult (legacy).
+            AlgorithmResult.
         """
         return self._run_optimization(context)
 

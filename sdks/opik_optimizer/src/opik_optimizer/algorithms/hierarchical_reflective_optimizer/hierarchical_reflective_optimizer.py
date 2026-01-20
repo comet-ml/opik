@@ -1,4 +1,5 @@
 import logging
+from contextlib import nullcontext
 
 import opik
 from opik.evaluation.evaluation_result import EvaluationResult
@@ -12,7 +13,8 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
-from ...utils.logging import debug_log
+from ...constants import normalize_eval_threads
+from ...utils.reporting import convert_tqdm_to_rich
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
@@ -20,8 +22,9 @@ from .types import (
     ImprovedPrompt,
     HierarchicalRootCauseAnalysis,
 )
-from . import helpers, prompts as hierarchical_prompts
+from . import prompts as hierarchical_prompts
 from . import reporting
+from .ops import iteration_ops
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -183,15 +186,26 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         scores exist, falls back to empty_score (or 0.0).
         """
         self.pre_trial(context, prompts)
-        evaluation_result = self.evaluate_prompt(
-            prompt=prompts,
-            dataset=dataset,
-            metric=metric,
-            agent=agent,
-            n_samples=n_samples,
-            n_threads=self.n_threads,
-            return_evaluation_result=True,
+        suppress_progress = bool(
+            (context.extra_params or {}).get("suppress_evaluation_progress", False)
         )
+        progress_ctx = (
+            nullcontext()
+            if suppress_progress
+            else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
+        )
+        with progress_ctx:
+            evaluation_result = self.evaluate_prompt(
+                prompt=prompts,
+                dataset=dataset,
+                metric=metric,
+                agent=agent,
+                n_samples=n_samples,
+                n_threads=normalize_eval_threads(self.n_threads),
+                experiment_config=context.experiment_config,
+                return_evaluation_result=True,
+                allow_tool_use=context.allow_tool_use,
+            )
         if not isinstance(evaluation_result, EvaluationResult):
             raise TypeError("Expected EvaluationResult from evaluate_prompt.")
         scores = [x.score_results[0].value for x in evaluation_result.test_results]
@@ -500,12 +514,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 break
 
             iteration += 1
-            debug_log(
-                "round_start",
-                round_index=iteration,
-                trials_completed=context.trials_completed,
-                max_trials=max_trials,
-            )
             logger.info(
                 f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
@@ -519,31 +527,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 break
             round_handle = self.pre_round(context)
 
-            # Perform hierarchical root cause analysis
-            with reporting.display_root_cause_analysis(
-                verbose=self.verbose
-            ) as rca_reporter:
-                self._set_reporter(rca_reporter)
-                try:
-                    self.pre_trial(context, best_prompts)
-                    train_dataset_experiment_result = self.evaluate_prompt(
-                        prompt=best_prompts,
-                        dataset=dataset,
-                        metric=metric,
-                        agent=agent,
-                        n_samples=n_samples,
-                        n_threads=self.n_threads,
-                        return_evaluation_result=True,
-                    )
-                    hierarchical_analysis = self._hierarchical_root_cause_analysis(
-                        train_dataset_experiment_result
-                    )
-                    rca_reporter.set_completed(
-                        hierarchical_analysis.total_test_cases,
-                        hierarchical_analysis.num_batches,
-                    )
-                finally:
-                    self._clear_reporter()
+            hierarchical_analysis = iteration_ops.run_root_cause_analysis(
+                optimizer=self,
+                context=context,
+                best_prompts=best_prompts,
+                dataset=dataset,
+                metric=metric,
+                agent=agent,
+                n_samples=n_samples,
+            )
 
             # Display synthesis results
             reporting.display_hierarchical_synthesis(
@@ -558,182 +550,35 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 hierarchical_analysis.unified_failure_modes, verbose=self.verbose
             )
 
-            # Generate improved prompt for each failure mode
-            for idx, root_cause in enumerate(
-                hierarchical_analysis.unified_failure_modes, 1
-            ):
-                with reporting.display_prompt_improvement(
-                    root_cause.name, verbose=self.verbose
-                ):
-                    # Try multiple attempts if needed
-                    max_attempts = max_retries + 1
-                    improved_chat_prompts = None
-                    improved_score = None
-
-                    for attempt in range(1, max_attempts + 1):
-                        # Check if we've reached the trial limit before starting a new trial
-                        if self._should_stop_context(context):
-                            logger.info(
-                                f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
-                                f"Stopping optimization."
-                            )
-                            self._should_stop_optimization = True
-                            break
-
-                        # Generate and evaluate improvement (this is 1 trial)
-                        trials_before_attempt = context.trials_completed
-                        (
-                            improved_chat_prompts,
-                            improved_score,
-                            improved_experiment_result,
-                        ) = self._generate_and_evaluate_improvement(
-                            root_cause=root_cause,
-                            best_prompts=best_prompts,
-                            best_score=best_score,
-                            original_prompts=optimizable_prompts,
-                            dataset=dataset,
-                            validation_dataset=validation_dataset,
-                            metric=metric,
-                            agent=agent,
-                            optimization_id=optimization.id if optimization else None,
-                            n_samples=n_samples,
-                            attempt=attempt,
-                            max_attempts=max_attempts,
-                            context=context,
-                            round_handle=round_handle,
-                        )
-                        if context.trials_completed == trials_before_attempt:
-                            # Guard against trial counters not being updated by mocks.
-                            # We treat this attempt as one completed trial to keep
-                            # max_trials enforcement and history alignment consistent.
-                            # This avoids infinite loops when test doubles bypass the
-                            # normal BaseOptimizer.evaluate() accounting path.
-                            score_for_accounting = (
-                                improved_score
-                                if improved_score is not None
-                                else best_score
-                            )
-                            self._record_trial_score(
-                                context,
-                                score_for_accounting,
-                                improved_chat_prompts or best_prompts,
-                            )
-
-                    # Check for perfect score early stop
-                    if (
-                        self.skip_perfect_score
-                        and improved_score is not None
-                        and improved_score >= self.perfect_score
-                    ):
-                        context.should_stop = True
-                        context.finish_reason = "perfect_score"
-                        break
-
-                    # Check if we got improvement
-                    if (
-                        best_score is not None
-                        and improved_score is not None
-                        and improved_score > best_score
-                    ):
-                        reporting.display_iteration_improvement(
-                            improvement=(
-                                (improved_score - best_score) / best_score
-                                if best_score > 0
-                                else 0
-                            ),
-                            current_score=float(improved_score),
-                            best_score=float(best_score),
-                            verbose=self.verbose,
-                        )
-                        break
-
-                    # No improvement - should we retry?
-                    if attempt < max_attempts and context.trials_completed < max_trials:
-                        reporting.display_retry_attempt(
-                            attempt=attempt,
-                            max_attempts=max_attempts,
-                            failure_mode_name=root_cause.name,
-                            verbose=self.verbose,
-                        )
-
-                # Break out of failure mode loop if flag is set
-                if self._should_stop_optimization or context.should_stop:
-                    break
-
-                # Check if final result is an improvement
-                if (
-                    improved_score is not None
-                    and improved_chat_prompts is not None
-                    and best_score is not None
-                    and improved_score > best_score
-                ):
-                    improvement = helpers.calculate_improvement(
-                        improved_score, best_score
-                    )
-                    logger.info(
-                        f"Improvement {improvement:.2%}: {best_score:.4f} -> {improved_score:.4f}"
-                    )
-
-                    # Update best
-                    best_score = improved_score
-                    best_prompts = improved_chat_prompts
-                    logger.info(
-                        f"Updated best prompt after addressing '{root_cause.name}'"
-                    )
-                else:
-                    logger.debug(
-                        f"Keeping previous best prompt, no improvement from '{root_cause.name}'"
-                    )
-
-            # Check for convergence after iteration
-            iteration_improvement = (
-                helpers.calculate_improvement(best_score, previous_iteration_score)
-                if best_score is not None and previous_iteration_score is not None
-                else 0.0
-            )
-
-            logger.info(
-                f"Round {iteration} complete. Score: {best_score:.4f}, "
-                f"Improvement: {iteration_improvement:.2%}"
-            )
-
-            runtime.record_and_post_trial(
+            best_prompts, best_score = iteration_ops.improve_over_failure_modes(
                 optimizer=self,
                 context=context,
-                prompt_or_payload=best_prompts,
-                score=best_score,
-                round_handle=round_handle,
-                post_metrics=None,
-                post_extras={
-                    "failure_modes": [
-                        fm.name for fm in hierarchical_analysis.unified_failure_modes
-                    ],
-                    "trials_completed": context.trials_completed,
-                },
-            )
-            self.post_round(
-                round_handle=round_handle,
-                context=context,
+                hierarchical_analysis=hierarchical_analysis,
+                optimizable_prompts=optimizable_prompts,
+                best_prompts=best_prompts,
                 best_score=best_score,
-                best_candidate=best_prompts,
-                stop_reason=context.finish_reason if context.should_stop else None,
-                extras={"improvement": iteration_improvement},
-            )
-            debug_log(
-                "round_end",
-                round_index=iteration,
-                best_score=best_score,
-                trials_completed=context.trials_completed,
+                dataset=dataset,
+                validation_dataset=validation_dataset,
+                metric=metric,
+                agent=agent,
+                n_samples=n_samples,
+                max_retries=max_retries,
+                max_trials=max_trials,
+                optimization_id=optimization.id if optimization else None,
+                round_handle=round_handle,
             )
 
-            # Stop if improvement is below convergence threshold
-            if abs(iteration_improvement) < self.convergence_threshold:
-                logger.info(
-                    f"Convergence achieved: improvement ({iteration_improvement:.2%}) "
-                    f"below threshold ({self.convergence_threshold:.2%}). "
-                    f"Stopping after {iteration} iterations."
-                )
-                # Do not break early; continue until max_trials are exhausted for stubborn cases
+            # Check for convergence after iteration
+            iteration_ops.finalize_iteration(
+                optimizer=self,
+                context=context,
+                round_index=iteration,
+                hierarchical_analysis=hierarchical_analysis,
+                best_prompts=best_prompts,
+                best_score=best_score,
+                previous_iteration_score=previous_iteration_score,
+                round_handle=round_handle,
+            )
 
             # Update previous score for next iteration
             previous_iteration_score = best_score

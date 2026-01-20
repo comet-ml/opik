@@ -636,15 +636,15 @@ class TestReporterLifecycle:
             yield reporter
 
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.parameter_optimizer.reporting.display_trial_evaluation",
+            "opik_optimizer.algorithms.parameter_optimizer.ops.optuna_ops.reporting.display_trial_evaluation",
             fake_trial_reporter,
         )
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.optuna_importance.get_param_importances",
+            "opik_optimizer.algorithms.parameter_optimizer.ops.optuna_ops.optuna_importance.get_param_importances",
             lambda study, params=None, target=None: {},
         )
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.sensitivity_analysis",
+            "opik_optimizer.algorithms.parameter_optimizer.ops.optuna_ops.sensitivity_analysis",
             lambda trials, specs: {},
         )
 

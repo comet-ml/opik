@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: Merge with other optimizer scoring helpers once GEPA selection is generalized.
 
+
 def rescore_candidates(
     *,
     optimizer: Any,
@@ -25,7 +26,9 @@ def rescore_candidates(
 ) -> list[float]:
     rescored: list[float] = []
     optimizer._history_builder.clear()
-    default_split = "validation" if optimizer._validation_dataset is not None else "train"
+    default_split = (
+        "validation" if optimizer._validation_dataset is not None else "train"
+    )
     optimizer.set_default_dataset_split(default_split)
 
     with suppress_opik_logs():
@@ -41,7 +44,9 @@ def rescore_candidates(
                     score = optimizer.evaluate(context, prompt_variants)
                     score = float(score)
                 except Exception:
-                    logger.debug("Rescoring failed for candidate %s", idx, exc_info=True)
+                    logger.debug(
+                        "Rescoring failed for candidate %s", idx, exc_info=True
+                    )
                     score = 0.0
 
                 rescored.append(score)

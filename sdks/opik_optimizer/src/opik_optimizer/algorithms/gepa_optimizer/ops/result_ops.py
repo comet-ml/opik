@@ -11,6 +11,7 @@ from ....utils.logging import debug_log
 
 # TODO: Extract selection metadata stitching into a shared optimizer helper.
 
+
 def build_algorithm_result(
     *,
     optimizer: Any,
