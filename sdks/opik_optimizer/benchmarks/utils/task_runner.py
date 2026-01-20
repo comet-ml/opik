@@ -682,8 +682,15 @@ def execute_task(
         score_value: float | None = None
         if isinstance(metrics_payload, dict):
             for split_metrics in metrics_payload.values():
+                candidate_metrics = None
                 if isinstance(split_metrics, dict) and split_metrics:
-                    first_value = next(iter(split_metrics.values()))
+                    candidate_metrics = split_metrics
+                elif isinstance(split_metrics, (list, tuple)) and split_metrics:
+                    first_entry = split_metrics[0]
+                    if isinstance(first_entry, dict) and first_entry:
+                        candidate_metrics = first_entry
+                if candidate_metrics:
+                    first_value = next(iter(candidate_metrics.values()))
                     try:
                         score_value = float(first_value)
                     except Exception:

@@ -74,14 +74,15 @@ def sanitize_generated_prompts(
         "context field",
         "question field",
         "hotpotqa",
-        "squad",
-        "naturalquestions",
-        "dataset",
         "training data",
         "ground truth",
         "gold standard",
         "evaluation metric",
         "scoring function",
+        "summary_1",
+        "passages_1",
+        "gaps_1",
+        "n_samples",
     ]
 
     sanitized = copy.deepcopy(prompt_json)

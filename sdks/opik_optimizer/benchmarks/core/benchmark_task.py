@@ -85,7 +85,7 @@ class TaskResult(BaseModel):
     ) = None
     evaluations: dict[str, EvaluationSet] = Field(default_factory=dict)
     stages: list[EvaluationStage] = Field(default_factory=list)
-    optimization_history: dict[str, Any] = Field(default_factory=dict)
+    optimization_history: dict[str, Any] = Field(default_factory=lambda: {"rounds": []})
     error_message: str | None = None
     timestamp_end: float | None = None
     llm_calls_total_optimization: int | None = None

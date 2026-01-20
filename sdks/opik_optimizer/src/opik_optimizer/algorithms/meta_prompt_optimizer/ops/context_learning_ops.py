@@ -32,8 +32,39 @@ def _sample_dataset_items(
         return []
 
 
+def _infer_label_field(dataset: opik.Dataset | None) -> str | None:
+    if dataset is None:
+        return None
+    for attr_name in (
+        "label_field",
+        "answer_field",
+        "target_field",
+        "ground_truth_field",
+    ):
+        value = getattr(dataset, attr_name, None)
+        if isinstance(value, str) and value:
+            return value
+    for method_name in ("get_label_field", "get_answer_field", "get_target_field"):
+        method = getattr(dataset, method_name, None)
+        if callable(method):
+            try:
+                value = method()
+            except Exception:
+                value = None
+            if isinstance(value, str) and value:
+                return value
+    schema = getattr(dataset, "schema", None)
+    if schema is not None:
+        value = getattr(schema, "label", None)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def _resolve_input_fields(
-    sample: dict[str, object], columns: list[str] | None
+    dataset: opik.Dataset | None,
+    sample: dict[str, object],
+    columns: list[str] | None,
 ) -> list[str]:
     excluded_keys = {
         "id",
@@ -47,7 +78,18 @@ def _resolve_input_fields(
         "response",
         "supporting_facts",
     }
+    inferred_label = _infer_label_field(dataset)
+    if inferred_label:
+        excluded_keys.add(inferred_label)
+    sensitive_pattern = re.compile(
+        r"(^|[_-])("
+        r"answer|gold|correct|target|label|output|ground|reference"
+        r")([_-]|$)"
+    )
     all_input_fields = [k for k in sample.keys() if k not in excluded_keys]
+    all_input_fields = [
+        k for k in all_input_fields if not sensitive_pattern.search(k.lower())
+    ]
     if columns is None:
         return all_input_fields
     input_fields = [f for f in columns if f in all_input_fields]
@@ -169,7 +211,7 @@ def get_task_context(
     if not samples:
         return "", 0
 
-    input_fields = _resolve_input_fields(samples[0], columns)
+    input_fields = _resolve_input_fields(dataset, samples[0], columns)
 
     max_value_length = constants.META_PROMPT_DEFAULT_MAX_VALUE_LENGTH
     current_num_examples = len(samples)

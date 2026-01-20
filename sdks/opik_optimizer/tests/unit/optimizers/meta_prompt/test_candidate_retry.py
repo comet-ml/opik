@@ -55,7 +55,7 @@ def test_candidate_single_retries_with_strict_json(mock_llm_call: Any) -> None:
 
     calls: list[dict[str, Any]] = []
 
-    def side_effect(**kwargs: Any):
+    def side_effect(**kwargs: Any) -> Any:
         calls.append(kwargs)
         if len(calls) == 1:
             raise StructuredOutputParsingError("bad", ValueError("bad"))
@@ -82,6 +82,7 @@ def test_candidate_single_retries_with_strict_json(mock_llm_call: Any) -> None:
 def test_candidate_synthesis_retries_with_strict_json(mock_llm_call: Any) -> None:
     optimizer = _make_optimizer()
     current_prompt = _make_prompt()
+    assert optimizer.hall_of_fame is not None
     optimizer.hall_of_fame.entries = [
         HallOfFameEntry(
             prompt_messages=current_prompt.get_messages(),
@@ -94,7 +95,7 @@ def test_candidate_synthesis_retries_with_strict_json(mock_llm_call: Any) -> Non
 
     calls: list[dict[str, Any]] = []
 
-    def side_effect(**kwargs: Any):
+    def side_effect(**kwargs: Any) -> Any:
         calls.append(kwargs)
         if len(calls) == 1:
             raise StructuredOutputParsingError("bad", ValueError("bad"))
