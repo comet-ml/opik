@@ -21,6 +21,7 @@ from ....utils.text import normalize_llm_text
 from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_library import PromptLibrary
+from ..types import MutationResponse
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,46 @@ _reporting_module.display_error = display_error
 _reporting_module.display_success = display_success
 sys.modules[_reporting_module.__name__] = _reporting_module
 reporting = _reporting_module
+
+
+def compute_adaptive_mutation_rate(
+    *,
+    current_rate: float,
+    best_fitness_history: list[float],
+    current_population: list[Any],
+    generations_without_improvement: int,
+    adaptive_mutation: bool,
+    restart_threshold: float,
+    restart_generations: int,
+    min_rate: float,
+    max_rate: float,
+    diversity_threshold: float,
+) -> tuple[float, int]:
+    if not adaptive_mutation or len(best_fitness_history) < 2:
+        return current_rate, generations_without_improvement
+
+    previous_best = best_fitness_history[-2]
+    recent_improvement = (
+        (best_fitness_history[-1] - previous_best) / abs(previous_best)
+        if previous_best != 0
+        else 0.0
+    )
+    current_diversity = helpers.calculate_population_diversity(current_population)
+
+    if recent_improvement < restart_threshold:
+        generations_without_improvement += 1
+    else:
+        generations_without_improvement = 0
+
+    if generations_without_improvement >= restart_generations:
+        return min(current_rate * 2.5, max_rate), generations_without_improvement
+    if recent_improvement < 0.01 and current_diversity < diversity_threshold:
+        return min(current_rate * 2.0, max_rate), generations_without_improvement
+    if recent_improvement < 0.01:
+        return min(current_rate * 1.5, max_rate), generations_without_improvement
+    if recent_improvement > 0.05:
+        return max(current_rate * 0.8, min_rate), generations_without_improvement
+    return current_rate, generations_without_improvement
 
 
 def _get_synonym(
@@ -302,18 +343,18 @@ def _semantic_mutation(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            response_model=MutationResponse,
             return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
 
         response_item = response[0] if isinstance(response, list) else response
         try:
+            if hasattr(response_item, "model_dump"):
+                response_item = response_item.model_dump()
             if isinstance(response_item, list):
                 messages = response_item
             elif isinstance(response_item, dict):
-                if "messages" in response_item:
-                    messages = response_item["messages"]
-                else:
-                    messages = [response_item]
+                messages = response_item.get("messages") or [response_item]
             else:
                 messages = json_to_dict(normalize_llm_text(response_item))
         except Exception as parse_exc:
@@ -372,14 +413,30 @@ def _radical_innovation_mutation(
             model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
+            response_model=MutationResponse,
             return_all=_llm_calls.requested_multiple_candidates(model_parameters),
         )
         response_item = (
             new_prompt_str[0] if isinstance(new_prompt_str, list) else new_prompt_str
         )
-        logger.info(f"Radical innovation LLM result (truncated): {response_item[:200]}")
+        if hasattr(response_item, "model_dump"):
+            response_item = response_item.model_dump()
+        if isinstance(response_item, str):
+            logger.info(
+                f"Radical innovation LLM result (truncated): {response_item[:200]}"
+            )
         try:
-            new_messages = json_to_dict(normalize_llm_text(response_item))
+            if isinstance(response_item, dict) and "messages" in response_item:
+                new_messages = response_item["messages"]
+            elif isinstance(response_item, list):
+                new_messages = response_item
+            else:
+                response_text = (
+                    response_item
+                    if isinstance(response_item, str)
+                    else str(response_item)
+                )
+                new_messages = json_to_dict(normalize_llm_text(response_text))
         except Exception as parse_exc:
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."

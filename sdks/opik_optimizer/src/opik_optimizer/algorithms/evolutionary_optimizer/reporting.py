@@ -3,6 +3,7 @@ from typing import Any
 
 from ...api_objects import chat_prompt
 from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
+from ...utils.logging import debug_log
 from ...utils.display import display_text_block, display_tool_description
 from ...utils.display.format import format_score_progress
 
@@ -231,3 +232,25 @@ def end_gen(
             )
 
         display_text_block("│")
+
+
+def log_round_start(
+    *, round_index: int, population: int, trials_completed: int
+) -> None:
+    debug_log(
+        "round_start",
+        round_index=round_index,
+        population=population,
+        trials_completed=trials_completed,
+    )
+
+
+def log_round_end(
+    *, round_index: int, best_score: float, trials_completed: int
+) -> None:
+    debug_log(
+        "round_end",
+        round_index=round_index,
+        best_score=best_score,
+        trials_completed=trials_completed,
+    )
