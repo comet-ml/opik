@@ -963,53 +963,6 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)> :tags <else> tags <endif> as tags,
-                created_by,
-                :user_name as last_updated_by,
-                prompt_version_id,
-                prompt_id,
-                prompt_versions,
-                <if(type)> :type <else> type <endif> as type,
-                optimization_id,
-                <if(status)> :status <else> status <endif> as status,
-                <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
-                created_at,
-                now64(9) as last_updated_at
-            FROM experiments
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-            LIMIT 1
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
-    private static final String BULK_UPDATE = """
-            INSERT INTO experiments (
-                id,
-                dataset_id,
-                name,
-                workspace_id,
-                metadata,
-                tags,
-                created_by,
-                last_updated_by,
-                prompt_version_id,
-                prompt_id,
-                prompt_versions,
-                type,
-                optimization_id,
-                status,
-                experiment_scores,
-                created_at,
-                last_updated_at
-            )
-            SELECT
-                id,
-                dataset_id,
-                <if(name)> :name <else> name <endif> as name,
-                workspace_id,
-                <if(metadata)> :metadata <else> metadata <endif> as metadata,
                 <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
                 created_by,
                 :user_name as last_updated_by,
@@ -1688,100 +1641,31 @@ class ExperimentDAO {
     Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
+                .flatMapMany(connection -> updateWithInsert(Set.of(id), experimentUpdate, false, "update_experiment",
+                        connection))
                 .then();
     }
 
-    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull ExperimentUpdate update, boolean mergeTags) {
-        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
-        log.info("Bulk updating '{}' experiments", ids.size());
-
+    Mono<Void> update(@NonNull Set<UUID> ids, @NonNull ExperimentUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "experiment IDs must not be empty");
+        log.info("Updating batch of '{}' experiments", ids.size());
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = buildBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId);
-                    var query = template.render();
-
-                    var statement = connection.createStatement(query)
-                            .bind("ids", ids.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId)
-                            .bind("user_name", userName);
-
-                    bindBulkUpdateParams(update, statement);
-
-                    return Flux.from(statement.execute());
-                }))
-                .then()
-                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' experiments", ids.size()));
+                .flatMapMany(
+                        connection -> updateWithInsert(ids, update, mergeTags, "bulk_update_experiments", connection))
+                .then();
     }
 
-    private ST buildBulkUpdateTemplate(ExperimentUpdate experimentUpdate, String sql, boolean mergeTags,
-            String workspaceId) {
-        var template = getSTWithLogComment(sql, "bulk_update_experiments", workspaceId, "");
-
-        if (StringUtils.isNotBlank(experimentUpdate.name())) {
-            template.add("name", experimentUpdate.name());
-        }
-
-        if (experimentUpdate.metadata() != null) {
-            template.add("metadata", experimentUpdate.metadata().toString());
-        }
-
-        if (experimentUpdate.tags() != null) {
-            template.add("tags", true);
-            template.add("merge_tags", mergeTags);
-        }
-
-        if (experimentUpdate.type() != null) {
-            template.add("type", experimentUpdate.type().getValue());
-        }
-
-        if (experimentUpdate.status() != null) {
-            template.add("status", experimentUpdate.status().getValue());
-        }
-
-        if (experimentUpdate.experimentScores() != null) {
-            template.add("experiment_scores", true);
-        }
-
-        return template;
-    }
-
-    private void bindBulkUpdateParams(ExperimentUpdate experimentUpdate, Statement statement) {
-        if (StringUtils.isNotBlank(experimentUpdate.name())) {
-            statement.bind("name", experimentUpdate.name());
-        }
-
-        if (experimentUpdate.metadata() != null) {
-            statement.bind("metadata", experimentUpdate.metadata().toString());
-        }
-
-        if (experimentUpdate.tags() != null) {
-            statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
-        }
-
-        if (experimentUpdate.type() != null) {
-            statement.bind("type", experimentUpdate.type().getValue());
-        }
-
-        if (experimentUpdate.status() != null) {
-            statement.bind("status", experimentUpdate.status().getValue());
-        }
-
-        if (experimentUpdate.experimentScores() != null) {
-            statement.bind("experiment_scores", JsonUtils.writeValueAsString(experimentUpdate.experimentScores()));
-        }
-    }
-
-    private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
-            Connection connection) {
+    private Publisher<? extends Result> updateWithInsert(@NonNull Set<UUID> ids,
+            @NonNull ExperimentUpdate experimentUpdate,
+            boolean mergeTags, String queryName, Connection connection) {
 
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = buildUpdateTemplate(experimentUpdate, UPDATE, "update_experiment", workspaceId);
+            var template = buildUpdateTemplate(experimentUpdate, mergeTags, queryName, workspaceId);
             String sql = template.render();
 
             Statement statement = connection.createStatement(sql);
             bindUpdateParams(experimentUpdate, statement);
-            statement.bind("id", id)
+            statement.bind("ids", ids.toArray(UUID[]::new))
                     .bind("workspace_id", workspaceId)
                     .bind("user_name", userName);
 
@@ -1789,9 +1673,9 @@ class ExperimentDAO {
         });
     }
 
-    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update, String queryName,
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, boolean mergeTags, String queryName,
             String workspaceId) {
-        var template = getSTWithLogComment(update, queryName, workspaceId, "");
+        var template = getSTWithLogComment(UPDATE, queryName, workspaceId, "");
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
             template.add("name", experimentUpdate.name());
@@ -1805,6 +1689,7 @@ class ExperimentDAO {
         // because an EMPTY set is a valid value here, and it is used to remove tags
         if (experimentUpdate.tags() != null) {
             template.add("tags", true);
+            template.add("merge_tags", mergeTags);
         }
 
         if (experimentUpdate.type() != null) {

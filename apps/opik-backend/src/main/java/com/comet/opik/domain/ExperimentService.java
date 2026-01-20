@@ -606,8 +606,13 @@ public class ExperimentService {
         log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
 
         boolean mergeTags = batchUpdate.mergeTags();
-        return experimentDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()));
+        return experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()))
+                .onErrorResume(throwable -> {
+                    log.error("Failed to complete batch update of the '{}' experiments", batchUpdate.ids().size(),
+                            throwable);
+                    return Mono.error(throwable);
+                });
     }
 
     private NotFoundException newNotFoundException(String message) {
