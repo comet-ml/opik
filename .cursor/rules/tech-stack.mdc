@@ -43,7 +43,7 @@ This document outlines the complete technology stack, dependency versions, and b
 - **Logging**: Rich, Sentry SDK
 
 ### TypeScript SDK
-- **Language**: TypeScript 5.9.3
+- **Language**: TypeScript 5.7.2
 - **Runtime**: Node.js 18+
 - **Build Tool**: tsup 8.3.6
 - **HTTP Client**: node-fetch 3.3.2
