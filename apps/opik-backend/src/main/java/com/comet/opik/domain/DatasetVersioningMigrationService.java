@@ -32,8 +32,7 @@ public class DatasetVersioningMigrationService {
 
     private static final Lock MIGRATION_LOCK = new Lock("dataset_versioning_migration");
     private static final Lock ITEMS_TOTAL_MIGRATION_LOCK = new Lock("dataset_version_items_total_migration");
-    private static final String WORKSPACE_CURSOR_MIN = ""; // Empty string is less than any workspace_id
-    private static final String VERSION_CURSOR_MIN = "00000000-0000-0000-0000-000000000000"; // Minimum UUID for cursor
+    private static final String CURSOR_MIN = ""; // Empty string is less than any string value
 
     public Mono<Void> runMigration(int workspaceBatchSize, Duration lockTimeout) {
         log.info(
@@ -42,7 +41,7 @@ public class DatasetVersioningMigrationService {
 
         return lockService.executeWithLockCustomExpire(
                 MIGRATION_LOCK,
-                Mono.defer(() -> migrateAllWorkspaces(workspaceBatchSize, WORKSPACE_CURSOR_MIN)),
+                Mono.defer(() -> migrateAllWorkspaces(workspaceBatchSize, CURSOR_MIN)),
                 lockTimeout);
     }
 
@@ -162,7 +161,7 @@ public class DatasetVersioningMigrationService {
 
         return lockService.executeWithLockCustomExpire(
                 ITEMS_TOTAL_MIGRATION_LOCK,
-                Mono.defer(() -> migrateItemsTotalInBatches(batchSize, VERSION_CURSOR_MIN)),
+                Mono.defer(() -> migrateItemsTotalInBatches(batchSize, CURSOR_MIN)),
                 lockTimeout);
     }
 
