@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import opik_optimizer
 
@@ -97,6 +97,22 @@ class TaskResult(BaseModel):
     optimizer_prompt_params_used: dict[str, Any] | None = None
     optimizer_params_used: dict[str, Any] | None = None
 
+    @field_validator("optimization_history", mode="before")
+    @classmethod
+    def _validate_optimization_history(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            rounds = value.get("rounds")
+            if rounds is None:
+                raise ValueError("optimization_history must contain 'rounds'")
+            if not isinstance(rounds, list):
+                raise TypeError("optimization_history['rounds'] must be a list")
+            for entry in rounds:
+                if not isinstance(entry, dict):
+                    raise TypeError(
+                        "optimization_history['rounds'] entries must be dicts"
+                    )
+        return value
+
     @classmethod
     def model_validate(
         cls,
@@ -175,6 +191,11 @@ class TaskResult(BaseModel):
                 key: DatasetMetadata.model_validate(value)
                 for key, value in obj["dataset_metadata"].items()
             }
+
+        if isinstance(obj, dict) and "optimization_history" in obj:
+            obj["optimization_history"] = cls._validate_optimization_history(
+                obj["optimization_history"]
+            )
 
         # Use the parent class's model_validate method to create the instance
         return super().model_validate(

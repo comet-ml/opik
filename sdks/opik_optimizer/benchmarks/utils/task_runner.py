@@ -626,10 +626,23 @@ def evaluate_prompt_on_dataset(
 
 
 def _serialize_optimization_result(result: Any) -> Any:
+    """Serialize an OptimizationResult to a dict for storage.
+
+    Handles both Pydantic v2 (model_dump) and v1 (dict) models, as well as
+    plain dicts or other serializable objects.
+    """
     if hasattr(result, "model_dump"):
-        return result.model_dump()
+        # Pydantic v2
+        try:
+            return result.model_dump(mode="json")
+        except Exception:
+            # Fallback to default mode if json mode fails
+            return result.model_dump()
     if hasattr(result, "dict"):
+        # Pydantic v1
         return result.dict()
+    if isinstance(result, dict):
+        return result
     return result
 
 
@@ -655,6 +668,43 @@ def execute_task(
     constructor_kwargs: dict[str, Any] | None = None
     test_initial_evaluation: TaskEvaluationResult | None = None
     steps: list[dict[str, Any]] = []
+    history_state = opik_optimizer.core.results.OptimizationHistoryState()
+
+    def _record_step(step: dict[str, Any]) -> None:
+        round_handle = history_state.start_round(
+            round_index=step.get("index"),
+            extras={
+                "step_id": step.get("step_id"),
+                "kind": step.get("kind"),
+            },
+        )
+        metrics_payload = step.get("metrics") or {}
+        score_value: float | None = None
+        if isinstance(metrics_payload, dict):
+            for split_metrics in metrics_payload.values():
+                if isinstance(split_metrics, dict) and split_metrics:
+                    first_value = next(iter(split_metrics.values()))
+                    try:
+                        score_value = float(first_value)
+                    except Exception:
+                        score_value = None
+                    break
+        history_state.record_trial(
+            round_handle=round_handle,
+            score=score_value,
+            candidate=step.get("prompt_snapshot"),
+            dataset_split=step.get("split"),
+            extras={
+                "metrics": metrics_payload,
+                "llm_calls": step.get("llm_calls"),
+                "meta": step.get("meta"),
+            },
+        )
+        history_state.end_round(
+            round_handle=round_handle,
+            best_score=score_value,
+            best_prompt=step.get("prompt_snapshot"),
+        )
 
     with reporting_utils.suppress_opik_logs():
         try:
@@ -762,6 +812,7 @@ def execute_task(
                     "meta": {},
                 }
             )
+            _record_step(steps[-1])
 
             if bundle.test is not None and bundle.test_name is not None:
                 test_initial_evaluation = evaluate_prompt_on_dataset(
@@ -786,6 +837,7 @@ def execute_task(
                         "meta": {},
                     }
                 )
+                _record_step(steps[-1])
 
             optimize_kwargs = dict(optimizer_config.optimizer_prompt_params)
             if optimizer_prompt_params_override:
@@ -831,10 +883,11 @@ def execute_task(
                     "split": bundle.evaluation_role,
                     "prompt_snapshot": optimized_prompt,
                     "metrics": {bundle.evaluation_role: optimized_evaluation.metrics},
-                    "llm_calls": optimization_results.llm_calls,
+                    "llm_calls": optimization_results.llm_calls or 0,
                     "meta": {},
                 }
             )
+            _record_step(steps[-1])
 
             test_evaluation = None
             if bundle.test is not None and bundle.test_name is not None:
@@ -860,6 +913,7 @@ def execute_task(
                         "meta": {},
                     }
                 )
+                _record_step(steps[-1])
 
             evaluations = {
                 "initial": EvaluationSet(
@@ -939,9 +993,9 @@ def execute_task(
                 optimized_prompt=optimized_prompt,
                 evaluations=evaluations,
                 stages=stages,
-                optimization_history={"steps": steps},
+                optimization_history={"rounds": history_state.get_entries()},
                 error_message=None,
-                llm_calls_total_optimization=optimization_results.llm_calls,
+                llm_calls_total_optimization=optimization_results.llm_calls or 0,
                 optimization_raw_result=optimization_results,
                 optimization_summary=_serialize_optimization_result(
                     optimization_results
@@ -970,7 +1024,7 @@ def execute_task(
                 requested_split=None,
                 evaluations={},
                 stages=[],
-                optimization_history={"steps": steps},
+                optimization_history={"rounds": history_state.get_entries()},
                 optimizer_prompt_params_used=optimize_kwargs,
                 optimizer_params_used=constructor_kwargs,
             )
