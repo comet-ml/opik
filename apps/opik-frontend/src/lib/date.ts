@@ -19,22 +19,64 @@ type FormatDateConfig = {
   includeSeconds?: boolean;
 };
 
+/**
+ * Get the user's browser locale, with fallback to 'en-US'
+ */
+const getBrowserLocale = (): string => {
+  if (typeof navigator !== "undefined" && navigator.language) {
+    return navigator.language;
+  }
+  return "en-US";
+};
+
+/**
+ * Format a date string according to the user's browser locale.
+ * Uses Intl.DateTimeFormat for locale-aware formatting.
+ *
+ * @param value - ISO date string to format
+ * @param config - Configuration options
+ * @param config.utc - If true, display the date in UTC timezone
+ * @param config.includeSeconds - If true, include seconds in the output
+ * @returns Formatted date string in the user's locale, or empty string if invalid
+ *
+ * @example
+ * // User with en-GB locale sees: "11/01/2026, 14:30"
+ * // User with en-US locale sees: "1/11/2026, 2:30 PM"
+ * // User with de-DE locale sees: "11.01.2026, 14:30"
+ * // User with ja-JP locale sees: "2026/01/11 14:30"
+ */
 export const formatDate = (
   value: string,
   { utc = false, includeSeconds = false }: FormatDateConfig = {},
-) => {
-  const dateTimeFormat = includeSeconds
-    ? "MM/DD/YY hh:mm:ss A"
-    : "MM/DD/YY hh:mm A";
-
-  if (isString(value) && dayjs(value).isValid()) {
-    if (utc) {
-      return dayjs(value).utc().format(dateTimeFormat);
-    }
-
-    return dayjs(value).format(dateTimeFormat);
+): string => {
+  if (!isString(value) || !dayjs(value).isValid()) {
+    return "";
   }
-  return "";
+
+  const date = utc ? dayjs(value).utc().toDate() : dayjs(value).toDate();
+  const locale = getBrowserLocale();
+
+  const options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(includeSeconds && { second: "2-digit" }),
+    ...(utc && { timeZone: "UTC" }),
+  };
+
+  try {
+    return new Intl.DateTimeFormat(locale, options).format(date);
+  } catch {
+    // Fallback to unambiguous format if locale is not supported
+    const fallbackFormat = includeSeconds
+      ? "MMM DD, YYYY h:mm:ss A"
+      : "MMM DD, YYYY h:mm A";
+    return utc
+      ? dayjs(value).utc().format(fallbackFormat)
+      : dayjs(value).format(fallbackFormat);
+  }
 };
 
 export const isStringValidFormattedDate = (value: string) => {
