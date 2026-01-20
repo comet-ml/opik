@@ -749,6 +749,17 @@ class SpanDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), attachments_final AS (
+              SELECT
+                   entity_id,
+                   COUNT(*) AS attachment_count
+              FROM attachments
+              WHERE workspace_id = :workspace_id
+              AND project_id = :project_id
+              AND entity_type = 'span'
+              <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+              <if(uuid_to_time)> AND entity_id \<= :uuid_to_time <endif>
+              GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -957,9 +968,11 @@ class SpanDAO {
                 , fsa.feedback_scores as feedback_scores
                 <endif>
                 <if(!exclude_comments)>, c.comments AS comments <endif>
+                , COALESCE(a.attachment_count, 0) AS attachment_count
             FROM spans_final s
             LEFT JOIN comments_final c ON s.id = c.entity_id
             LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id
+            LEFT JOIN attachments_final a ON s.id = a.entity_id
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>

@@ -78,7 +78,9 @@ public record Span(
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @DecimalMin("0.0") BigDecimal totalEstimatedCost,
         String totalEstimatedCostVersion,
         @JsonView({
-                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration){
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
+        @JsonView({
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int attachmentCount){
 
     @Builder(toBuilder = true)
     public record SpanPage(
@@ -115,7 +117,8 @@ public record Span(
         COMMENTS("comments"),
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         TOTAL_ESTIMATED_COST_VERSION("total_estimated_cost_version"),
-        DURATION("duration");
+        DURATION("duration"),
+        ATTACHMENT_COUNT("attachment_count");
 
         @JsonValue
         private final String value;

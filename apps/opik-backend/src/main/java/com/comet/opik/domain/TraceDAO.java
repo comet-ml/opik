@@ -1070,6 +1070,16 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 )
                 GROUP BY workspace_id, project_id, entity_id
+            ), attachments_agg AS (
+                SELECT
+                    entity_id,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND entity_type = 'trace'
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \<= :uuid_to_time <endif>
+                GROUP BY workspace_id, entity_id
             ), trace_annotation_queue_ids AS (
                  SELECT trace_id,
                         groupArray(id) AS annotation_queue_ids
@@ -1224,12 +1234,14 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
+                  , COALESCE(a.attachment_count, 0) AS attachment_count
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+             LEFT JOIN attachments_agg a ON t.id = a.entity_id
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
             SETTINGS log_comment = '<log_comment>'
             ;

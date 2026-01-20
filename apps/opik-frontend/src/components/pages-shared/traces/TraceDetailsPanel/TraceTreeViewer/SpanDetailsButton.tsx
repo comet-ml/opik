@@ -30,6 +30,10 @@ const OPTIONS: DropdownOption<TREE_DATABLOCK_TYPE>[] = [
     value: TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
   },
   { label: "Number of tags", value: TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS },
+  {
+    label: "Number of attachments",
+    value: TREE_DATABLOCK_TYPE.NUMBER_OF_ATTACHMENTS,
+  },
   { label: "Model", value: TREE_DATABLOCK_TYPE.MODEL },
 ];
 
