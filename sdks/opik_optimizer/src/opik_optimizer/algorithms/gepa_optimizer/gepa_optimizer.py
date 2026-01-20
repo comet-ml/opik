@@ -303,7 +303,7 @@ class GepaOptimizer(BaseOptimizer):
         rescored = scoring_ops.rescore_candidates(
             optimizer=self,
             context=context,
-            dataset=dataset,
+            dataset=context.evaluation_dataset,
             optimizable_prompts=optimizable_prompts,
             filtered_indexed_candidates=filtered_indexed_candidates,
             filtered_val_scores=filtered_val_scores,

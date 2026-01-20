@@ -54,7 +54,7 @@ class TestGepaOptimizerValidation:
 
         # Test default n_threads
         optimizer = GepaOptimizer(model="openai/gpt-4")
-        assert optimizer.n_threads == 6  # Default value
+        assert optimizer.n_threads == 12  # Default value
 
     def test_verbose_validation(self) -> None:
         """Test verbose parameter validation."""

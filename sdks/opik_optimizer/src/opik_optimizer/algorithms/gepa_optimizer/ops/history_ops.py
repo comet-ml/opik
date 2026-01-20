@@ -19,6 +19,7 @@ def record_candidate_round(
     *,
     optimizer: Any,
     context: Any,
+    round_handle: Any | None = None,
     candidate_index: int,
     candidate_id: str,
     candidate: dict[str, str],
@@ -27,6 +28,7 @@ def record_candidate_round(
     filtered_val_score: float | None,
     selection_policy: str,
 ) -> None:
+    finalize_round = round_handle is None
     debug_log(
         "candidate_start",
         candidate_index=candidate_index,
@@ -38,7 +40,8 @@ def record_candidate_round(
         for key, value in candidate.items()
         if not key.startswith("_") and key not in ("source", "id")
     }
-    round_handle = optimizer.pre_round(context, candidate_id=candidate_id)
+    if round_handle is None:
+        round_handle = optimizer.pre_round(context, candidate_id=candidate_id)
     runtime.record_and_post_trial(
         optimizer=optimizer,
         context=context,
@@ -68,18 +71,19 @@ def record_candidate_round(
         score=score,
         trials_completed=context.trials_completed,
     )
-    optimizer.set_selection_meta(
-        {
-            "selection_policy": selection_policy,
-            "opik_rescored_scores": optimizer._gepa_rescored_scores,
-            "gepa_scores": optimizer._gepa_filtered_val_scores,
-        }
-    )
-    optimizer.post_round(
-        round_handle,
-        context=context,
-        extras={
-            "score_label": "opik_rescore",
-        },
-        stop_reason=context.finish_reason if context.should_stop else None,
-    )
+    if finalize_round:
+        optimizer.set_selection_meta(
+            {
+                "selection_policy": selection_policy,
+                "opik_rescored_scores": optimizer._gepa_rescored_scores,
+                "gepa_scores": optimizer._gepa_filtered_val_scores,
+            }
+        )
+        optimizer.post_round(
+            round_handle,
+            context=context,
+            extras={
+                "score_label": "opik_rescore",
+            },
+            stop_reason=context.finish_reason if context.should_stop else None,
+        )

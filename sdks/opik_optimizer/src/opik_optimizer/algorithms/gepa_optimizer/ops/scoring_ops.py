@@ -33,6 +33,8 @@ def rescore_candidates(
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich(verbose=0):
+            round_handle = optimizer.pre_round(context, candidate_id="gepa_candidates")
+            best_score = None
             for idx, (_, candidate) in enumerate(filtered_indexed_candidates):
                 prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
                     base_prompts=optimizable_prompts,
@@ -52,11 +54,13 @@ def rescore_candidates(
                 rescored.append(score)
                 optimizer._gepa_rescored_scores = rescored
                 optimizer._gepa_filtered_val_scores = filtered_val_scores
+                best_score = score if best_score is None else max(best_score, score)
 
                 candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
                 history_ops.record_candidate_round(
                     optimizer=optimizer,
                     context=context,
+                    round_handle=round_handle,
                     candidate_index=idx,
                     candidate_id=candidate_id,
                     candidate=candidate,
@@ -69,5 +73,22 @@ def rescore_candidates(
                     ),
                     selection_policy=selection_policy,
                 )
+            optimizer.set_selection_meta(
+                {
+                    "selection_policy": selection_policy,
+                    "opik_rescored_scores": optimizer._gepa_rescored_scores,
+                    "gepa_scores": optimizer._gepa_filtered_val_scores,
+                }
+            )
+            optimizer.post_round(
+                round_handle,
+                context=context,
+                best_score=best_score,
+                extras={
+                    "score_label": "opik_rescore",
+                    "candidate_count": len(rescored),
+                },
+                stop_reason=context.finish_reason if context.should_stop else None,
+            )
 
     return rescored

@@ -83,19 +83,19 @@ repos:
         additional_dependencies: [radon==6.0.1]
       - id: xenon
         name: xenon
-        entry: xenon --max-absolute D --max-average C --max-modules C
+        entry: bash -c 'set -o pipefail; xenon --max-absolute D --max-average C --max-modules C sdks/opik_optimizer/src | head -n 200'
         language: python
         types: [python]
         files: ^sdks/opik_optimizer/src/
-        pass_filenames: true
+        pass_filenames: false
         additional_dependencies: [xenon==0.9.3]
       - id: lizard
         name: lizard
-        entry: lizard -C 25 -l python -w
+        entry: bash -c 'set -o pipefail; lizard -C 25 -l python -w sdks/opik_optimizer/src | head -n 200'
         language: python
         types: [python]
         files: ^sdks/opik_optimizer/src/
-        pass_filenames: true
+        pass_filenames: false
         additional_dependencies: [lizard==1.19.0]
 
   - repo: https://github.com/jendrikseipp/vulture
