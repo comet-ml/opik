@@ -1,6 +1,5 @@
 import { WithRawResponse } from "../src/opik/rest_api/core/fetcher/RawResponse";
 import { HttpResponsePromise } from "../src/opik/rest_api/core/fetcher/HttpResponsePromise";
-import { Readable } from "node:stream";
 
 export function createMockHttpResponsePromise<T>(
   data?: T
@@ -37,10 +36,10 @@ export function mockAPIFunctionWithError<T>(
 }
 
 /**
- * Creates a readable stream from string data
+ * Creates a Web ReadableStream from string data
  * @param data The string data to stream
  * @param options Additional options for the stream
- * @returns A readable stream
+ * @returns A Web ReadableStream<Uint8Array>
  */
 export function createMockStream(
   data: string,
@@ -49,15 +48,32 @@ export function createMockStream(
     lineByLine?: boolean;
     emitError?: boolean | Error;
   } = {}
-): Readable {
+): ReadableStream<Uint8Array> {
   const { delay = 0, lineByLine = false, emitError = false } = options;
 
-  if (lineByLine && data.length > 0) {
-    const lines = data.split("\n").filter(Boolean);
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      try {
+        if (lineByLine && data.length > 0) {
+          const lines = data.split("\n").filter(Boolean);
+          for (const line of lines) {
+            if (delay) {
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
 
-    return Readable.from(
-      (async function* () {
-        for (const line of lines) {
+            if (emitError) {
+              const error =
+                emitError instanceof Error
+                  ? emitError
+                  : new Error("Mock stream error");
+              controller.error(error);
+              return;
+            }
+
+            controller.enqueue(encoder.encode(`${line}\n`));
+          }
+        } else {
           if (delay) {
             await new Promise((resolve) => setTimeout(resolve, delay));
           }
@@ -67,34 +83,20 @@ export function createMockStream(
               emitError instanceof Error
                 ? emitError
                 : new Error("Mock stream error");
-            throw error;
+            controller.error(error);
+            return;
           }
 
-          yield `${line}\n`;
+          if (data.length > 0) {
+            controller.enqueue(encoder.encode(data));
+          }
         }
-      })()
-    );
-  }
-
-  return Readable.from(
-    (async function* () {
-      if (delay) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        controller.close();
+      } catch (error) {
+        controller.error(error);
       }
-
-      if (emitError) {
-        const error =
-          emitError instanceof Error
-            ? emitError
-            : new Error("Mock stream error");
-        throw error;
-      }
-
-      if (data.length > 0) {
-        yield data;
-      }
-    })()
-  );
+    },
+  });
 }
 
 /**
@@ -107,19 +109,10 @@ export function mockAPIFunctionWithStream<T>(
   data: string,
   options: Parameters<typeof createMockStream>[1] = {}
 ): HttpResponsePromise<T> {
-  const stream = createMockStream(data, options);
-
-  const asyncIterable: AsyncIterable<Uint8Array> = {
-    [Symbol.asyncIterator]: async function* () {
-      for await (const chunk of stream) {
-        const encoder = new TextEncoder();
-        yield encoder.encode(chunk as string);
-      }
-    },
-  };
+  const readableStream = createMockStream(data, options);
 
   const withRawResponse: WithRawResponse<T> = {
-    data: asyncIterable as T,
+    data: readableStream as T,
     rawResponse: {
       status: 200,
       headers: {} as Headers,
