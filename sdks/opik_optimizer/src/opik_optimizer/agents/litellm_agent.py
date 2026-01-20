@@ -24,6 +24,7 @@ from ..utils.candidate_selection import extract_choice_logprob
 
 
 logger = logging.getLogger(__name__)
+_WARNED_NO_LOGPROBS = False
 
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -38,6 +39,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.project_name = resolve_project_name(project_name)
+        self._warned_no_logprobs = False
         self.init_llm()
 
     def init_llm(self) -> None:
@@ -286,30 +288,36 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         _llm_calls._increment_llm_counter_if_in_optimizer()
         self._apply_cost_usage_to_owner(response)
 
+        global _WARNED_NO_LOGPROBS
         choices = response.choices or []
         candidate_logprobs: list[float] = []
-        for choice in choices:
-            score = extract_choice_logprob(
-                choice,
-                aggregation="mean",
-                min_tokens=5,
+        if len(choices) > 1:
+            for choice in choices:
+                score = extract_choice_logprob(
+                    choice,
+                    aggregation="mean",
+                    min_tokens=5,
+                )
+                if score is None:
+                    candidate_logprobs = []
+                    break
+                candidate_logprobs.append(score)
+            self._last_candidate_logprobs = (
+                candidate_logprobs if candidate_logprobs else None
             )
-            if score is None:
-                candidate_logprobs = []
-                break
-            candidate_logprobs.append(score)
-        self._last_candidate_logprobs = (
-            candidate_logprobs if candidate_logprobs else None
-        )
-        if candidate_logprobs:
-            logger.debug(
-                "LiteLLMAgent: extracted logprobs for %d choices",
-                len(candidate_logprobs),
-            )
+            if candidate_logprobs:
+                logger.debug(
+                    "LiteLLMAgent: extracted logprobs for %d choices",
+                    len(candidate_logprobs),
+                )
+            elif not self._warned_no_logprobs and not _WARNED_NO_LOGPROBS:
+                logger.debug(
+                    "LiteLLMAgent: no logprobs available; max_logprob will fall back"
+                )
+                self._warned_no_logprobs = True
+                _WARNED_NO_LOGPROBS = True
         else:
-            logger.debug(
-                "LiteLLMAgent: no logprobs available; max_logprob will fall back"
-            )
+            self._last_candidate_logprobs = None
         outputs = [
             ch.message.content
             for ch in choices

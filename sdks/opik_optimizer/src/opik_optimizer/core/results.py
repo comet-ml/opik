@@ -405,6 +405,9 @@ class OptimizationHistoryState:
             score=score_val,
             dataset_split=dataset_split_val,
             candidate_id=trial.candidate_id,
+            score_label=(extras or {}).get("score_label")
+            if isinstance(extras, dict)
+            else None,
         )
         return trial.to_dict()
 
@@ -489,6 +492,9 @@ class OptimizationHistoryState:
             best_so_far=entry.best_so_far,
             trials=len(entry.trials),
             selection_meta=(entry.extras or {}).get("selection_meta")
+            if isinstance(entry.extras, dict)
+            else None,
+            score_label=(entry.extras or {}).get("score_label")
             if isinstance(entry.extras, dict)
             else None,
         )

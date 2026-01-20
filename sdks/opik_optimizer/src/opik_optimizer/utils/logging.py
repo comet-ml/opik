@@ -8,7 +8,6 @@ import os
 from typing import Any
 import json
 
-from rich.console import Console
 from rich.logging import RichHandler
 
 from ..constants import (
@@ -17,6 +16,7 @@ from ..constants import (
     DEFAULT_TOOL_DEBUG_PREFIX,
     DEFAULT_DEBUG_TEXT_CLIP,
 )
+from .reporting import get_console
 
 DEFAULT_LOG_FORMAT = "%(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -82,6 +82,7 @@ def setup_logging(
         show_time=True,
         show_level=True,
         show_path=False,
+        console=get_console(),
     )
 
     base_level = target_level if target_level >= logging.WARNING else logging.WARNING
@@ -145,7 +146,7 @@ def setup_logging(
             "[/bold cyan]\n"
             f"Opik Optimizer SDK [bold]Version:[/bold] {version}"
         )
-        Console().print(banner)
+        get_console().print(banner)
 
         logging.getLogger(__name__).info(
             "Opik Agent Optimizer logging configured to level: %s",

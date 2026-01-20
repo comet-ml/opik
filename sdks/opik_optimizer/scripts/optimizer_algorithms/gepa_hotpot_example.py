@@ -70,3 +70,4 @@ result = optimizer.optimize_prompt(
     skip_perfect_score=False,
     display_progress_bar=True,
 )
+

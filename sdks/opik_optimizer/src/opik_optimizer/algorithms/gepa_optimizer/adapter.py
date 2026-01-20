@@ -122,22 +122,28 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
     ) -> None:
         """Record adapter metric call and post candidate/round to history."""
         self._record_adapter_metric_call()
+        merged_extra = {"score_label": "per_item"}
+        if extra:
+            merged_extra.update(extra)
+        merged_metrics = dict(metrics or {})
+        merged_metrics.setdefault("per_item_score", score)
         round_handle = self._optimizer.pre_round(self._context)
         runtime.record_and_post_trial(
             optimizer=self._optimizer,
             context=self._context,
             prompt_or_payload=prompt_variants,
-            score=score,
+            score=None,
             candidate_id=candidate_id,
-            metrics=metrics,
-            extra=extra,
+            metrics=merged_metrics,
+            extra=merged_extra,
             round_handle=round_handle,
         )
         self._optimizer.post_round(
             round_handle,
             context=self._context,
-            best_score=score,
+            best_score=None,
             best_prompt=prompt_variants,
+            extras={"score_label": "per_item"},
         )
 
     def _rebuild_prompts_from_candidate(

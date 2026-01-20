@@ -44,7 +44,11 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
             disable: bool,
         ) -> None:
             self._iterable = iterable
-            self._progress = Progress(transient=True, disable=disable)
+            self._progress = Progress(
+                transient=True,
+                disable=disable,
+                console=get_console(),
+            )
             self._progress.start()
             self._task_id = self._progress.add_task(desc or "", total=total)
             self._last_heartbeat = time.time()
@@ -66,6 +70,9 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
             """Update the progress bar with heartbeat logging."""
             self._progress.advance(self._task_id, advance)
             if not self._logger.isEnabledFor(logging.DEBUG):
+                return
+            if not self._progress.disable:
+                # Avoid interleaving debug logs with active progress bars.
                 return
             now = time.time()
             # Don't log more frequently than every 5 seconds

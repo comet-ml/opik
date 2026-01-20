@@ -6,16 +6,7 @@ from typing import Any
 from rich.table import Table
 from rich.text import Text
 from rich.panel import Panel
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    BarColumn,
-    TimeRemainingColumn,
-    MofNCompleteColumn,
-)
-
-from ...utils.reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
+from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import (
     display_text_block,
     format_prompt_snippet,
@@ -105,17 +96,16 @@ class RichGEPAOptimizerLogger:
         self,
         optimizer: Any,
         verbose: int = 1,
-        progress: Progress | None = None,
-        task_id: Any | None = None,
+        progress: Any | None = None,
         max_trials: int = 10,
     ) -> None:
         self.optimizer = optimizer
         self.verbose = verbose
         self.progress = progress
-        self.task_id = task_id
         self.max_trials = max_trials
         self.current_iteration = 0
-        self._last_best_message: tuple[str, str] | None = None
+        self._last_progress_value = 0
+        self._last_best_score: float | None = None
         self._last_raw_message: str | None = None
 
     def log(self, message: str) -> None:
@@ -134,10 +124,6 @@ class RichGEPAOptimizerLogger:
 
         if first == self._last_raw_message:
             return
-
-        # Reset duplicate tracker when handling other messages
-        if not first.startswith("Best "):
-            self._last_best_message = None
 
         iteration_handled = self._handle_iteration_start(first)
         if iteration_handled:
@@ -197,8 +183,8 @@ class RichGEPAOptimizerLogger:
         self.current_iteration = iteration
         self._last_raw_message = first
 
-        if self.progress and self.task_id is not None:
-            self.progress.update(self.task_id, completed=iteration)
+        if self.progress:
+            self.progress.update_to(iteration)
 
         if "Base program full valset score" in first:
             score_match = first.split(":")[-1].strip()
@@ -271,12 +257,17 @@ class RichGEPAOptimizerLogger:
         ):
             parts = first.split(":")
             if len(parts) >= 2:
-                score = parts[-1].strip()
-                key = ("new_best", score)
-                if self._last_best_message != key:
-                    display_text_block(f"│ └─ New best: {score} ✓", style="bold green")
+                score_text = parts[-1].strip()
+                try:
+                    score_value = float(score_text)
+                except ValueError:
+                    score_value = None
+                if score_value is not None and score_value != self._last_best_score:
+                    display_text_block(
+                        f"│ └─ New best: {score_text} ✓", style="bold green"
+                    )
                     display_text_block("│")
-                    self._last_best_message = key
+                    self._last_best_score = score_value
                     self._last_raw_message = first
             return True
 
@@ -323,39 +314,45 @@ def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
         display_text_block("> Starting GEPA optimization")
 
     class Reporter:
-        progress: Progress | None = None
-        task_id: Any | None = None
+        progress: Any | None = None
 
         def info(self, message: str) -> None:
             if verbose >= 1:
                 display_text_block(f"│   {message}")
 
+    class _GepaProgressAdapter:
+        def __init__(self, tqdm_instance: Any) -> None:
+            self._tqdm = tqdm_instance
+            self._last_completed = 0
+
+        def update_to(self, completed: int) -> None:
+            total = getattr(self._tqdm, "total", None)
+            if total is not None:
+                completed = min(completed, int(total))
+            delta = completed - self._last_completed
+            if delta > 0:
+                self._tqdm.update(delta)
+                self._last_completed = completed
+
+        def close(self) -> None:
+            self._tqdm.close()
+
     with suppress_opik_logs():
         try:
-            # Create Rich progress bar
-            if verbose >= 1:
-                Reporter.progress = Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]{task.description}"),
-                    BarColumn(),
-                    MofNCompleteColumn(),
-                    TextColumn("•"),
-                    TimeRemainingColumn(),
-                    console=get_console(),
-                    transient=True,  # Make progress bar disappear when done
-                )
-                Reporter.progress.start()
-                Reporter.task_id = Reporter.progress.add_task(
-                    "GEPA Optimization", total=max_trials
-                )
+            with convert_tqdm_to_rich("GEPA Optimization", verbose=verbose):
+                if verbose >= 1:
+                    import opik.evaluation.engine.evaluation_tasks_executor
 
-            yield Reporter()
+                    tqdm_fn = opik.evaluation.engine.evaluation_tasks_executor._tqdm
+                    tqdm_instance = tqdm_fn(total=max_trials, desc="GEPA Optimization")
+                    Reporter.progress = _GepaProgressAdapter(tqdm_instance)
+
+                yield Reporter()
         finally:
             if verbose >= 1:
-                if Reporter.progress and Reporter.task_id is not None:
-                    # Mark as complete before stopping
-                    Reporter.progress.update(Reporter.task_id, completed=max_trials)
-                    Reporter.progress.stop()
+                if Reporter.progress:
+                    Reporter.progress.update_to(max_trials)
+                    Reporter.progress.close()
                 display_text_block("")
 
 

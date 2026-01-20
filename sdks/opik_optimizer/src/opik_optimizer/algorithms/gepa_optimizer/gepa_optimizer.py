@@ -259,7 +259,6 @@ class GepaOptimizer(BaseOptimizer):
                 self,
                 verbose=self.verbose,
                 progress=reporter.progress,
-                task_id=reporter.task_id,
                 max_trials=max_trials,
             )
 

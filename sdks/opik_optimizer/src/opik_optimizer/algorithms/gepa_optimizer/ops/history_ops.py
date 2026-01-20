@@ -52,11 +52,13 @@ def record_candidate_round(
         extra={
             "components": components,
             "source": candidate.get("source"),
+            "score_label": "opik_rescore",
         },
         round_handle=round_handle,
         post_extras={
             "components": components,
             "candidate_id": candidate_id,
+            "score_label": "opik_rescore",
         },
     )
     debug_log(
@@ -76,5 +78,8 @@ def record_candidate_round(
     optimizer.post_round(
         round_handle,
         context=context,
+        extras={
+            "score_label": "opik_rescore",
+        },
         stop_reason=context.finish_reason if context.should_stop else None,
     )

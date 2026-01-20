@@ -7,9 +7,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import ChatPrompt, GepaOptimizer, OptimizationResult
+from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_simple_metric,
+    make_optimization_context,
     STANDARD_DATASET_ITEMS,
 )
 
@@ -251,5 +253,48 @@ class TestGepaOptimizerAgentUsage:
 
         # Verify self.agent is set and can be accessed in run_optimization
         assert optimizer.agent is mock_agent
-        # This confirms that adapter creation in run_optimization
-        # can access self.agent successfully
+
+
+def test_gepa_adapter_records_per_item_metrics() -> None:
+    """Ensure per-item adapter scoring does not override round best scores."""
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = ChatPrompt(system="baseline", user="{question}")
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        return 0.1
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=MagicMock(),
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    adapter._record_and_post_candidate(
+        prompt_variants=context.prompts,
+        score=1.0,
+        metrics={"adapter_metric": 1.0},
+    )
+
+    history = optimizer.get_history_entries()
+    assert history
+    entry = history[0]
+    trials = entry.get("trials") or []
+    candidates = entry.get("candidates") or []
+    assert trials
+    assert candidates
+    assert trials[0].get("score") is None
+    assert trials[0].get("metrics", {}).get("per_item_score") == 1.0
+    assert candidates[0].get("metrics", {}).get("per_item_score") == 1.0
+    assert trials[0].get("extra", {}).get("score_label") == "per_item"
+    # This confirms that adapter creation in run_optimization
+    # can access self.agent successfully
