@@ -233,6 +233,7 @@ interface SMEFlowContextValue {
   totalCount: number;
   canStartAnnotation: boolean;
   unprocessedItems: (Trace | Thread)[];
+  hasAnyUnsavedChanges: boolean;
 
   // Annotation state
   currentAnnotationState: AnnotationState;
@@ -778,6 +779,14 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     setCurrentView,
   ]);
 
+  const hasAnyUnsavedChanges = useMemo(() => {
+    const currentItemHasChanges = hasUnsavedChanges(currentAnnotationState);
+    const cachedItemsHaveChanges = Object.values(cachedAnnotationStates).some(
+      (state) => hasUnsavedChanges(state),
+    );
+    return currentItemHasChanges || cachedItemsHaveChanges;
+  }, [currentAnnotationState, cachedAnnotationStates]);
+
   const contextValue: SMEFlowContextValue = {
     // Queue data
     annotationQueue,
@@ -795,6 +804,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     totalCount,
     canStartAnnotation,
     unprocessedItems,
+    hasAnyUnsavedChanges,
 
     // Annotation state
     currentAnnotationState,
