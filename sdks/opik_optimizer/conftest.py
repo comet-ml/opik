@@ -5,18 +5,20 @@ Pytest requires `pytest_plugins` to be declared in a *top-level* conftest
 to avoid surprising global side effects.
 """
 
+PYTEST_PLUGIN_PREFIX = "sdks.opik_optimizer.tests.unit.fixtures"
+
 pytest_plugins = [
-    "tests.unit.fixtures.display_fixtures",
-    "tests.unit.fixtures.llm_fixtures",
-    "tests.unit.fixtures.llm_sequence_fixtures",
-    "tests.unit.fixtures.opik_platform_fixtures",
-    "tests.unit.fixtures.throttle_fixtures",
-    "tests.unit.fixtures.token_fixtures",
-    "tests.unit.fixtures.prompt_fixtures",
-    "tests.unit.fixtures.common_data_fixtures",
-    "tests.unit.fixtures.prompt_library_fixtures",
-    "tests.unit.fixtures.agent_fixtures",
-    "tests.unit.fixtures.evaluation_fixtures",
-    "tests.unit.fixtures.optimization_flow_fixtures",
-    "tests.unit.fixtures.warnings_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.display_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.llm_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.llm_sequence_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.opik_platform_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.throttle_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.token_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.prompt_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.common_data_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.prompt_library_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.agent_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.evaluation_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.optimization_flow_fixtures",
+    f"{PYTEST_PLUGIN_PREFIX}.warnings_fixtures",
 ]
