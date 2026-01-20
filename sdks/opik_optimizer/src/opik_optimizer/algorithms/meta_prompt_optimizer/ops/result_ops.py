@@ -115,3 +115,26 @@ def create_round_data(
             "previous_best_score": previous_best_score,
         },
     )
+
+
+def build_algorithm_result(
+    *,
+    best_prompts: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
+    best_score: float,
+    history: Sequence[OptimizationRound],
+    prompts_per_round: int,
+    hall_of_fame_size: int,
+    use_hall_of_fame: bool,
+) -> AlgorithmResult:
+    """Build the AlgorithmResult payload for MetaPromptOptimizer."""
+    return AlgorithmResult(
+        best_prompts=best_prompts
+        if isinstance(best_prompts, dict)
+        else {"prompt": best_prompts},
+        best_score=best_score,
+        history=list(history),
+        metadata={
+            "prompts_per_round": prompts_per_round,
+            "hall_of_fame_size": hall_of_fame_size if use_hall_of_fame else 0,
+        },
+    )

@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
 )
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops import (
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops import (
     get_task_context,
     count_tokens,
 )
@@ -71,12 +71,12 @@ class TestTokenCalculation:
 
 
 class TestContextOpsTokenCounting:
-    """Test token counting functionality in context_ops."""
+    """Test token counting functionality in history_ops."""
 
     def test_count_tokens_with_litellm(self) -> None:
         """Test token counting using litellm."""
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.token_counter"
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.token_counter"
         ) as mock_counter:
             mock_counter.return_value = 100
 
@@ -93,7 +93,7 @@ class TestContextOpsTokenCounting:
     def test_count_tokens_fallback_when_litellm_unavailable(self) -> None:
         """Test fallback token counting when litellm fails."""
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.LITELLM_TOKEN_COUNTER_AVAILABLE",
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.LITELLM_TOKEN_COUNTER_AVAILABLE",
             False,
         ):
             test_string = "x" * 40  # Exactly 40 characters
@@ -133,7 +133,7 @@ class TestAdaptiveContextFitting:
         mock_metric = _metric_with_name()
 
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
         ) as mock_count:
             # First call: too many tokens, second call: fits
             mock_count.side_effect = [3000, 1500]
@@ -156,7 +156,7 @@ class TestAdaptiveContextFitting:
         mock_metric = _metric_with_name()
 
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
         ) as mock_count:
             # First call: still too big, second call: fits with reduced truncation
             mock_count.side_effect = [2500, 1800]
@@ -179,13 +179,13 @@ class TestAdaptiveContextFitting:
         mock_metric = _metric_with_name()
 
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
         ) as mock_count:
             # Always return too many tokens
             mock_count.return_value = 5000
 
             with patch(
-                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger"
+                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.logger"
             ) as mock_logger:
                 context, token_count = get_task_context(
                     dataset=mock_dataset,
@@ -220,7 +220,7 @@ class TestColumnSelection:
         mock_metric = _metric_with_name()
 
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
         ) as mock_count:
             mock_count.return_value = 100  # Fits within budget
 
@@ -255,12 +255,12 @@ class TestColumnSelection:
         mock_metric = _metric_with_name()
 
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
         ) as mock_count:
             mock_count.return_value = 100
 
             with patch(
-                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger"
+                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.logger"
             ) as mock_logger:
                 context, token_count = get_task_context(
                     dataset=mock_dataset,
