@@ -577,6 +577,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             }
             if columnar_choices:
                 trial_result_config["columnar_choices"] = columnar_choices
+            trial.set_user_attr("parameters", dict(trial.params))
+            trial.set_user_attr("model_kwargs", copy.deepcopy(self.model_parameters))
+            trial.set_user_attr("model", self.model)
+            trial.set_user_attr("stage", "few_shot")
+            trial.set_user_attr("type", "bayesian")
             trial.set_user_attr("score", score)
             trial.set_user_attr("config", trial_result_config)
 

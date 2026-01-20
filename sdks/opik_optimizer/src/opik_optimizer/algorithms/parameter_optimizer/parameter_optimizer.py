@@ -27,7 +27,6 @@ from .ops.optuna_ops import (
     completed_trials as get_completed_trials,
     select_best_trial,
     compute_parameter_importance,
-    update_optimization_status,
 )
 from .ops.search_ops import ParameterSearchSpace
 from . import prompts as param_prompts
@@ -707,7 +706,12 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
-        update_optimization_status(optimizer=self, optimization=optimization)
+        if optimization is not None:
+            self._update_optimization(optimization, status="completed")
+            logger.info(
+                "Optimization %s status updated to completed.",
+                self.current_optimization_id,
+            )
 
         history_entries = self.get_history_entries()
 
@@ -728,8 +732,8 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_importance": importance,
             "parameter_precision": 6,
             "trials_requested": total_trials,
-            "trials_completed": len(history_entries),
-            "stopped_early": len(history_entries) < total_trials,
+            "trials_completed": len(completed_trials),
+            "stopped_early": len(completed_trials) < total_trials,
             "stop_reason": None,
             "selection_meta": {
                 "sampler": sampler.__class__.__name__ if sampler else None,

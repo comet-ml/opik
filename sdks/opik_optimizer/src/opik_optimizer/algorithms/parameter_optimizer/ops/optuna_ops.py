@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 def build_optuna_objective(
     *,
-    optimizer: "ParameterOptimizer",
+    optimizer: ParameterOptimizer,
     context: OptimizationContext,
     current_space_ref: dict[str, ParameterSearchSpace],
     stage_ref: dict[str, Any],
@@ -115,12 +115,16 @@ def build_optuna_objective(
             for name, p in tuned_prompts.items()
         }
         trial.set_user_attr("model_kwargs", model_kwargs_for_trial)
-        trial.set_user_attr("model", {name: p.model for name, p in tuned_prompts.items()})
+        trial.set_user_attr(
+            "model", {name: p.model for name, p in tuned_prompts.items()}
+        )
         trial.set_user_attr("stage", stage)
         if stage_ref.get("type") is not None:
             trial.set_user_attr("type", stage_ref.get("type"))
         if stage_ref.get("local_search_scale") is not None:
-            trial.set_user_attr("local_search_scale", stage_ref.get("local_search_scale"))
+            trial.set_user_attr(
+                "local_search_scale", stage_ref.get("local_search_scale")
+            )
         if stage_ref.get("local_trials") is not None:
             trial.set_user_attr("local_trials", stage_ref.get("local_trials"))
         if stage_ref.get("global_trials") is not None:
@@ -159,7 +163,7 @@ def build_optuna_objective(
 
 def run_optuna_phase(
     *,
-    optimizer: "ParameterOptimizer",
+    optimizer: ParameterOptimizer,
     study: optuna.study.Study,
     objective: Callable[[Trial], float],
     n_trials: int,
@@ -260,28 +264,3 @@ def compute_parameter_importance(
             completed_trials, expanded_parameter_space.parameters
         )
     return importance
-
-
-def update_optimization_status(
-    *,
-    optimizer: "ParameterOptimizer",
-    optimization: Any | None,
-) -> None:
-    if optimization is None:
-        return
-    count = 0
-    while count < 3:
-        try:
-            optimization.update(status="completed")
-            logger.info(
-                "Optimization %s status updated to completed.",
-                optimizer.current_optimization_id,
-            )
-            break
-        except Exception:
-            count += 1
-            import time
-
-            time.sleep(5)
-    if count == 3:
-        logger.warning("Unable to update optimization status; continuing...")
