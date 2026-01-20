@@ -14,6 +14,7 @@ from ....core.state import OptimizationContext
 from ....utils.logging import debug_log
 from ....utils.reporting import convert_tqdm_to_rich
 from .. import helpers, reporting
+
 if TYPE_CHECKING:  # pragma: no cover
     from ..hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 from ..types import HierarchicalRootCauseAnalysis
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def run_root_cause_analysis(
     *,
-    optimizer: "HierarchicalReflectiveOptimizer",
+    optimizer: HierarchicalReflectiveOptimizer,
     context: OptimizationContext,
     best_prompts: dict[str, chat_prompt.ChatPrompt],
     dataset: opik.Dataset,
@@ -31,7 +32,9 @@ def run_root_cause_analysis(
     agent: Any,
     n_samples: int | None,
 ) -> HierarchicalRootCauseAnalysis:
-    with reporting.display_root_cause_analysis(verbose=optimizer.verbose) as rca_reporter:
+    with reporting.display_root_cause_analysis(
+        verbose=optimizer.verbose
+    ) as rca_reporter:
         optimizer._set_reporter(rca_reporter)
         try:
             optimizer.pre_trial(context, best_prompts)
@@ -50,7 +53,9 @@ def run_root_cause_analysis(
                     metric=metric,
                     agent=agent,
                     n_samples=n_samples,
-                    n_threads=normalize_eval_threads(getattr(optimizer, "n_threads", None)),
+                    n_threads=normalize_eval_threads(
+                        getattr(optimizer, "n_threads", None)
+                    ),
                     experiment_config=context.experiment_config,
                     return_evaluation_result=True,
                     allow_tool_use=context.allow_tool_use,
@@ -70,7 +75,7 @@ def run_root_cause_analysis(
 
 def improve_over_failure_modes(
     *,
-    optimizer: "HierarchicalReflectiveOptimizer",
+    optimizer: HierarchicalReflectiveOptimizer,
     context: OptimizationContext,
     hierarchical_analysis: HierarchicalRootCauseAnalysis,
     optimizable_prompts: dict[str, chat_prompt.ChatPrompt],
@@ -87,7 +92,9 @@ def improve_over_failure_modes(
     round_handle: Any,
 ) -> tuple[dict[str, chat_prompt.ChatPrompt], float]:
     for root_cause in hierarchical_analysis.unified_failure_modes:
-        with reporting.display_prompt_improvement(root_cause.name, verbose=optimizer.verbose):
+        with reporting.display_prompt_improvement(
+            root_cause.name, verbose=optimizer.verbose
+        ):
             max_attempts = max_retries + 1
             improved_chat_prompts = None
             improved_score = None
@@ -192,7 +199,7 @@ def improve_over_failure_modes(
 
 def finalize_iteration(
     *,
-    optimizer: "HierarchicalReflectiveOptimizer",
+    optimizer: HierarchicalReflectiveOptimizer,
     context: OptimizationContext,
     round_index: int,
     hierarchical_analysis: HierarchicalRootCauseAnalysis,

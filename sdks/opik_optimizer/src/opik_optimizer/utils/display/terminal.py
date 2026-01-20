@@ -553,11 +553,11 @@ def _build_parameter_summary_table(
     summary_table.add_column("Gain", justify="left", style="dim")
     summary_table.add_column("Ranges", justify="left")
 
-    stage_order = [
-        record.get("stage")
-        for record in search_stages
-        if record.get("stage") in search_ranges
-    ]
+    stage_order: list[str] = []
+    for record in search_stages:
+        stage = record.get("stage")
+        if isinstance(stage, str) and stage in search_ranges:
+            stage_order.append(stage)
     if not stage_order:
         stage_order = sorted(search_ranges)
 

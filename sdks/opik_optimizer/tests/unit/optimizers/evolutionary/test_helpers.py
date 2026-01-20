@@ -1,5 +1,7 @@
 """Tests for evolutionary optimizer helpers module."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from opik_optimizer import ChatPrompt
@@ -7,6 +9,7 @@ from opik_optimizer.algorithms.evolutionary_optimizer.helpers import (
     get_task_description_for_llm,
     calculate_population_diversity,
 )
+from opik_optimizer.algorithms.evolutionary_optimizer import helpers
 
 
 class TestGetTaskDescriptionForLLM:
@@ -18,7 +21,6 @@ class TestGetTaskDescriptionForLLM:
             user="Answer the question: {question}",
         )
         description = get_task_description_for_llm(prompt)
-
         assert "Task:" in description
         assert "messages" in description.lower() or "instruction" in description.lower()
         assert "effective prompt" in description.lower()
@@ -29,8 +31,6 @@ class TestGetTaskDescriptionForLLM:
             user="{text}",
         )
         description = get_task_description_for_llm(prompt)
-
-        # Should include reference to original messages
         assert "optimized" in description.lower() or "original" in description.lower()
 
     def test_handles_complex_prompt(self) -> None:
@@ -67,7 +67,6 @@ class TestCalculatePopulationDiversity:
         individual = {"prompt": [{"role": "system", "content": "Test prompt"}]}
         population = [individual, individual.copy(), individual.copy()]
         diversity = calculate_population_diversity(population)
-        # Identical individuals should have low diversity (high similarity)
         assert diversity >= 0.0
 
     def test_different_individuals_have_diversity(self) -> None:
@@ -83,11 +82,9 @@ class TestCalculatePopulationDiversity:
             },
         ]
         diversity = calculate_population_diversity(population)
-        # Different individuals should have measurable diversity
         assert diversity >= 0.0
 
     def test_handles_dict_individuals(self) -> None:
-        # Test with dict-like individuals that have .items()
         population = [
             {"key": "value1", "prompt": "test1"},
             {"key": "value2", "prompt": "test2"},
@@ -97,13 +94,11 @@ class TestCalculatePopulationDiversity:
         assert isinstance(diversity, float)
 
     def test_handles_non_dict_individuals(self) -> None:
-        # Test with non-dict individuals (uses str())
         population = ["individual1", "individual2", "individual3"]
         diversity = calculate_population_diversity(population)
         assert isinstance(diversity, float)
 
     def test_handles_mixed_population(self) -> None:
-        # Create a mock individual with items method
         class MockIndividual:
             def __init__(self, data: dict[str, Any]) -> None:
                 self._data = data
@@ -131,7 +126,6 @@ class TestCalculatePopulationDiversity:
         assert isinstance(diversity, float)
 
     def test_diversity_increases_with_varied_content(self) -> None:
-        # Similar population
         similar_pop = [
             {"content": "Hello world"},
             {"content": "Hello world!"},
@@ -139,7 +133,6 @@ class TestCalculatePopulationDiversity:
         ]
         similar_diversity = calculate_population_diversity(similar_pop)
 
-        # Diverse population
         diverse_pop = [
             {"content": "Hello world"},
             {"content": "The quick brown fox jumps over the lazy dog"},
@@ -147,8 +140,41 @@ class TestCalculatePopulationDiversity:
         ]
         diverse_diversity = calculate_population_diversity(diverse_pop)
 
-        # Both should be valid floats
         assert isinstance(similar_diversity, float)
         assert isinstance(diverse_diversity, float)
         assert diverse_diversity > similar_diversity
         assert similar_diversity < 0.2
+
+
+class _ResponseModel:
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+
+    def model_dump(self) -> Any:
+        return self._payload
+
+
+def test_parse_llm_messages_returns_list_passthrough() -> None:
+    messages = [{"role": "system", "content": "x"}]
+    assert helpers.parse_llm_messages(messages) == messages
+
+
+def test_parse_llm_messages_handles_dict_with_messages() -> None:
+    payload = {"messages": [{"role": "user", "content": "y"}]}
+    assert helpers.parse_llm_messages(payload) == payload["messages"]
+
+
+def test_parse_llm_messages_handles_dict_without_messages() -> None:
+    payload = {"role": "user", "content": "z"}
+    assert helpers.parse_llm_messages(payload) == [payload]
+
+
+def test_parse_llm_messages_handles_model_dump() -> None:
+    payload = {"messages": [{"role": "assistant", "content": "ok"}]}
+    model = _ResponseModel(payload)
+    assert helpers.parse_llm_messages(model) == payload["messages"]
+
+
+def test_parse_llm_messages_handles_json_string() -> None:
+    payload = '[{"role": "system", "content": "hi"}]'
+    assert helpers.parse_llm_messages(payload) == [{"role": "system", "content": "hi"}]
