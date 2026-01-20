@@ -335,9 +335,7 @@ class OpikTracer(BaseTracer):
             else:
                 outputs = ERROR_SKIPPED_OUTPUTS
         elif (outputs := run_dict.get("outputs")) is not None:
-            outputs, trace_additional_metadata = (
-                langchain_helpers.split_big_langgraph_outputs(outputs)
-            )
+            outputs = langchain_helpers.extract_command_update(outputs)
 
         if not self._opik_context_read_only_mode:
             self._ensure_no_hanging_opik_tracer_spans()
@@ -735,15 +733,10 @@ class OpikTracer(BaseTracer):
                 if resume_value := _extract_resume_value_from_command(input_value):
                     span_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
-            filtered_output, additional_metadata = (
-                langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
-            )
-
-            if additional_metadata:
-                span_data.update(metadata=additional_metadata)
+            span_output = langchain_helpers.extract_command_update(run_dict["outputs"])
 
             span_data.init_end_time().update(
-                output=filtered_output,
+                output=span_output,
                 usage=(
                     usage_info.usage.provider_usage.model_dump()
                     if isinstance(usage_info.usage, llm_usage.OpikUsage)
