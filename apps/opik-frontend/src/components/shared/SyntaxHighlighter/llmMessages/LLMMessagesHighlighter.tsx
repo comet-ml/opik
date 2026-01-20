@@ -60,10 +60,10 @@ const LLMMessagesHighlighter: React.FC<LLMMessagesHighlighterProps> = ({
     handleValueChange,
   } = useLLMMessagesExpandAll(allMessageIds, preserveKey);
 
-  // Render block from descriptor (no switch needed!)
+  // Render block from descriptor
   const renderBlock = (descriptor: LLMBlockDescriptor, key: string) => {
     const Component = descriptor.component as React.ComponentType<
-      Record<string, unknown>
+      typeof descriptor.props
     >;
     return <Component key={key} {...descriptor.props} />;
   };
