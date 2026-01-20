@@ -1,0 +1,77 @@
+---
+description: Start here to integrate Kong AI Gateway with Opik for production-ready
+  LLM gateway capabilities with enterprise features.
+headline: Kong AI Gateway | Opik Documentation
+og:description: Learn to integrate Kong AI Gateway with Opik using the Opik Kong plugin
+  to log all LLM calls for comprehensive observability.
+og:site_name: Opik Documentation
+og:title: Integrate Kong AI Gateway with Opik for Production LLM Gateway
+title: Observability for Kong AI Gateway with Opik
+---
+
+[Kong](https://docs.konghq.com/gateway/latest/) is a popular open-source API gateway that has an AI Gateway. 
+
+## Gateway Overview
+
+Kong AI Gateway provides enterprise-grade features for managing LLM API access, including:
+
+- **Authentication mechanisms**: Secure access control for your LLM endpoints
+- **Load balancing**: Distribute traffic across multiple LLM providers
+- **Caching**: Reduce costs and improve response times
+- **Rate limiting**: Control API usage and prevent abuse
+- **Advanced monitoring**: Track usage, performance, and costs
+
+You can learn more about the Kong AI Gateway [here](https://docs.konghq.com/gateway/latest/ai-gateway/).
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=kong-ai-gateway&utm_campaign=opik) provides a hosted version of the Opik platform. [Simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=kong-ai-gateway&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=kong-ai-gateway&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installing the Opik Kong Plugin
+
+We have developed a Kong plugin that allows you to log all the LLM calls from your Kong server to the Opik platform. The plugin is available for enterprise customers. Please contact our support team for access.
+
+### Configuring the Opik Kong Plugin
+
+Once the plugin is installed, you can enable it by running:
+
+```bash
+curl -is -X POST http://localhost:8001/services/{serviceName|Id}/plugins \
+  --header "accept: application/json" \
+  --header "Content-Type: application/json" \
+  --data '
+  {
+    "name": "opik-log",
+    "config": {
+      "opik_api_key": "<Replace with your Opik API key>",
+      "opik_workspace": "<Replace with your Opik workspace>"
+    }
+  }'
+```
+
+### Configuration Parameters
+
+The Opik Kong plugin accepts the following configuration parameters:
+
+- **`opik_api_key`**: Your Opik API key (required)
+- **`opik_workspace`**: Your Opik workspace name (required)
+
+### Viewing Traces in Opik
+
+Once configured, you will be able to view all your LLM calls in the Opik dashboard:
+
+<Frame>
+  <img src="/img/production/opik-kong-gateway.png" />
+</Frame>
+
+## Enterprise Support
+
+For more information about the Opik Kong plugin, please contact our support team.
+
+## Further Improvements
+
+If you have suggestions for improving the Kong AI Gateway integration, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).
