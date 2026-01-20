@@ -347,12 +347,12 @@ describe("mapOpenAIMessages", () => {
       // First block should be audio
       expect(result[0].blocks[0].blockType).toBe("audio");
       if (result[0].blocks[0].blockType === "audio") {
-        expect(result[0].blocks[0].props.url).toBe(
-          "[output-attachment-1-1768563367373.wav]",
-        );
-        expect(result[0].blocks[0].props.name).toBe(
-          "Audio audio_696a22a63a3c8191881b0c0e87a8c59c",
-        );
+        expect(result[0].blocks[0].props.audios).toEqual([
+          {
+            url: "[output-attachment-1-1768563367373.wav]",
+            name: "audio_696a22a63a3c8191881b0c0e87a8c59c",
+          },
+        ]);
       }
 
       // Second block should be text with transcript
@@ -387,7 +387,12 @@ describe("mapOpenAIMessages", () => {
       expect(result[0].blocks).toHaveLength(1);
       expect(result[0].blocks[0].blockType).toBe("audio");
       if (result[0].blocks[0].blockType === "audio") {
-        expect(result[0].blocks[0].props.url).toBe("[audio-file.wav]");
+        expect(result[0].blocks[0].props.audios).toEqual([
+          {
+            url: "[audio-file.wav]",
+            name: "audio_123",
+          },
+        ]);
       }
     });
 
@@ -444,9 +449,12 @@ describe("mapOpenAIMessages", () => {
       expect(result[0].blocks).toHaveLength(2);
       expect(result[0].blocks[0].blockType).toBe("audio");
       if (result[0].blocks[0].blockType === "audio") {
-        expect(result[0].blocks[0].props.url).toBe(
-          "https://example.com/audio.wav",
-        );
+        expect(result[0].blocks[0].props.audios).toEqual([
+          {
+            url: "https://example.com/audio.wav",
+            name: "audio_789",
+          },
+        ]);
       }
     });
 

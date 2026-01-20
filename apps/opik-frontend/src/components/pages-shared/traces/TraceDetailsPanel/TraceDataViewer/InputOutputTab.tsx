@@ -25,10 +25,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   search,
 }) => {
   // Use unified media hook to fetch all media and get transformed data
-  console.log("[DEBUG] InputOutputTab: data", data);
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
-
-  console.log("[DEBUG] InputOutputTab: media", media);
 
   const hasError = Boolean(data.error_info);
 

@@ -23,6 +23,11 @@ export interface AttachmentWithType extends Attachment {
 export type ParsedImageData = {
   url: string;
   name: string;
+  /**
+   * True if this media was replaced with a placeholder in the transformed JSON.
+   * Used to determine if a placeholder field should be assigned in UnifiedMediaItem.
+   */
+  hasPlaceholder?: boolean;
 };
 
 export type AttachmentPreviewData = {
@@ -39,6 +44,11 @@ export type ParsedVideoData = {
    * When provided, consumers can display or transform the video appropriately.
    */
   mimeType?: string;
+  /**
+   * True if this media was replaced with a placeholder in the transformed JSON.
+   * Used to determine if a placeholder field should be assigned in UnifiedMediaItem.
+   */
+  hasPlaceholder?: boolean;
 };
 
 export type ParsedAudioData = {
@@ -49,6 +59,11 @@ export type ParsedAudioData = {
    * When provided, consumers can display or transform the audio appropriately.
    */
   mimeType?: string;
+  /**
+   * True if this media was replaced with a placeholder in the transformed JSON.
+   * Used to determine if a placeholder field should be assigned in UnifiedMediaItem.
+   */
+  hasPlaceholder?: boolean;
 };
 
 export type ParsedMediaData =

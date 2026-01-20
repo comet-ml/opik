@@ -20,14 +20,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
     hasError,
     errorMessage,
     audioRef,
-    handleLoadedMetaData,
-    handleListen,
-    handlePlay,
-    handlePause,
-    handleCanPlay,
-    handleWaiting,
-    handleLoadStart,
-    handleError,
     formatTime,
   } = useAudioPlayer({ url });
 
@@ -45,7 +37,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
         ) : (
           <span className="ml-2 shrink-0 text-xs text-light-slate">
             {formatTime(currentTime)} /{" "}
-            {duration > 0 ? formatTime(duration) : "--:--"}
+            {duration > 0 ? formatTime(duration) : "00:00"}
           </span>
         )}
       </div>
@@ -85,14 +77,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
           <AudioPlayerLib
             ref={audioRef}
             src={url}
-            onLoadedMetaData={handleLoadedMetaData}
-            onListen={handleListen}
-            onPlay={handlePlay}
-            onPause={handlePause}
-            onCanPlay={handleCanPlay}
-            onLoadStart={handleLoadStart}
-            onWaiting={handleWaiting}
-            onError={handleError}
             showJumpControls={false}
             customAdditionalControls={[]}
             customVolumeControls={[]}

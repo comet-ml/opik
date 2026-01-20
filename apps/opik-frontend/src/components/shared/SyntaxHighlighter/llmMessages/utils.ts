@@ -8,6 +8,14 @@ export const isPlaceholder = (value: string): boolean => {
 };
 
 /**
+ * Check if a string is a backend attachment placeholder pattern.
+ * Matches patterns like "[input-attachment-1-1768916401606.wav]" or "[output-attachment-1-xxx.wav]"
+ */
+export const isBackendAttachmentPlaceholder = (value: string): boolean => {
+  return /^\[(input|output)-attachment-\d+-\d+\.\w+\]$/.test(value);
+};
+
+/**
  * Extract the index from a placeholder string.
  * @example extractPlaceholderIndex("[image_0]") // returns 0
  * @example extractPlaceholderIndex("[video_2]") // returns 2

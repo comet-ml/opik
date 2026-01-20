@@ -56,16 +56,20 @@ const createUnifiedMediaItem = (
   idPrefix: string,
   index: number,
   placeholderIndex: number = index,
-): UnifiedMediaItem => ({
-  id: `${idPrefix}-${index}`,
-  url: item.url,
-  name: item.name,
-  type: item.type,
-  source,
-  ...(source === "inline" && {
-    placeholder: `[${item.type}_${placeholderIndex}]`,
-  }),
-});
+): UnifiedMediaItem => {
+  return {
+    id: `${idPrefix}-${index}`,
+    url: item.url,
+    name: item.name,
+    type: item.type,
+    source,
+    // Use the explicit flag set during extraction in images.ts
+    // Only media that was replaced with a placeholder in the JSON gets this field
+    ...(item.hasPlaceholder && {
+      placeholder: `[${item.type}_${placeholderIndex}]`,
+    }),
+  };
+};
 
 /**
  * Filters and converts unified media items to detectable format for async detection.
@@ -307,6 +311,7 @@ export const useUnifiedMedia = (
     const apiMedia: UnifiedMediaItem[] = (attachmentsData?.content ?? []).map(
       (att, index) => ({
         id: `api-${att.file_name}-${index}`,
+        placeholder: `[${att.file_name}]`,
         url: att.link,
         name: att.file_name,
         type:

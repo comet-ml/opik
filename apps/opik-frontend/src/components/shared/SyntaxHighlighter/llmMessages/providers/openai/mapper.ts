@@ -476,8 +476,12 @@ const mapMessageContent = (
         blockType: "audio",
         component: PrettyLLMMessage.AudioPlayerBlock,
         props: {
-          url: message.audio.data,
-          name: `Audio ${message.audio.id}`,
+          audios: [
+            {
+              url: message.audio.data,
+              name: message.audio.id,
+            },
+          ],
         },
       });
     }

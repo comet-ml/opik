@@ -5,7 +5,7 @@ import React, {
   ReactNode,
 } from "react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
-import { isPlaceholder } from "./utils";
+import { isBackendAttachmentPlaceholder, isPlaceholder } from "./utils";
 
 /**
  * Media context value providing unified media access and resolution utilities
@@ -71,7 +71,10 @@ export const MediaProvider: React.FC<MediaProviderProps> = ({
   const resolveMedia = useCallback(
     (urlOrPlaceholder: string, fallbackName?: string) => {
       // Check if it's a placeholder like "[image_0]"
-      if (isPlaceholder(urlOrPlaceholder)) {
+      if (
+        isPlaceholder(urlOrPlaceholder) ||
+        isBackendAttachmentPlaceholder(urlOrPlaceholder)
+      ) {
         const mediaItem = media.find(
           (item) => item.placeholder === urlOrPlaceholder,
         );

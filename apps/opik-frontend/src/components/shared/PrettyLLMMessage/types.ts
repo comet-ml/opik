@@ -48,9 +48,7 @@ export interface PrettyLLMMessageCodeBlockProps {
 }
 
 export interface PrettyLLMMessageAudioPlayerBlockProps {
-  audios?: Array<{ url: string; name: string }>;
-  url?: string;
-  name?: string;
+  audios: Array<{ url: string; name: string }>;
   className?: string;
 }
 

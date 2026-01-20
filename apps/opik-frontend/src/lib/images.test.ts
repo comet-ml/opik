@@ -235,7 +235,7 @@ describe("processInputData", () => {
       "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7": "gif", // minimal GIF
       "Qk1GAwAAAAgAAAA//8AAwAAA": "bmp", // minimal BMP
       "SUkqAGkAAAD/AAEAAAABAAEAAAABAAEAAAD/": "tiff", // minimal TIFF
-      "UklGRgAAAABXRU5ErkJggg==": "webp", // minimal WebP
+      UklGRgAAAABXRUJQVlA4: "webp", // minimal WebP (RIFF + WEBP header)
     };
 
     for (const [prefix, format] of Object.entries(prefixes)) {

@@ -10,6 +10,7 @@ import {
   ATTACHMENT_TYPE,
 } from "@/types/attachments";
 import { safelyParseJSON } from "@/lib/utils";
+import { isBackendAttachmentPlaceholder } from "@/components/shared/SyntaxHighlighter/llmMessages/utils";
 
 /**
  * Type guard to check if a value is already parsed media data
@@ -57,25 +58,28 @@ function isValidBase64Image(base64Str: string): boolean {
 
     const startsWith = (sig: string) => hex.startsWith(sig.toLowerCase());
 
+    // Check for RIFF-based formats first (WebP and WAV both start with RIFF)
+    if (startsWith("52494646") && bytes.length >= 12) {
+      const format = String.fromCharCode(...bytes.slice(8, 12));
+      // Only return true if it's WebP, not WAV or other RIFF formats
+      if (format === "WEBP") return true;
+      // If it's WAVE or other RIFF format, it's not an image
+      return false;
+    }
+
+    // Check other image signatures
     const signatures = {
       jpeg: ["ffd8ff"],
       png: ["89504e470d0a1a0a"],
       gif: ["474946383961", "474946383761"],
       bmp: ["424d"],
       tiff: ["49492a00", "4d4d002a"],
-      webp: ["52494646"], // needs extra check
     };
 
     for (const sigs of Object.values(signatures)) {
       for (const sig of sigs) {
         if (startsWith(sig)) return true;
       }
-    }
-
-    // WebP check
-    if (startsWith("52494646") && bytes.length >= 12) {
-      const format = String.fromCharCode(...bytes.slice(8, 12));
-      if (format === "WEBP") return true;
     }
 
     return false;
@@ -525,6 +529,8 @@ const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
 
           const url = content.image_url!.url;
           if (!isImageBase64String(url)) {
+            // Skip backend attachment placeholders - they will be resolved separately via API
+            if (isBackendAttachmentPlaceholder(url)) return;
             // Skip if URL has a video extension
             if (hasVideoExtension(url)) return;
 
@@ -556,6 +562,9 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
 
       const pushVideo = (source: string | undefined, mimeType?: string) => {
         if (!source) return;
+
+        // Skip backend attachment placeholders - they will be resolved separately via API
+        if (isBackendAttachmentPlaceholder(source)) return;
 
         // Skip if URL has an image extension (only check http URLs)
         if (source.startsWith("http") && hasImageExtension(source)) return;
@@ -598,12 +607,80 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
   });
 };
 
-const extractOpenAIAudios = (input: object, audios: ParsedAudioData[]) => {
+const extractOpenAIAudios = (
+  input: object,
+  inputString: string,
+  audios: ParsedAudioData[],
+  startIndex: number,
+): { updatedInput: string; nextIndex: number } => {
   if (!isObject(input) || !("messages" in input) || !isArray(input.messages)) {
-    return;
+    return { updatedInput: inputString, nextIndex: startIndex };
   }
 
+  let updatedInput = inputString;
+  let index = startIndex;
+
+  const pushAudio = (
+    source: string | undefined,
+    mimeType?: string,
+    replaceInString: boolean = false,
+  ) => {
+    if (!source) return;
+
+    // Skip backend attachment placeholders - they will be resolved separately via API
+    if (isBackendAttachmentPlaceholder(source)) return;
+
+    // Skip if URL has an image or video extension (only check http URLs)
+    if (source.startsWith("http") && hasImageExtension(source)) return;
+    if (source.startsWith("http") && hasVideoExtension(source)) return;
+
+    const url = source;
+    const name = url.startsWith("data:")
+      ? "Base64 Audio"
+      : extractFilename(url);
+
+    // Replace the raw base64 data in the string with a placeholder
+    if (
+      replaceInString &&
+      !url.startsWith("data:") &&
+      !url.startsWith("http")
+    ) {
+      const placeholder = `[audio_${index}]`;
+      // Escape special regex characters in the source string
+      const escapedSource = source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Replace only the first occurrence (no 'g' flag) to handle duplicate audio correctly
+      updatedInput = updatedInput.replace(
+        new RegExp(escapedSource),
+        placeholder,
+      );
+      audios.push({
+        url: ensureAudioDataUrl(source, mimeType),
+        name: `Base64 Audio: ${placeholder}`,
+        mimeType,
+        hasPlaceholder: true,
+      });
+      index++;
+    } else {
+      audios.push({
+        url,
+        name,
+        mimeType,
+      });
+    }
+  };
+
   input.messages.forEach((message) => {
+    // Handle message-level audio field
+    if (message?.audio && isObject(message.audio) && "data" in message.audio) {
+      const audioData = message.audio.data;
+      if (typeof audioData === "string" && audioData.length > 0) {
+        // Default to mpeg for message-level audio if no format specified
+        const mimeType = "audio/mpeg";
+        pushAudio(audioData, mimeType, true);
+      }
+    }
+
+    // Handle content array
     if (!isArray(message?.content)) {
       return;
     }
@@ -613,29 +690,21 @@ const extractOpenAIAudios = (input: object, audios: ParsedAudioData[]) => {
         return;
       }
 
-      const pushAudio = (source: string | undefined, mimeType?: string) => {
-        if (!source) return;
-
-        // Skip if URL has an image or video extension (only check http URLs)
-        if (source.startsWith("http") && hasImageExtension(source)) return;
-        if (source.startsWith("http") && hasVideoExtension(source)) return;
-
-        const url = source;
-        const name = url.startsWith("data:")
-          ? "Base64 Audio"
-          : extractFilename(url);
-        audios.push({
-          url,
-          name,
-          mimeType,
-        });
-      };
-
       if (content.type === "audio_url") {
         if (typeof content.audio_url === "string") {
           pushAudio(content.audio_url);
         } else if (content.audio_url?.url) {
           pushAudio(content.audio_url.url);
+        }
+      }
+
+      if (content.type === "input_audio" && "input_audio" in content) {
+        const inputAudio = (content as { input_audio?: InputAudioValue })
+          .input_audio;
+        if (inputAudio?.data) {
+          const format = inputAudio.format || "wav";
+          const mimeType = `audio/${format}`;
+          pushAudio(inputAudio.data, mimeType, true);
         }
       }
 
@@ -645,11 +714,13 @@ const extractOpenAIAudios = (input: object, audios: ParsedAudioData[]) => {
         if (file_id) {
           pushAudio(file_id, format);
         } else if (file_data) {
-          pushAudio(ensureAudioDataUrl(file_data, format), format);
+          pushAudio(file_data, format, true);
         }
       }
     });
   });
+
+  return { updatedInput, nextIndex: index };
 };
 
 const extractDataURIImages = (
@@ -664,6 +735,7 @@ const extractDataURIImages = (
       images.push({
         url: match,
         name: `Base64: ${name}`,
+        hasPlaceholder: true,
       });
       index++;
       return name;
@@ -690,6 +762,7 @@ const extractPrefixedBase64Images = (
       images.push({
         url: `data:image/${extension};base64,${match}`,
         name: `Base64: ${name}`,
+        hasPlaceholder: true,
       });
       index++;
       return name;
@@ -714,6 +787,7 @@ const extractDataURIVideos = (
       url: match,
       name: `Base64 Video: ${name}`,
       mimeType: match.slice(5, match.indexOf(";base64")),
+      hasPlaceholder: true,
     });
     index++;
     return name;
@@ -737,6 +811,7 @@ const extractDataURIAudios = (
       url: match,
       name: `Base64 Audio: ${name}`,
       mimeType: match.slice(5, match.indexOf(";base64")),
+      hasPlaceholder: true,
     });
     index++;
     return name;
@@ -837,9 +912,16 @@ export const processInputDataInternal = (input?: object): ProcessedInput => {
   let videoIndex = 0;
   let audioIndex = 0;
 
-  extractOpenAIURLImages(input, images);
-  extractOpenAIVideos(input, videos);
-  extractOpenAIAudios(input, audios);
+  // STEP 1: Extract media that gets REPLACED with placeholders in the JSON string
+  // This ensures array indices match the placeholder numbers in the transformed data
+
+  // Extract OpenAI audios and replace in string (must be before extractDataURIAudios)
+  ({ updatedInput: inputString, nextIndex: audioIndex } = extractOpenAIAudios(
+    input,
+    inputString,
+    audios,
+    audioIndex,
+  ));
 
   ({ updatedInput: inputString, nextIndex: imageIndex } = extractDataURIImages(
     inputString,
@@ -858,6 +940,11 @@ export const processInputDataInternal = (input?: object): ProcessedInput => {
   ));
   ({ updatedInput: inputString, nextIndex: imageIndex } =
     extractPrefixedBase64Images(inputString, images, imageIndex));
+
+  // STEP 2: Extract URL-based media (NOT replaced, stays as-is in JSON)
+  // These are added to the end of the array after placeholder-based media
+  extractOpenAIURLImages(input, images);
+  extractOpenAIVideos(input, videos);
   extractImageURLs(inputString, images);
   extractVideoURLs(inputString, videos);
   extractAudioURLs(inputString, audios);

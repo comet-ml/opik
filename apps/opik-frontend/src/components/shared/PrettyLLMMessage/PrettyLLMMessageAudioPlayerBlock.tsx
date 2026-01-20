@@ -6,27 +6,25 @@ import { useMediaResolver } from "@/hooks/useMediaResolver";
 
 /**
  * Pure presentation component for displaying audio in LLM messages.
- * Resolves placeholders like "[audio_0]" using MediaContext.
+ * Resolves placeholders like "[audio_0]" or "[output-attachment-1-xxx.wav]" using MediaContext.
  * No API calls - all data comes from context.
  */
 const PrettyLLMMessageAudioPlayerBlock: React.FC<
   PrettyLLMMessageAudioPlayerBlockProps
-> = ({ audios, url, name, className }) => {
+> = ({ audios, className }) => {
   const resolveMedia = useMediaResolver();
 
   // Resolve placeholders to actual URLs using centralized resolver
   const resolvedAudioList = useMemo(() => {
-    // Support both array and single audio formats
-    const audioList = audios || (url ? [{ url, name: name || "Audio" }] : []);
-
-    return audioList.map((audio) => {
+    return audios.map((audio) => {
       const resolved = resolveMedia(audio.url, audio.name);
+
       return {
         url: resolved.url,
         name: resolved.name,
       };
     });
-  }, [audios, url, name, resolveMedia]);
+  }, [audios, resolveMedia]);
 
   if (resolvedAudioList.length === 0) {
     return null;
