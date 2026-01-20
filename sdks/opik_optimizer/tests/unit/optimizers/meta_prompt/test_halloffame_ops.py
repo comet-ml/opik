@@ -14,6 +14,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
     HallOfFameEntry,
     PromptHallOfFame,
 )
+from opik_optimizer.core.llm_calls import StructuredOutputParsingError
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -397,3 +398,26 @@ class TestPromptHallOfFameExtractPatterns:
         result = hof.extract_patterns("gpt-4", {}, "accuracy")
 
         assert result == []
+
+    def test_retries_with_strict_json_on_parse_error(self, mock_llm_call: Any) -> None:
+        """Should retry with strict JSON instruction on parse errors."""
+        hof = PromptHallOfFame()
+        hof.add(self._create_entry(0.7, 1))
+        hof.add(self._create_entry(0.8, 2))
+        hof.add(self._create_entry(0.9, 3))
+
+        calls: list[dict[str, Any]] = []
+
+        def side_effect(**kwargs: Any) -> Any:
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise StructuredOutputParsingError("bad", ValueError("bad"))
+            return {"patterns": ["Pattern A"]}
+
+        mock_llm_call(side_effect=side_effect)
+
+        result = hof.extract_patterns("gpt-4", {}, "accuracy")
+
+        assert "Pattern A" in result
+        assert len(calls) == 2
+        assert "Return ONLY valid JSON" in calls[1]["messages"][1]["content"]

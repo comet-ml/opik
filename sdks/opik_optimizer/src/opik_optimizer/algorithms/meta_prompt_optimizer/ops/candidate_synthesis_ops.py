@@ -20,8 +20,29 @@ from ....utils import display as display_utils
 from ....utils.text import normalize_llm_text
 from .. import prompts as meta_prompts
 from .. import reporting
+from ..types import PromptCandidatesResponse
 
 logger = logging.getLogger(__name__)
+STRICT_JSON_INSTRUCTION = (
+    "\n\nReturn ONLY valid JSON. Do not include commentary or markdown."
+)
+
+
+def _with_strict_json_instruction(
+    messages: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    updated: list[dict[str, str]] = []
+    for msg in messages:
+        if msg.get("role") == "user":
+            updated.append(
+                {
+                    **msg,
+                    "content": f"{msg.get('content', '')}{STRICT_JSON_INSTRUCTION}",
+                }
+            )
+        else:
+            updated.append(msg)
+    return updated
 
 
 def _collect_hof_prompts(
@@ -125,12 +146,19 @@ def _normalize_synthesis_json(json_result: Any) -> dict[str, Any]:
 def _parse_synthesis_prompt_items(contents: list[Any]) -> list[dict[str, Any]]:
     prompt_items: list[dict[str, Any]] = []
     for content_item in contents:
-        if not isinstance(content_item, str):
+        if hasattr(content_item, "model_dump"):
+            normalized = content_item.model_dump()
+        else:
+            normalized = content_item
+        if isinstance(normalized, str):
+            json_result = _normalize_synthesis_json(_parse_synthesis_json(normalized))
+        elif isinstance(normalized, dict):
+            json_result = _normalize_synthesis_json(normalized)
+        else:
             raise ValueError(
-                "Synthesis response must be a string; received %s"
-                % type(content_item).__name__
+                "Synthesis response must be a string or dict; received %s"
+                % type(normalized).__name__
             )
-        json_result = _normalize_synthesis_json(_parse_synthesis_json(content_item))
         prompt_items.extend(json_result["prompts"])
     return prompt_items
 
@@ -256,20 +284,37 @@ def generate_synthesis_prompts(
                 optimizer, "optimization_algorithm_synthesis"
             )
 
-            content = _llm_calls.call_model(
-                messages=[
-                    {"role": "system", "content": synthesis_system_prompt},
-                    {"role": "user", "content": synthesis_user_prompt},
-                ],
-                model=optimizer.model,
-                model_parameters=optimizer.model_parameters,
-                metadata=metadata_for_call,
-                optimization_id=optimization_id,
-                project_name=project_name,
-                return_all=_llm_calls.requested_multiple_candidates(
-                    optimizer.model_parameters
-                ),
-            )
+            base_messages = [
+                {"role": "system", "content": synthesis_system_prompt},
+                {"role": "user", "content": synthesis_user_prompt},
+            ]
+            try:
+                content = _llm_calls.call_model(
+                    messages=base_messages,
+                    model=optimizer.model,
+                    model_parameters=optimizer.model_parameters,
+                    response_model=PromptCandidatesResponse,
+                    metadata=metadata_for_call,
+                    optimization_id=optimization_id,
+                    project_name=project_name,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        optimizer.model_parameters
+                    ),
+                )
+            except (BadRequestError, StructuredOutputParsingError):
+                retry_messages = _with_strict_json_instruction(base_messages)
+                content = _llm_calls.call_model(
+                    messages=retry_messages,
+                    model=optimizer.model,
+                    model_parameters=optimizer.model_parameters,
+                    response_model=PromptCandidatesResponse,
+                    metadata=metadata_for_call,
+                    optimization_id=optimization_id,
+                    project_name=project_name,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        optimizer.model_parameters
+                    ),
+                )
 
             contents = content if isinstance(content, list) else [content]
             prompt_items = _parse_synthesis_prompt_items(contents)

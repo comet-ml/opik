@@ -250,7 +250,7 @@ def _prepare_model_params(
             "Prompt Optimization",
         ]
 
-    # Add structured output support
+    # Add structured output support (LiteLLM will populate message.parsed for us)
     if response_model is not None:
         final_params["response_format"] = response_model
 
@@ -285,11 +285,14 @@ def _parse_response(
     choices = getattr(response, "choices", None) or []
     if return_all and choices:
         contents = []
+        parsed_objects = []
         for choice in choices:
             contents.append(choice.message.content)
-        return _parse_response_list(contents, response_model)
+            parsed_objects.append(getattr(choice.message, "parsed", None))
+        return _parse_response_list(contents, response_model, parsed_objects)
 
-    content = choices[0].message.content if choices else ""
+    first_message = choices[0].message if choices else None
+    content = first_message.content if first_message is not None else ""
 
     finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
     # When the model was truncated due to max_tokens we raise a BadRequest so downstream sees the OpenAI error.
@@ -319,6 +322,18 @@ def _parse_response(
     # When using structured outputs with Pydantic models, LiteLLM automatically
     # parses the response. Parse the JSON string into the Pydantic model
     if response_model is not None:
+        parsed_obj = getattr(first_message, "parsed", None)
+        if parsed_obj is not None:
+            try:
+                if isinstance(parsed_obj, response_model):
+                    return parsed_obj
+                return response_model.model_validate(parsed_obj)
+            except PydanticValidationError as exc:
+                logger.debug(
+                    "Structured output parsed object validation failed for %s: %s",
+                    getattr(response_model, "__name__", "unknown"),
+                    exc,
+                )
         try:
             return response_model.model_validate_json(content)
         except PydanticValidationError as exc:
@@ -351,6 +366,7 @@ def _parse_response(
 def _parse_response_list(
     contents: list[str],
     response_model: type[BaseModel] | None,
+    parsed_objects: list[Any] | None = None,
 ) -> list[BaseModel] | list[str]:
     """
     Parse multiple LLM responses into a list of strings or Pydantic models.
@@ -373,7 +389,18 @@ def _parse_response_list(
         return contents
 
     parsed: list[BaseModel] = []
-    for content in contents:
+    for idx, content in enumerate(contents):
+        if parsed_objects is not None:
+            candidate = parsed_objects[idx]
+            if candidate is not None:
+                try:
+                    if isinstance(candidate, response_model):
+                        parsed.append(candidate)
+                        continue
+                    parsed.append(response_model.model_validate(candidate))
+                    continue
+                except PydanticValidationError:
+                    pass
         try:
             parsed.append(response_model.model_validate_json(content))
         except PydanticValidationError as exc:

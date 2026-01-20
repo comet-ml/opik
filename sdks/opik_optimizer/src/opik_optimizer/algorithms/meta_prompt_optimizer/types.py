@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from opik_optimizer.api_objects import chat_prompt, types
 
@@ -59,6 +59,55 @@ class AgentBundleCandidatesResponse(BaseModel):
     candidates: list[AgentBundleCandidateResponse] = Field(
         ..., description="List of candidate bundles"
     )
+
+
+class PromptCandidateResponse(BaseModel):
+    """Response model for single-prompt candidate generation."""
+
+    prompt: list[types.Message] = Field(..., description="Candidate prompt messages")
+    improvement_focus: str | None = Field(
+        None, description="What aspect of the prompt is being improved"
+    )
+    reasoning: str | None = Field(
+        None, description="Explanation of why these changes were made"
+    )
+
+
+class PromptCandidatesResponse(BaseModel):
+    """Response model for candidate prompt lists."""
+
+    prompts: list[PromptCandidateResponse] = Field(
+        ..., description="List of candidate prompts"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _wrap_list(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return {"prompts": value}
+        return value
+
+
+class PatternItem(BaseModel):
+    """Pattern extraction item with optional example."""
+
+    pattern: str
+    example: str | None = None
+
+
+class PatternExtractionResponse(BaseModel):
+    """Response model for Hall-of-Fame pattern extraction."""
+
+    patterns: list[PatternItem | str] = Field(
+        default_factory=list, description="Extracted prompt patterns"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _wrap_patterns(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return {"patterns": value}
+        return value
 
 
 @dataclass

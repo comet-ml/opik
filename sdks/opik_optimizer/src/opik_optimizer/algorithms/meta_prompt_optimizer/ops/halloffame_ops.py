@@ -14,10 +14,12 @@ import re
 import logging
 
 from .. import prompts as meta_prompts
-from ..types import HallOfFameEntry
+from ..types import HallOfFameEntry, PatternExtractionResponse
 from ....utils.prompt_library import PromptLibrary
 from ....utils.display import format as display_format
 from ....utils.logging import debug_log
+from ....core.llm_calls import StructuredOutputParsingError
+from litellm.exceptions import BadRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -123,16 +125,39 @@ class PromptHallOfFame:
             system_prompt = meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE
 
         try:
-            response = _llm_calls.call_model(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt_analysis},
-                ],
-                model=model,
-                model_parameters=model_parameters,
-                is_reasoning=True,
-                return_all=_llm_calls.requested_multiple_candidates(model_parameters),
-            )
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt_analysis},
+            ]
+            try:
+                response = _llm_calls.call_model(
+                    messages=messages,
+                    model=model,
+                    model_parameters=model_parameters,
+                    is_reasoning=True,
+                    response_model=PatternExtractionResponse,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        model_parameters
+                    ),
+                )
+            except (BadRequestError, StructuredOutputParsingError):
+                retry_messages = [
+                    messages[0],
+                    {
+                        "role": "user",
+                        "content": f"{prompt_analysis}\n\nReturn ONLY valid JSON. Do not include commentary or markdown.",
+                    },
+                ]
+                response = _llm_calls.call_model(
+                    messages=retry_messages,
+                    model=model,
+                    model_parameters=model_parameters,
+                    is_reasoning=True,
+                    response_model=PatternExtractionResponse,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        model_parameters
+                    ),
+                )
 
             responses = response if isinstance(response, list) else [response]
             patterns: list[str] = []
@@ -214,12 +239,19 @@ class PromptHallOfFame:
             metric_name=metric_name,
         )
 
-    def _parse_pattern_response(self, response: str) -> list[str]:
+    def _parse_pattern_response(self, response: Any) -> list[str]:
         try:
             from ....utils.helpers import json_to_dict
             from ....utils.text import normalize_llm_text
 
-            parsed = json_to_dict(normalize_llm_text(response))
+            if hasattr(response, "model_dump"):
+                response = response.model_dump()
+            if isinstance(response, list):
+                parsed = {"patterns": response}
+            elif isinstance(response, dict):
+                parsed = response
+            else:
+                parsed = json_to_dict(normalize_llm_text(response))
             patterns: list[str] = []
             for item in parsed.get("patterns", []):
                 if isinstance(item, dict):

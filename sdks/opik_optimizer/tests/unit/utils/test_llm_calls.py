@@ -8,7 +8,7 @@ Tests cover:
 - StructuredOutputParsingError: Exception behavior
 """
 
-from typing import Any
+from typing import Any, cast
 from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -248,6 +248,56 @@ class TestParseResponse:
         assert result.name == "test"
         assert result.count == 42
 
+    def test_parses_structured_output_from_parsed_object(self) -> None:
+        """Should prefer message.parsed when available."""
+
+        class TestModel(BaseModel):
+            name: str
+            count: int
+
+        mock_response = make_mock_response(
+            "not valid json",
+            parsed={"name": "parsed", "count": 7},
+        )
+
+        result = _parse_response(mock_response, response_model=TestModel)
+
+        assert isinstance(result, TestModel)
+        assert result.name == "parsed"
+        assert result.count == 7
+
+    def test_parses_structured_output_from_parsed_model_instance(self) -> None:
+        """Should return parsed model instance when it matches response_model."""
+
+        class TestModel(BaseModel):
+            name: str
+            count: int
+
+        parsed_model = TestModel(name="parsed", count=3)
+        mock_response = make_mock_response("{}", parsed=parsed_model)
+
+        result = _parse_response(mock_response, response_model=TestModel)
+
+        assert result is parsed_model
+
+    def test_parsed_object_invalid_falls_back_to_json(self) -> None:
+        """Invalid parsed object should fall back to JSON parsing."""
+
+        class TestModel(BaseModel):
+            name: str
+            count: int
+
+        mock_response = make_mock_response(
+            '{"name": "json", "count": 11}',
+            parsed={"name": "missing_count"},
+        )
+
+        result = _parse_response(mock_response, response_model=TestModel)
+
+        assert isinstance(result, TestModel)
+        assert result.name == "json"
+        assert result.count == 11
+
     def test_raises_bad_request_error_on_truncation_with_empty_content(self) -> None:
         """Should raise BadRequestError when content is empty and finish_reason indicates truncation."""
         from litellm.exceptions import BadRequestError
@@ -338,6 +388,84 @@ class TestParseResponse:
         result = _parse_response(mock_response)
 
         assert result == "Response content"
+
+    def test_return_all_prefers_parsed_objects(self) -> None:
+        """When return_all=True, should parse each choice via message.parsed."""
+
+        class TestModel(BaseModel):
+            name: str
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(), MagicMock()]
+        mock_response.choices[0].message.content = "invalid"
+        mock_response.choices[0].message.parsed = {"name": "first"}
+        mock_response.choices[1].message.content = "invalid"
+        mock_response.choices[1].message.parsed = {"name": "second"}
+
+        result = _parse_response(
+            mock_response, response_model=TestModel, return_all=True
+        )
+
+        parsed_results = cast(list[TestModel], result)
+        assert [item.name for item in parsed_results] == ["first", "second"]
+
+
+class TestStructuredOutputModels:
+    """Tests for structured output response models used by optimizers."""
+
+    def test_mutation_response_wraps_messages_list(self) -> None:
+        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
+            MutationResponse,
+        )
+
+        payload = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
+        parsed = MutationResponse.model_validate(payload)
+
+        assert len(parsed.messages) == 2
+        first = parsed.messages[0]
+        role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
+        assert role == "system"
+
+    def test_mutation_response_wraps_single_message_dict(self) -> None:
+        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
+            MutationResponse,
+        )
+
+        payload = {"role": "system", "content": "s"}
+        parsed = MutationResponse.model_validate(payload)
+
+        assert len(parsed.messages) == 1
+        first = parsed.messages[0]
+        role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
+        assert role == "system"
+
+    def test_prompt_candidates_response_wraps_list(self) -> None:
+        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
+            PromptCandidatesResponse,
+        )
+
+        payload = [
+            {
+                "prompt": [
+                    {"role": "system", "content": "s"},
+                    {"role": "user", "content": "u"},
+                ]
+            }
+        ]
+        parsed = PromptCandidatesResponse.model_validate(payload)
+
+        assert len(parsed.prompts) == 1
+        assert parsed.prompts[0].prompt[0]["role"] == "system"
+
+    def test_pattern_extraction_response_wraps_list(self) -> None:
+        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
+            PatternExtractionResponse,
+        )
+
+        payload = ["Pattern A", "Pattern B"]
+        parsed = PatternExtractionResponse.model_validate(payload)
+
+        assert parsed.patterns == ["Pattern A", "Pattern B"]
 
 
 class TestStructuredOutputParsingError:

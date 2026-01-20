@@ -21,8 +21,29 @@ from ....utils import display as display_utils
 from ....utils.text import normalize_llm_text
 from .. import prompts as meta_prompts
 from .. import reporting
+from ..types import PromptCandidatesResponse
 
 logger = logging.getLogger(__name__)
+STRICT_JSON_INSTRUCTION = (
+    "\n\nReturn ONLY valid JSON. Do not include commentary or markdown."
+)
+
+
+def _with_strict_json_instruction(
+    messages: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    updated: list[dict[str, str]] = []
+    for msg in messages:
+        if msg.get("role") == "user":
+            updated.append(
+                {
+                    **msg,
+                    "content": f"{msg.get('content', '')}{STRICT_JSON_INSTRUCTION}",
+                }
+            )
+        else:
+            updated.append(msg)
+    return updated
 
 
 def sanitize_generated_prompts(
@@ -230,17 +251,20 @@ def _parse_candidate_prompts(
 ) -> list[dict[str, Any]]:
     prompt_items: list[dict[str, Any]] = []
     for content_item in contents:
-        normalized = (
-            normalize_llm_text(content_item)
-            if isinstance(content_item, str)
-            else content_item
-        )
-        if not isinstance(normalized, str):
+        if hasattr(content_item, "model_dump"):
+            normalized = content_item.model_dump()
+        else:
+            normalized = content_item
+        if isinstance(normalized, str):
+            normalized = normalize_llm_text(normalized)
+            json_result = _parse_candidate_json(normalized)
+        elif isinstance(normalized, dict):
+            json_result = normalized
+        else:
             raise ValueError(
-                "Candidate generation response must be a string; received %s"
+                "Candidate generation response must be a string or dict; received %s"
                 % type(normalized).__name__
             )
-        json_result = _parse_candidate_json(normalized)
         json_result = _normalize_prompt_json(json_result)
         json_result = sanitize_generated_prompts(json_result, metric_name)
         prompt_items.extend(json_result["prompts"])
@@ -368,18 +392,34 @@ def generate_candidate_prompts(
                 optimizer, "optimization_algorithm"
             )
 
-            content = _llm_calls.call_model(
-                messages=messages,
-                model=optimizer.model,
-                model_parameters=optimizer.model_parameters,
-                return_all=_llm_calls.requested_multiple_candidates(
-                    optimizer.model_parameters
-                ),
-                metadata=metadata_for_call,
-                optimization_id=optimization_id,
-                project_name=project_name,
-            )
-            contents = content if isinstance(content, list) else [content]
+            try:
+                content = _llm_calls.call_model(
+                    messages=messages,
+                    model=optimizer.model,
+                    model_parameters=optimizer.model_parameters,
+                    response_model=PromptCandidatesResponse,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        optimizer.model_parameters
+                    ),
+                    metadata=metadata_for_call,
+                    optimization_id=optimization_id,
+                    project_name=project_name,
+                )
+            except (BadRequestError, StructuredOutputParsingError):
+                retry_messages = _with_strict_json_instruction(messages)
+                content = _llm_calls.call_model(
+                    messages=retry_messages,
+                    model=optimizer.model,
+                    model_parameters=optimizer.model_parameters,
+                    response_model=PromptCandidatesResponse,
+                    return_all=_llm_calls.requested_multiple_candidates(
+                        optimizer.model_parameters
+                    ),
+                    metadata=metadata_for_call,
+                    optimization_id=optimization_id,
+                    project_name=project_name,
+                )
+            contents: list[Any] = content if isinstance(content, list) else [content]
             contents = [
                 normalize_llm_text(item) if isinstance(item, str) else item
                 for item in contents

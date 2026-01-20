@@ -235,6 +235,7 @@ def make_mock_response(
     *,
     finish_reason: str = "stop",
     model: str = "gpt-4",
+    parsed: Any | None = None,
 ) -> MagicMock:
     """
     Create a mock LLM response object.
@@ -250,6 +251,7 @@ def make_mock_response(
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = content
+    mock_response.choices[0].message.parsed = parsed
     mock_response.choices[0].finish_reason = finish_reason
     mock_response.model = model
     return mock_response
