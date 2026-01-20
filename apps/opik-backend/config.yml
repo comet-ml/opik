@@ -849,7 +849,7 @@ datasetVersioningMigration:
   # Set to true to enable the migration, false to disable after completion
   # This migration calculates and updates the items_total field for dataset versions
   # that were created by the Liquibase migration (where dataset_id = dataset_version_id)
-  itemsTotalEnabled: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED:-"false"}
+  itemsTotalEnabled: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED:-"true"}
   # Default: 100
   # Description: Number of dataset versions to process in each batch for items_total migration
   # Smaller batches reduce memory usage but increase total migration time
