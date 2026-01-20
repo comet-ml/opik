@@ -27,8 +27,24 @@ import java.util.UUID;
 @ImplementedBy(CsvDatasetExportServiceImpl.class)
 public interface CsvDatasetExportService {
 
+    /**
+     * Starts a new CSV export job for the specified dataset.
+     * If an export job is already in progress for this dataset, returns the existing job.
+     * The export is processed asynchronously via a Redis stream.
+     *
+     * @param datasetId The dataset ID to export
+     * @return Mono emitting the created or existing export job
+     * @throws IllegalStateException if dataset export feature is disabled
+     */
     Mono<DatasetExportJob> startExport(UUID datasetId);
 
+    /**
+     * Retrieves an export job by its ID.
+     *
+     * @param jobId The job ID to retrieve
+     * @return Mono emitting the export job
+     * @throws NotFoundException if job doesn't exist or doesn't belong to the current workspace
+     */
     Mono<DatasetExportJob> getJob(UUID jobId);
 
     /**
@@ -181,6 +197,15 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     public Mono<InputStream> downloadExport(@NonNull UUID jobId) {
         return jobService.getJob(jobId)
                 .flatMap(job -> {
+
+                    if (job.status() == DatasetExportStatus.FAILED) {
+                        return Mono
+                                .error(new BadRequestException(
+                                        "Export job '%s' failed: %s"
+                                                .formatted(jobId, job.errorMessage() != null
+                                                        ? job.errorMessage()
+                                                        : "Unknown error")));
+                    }
 
                     if (job.status() != DatasetExportStatus.COMPLETED) {
                         return Mono

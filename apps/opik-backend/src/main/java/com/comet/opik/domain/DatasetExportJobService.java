@@ -26,8 +26,22 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(DatasetExportJobServiceImpl.class)
 public interface DatasetExportJobService {
 
+    /**
+     * Creates a new export job for the specified dataset.
+     *
+     * @param datasetId The dataset ID to export
+     * @param ttl       Time-to-live duration for the export file
+     * @return Mono emitting the created export job
+     */
     Mono<DatasetExportJob> createJob(UUID datasetId, Duration ttl);
 
+    /**
+     * Finds all in-progress (PENDING or PROCESSING) export jobs for a dataset.
+     * Used to check for existing jobs before creating a new one.
+     *
+     * @param datasetId The dataset ID to check
+     * @return Mono emitting list of in-progress export jobs
+     */
     Mono<List<DatasetExportJob>> findInProgressJobs(UUID datasetId);
 
     /**
@@ -39,6 +53,13 @@ public interface DatasetExportJobService {
      */
     Mono<List<DatasetExportJob>> findAllJobs();
 
+    /**
+     * Retrieves an export job by its ID.
+     *
+     * @param jobId The job ID to retrieve
+     * @return Mono emitting the export job
+     * @throws NotFoundException if job doesn't exist or doesn't belong to the current workspace
+     */
     Mono<DatasetExportJob> getJob(UUID jobId);
 
     /**
@@ -50,10 +71,39 @@ public interface DatasetExportJobService {
      */
     Mono<Void> markJobAsViewed(UUID jobId);
 
+    /**
+     * Updates the job status from PENDING to PROCESSING.
+     * Called when the export worker starts processing the job.
+     *
+     * @param jobId The job ID to update
+     * @return Mono completing when the status is updated
+     * @throws NotFoundException     if job doesn't exist
+     * @throws IllegalStateException if job is not in PENDING status
+     */
     Mono<Void> updateJobToProcessing(UUID jobId);
 
+    /**
+     * Updates the job status to COMPLETED with file path and expiration.
+     * Called when the export worker successfully completes the export.
+     *
+     * @param jobId     The job ID to update
+     * @param filePath  Path to the exported file in storage
+     * @param expiresAt Timestamp when the file will expire
+     * @return Mono completing when the status is updated
+     * @throws NotFoundException     if job doesn't exist
+     * @throws IllegalStateException if job is not in PROCESSING status
+     */
     Mono<Void> updateJobToCompleted(UUID jobId, String filePath, Instant expiresAt);
 
+    /**
+     * Updates the job status to FAILED with an error message.
+     * Called when the export worker encounters an error.
+     *
+     * @param jobId        The job ID to update
+     * @param errorMessage Description of the error that occurred
+     * @return Mono completing when the status is updated
+     * @throws NotFoundException if job doesn't exist
+     */
     Mono<Void> updateJobToFailed(UUID jobId, String errorMessage);
 
     /**
