@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.80](https://img.shields.io/badge/Version-1.9.80-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.80](https://img.shields.io/badge/AppVersion-1.9.80-informational?style=flat-square)
+![Version: 1.9.89](https://img.shields.io/badge/Version-1.9.89-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.89](https://img.shields.io/badge/AppVersion-1.9.89-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -81,10 +81,9 @@ Call opik api on http://localhost:5173/api
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.6 |
+| https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
-| oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
-| oci://registry-1.docker.io/cloudpirates | minio | 0.5.6 |
+| oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
 | oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.10 |
 
@@ -93,6 +92,7 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
@@ -183,6 +183,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
+| clickhouse.namespaceDomainPattern | string | `""` |  |
 | clickhouse.readinessProbe.failureThreshold | int | `30` |  |
 | clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.readinessProbe.httpGet.port | int | `8123` |  |
@@ -279,7 +280,31 @@ Call opik api on http://localhost:5173/api
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
+| component.frontend.csp.connectSrc[0] | string | `"'self'"` |  |
+| component.frontend.csp.connectSrc[1] | string | `"ws:"` |  |
+| component.frontend.csp.connectSrc[2] | string | `"wss:"` |  |
+| component.frontend.csp.connectSrc[3] | string | `"https:"` |  |
+| component.frontend.csp.enabled | bool | `true` |  |
+| component.frontend.csp.fontSrc[0] | string | `"'self'"` |  |
+| component.frontend.csp.fontSrc[1] | string | `"data:"` |  |
+| component.frontend.csp.fontSrc[2] | string | `"https://fonts.gstatic.com"` |  |
+| component.frontend.csp.frameAncestors[0] | string | `"'none'"` |  |
+| component.frontend.csp.imgSrc[0] | string | `"'self'"` |  |
+| component.frontend.csp.imgSrc[1] | string | `"data:"` |  |
+| component.frontend.csp.imgSrc[2] | string | `"blob:"` |  |
+| component.frontend.csp.imgSrc[3] | string | `"https:"` |  |
+| component.frontend.csp.imgSrc[4] | string | `"http:"` |  |
+| component.frontend.csp.mediaSrc[0] | string | `"'self'"` |  |
+| component.frontend.csp.mediaSrc[1] | string | `"https:"` |  |
+| component.frontend.csp.mediaSrc[2] | string | `"http:"` |  |
+| component.frontend.csp.scriptSrc[0] | string | `"'self'"` |  |
+| component.frontend.csp.scriptSrc[1] | string | `"'unsafe-inline'"` |  |
+| component.frontend.csp.scriptSrc[2] | string | `"'unsafe-eval'"` |  |
+| component.frontend.csp.styleSrc[0] | string | `"'self'"` |  |
+| component.frontend.csp.styleSrc[1] | string | `"'unsafe-inline'"` |  |
+| component.frontend.csp.styleSrc[2] | string | `"https://fonts.googleapis.com"` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |

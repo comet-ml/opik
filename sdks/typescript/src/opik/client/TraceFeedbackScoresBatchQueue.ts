@@ -48,7 +48,9 @@ export class TraceFeedbackScoresBatchQueue extends BatchQueue<
       await this.api.traces.deleteTraceFeedbackScore(
         scoreId.id,
         {
-          name: scoreId.name,
+          body: {
+            name: scoreId.name,
+          },
         },
         this.api.requestOptions
       );
