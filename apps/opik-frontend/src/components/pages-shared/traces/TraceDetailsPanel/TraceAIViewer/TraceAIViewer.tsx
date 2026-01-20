@@ -90,6 +90,18 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
     isStreaming: isRunning,
   });
 
+  // Build entity map once for all messages (span ID -> span name)
+  // This includes ALL spans regardless of filters or collapsed state
+  const entityMap = useMemo(() => {
+    const map = new Map<string, string>();
+    spans?.forEach((span) => {
+      if (span.id && span.name) {
+        map.set(span.id, span.name);
+      }
+    });
+    return map;
+  }, [spans]);
+
   useEffect(() => {
     setChat({ value: "", messages: [] });
     stopStreaming();
@@ -487,7 +499,11 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
             ) : (
               <div className="flex w-full flex-col gap-2 py-4">
                 {chat.messages.map((m) => (
-                  <TraceChatMessage key={m.id} message={m} spans={spans} />
+                  <TraceChatMessage
+                    key={m.id}
+                    message={m}
+                    entityMap={entityMap}
+                  />
                 ))}
                 {isThinking && (
                   <div className="mb-2 flex justify-start">

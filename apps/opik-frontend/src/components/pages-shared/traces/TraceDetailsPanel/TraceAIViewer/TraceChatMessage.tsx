@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
@@ -7,34 +7,18 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { parseEntityReferences } from "@/lib/entityReferences";
-import { Span } from "@/types/traces";
 
 type TraceChatMessageProps = {
   message: TraceAnalyzerLLMMessage;
-  spans?: Span[];
+  entityMap: Map<string, string>;
 };
 
 const TraceChatMessage: React.FC<TraceChatMessageProps> = ({
   message,
-  spans,
+  entityMap,
 }) => {
   const isUser = message.role === LLM_MESSAGE_ROLE.user;
   const isToolCall = message.messageType === MESSAGE_TYPE.tool_call;
-
-  // Build entity map from spans data (span ID -> span name)
-  // This includes ALL spans regardless of filters or collapsed state
-  const entityMap = useMemo(() => {
-    const map = new Map<string, string>();
-
-    // Add all spans
-    spans?.forEach((span) => {
-      if (span.id && span.name) {
-        map.set(span.id, span.name);
-      }
-    });
-
-    return map;
-  }, [spans]);
 
   // Tool call messages have their own rendering
   if (isToolCall && message.toolCalls) {

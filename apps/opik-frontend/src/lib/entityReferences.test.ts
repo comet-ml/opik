@@ -25,16 +25,24 @@ describe("parseEntityReferences", () => {
     expect(parseEntityReferences(input, entityMap)).toBe(expected);
   });
 
-  it("should fall back to ID when entity not found", () => {
+  it("should fall back to original reference when entity not found", () => {
     const entityMap = new Map([["known-id", "known_name"]]);
     const input = "Fetching {span:unknown-id}";
-    const expected = "Fetching unknown-id";
+    const expected = "Fetching {span:unknown-id}";
 
     expect(parseEntityReferences(input, entityMap)).toBe(expected);
   });
 
-  it("should keep original text for unknown entity types", () => {
+  it("should work for any entity type if ID is in the map", () => {
     const entityMap = new Map([["some-id", "some_name"]]);
+    const input = "Fetching {unknown:some-id}";
+    const expected = "Fetching some_name";
+
+    expect(parseEntityReferences(input, entityMap)).toBe(expected);
+  });
+
+  it("should keep original reference for unknown entity types when ID not in map", () => {
+    const entityMap = new Map([["other-id", "other_name"]]);
     const input = "Fetching {unknown:some-id}";
     const expected = "Fetching {unknown:some-id}";
 
@@ -79,7 +87,7 @@ describe("parseEntityReferences", () => {
   it("should handle empty entity map", () => {
     const entityMap = new Map();
     const input = "Fetching {span:some-id}";
-    const expected = "Fetching some-id";
+    const expected = "Fetching {span:some-id}";
 
     expect(parseEntityReferences(input, entityMap)).toBe(expected);
   });

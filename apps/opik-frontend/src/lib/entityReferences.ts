@@ -4,9 +4,13 @@
  * Entity references follow the format: {type:id}
  * For example: {span:01978716-1435-7749-b575-ff4982e17264}
  *
+ * This utility is generic and will attempt to replace any entity reference
+ * found in the entityMap, regardless of type. If the entity ID is not found
+ * in the map, the original reference is kept as-is.
+ *
  * @param text - The text containing entity references
  * @param entityMap - A map of entity IDs to their display names
- * @returns The text with entity references replaced by names, or IDs if not found
+ * @returns The text with entity references replaced by names from the map
  *
  * @example
  * const entityMap = new Map([['span-123', 'answer']]);
@@ -14,14 +18,15 @@
  * // Returns: 'Fetching answer'
  *
  * @example
- * // Fallback to ID when entity not found
+ * // Fallback to original reference when entity not found
  * parseEntityReferences('Fetching {span:unknown-id}', new Map());
- * // Returns: 'Fetching unknown-id'
+ * // Returns: 'Fetching {span:unknown-id}'
  *
  * @example
- * // Unknown entity types are kept as-is
- * parseEntityReferences('Fetching {unknown:id}', new Map());
- * // Returns: 'Fetching {unknown:id}'
+ * // Works for any entity type if ID is in the map
+ * const entityMap = new Map([['trace-1', 'my_trace']]);
+ * parseEntityReferences('Analyzing {trace:trace-1}', entityMap);
+ * // Returns: 'Analyzing my_trace'
  */
 export function parseEntityReferences(
   text: string,
@@ -30,10 +35,7 @@ export function parseEntityReferences(
   const entityReferencePattern = /\{(\w+):([^}]+)\}/g;
 
   return text.replace(entityReferencePattern, (match, type, id) => {
-    if (type === "span") {
-      const entityName = entityMap.get(id);
-      return entityName || id;
-    }
-    return match;
+    const entityName = entityMap.get(id);
+    return entityName ?? match;
   });
 }
