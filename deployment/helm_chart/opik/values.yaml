@@ -692,6 +692,7 @@ clickhouse:
       metricRelabelings: []
       podTargetLabels: []
       honorLabels: false
+  namespaceDomainPattern:  ""
 
 zookeeper:
   enabled: true
