@@ -5,6 +5,13 @@ Pytest requires `pytest_plugins` to be declared in a *top-level* conftest
 to avoid surprising global side effects.
 """
 
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1].parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 PYTEST_PLUGIN_PREFIX = "sdks.opik_optimizer.tests.unit.fixtures"
 
 pytest_plugins = [
