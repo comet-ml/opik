@@ -11,7 +11,11 @@ import pytest
 from opik_optimizer import ChatPrompt, ParameterOptimizer
 from tests.unit.algorithms.parameter_optimizer._test_builders import float_param, space
 from tests.unit.fixtures import assert_baseline_early_stop, make_baseline_prompt
-from tests.unit.test_helpers import make_mock_dataset, make_simple_metric, STANDARD_DATASET_ITEMS
+from tests.unit.test_helpers import (
+    make_mock_dataset,
+    make_simple_metric,
+    STANDARD_DATASET_ITEMS,
+)
 
 
 class TestParameterOptimizerInit:
@@ -25,7 +29,9 @@ class TestParameterOptimizerInit:
             ),
         ],
     )
-    def test_initialization(self, kwargs: dict[str, Any], expected: dict[str, Any]) -> None:
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
         optimizer = ParameterOptimizer(**kwargs)
         for key, value in expected.items():
             assert getattr(optimizer, key) == value
@@ -106,4 +112,3 @@ class TestNormalizePromptInput:
 
         assert prompts is prompt_dict
         assert is_single is False
-

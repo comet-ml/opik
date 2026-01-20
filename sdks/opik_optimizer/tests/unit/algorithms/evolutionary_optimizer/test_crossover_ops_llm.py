@@ -37,8 +37,14 @@ class TestLLMCrossoverMessages:
             lambda **_kwargs: mock_response,
         )
 
-        messages1 = [{"role": "system", "content": "System A"}, {"role": "user", "content": "User A"}]
-        messages2 = [{"role": "system", "content": "System B"}, {"role": "user", "content": "User B"}]
+        messages1 = [
+            {"role": "system", "content": "System A"},
+            {"role": "user", "content": "User A"},
+        ]
+        messages2 = [
+            {"role": "system", "content": "System B"},
+            {"role": "user", "content": "User B"},
+        ]
 
         child1, child2 = _llm_crossover_messages(
             messages1,
@@ -75,8 +81,12 @@ class TestLLMDeapCrossover:
 
         random.seed(42)
 
-        ind1 = make_deap_individual({"main": [{"role": "system", "content": "First. Second."}]})
-        ind2 = make_deap_individual({"main": [{"role": "system", "content": "Alpha. Beta."}]})
+        ind1 = make_deap_individual(
+            {"main": [{"role": "system", "content": "First. Second."}]}
+        )
+        ind2 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
+        )
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -104,14 +114,20 @@ class TestLLMDeapCrossover:
             child_2=[{"role": "system", "content": "LLM generated 2"}],
         )
 
-        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", lambda **_kw: mock_response)
+        monkeypatch.setattr(
+            "opik_optimizer.core.llm_calls.call_model", lambda **_kw: mock_response
+        )
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
             lambda *_a, **_k: None,
         )
 
-        ind1 = make_deap_individual({"main": [{"role": "system", "content": "Original 1"}]})
-        ind2 = make_deap_individual({"main": [{"role": "system", "content": "Original 2"}]})
+        ind1 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Original 1"}]}
+        )
+        ind2 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Original 2"}]}
+        )
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -133,14 +149,20 @@ class TestLLMDeapCrossover:
             llm_deap_crossover,
         )
 
-        def fake_semantic(*_args: Any, **_kwargs: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        def fake_semantic(
+            *_args: Any, **_kwargs: Any
+        ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             return (
                 [{"role": "system", "content": "Semantic child 1"}],
                 [{"role": "system", "content": "Semantic child 2"}],
             )
 
-        def fake_llm(*_args: Any, **_kwargs: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-            raise AssertionError("LLM crossover should not be used when semantic succeeds")
+        def fake_llm(
+            *_args: Any, **_kwargs: Any
+        ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            raise AssertionError(
+                "LLM crossover should not be used when semantic succeeds"
+            )
 
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops._semantic_crossover_messages",
@@ -151,8 +173,12 @@ class TestLLMDeapCrossover:
             fake_llm,
         )
 
-        ind1 = make_deap_individual({"main": [{"role": "system", "content": "Original 1"}]})
-        ind2 = make_deap_individual({"main": [{"role": "system", "content": "Original 2"}]})
+        ind1 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Original 1"}]}
+        )
+        ind2 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Original 2"}]}
+        )
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -188,14 +214,20 @@ class TestLLMDeapCrossover:
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops._semantic_crossover_messages",
             fake_semantic,
         )
-        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", lambda **_kw: mock_response)
+        monkeypatch.setattr(
+            "opik_optimizer.core.llm_calls.call_model", lambda **_kw: mock_response
+        )
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
             lambda *_a, **_k: None,
         )
 
-        ind1 = make_deap_individual({"main": [{"role": "system", "content": "Original 1"}]})
-        ind2 = make_deap_individual({"main": [{"role": "system", "content": "Original 2"}]})
+        ind1 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Original 1"}]}
+        )
+        ind2 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Original 2"}]}
+        )
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -210,4 +242,3 @@ class TestLLMDeapCrossover:
 
         assert child1["main"][0]["content"] == "LLM fallback 1"
         assert child2["main"][0]["content"] == "LLM fallback 2"
-

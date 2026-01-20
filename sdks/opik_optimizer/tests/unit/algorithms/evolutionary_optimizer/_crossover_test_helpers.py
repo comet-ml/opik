@@ -16,4 +16,3 @@ def make_deap_individual(data: dict[str, Any]) -> Any:
     if not hasattr(creator, "Individual"):
         creator.create("Individual", dict, fitness=None)
     return creator.Individual(data)
-

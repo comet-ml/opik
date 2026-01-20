@@ -1,7 +1,5 @@
 import random
-from typing import Any
 
-import pytest
 
 from tests.unit.algorithms.evolutionary_optimizer._crossover_test_helpers import (
     make_deap_individual,
@@ -49,10 +47,14 @@ class TestDeapCrossover:
 
         random.seed(42)
 
-        ind1 = make_deap_individual({"main": [{"role": "system", "content": "Content. More."}]})
+        ind1 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Content. More."}]}
+        )
         setattr(ind1, "prompts_metadata", {"main": {"name": "main_prompt"}})
 
-        ind2 = make_deap_individual({"main": [{"role": "system", "content": "Alpha. Beta."}]})
+        ind2 = make_deap_individual(
+            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
+        )
         setattr(ind2, "prompts_metadata", {"main": {"name": "main_prompt_v2"}})
 
         child1, child2 = deap_crossover(ind1, ind2, verbose=0)
@@ -67,8 +69,12 @@ class TestDeapCrossover:
 
         random.seed(42)
 
-        ind1 = make_deap_individual({"prompt_a": [{"role": "system", "content": "A content. More A."}]})
-        ind2 = make_deap_individual({"prompt_b": [{"role": "system", "content": "B content. More B."}]})
+        ind1 = make_deap_individual(
+            {"prompt_a": [{"role": "system", "content": "A content. More A."}]}
+        )
+        ind2 = make_deap_individual(
+            {"prompt_b": [{"role": "system", "content": "B content. More B."}]}
+        )
 
         child1, child2 = deap_crossover(ind1, ind2, verbose=0)
 
@@ -76,4 +82,3 @@ class TestDeapCrossover:
         assert "prompt_b" in child1
         assert "prompt_a" in child2
         assert "prompt_b" in child2
-

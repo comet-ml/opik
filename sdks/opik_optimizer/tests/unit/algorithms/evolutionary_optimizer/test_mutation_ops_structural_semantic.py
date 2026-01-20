@@ -1,4 +1,3 @@
-import copy
 import pytest
 from typing import Any
 
@@ -431,7 +430,9 @@ def test_semantic_mutation_invalid_json_response(
     assert result is not original_prompt
     assert captured == {}
     assert result.get_messages() == [
-        {"role": "system", "content": "Provide a brief and direct answer to the question."},
+        {
+            "role": "system",
+            "content": "Provide a brief and direct answer to the question.",
+        },
         {"role": "user", "content": "{question}"},
     ]
-

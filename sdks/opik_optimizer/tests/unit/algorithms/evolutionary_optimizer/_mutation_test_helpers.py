@@ -6,7 +6,9 @@ from typing import Any
 
 import pytest
 
-_MUTATION_OPS_MODULE = "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops"
+_MUTATION_OPS_MODULE = (
+    "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops"
+)
 
 
 def force_random(
@@ -47,4 +49,3 @@ def patch_modify_phrase(monkeypatch: pytest.MonkeyPatch, *, return_value: str) -
         return return_value
 
     monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}._modify_phrase", fake_modify_phrase)
-

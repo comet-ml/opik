@@ -38,4 +38,3 @@ def categorical_param(name: str, *, choices: list[str], **kwargs: Any) -> Parame
 
 def space(*parameters: ParameterSpec) -> ParameterSearchSpace:
     return ParameterSearchSpace(parameters=list(parameters))
-

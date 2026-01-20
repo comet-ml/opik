@@ -1,7 +1,5 @@
 import random
 
-import pytest
-
 
 class TestCrossoverMessages:
     """Tests for _crossover_messages function."""
@@ -41,7 +39,10 @@ class TestCrossoverMessages:
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "First part. Second part."},
-                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,abc"},
+                    },
                 ],
             }
         ]
@@ -50,7 +51,10 @@ class TestCrossoverMessages:
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Alpha part. Beta part."},
-                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,xyz"},
+                    },
                 ],
             }
         ]
@@ -93,4 +97,3 @@ class TestCrossoverMessages:
 
         assert len(child1_msgs) == 3
         assert len(child2_msgs) == 1
-

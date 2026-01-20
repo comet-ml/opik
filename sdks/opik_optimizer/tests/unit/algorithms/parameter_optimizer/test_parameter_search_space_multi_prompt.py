@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
@@ -21,7 +20,9 @@ class TestExpandForPrompts:
     """Tests for ParameterSearchSpace.expand_for_prompts()."""
 
     def test_expands_unprefixed_params(self) -> None:
-        expanded = space(float_param("temperature")).expand_for_prompts(["analyze", "respond"])
+        expanded = space(float_param("temperature")).expand_for_prompts(
+            ["analyze", "respond"]
+        )
         names = [p.name for p in expanded.parameters]
         assert "analyze.temperature" in names
         assert "respond.temperature" in names
@@ -292,4 +293,3 @@ class TestBackwardCompatibility:
         assert "p2.temperature" in description
         assert description["p1.temperature"]["min"] == 0.0
         assert description["p1.temperature"]["max"] == 1.0
-

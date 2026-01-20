@@ -81,7 +81,7 @@ class TestReporterLifecycle:
 
             def optimize(
                 self,
-                objective: "Callable[[FakeTrial], float]",
+                objective: Callable[[FakeTrial], float],
                 n_trials: int,
                 timeout: float | None = None,
                 callbacks: list | None = None,
@@ -260,4 +260,3 @@ class TestOptunaHistoryRedaction:
         assert isinstance(prompt_payload["p"], ChatPrompt)
         params = captured["extra"]["parameters"]
         assert params.get("p.api_key") == "<REDACTED>"
-

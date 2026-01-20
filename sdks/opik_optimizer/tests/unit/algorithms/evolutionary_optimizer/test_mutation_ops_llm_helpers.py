@@ -136,7 +136,10 @@ class TestWordLevelMutation:
             Content,
             [
                 {"type": "text", "text": "Hello world"},
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,abc"},
+                },
             ],
         )
 
@@ -169,4 +172,3 @@ class TestWordLevelMutationPrompt:
 
         assert isinstance(result, ChatPrompt)
         assert len(result.get_messages()) == 2
-
