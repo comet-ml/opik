@@ -351,6 +351,8 @@ def _parse_response(
                 exc,
                 (content or "")[:400],
             )
+            # TODO: Retry once on likely truncation/EOF (e.g., long multimodal JSON),
+            # forcing strict JSON-only output and/or raising max_tokens.
             raise StructuredOutputParsingError(content=content, error=exc) from exc
 
     return content
