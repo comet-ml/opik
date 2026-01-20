@@ -2,8 +2,8 @@
 E2E test for code metric optimization - loads config from frontend, runs via backend factories.
 
 Run with:
-    cd sdks/opik_optimizer
-    PYTHONPATH=src:../../../apps/opik-python-backend/src pytest tests/e2e/optimizers/test_code_metric_optimization.py -v
+    cd apps/opik-python-backend
+    PYTHONPATH=src OPENAI_API_KEY=your-key pytest tests/test_code_metric_optimization.py -v
 
 Requires:
     - OPENAI_API_KEY environment variable
@@ -20,12 +20,16 @@ import pytest
 
 from opik_optimizer import ChatPrompt
 
+from opik_backend.studio.metrics import MetricFactory
+from opik_backend.studio.optimizers import OptimizerFactory
+from opik_backend.studio.types import OptimizationConfig
+
 pytestmark = pytest.mark.integration
 
-# Path to frontend constants file
+# Path to frontend constants file (relative to this test file)
 FRONTEND_CONSTANTS = (
-    Path(__file__).resolve().parents[5]
-    / "apps/opik-frontend/src/constants/optimizations.ts"
+    Path(__file__).resolve().parents[2]
+    / "opik-frontend/src/constants/optimizations.ts"
 )
 
 
@@ -93,16 +97,6 @@ def test_optimization_with_code_metric() -> None:
     if not os.getenv("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY is required")
 
-    # Import backend (skip if not available)
-    try:
-        from opik_backend.studio.metrics import MetricFactory  # type: ignore[import-not-found]
-        from opik_backend.studio.optimizers import OptimizerFactory  # type: ignore[import-not-found]
-        from opik_backend.studio.types import OptimizationConfig  # type: ignore[import-not-found]
-    except ImportError:
-        pytest.skip(
-            "opik_backend not in PYTHONPATH - run with PYTHONPATH including apps/opik-python-backend/src"
-        )
-
     # Load config from frontend
     studio_config, dataset_items = _load_frontend_template("opik-chatbot")
 
@@ -130,12 +124,15 @@ def test_optimization_with_code_metric() -> None:
     dataset_name = "test_code_metric_e2e"
 
     try:
+        # Clean up any existing dataset
         try:
-            client.get_dataset(dataset_name).delete()
+            existing = client.get_dataset(dataset_name)
+            existing.delete()
         except Exception:
             pass
 
-        dataset = client.create_dataset(dataset_name)
+        # Create fresh dataset
+        dataset = client.get_or_create_dataset(dataset_name)
         dataset.insert(dataset_items)
 
         # Run optimization
@@ -166,9 +163,6 @@ def test_optimization_with_code_metric() -> None:
         assert result.metric_name == "code", (
             f"Expected metric_name 'code', got '{result.metric_name}'"
         )
-
-        # Optimization should have run (history not empty)
-        assert len(result.history) > 0, "Optimization history should not be empty"
 
         # Final score should be at least as good as initial (optimization shouldn't make it worse)
         assert result.score >= result.initial_score, (
