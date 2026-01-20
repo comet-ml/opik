@@ -11,34 +11,102 @@ export interface PlaygroundPrefillData {
 }
 
 /**
- * Convert a ProviderMessageType to LLMMessage format
+ * Map external role strings to valid LLM_MESSAGE_ROLE values
+ * Handles roles from various sources (LangChain, OpenAI, etc.)
  */
-const convertProviderMessageToLLMMessage = (
-  msg: ProviderMessageType,
-): LLMMessage => {
+const mapRoleToLLMMessageRole = (role: string): LLM_MESSAGE_ROLE => {
+  const normalizedRole = role.toLowerCase();
+
+  // Direct matches
+  if (normalizedRole in LLM_MESSAGE_ROLE) {
+    return normalizedRole as LLM_MESSAGE_ROLE;
+  }
+
+  // Map common external roles
+  switch (normalizedRole) {
+    case "human":
+      return LLM_MESSAGE_ROLE.user;
+    case "tool":
+    case "function":
+    case "tool_result":
+      return LLM_MESSAGE_ROLE.tool_execution_result;
+    case "ai":
+    case "bot":
+      return LLM_MESSAGE_ROLE.assistant;
+    default:
+      // Default to user for unknown roles
+      return LLM_MESSAGE_ROLE.user;
+  }
+};
+
+/**
+ * Get role from a message object, supporting both 'role' and 'type' properties
+ * (LangChain/LangGraph uses 'type' instead of 'role')
+ */
+const getRoleFromMessage = (msg: Record<string, unknown>): string => {
+  if (typeof msg.role === "string") {
+    return msg.role;
+  }
+  if (typeof msg.type === "string") {
+    return msg.type;
+  }
+  return "user"; // Default fallback
+};
+
+/**
+ * Convert a message object to LLMMessage format
+ */
+const convertToLLMMessage = (msg: Record<string, unknown>): LLMMessage => {
+  const role = getRoleFromMessage(msg);
   return {
     id: generateRandomString(),
-    role: msg.role as LLM_MESSAGE_ROLE,
-    content: msg.content,
+    role: mapRoleToLLMMessageRole(role),
+    content: (msg as ProviderMessageType).content,
   };
 };
 
 /**
- * Check if a value looks like an array of messages (has role and content)
+ * Check if a value looks like an array of messages
+ * Supports both 'role' (standard) and 'type' (LangChain) properties
  */
 const isMessagesArray = (
   value: unknown,
-): value is Array<{ role: string; content: unknown }> => {
-  if (!isArray(value) || value.length === 0) return false;
+): value is Array<{ role?: string; type?: string; content: unknown }> => {
+  if (!isArray(value)) return false;
 
-  // Check if first item has role and content properties
+  // Empty array is valid (will be handled separately)
+  if (value.length === 0) return true;
+
+  // Check if first item has role/type and content properties
   const firstItem = value[0];
   return (
     isObject(firstItem) &&
-    "role" in firstItem &&
+    ("role" in firstItem || "type" in firstItem) &&
     "content" in firstItem &&
-    typeof firstItem.role === "string"
+    (typeof (firstItem as Record<string, unknown>).role === "string" ||
+      typeof (firstItem as Record<string, unknown>).type === "string")
   );
+};
+
+/**
+ * Check if input has non-empty extractable content
+ */
+const hasNonEmptyInput = (input: unknown): boolean => {
+  if (!input) return false;
+
+  // Empty object
+  if (isObject(input) && Object.keys(input).length === 0) return false;
+
+  // Empty array
+  if (isArray(input) && input.length === 0) return false;
+
+  // Object with empty messages array
+  if (isObject(input) && "messages" in input) {
+    const messages = (input as { messages: unknown }).messages;
+    if (isArray(messages) && messages.length === 0) return false;
+  }
+
+  return true;
 };
 
 /**
@@ -49,29 +117,28 @@ const isMessagesArray = (
  * - Plain object/string - converted to a user message
  */
 const extractMessagesFromInput = (input: unknown): LLMMessage[] => {
-  // Case 1: Input has a messages property with array of messages
+  // Case 1: Input has a messages property
   if (isObject(input) && "messages" in input) {
     const messages = (input as { messages: unknown }).messages;
     if (isMessagesArray(messages)) {
+      // Handle empty messages array
+      if (messages.length === 0) return [];
       return messages.map((msg) =>
-        convertProviderMessageToLLMMessage(msg as ProviderMessageType),
+        convertToLLMMessage(msg as Record<string, unknown>),
       );
     }
   }
 
   // Case 2: Input is directly an array of messages
   if (isMessagesArray(input)) {
+    // Handle empty array
+    if (input.length === 0) return [];
     return input.map((msg) =>
-      convertProviderMessageToLLMMessage(msg as ProviderMessageType),
+      convertToLLMMessage(msg as Record<string, unknown>),
     );
   }
 
-  // Case 3: Empty array - return empty
-  if (isArray(input) && input.length === 0) {
-    return [];
-  }
-
-  // Case 4: Input is a plain value - convert to user message
+  // Case 3: Input is a plain value - convert to user message
   const content =
     typeof input === "string" ? input : JSON.stringify(input, null, 2);
 
@@ -86,19 +153,28 @@ const extractMessagesFromInput = (input: unknown): LLMMessage[] => {
 
 /**
  * Find the best LLM span from a list of spans
- * Prefers spans with model/provider information
+ * Prefers spans with model/provider information AND non-empty input
  */
 const findBestLLMSpan = (spans: Span[]): Span | undefined => {
   const llmSpans = spans.filter((s) => s.type === SPAN_TYPE.llm);
 
   if (llmSpans.length === 0) return undefined;
 
-  // Prefer spans with model information
+  // Prefer spans with model information AND non-empty input
+  const spanWithModelAndInput = llmSpans.find(
+    (s) => s.model && hasNonEmptyInput(s.input),
+  );
+  if (spanWithModelAndInput) return spanWithModelAndInput;
+
+  // Then try spans with just non-empty input
+  const spanWithInput = llmSpans.find((s) => hasNonEmptyInput(s.input));
+  if (spanWithInput) return spanWithInput;
+
+  // Return first LLM span with model (even if empty input, for model info)
   const spanWithModel = llmSpans.find((s) => s.model);
   if (spanWithModel) return spanWithModel;
 
-  // Return first LLM span
-  return llmSpans[0];
+  return undefined;
 };
 
 /**
@@ -118,28 +194,27 @@ export const extractPlaygroundDataFromSpan = (
 
 /**
  * Extract playground prefill data from a trace
- * If spans are provided, tries to find an LLM span with model info
+ * If spans are provided, tries to find an LLM span with model info and non-empty input
  */
 export const extractPlaygroundDataFromTrace = (
   trace: Trace,
   spans?: Span[],
 ): PlaygroundPrefillData => {
-  // Try to find an LLM span with model/provider info
+  // Try to find an LLM span with model/provider info and non-empty input
   const llmSpan = spans ? findBestLLMSpan(spans) : undefined;
 
-  if (llmSpan) {
-    // Use the LLM span's input and model info
+  // Only use LLM span if it has non-empty input
+  if (llmSpan && hasNonEmptyInput(llmSpan.input)) {
     return extractPlaygroundDataFromSpan(llmSpan);
   }
 
-  // Fall back to trace input
+  // Fall back to trace input, but keep model/provider from LLM span if available
   const messages = extractMessagesFromInput(trace.input);
 
   return {
     messages,
-    // Trace doesn't have model/provider, leave undefined
-    model: undefined,
-    provider: undefined,
+    model: llmSpan?.model,
+    provider: llmSpan?.provider,
   };
 };
 
@@ -169,11 +244,5 @@ export const extractPlaygroundData = (
  * Check if the data has extractable messages for playground
  */
 export const canOpenInPlayground = (data: Trace | Span): boolean => {
-  const input = data.input;
-
-  // Check if input exists and is not empty
-  if (!input) return false;
-  if (isObject(input) && Object.keys(input).length === 0) return false;
-
-  return true;
+  return hasNonEmptyInput(data.input);
 };

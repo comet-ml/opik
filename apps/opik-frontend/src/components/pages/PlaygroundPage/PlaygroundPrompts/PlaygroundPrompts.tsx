@@ -128,7 +128,7 @@ const PlaygroundPrompts = ({
     let provider: COMPOSED_PROVIDER_TYPE | "" = "";
 
     if (prefillData.model) {
-      // Try to find the model in available providers
+      // Try to find the exact model in available providers
       const resolvedModel = calculateDefaultModel(
         prefillData.model as PROVIDER_MODEL_TYPE,
         providerKeys,
@@ -139,7 +139,20 @@ const PlaygroundPrompts = ({
       }
     }
 
-    // If no model resolved, use the last picked model or default
+    // If no model resolved but we have a provider from the trace, try to use it
+    if (!model && prefillData.provider) {
+      const traceProvider = prefillData.provider as COMPOSED_PROVIDER_TYPE;
+      // Check if the trace provider is available in user's configured providers
+      if (providerKeys.includes(traceProvider)) {
+        // Get a default model for this provider
+        model = calculateDefaultModel("", providerKeys, traceProvider);
+        if (model) {
+          provider = traceProvider;
+        }
+      }
+    }
+
+    // Final fallback: use the last picked model or default
     if (!model) {
       model = calculateDefaultModel(lastPickedModel || "", providerKeys);
       provider = calculateModelProvider(model);
@@ -173,7 +186,7 @@ const PlaygroundPrompts = ({
     const prefillPrompt = loadPrefillData();
 
     if (prefillPrompt) {
-      // Set up playground with the prefilled prompt
+      // Reset playground state, then set up with the prefilled prompt
       setPromptMap([prefillPrompt.id], { [prefillPrompt.id]: prefillPrompt });
       setDatasetId(null);
       setSelectedRuleIds(null);
