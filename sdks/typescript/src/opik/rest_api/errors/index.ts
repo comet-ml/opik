@@ -1,2 +1,2 @@
-export { OpikApiError } from "./OpikApiError";
-export { OpikApiTimeoutError } from "./OpikApiTimeoutError";
+export { OpikApiError } from "./OpikApiError.js";
+export { OpikApiTimeoutError } from "./OpikApiTimeoutError.js";
