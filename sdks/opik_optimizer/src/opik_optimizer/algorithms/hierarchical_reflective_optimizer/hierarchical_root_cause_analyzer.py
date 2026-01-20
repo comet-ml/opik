@@ -140,12 +140,16 @@ Scores:
         )
 
         # TODO: Check which project this data gets logged to
+        # Ensure sufficient max_tokens for structured JSON output to avoid truncation
+        # Override any existing max_tokens to ensure analysis has enough room
+        analysis_params = {**self.model_parameters, "max_tokens": 16384}
+
         root_cause_response = await _llm_calls.call_model_async(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": batch_analysis_prompt}],
             seed=self.seed,
             project_name=project_name,
-            model_parameters=self.model_parameters,
+            model_parameters=analysis_params,
             response_model=RootCauseAnalysis,
         )
 
@@ -197,12 +201,16 @@ Scores:
             batch_summaries=chr(10).join(batch_summaries),
         )
 
+        # Ensure sufficient max_tokens for structured JSON output to avoid truncation
+        # Override any existing max_tokens to ensure synthesis has enough room
+        synthesis_params = {**self.model_parameters, "max_tokens": 16384}
+
         synthesis_response = await _llm_calls.call_model_async(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
             seed=self.seed,
             project_name=project_name,
-            model_parameters=self.model_parameters,
+            model_parameters=synthesis_params,
             response_model=HierarchicalRootCauseAnalysis,
         )
 

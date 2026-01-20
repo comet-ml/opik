@@ -165,75 +165,150 @@ export type OptimizationTemplate = Partial<Optimization> & {
   dataset_items?: DemoDatasetItem[];
 };
 
-// Chatbot training dataset items - mix of Opik questions (should answer) and off-topic (should decline)
+// ICP Classification from structured lead data
+// SECRET RULES (must be deduced from examples):
+//
+// "ideal" = BOTH conditions:
+//   - industry IN ["saas", "fintech"]
+//   - AND employees >= 50
+//
+// "poor_fit" = ANY of these:
+//   - industry IN ["education", "nonprofit"]
+//   - OR tools includes "spreadsheets"
+//
+// "potential" = Everything else
+//
+// TRICKY ASPECTS:
+// - Industry matters but only specific ones (not "tech" broadly)
+// - Employee count threshold is 50 (not obvious round numbers like 100)
+// - Tool usage is a disqualifier (spreadsheets = not tech-mature)
+// - Role and budget are RED HERRINGS - they don't affect classification!
+//
 const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
+  // IDEAL - saas/fintech AND employees >= 50
   {
-    message: "Is it normal for the app to crash 5 times a day? Just curious.",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    industry: "saas",
+    employees: "120",
+    role: "engineer",
+    tools: "jira, slack",
+    budget: "$1k-10k",
+    expected_icp: "ideal",
   },
   {
-    message: "Love the product! Would be even better with dark mode though.",
-    expected_intent: "request",
-    expected_urgency: "low",
+    industry: "fintech",
+    employees: "50",
+    role: "intern",
+    tools: "github, notion",
+    budget: "$0-1k",
+    expected_icp: "ideal",
   },
   {
-    message:
-      "Thanks for the 'update' that broke everything. Really appreciate it.",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    industry: "saas",
+    employees: "500",
+    role: "ceo",
+    tools: "salesforce",
+    budget: "$10k+",
+    expected_icp: "ideal",
   },
   {
-    message:
-      "Anyone else having issues? Our whole team can't access anything and we have a client demo in 2 hours.",
-    expected_intent: "complaint",
-    expected_urgency: "critical",
+    industry: "fintech",
+    employees: "85",
+    role: "manager",
+    tools: "linear, figma",
+    budget: "undisclosed",
+    expected_icp: "ideal",
   },
   {
-    message:
-      "The new pricing seems expensive compared to competitors. What do I get for the extra cost?",
-    expected_intent: "question",
-    expected_urgency: "medium",
+    industry: "saas",
+    employees: "200",
+    role: "director",
+    tools: "asana, slack",
+    budget: "$1k-10k",
+    expected_icp: "ideal",
+  },
+
+  // POOR_FIT - education/nonprofit OR uses spreadsheets
+  {
+    industry: "education",
+    employees: "500",
+    role: "director",
+    tools: "canvas, zoom",
+    budget: "$10k+",
+    expected_icp: "poor_fit",
   },
   {
-    message:
-      "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
-    expected_intent: "complaint",
-    expected_urgency: "medium",
+    industry: "nonprofit",
+    employees: "100",
+    role: "vp",
+    tools: "monday, slack",
+    budget: "$1k-10k",
+    expected_icp: "poor_fit",
   },
   {
-    message:
-      "Can someone please help me recover my data? I lost everything after your last update and I'm panicking.",
-    expected_intent: "request",
-    expected_urgency: "critical",
+    industry: "retail",
+    employees: "1000",
+    role: "cto",
+    tools: "spreadsheets, email",
+    budget: "$10k+",
+    expected_icp: "poor_fit",
   },
   {
-    message: "Interesting approach with the new UI. Different.",
-    expected_intent: "feedback",
-    expected_urgency: "low",
+    industry: "manufacturing",
+    employees: "200",
+    role: "manager",
+    tools: "spreadsheets",
+    budget: "$1k-10k",
+    expected_icp: "poor_fit",
   },
   {
-    message: "Why did you remove the export feature? I used it every day.",
-    expected_intent: "complaint",
-    expected_urgency: "medium",
+    industry: "education",
+    employees: "50",
+    role: "engineer",
+    tools: "github",
+    budget: "$0-1k",
+    expected_icp: "poor_fit",
+  },
+
+  // POTENTIAL - not saas/fintech with 50+, not education/nonprofit, no spreadsheets
+  {
+    industry: "healthcare",
+    employees: "300",
+    role: "director",
+    tools: "jira, confluence",
+    budget: "$10k+",
+    expected_icp: "potential",
   },
   {
-    message:
-      "Hey, quick thing - need to add 50 users to our enterprise account before tomorrow's onboarding. How do I do that?",
-    expected_intent: "request",
-    expected_urgency: "critical",
+    industry: "retail",
+    employees: "150",
+    role: "vp",
+    tools: "shopify, slack",
+    budget: "$1k-10k",
+    expected_icp: "potential",
   },
   {
-    message:
-      "Wow, only 10 minutes to load a simple report. Impressive performance optimization!",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    industry: "saas",
+    employees: "30",
+    role: "ceo",
+    tools: "notion, linear",
+    budget: "$10k+",
+    expected_icp: "potential",
   },
   {
-    message:
-      "Just checking - what's the process for exporting all my data? Asking for future reference.",
-    expected_intent: "question",
-    expected_urgency: "low",
+    industry: "fintech",
+    employees: "25",
+    role: "engineer",
+    tools: "github, jira",
+    budget: "$1k-10k",
+    expected_icp: "potential",
+  },
+  {
+    industry: "ecommerce",
+    employees: "80",
+    role: "manager",
+    tools: "hubspot, slack",
+    budget: "undisclosed",
+    expected_icp: "potential",
   },
 ];
 
@@ -300,118 +375,111 @@ const EXPECTED_JSON_SCHEMA = {
   required: ["intent", "urgency", "sentiment", "action", "response"],
 };
 
-// JSON output dataset items - tasks to generate structured JSON data
+// JSON output dataset - Ticket routing with JSON schema validation
 const JSON_OUTPUT_DATASET_ITEMS: DemoDatasetItem[] = [
+  // BILLING - Payment/money related
   {
-    message: "Is it normal for the app to crash 5 times a day? Just curious.",
+    message: "I was charged twice for my subscription this month.",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    expected_category: "billing",
   },
   {
-    message: "Love the product! Would be even better with dark mode though.",
+    message: "Can I get a refund for the unused portion of my plan?",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "request",
-    expected_urgency: "low",
+    expected_category: "billing",
   },
   {
-    message:
-      "Thanks for the 'update' that broke everything. Really appreciate it.",
+    message: "Please send me the invoice for September.",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    expected_category: "billing",
   },
   {
-    message:
-      "Anyone else having issues? Our whole team can't access anything and we have a client demo in 2 hours.",
+    message: "Why did my payment fail when I have sufficient funds?",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "complaint",
-    expected_urgency: "critical",
+    expected_category: "billing",
+  },
+
+  // TECHNICAL - Bug/error related
+  {
+    message: "The app crashes every time I try to upload a file.",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_category: "technical",
   },
   {
-    message:
-      "The new pricing seems expensive compared to competitors. What do I get for the extra cost?",
+    message: "I keep getting a 404 error when accessing my dashboard.",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "question",
-    expected_urgency: "medium",
+    expected_category: "technical",
   },
   {
-    message:
-      "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
+    message: "The export feature is broken and returns empty files.",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    expected_category: "technical",
   },
   {
-    message:
-      "Can someone please help me recover my data? I lost everything after your last update and I'm panicking.",
+    message: "Login fails even with correct credentials.",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "request",
-    expected_urgency: "critical",
+    expected_category: "technical",
+  },
+
+  // GENERAL - Everything else
+  {
+    message: "How do I add new team members to my workspace?",
+    json_schema: EXPECTED_JSON_SCHEMA,
+    expected_category: "general",
   },
   {
-    message: "Interesting approach with the new UI. Different.",
+    message: "What's the difference between Pro and Enterprise plans?",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "feedback",
-    expected_urgency: "low",
+    expected_category: "general",
   },
   {
-    message: "Why did you remove the export feature? I used it every day.",
+    message: "Can you recommend the best settings for my use case?",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "complaint",
-    expected_urgency: "medium",
+    expected_category: "general",
   },
   {
-    message:
-      "Hey, quick thing - need to add 50 users to our enterprise account before tomorrow's onboarding. How do I do that?",
+    message: "I'd like to schedule a demo for my team.",
     json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "request",
-    expected_urgency: "critical",
-  },
-  {
-    message:
-      "Wow, only 10 minutes to load a simple report. Impressive performance optimization!",
-    json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "complaint",
-    expected_urgency: "high",
-  },
-  {
-    message:
-      "Just checking - what's the process for exporting all my data? Asking for future reference.",
-    json_schema: EXPECTED_JSON_SCHEMA,
-    expected_intent: "request",
-    expected_urgency: "medium",
+    expected_category: "general",
   },
 ];
 
 export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   {
-    id: "opik-chatbot",
-    title: "Demo template - Message Classifier",
-    description: "Classify messages by intent and urgency for support routing",
-    name: "Message classifier optimization",
+    id: "icp-classification",
+    title: "Demo template - ICP Classifier",
+    description: "Classify leads by Ideal Customer Profile fit",
+    name: "ICP classification optimization",
     dataset_id: "",
     dataset_items: CHATBOT_DATASET_ITEMS,
     studio_config: {
-      dataset_name: "Demo - Customer Message Classifier",
+      dataset_name: "Demo - ICP Classifier",
       prompt: {
         messages: [
           {
             role: LLM_MESSAGE_ROLE.system,
-            content: `Classify customer messages. Output JSON with:
+            content: `Classify the lead by ICP (Ideal Customer Profile) fit.
+
+Output JSON with:
 {
-  "intent": {"primary": "question|complaint|request|feedback|other", "confidence": 0.0-1.0},
-  "urgency": "critical|high|medium|low"
+  "icp": "ideal|potential|poor_fit"
 }
 
 Output valid JSON only.`,
           },
-          { role: LLM_MESSAGE_ROLE.user, content: "{{message}}" },
+          {
+            role: LLM_MESSAGE_ROLE.user,
+            content: `Industry: {{industry}}
+Employees: {{employees}}
+Role: {{role}}
+Tools: {{tools}}
+Budget: {{budget}}`,
+          },
         ],
       },
       llm_model: {
         model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-        parameters: { temperature: 0.7, max_tokens: 500 },
+        parameters: { temperature: 0.7, max_tokens: 100 },
       },
       evaluation: {
         metrics: [
@@ -420,7 +488,6 @@ Output valid JSON only.`,
             parameters: {
               code: `def evaluation_metric(dataset_item, llm_output):
     try:
-        # Parse the LLM output
         output = llm_output.strip()
         if output.startswith("${"```"}"):
             output = output.split("${"```"}")[1]
@@ -428,41 +495,27 @@ Output valid JSON only.`,
                 output = output[4:]
         result = json.loads(output)
 
-        # Extract predictions
-        predicted_intent = result.get("intent", {}).get("primary", "").lower()
-        predicted_urgency = result.get("urgency", "").lower()
+        predicted = result.get("icp", "").lower()
+        expected = dataset_item.get("expected_icp", "").lower()
 
-        # Get expected values
-        expected_intent = dataset_item.get("expected_intent", "").lower()
-        expected_urgency = dataset_item.get("expected_urgency", "").lower()
-
-        # Score: 0.6 for intent, 0.4 for urgency
-        score = 0.0
-        reasons = []
-
-        if predicted_intent == expected_intent:
-            score += 0.6
-            reasons.append(f"Intent correct: {predicted_intent}")
+        if predicted == expected:
+            return ScoreResult(
+                name="icp_classification",
+                value=1.0,
+                reason=f"Correct: {predicted}"
+            )
         else:
-            reasons.append(f"Intent wrong: expected '{expected_intent}', got '{predicted_intent}'")
-
-        if predicted_urgency == expected_urgency:
-            score += 0.4
-            reasons.append(f"Urgency correct: {predicted_urgency}")
-        else:
-            reasons.append(f"Urgency wrong: expected '{expected_urgency}', got '{predicted_urgency}'")
-
-        return ScoreResult(
-            name="intent_accuracy",
-            value=score,
-            reason="; ".join(reasons)
-        )
+            return ScoreResult(
+                name="icp_classification",
+                value=0.0,
+                reason=f"Wrong: expected '{expected}', got '{predicted}'"
+            )
 
     except Exception as e:
         return ScoreResult(
-            name="intent_accuracy",
+            name="icp_classification",
             value=0.0,
-            reason=f"Failed to parse output: {str(e)}"
+            reason=f"Parse error: {str(e)}"
         )`,
             },
           },

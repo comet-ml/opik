@@ -258,11 +258,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Retry attempt {attempt}: Using seed {attempt_seed} (base seed: {self.seed})"
             )
 
+        # Ensure sufficient max_tokens for structured JSON output to avoid truncation
+        # The improved prompt includes full message content which can be lengthy
+        improve_params = {**self.model_parameters, "max_tokens": 16384}
+
         improve_prompt_response = _llm_calls.call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.model,
             seed=attempt_seed,
-            model_parameters=self.model_parameters,
+            model_parameters=improve_params,
             response_model=ImprovedPrompt,
         )
 
