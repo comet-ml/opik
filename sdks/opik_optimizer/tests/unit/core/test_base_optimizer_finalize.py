@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer finalize/result building behaviors."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -177,4 +179,3 @@ class TestBuildFinalResultStoppedEarly:
         assert result.details["stop_reason"] == expected_reason
         if finish_reason == "max_trials":
             assert result.details["finish_reason"] == expected_reason
-
