@@ -36,6 +36,7 @@ import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
@@ -100,6 +101,7 @@ public class ExperimentsResource {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
     private final @NonNull ExperimentSortingFactory sortingFactory;
+    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull ExperimentGroupingFactory groupingFactory;
@@ -124,6 +126,13 @@ public class ExperimentsResource {
             @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
+        var metadata = workspaceMetadataService.getExperimentMetadata(
+                requestContext.get().getWorkspaceId(), datasetId)
+                .block();
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
 
         var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
 
@@ -151,6 +160,12 @@ public class ExperimentsResource {
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
+                .map(experimentPage -> {
+                    if (metadata.cannotUseDynamicSorting()) {
+                        return experimentPage.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return experimentPage;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",
