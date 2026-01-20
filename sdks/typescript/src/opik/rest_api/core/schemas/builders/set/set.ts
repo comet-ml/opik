@@ -1,8 +1,8 @@
-import { BaseSchema, Schema, SchemaType } from "../../Schema";
-import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType";
-import { maybeSkipValidation } from "../../utils/maybeSkipValidation";
-import { list } from "../list";
-import { getSchemaUtils } from "../schema-utils";
+import { type BaseSchema, type Schema, SchemaType } from "../../Schema.js";
+import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType.js";
+import { maybeSkipValidation } from "../../utils/maybeSkipValidation.js";
+import { list } from "../list/index.js";
+import { getSchemaUtils } from "../schema-utils/index.js";
 
 export function set<Raw, Parsed>(schema: Schema<Raw, Parsed>): Schema<Raw[], Set<Parsed>> {
     const listSchema = list(schema);

@@ -1,2 +1,2 @@
-export { AnnotationQueueBatchWrite } from "./AnnotationQueueBatchWrite";
-export { AnnotationQueueUpdate } from "./AnnotationQueueUpdate";
+export { AnnotationQueueBatchWrite } from "./AnnotationQueueBatchWrite.js";
+export { AnnotationQueueUpdate } from "./AnnotationQueueUpdate.js";

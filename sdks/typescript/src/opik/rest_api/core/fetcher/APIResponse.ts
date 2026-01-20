@@ -1,4 +1,4 @@
-import { RawResponse } from "./RawResponse";
+import type { RawResponse } from "./RawResponse.js";
 
 /**
  * The response of an API call.

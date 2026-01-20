@@ -1,2 +1,2 @@
-export * from "./builders";
-export type { inferParsed, inferRaw, Schema, SchemaOptions } from "./Schema";
+export * from "./builders/index.js";
+export type { inferParsed, inferRaw, Schema, SchemaOptions } from "./Schema.js";

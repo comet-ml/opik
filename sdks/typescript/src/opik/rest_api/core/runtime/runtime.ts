@@ -11,6 +11,9 @@ interface BunGlobal {
 declare const Deno: DenoGlobal | undefined;
 declare const Bun: BunGlobal | undefined;
 declare const EdgeRuntime: string | undefined;
+declare const self: typeof globalThis.self & {
+    importScripts?: unknown;
+};
 
 /**
  * A constant that indicates which environment and version the SDK is running in.
@@ -62,7 +65,6 @@ function evaluateRuntime(): Runtime {
      */
     const isWebWorker =
         typeof self === "object" &&
-        // @ts-ignore
         typeof self?.importScripts === "function" &&
         (self.constructor?.name === "DedicatedWorkerGlobalScope" ||
             self.constructor?.name === "ServiceWorkerGlobalScope" ||
@@ -98,6 +100,18 @@ function evaluateRuntime(): Runtime {
     }
 
     /**
+     * A constant that indicates whether the environment the code is running is in React-Native.
+     * This check should come before Node.js detection since React Native may have a process polyfill.
+     * https://github.com/facebook/react-native/blob/main/packages/react-native/Libraries/Core/setUpNavigator.js
+     */
+    const isReactNative = typeof navigator !== "undefined" && navigator?.product === "ReactNative";
+    if (isReactNative) {
+        return {
+            type: "react-native",
+        };
+    }
+
+    /**
      * A constant that indicates whether the environment the code is running is Node.JS.
      */
     const isNode =
@@ -111,17 +125,6 @@ function evaluateRuntime(): Runtime {
             type: "node",
             version: process.versions.node,
             parsedVersion: Number(process.versions.node.split(".")[0]),
-        };
-    }
-
-    /**
-     * A constant that indicates whether the environment the code is running is in React-Native.
-     * https://github.com/facebook/react-native/blob/main/packages/react-native/Libraries/Core/setUpNavigator.js
-     */
-    const isReactNative = typeof navigator !== "undefined" && navigator?.product === "ReactNative";
-    if (isReactNative) {
-        return {
-            type: "react-native",
         };
     }
 

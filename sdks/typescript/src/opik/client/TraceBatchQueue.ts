@@ -33,7 +33,7 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   }
 
   protected async updateEntity(id: string, updates: Partial<SavedTrace>) {
-    await this.api.traces.updateTrace(id, updates, this.api.requestOptions);
+    await this.api.traces.updateTrace(id, { body: updates }, this.api.requestOptions);
   }
 
   protected async deleteEntities(ids: string[]) {

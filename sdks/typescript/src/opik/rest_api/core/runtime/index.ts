@@ -1,1 +1,1 @@
-export { RUNTIME } from "./runtime";
+export { RUNTIME } from "./runtime.js";

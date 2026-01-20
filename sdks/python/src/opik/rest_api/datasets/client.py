@@ -1031,16 +1031,16 @@ class DatasetsClient:
         return _response.data
 
     def create_version_tag(
-        self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         tag : str
 
@@ -1055,24 +1055,24 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.create_version_tag(version_hash='versionHash', id='id', tag='tag', )
+        client.datasets.create_version_tag(id='id', version_hash='versionHash', tag='tag', )
         """
-        _response = self._raw_client.create_version_tag(version_hash, id, tag=tag, request_options=request_options)
+        _response = self._raw_client.create_version_tag(id, version_hash, tag=tag, request_options=request_options)
         return _response.data
 
     def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, tag: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
 
         Parameters
         ----------
+        id : str
+
         version_hash : str
 
         tag : str
-
-        id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1085,9 +1085,9 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
+        client.datasets.delete_version_tag(id='id', version_hash='versionHash', tag='tag', )
         """
-        _response = self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
+        _response = self._raw_client.delete_version_tag(id, version_hash, tag, request_options=request_options)
         return _response.data
 
     def list_dataset_versions(
@@ -1160,8 +1160,8 @@ class DatasetsClient:
 
     def update_dataset_version(
         self,
-        version_hash: str,
         id: str,
+        version_hash: str,
         *,
         change_description: typing.Optional[str] = OMIT,
         tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1172,9 +1172,9 @@ class DatasetsClient:
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         change_description : typing.Optional[str]
             Optional description of changes in this version
@@ -1194,11 +1194,11 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.update_dataset_version(version_hash='versionHash', id='id', )
+        client.datasets.update_dataset_version(id='id', version_hash='versionHash', )
         """
         _response = self._raw_client.update_dataset_version(
-            version_hash,
             id,
+            version_hash,
             change_description=change_description,
             tags_to_add=tags_to_add,
             request_options=request_options,
@@ -2280,16 +2280,16 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def create_version_tag(
-        self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         tag : str
 
@@ -2306,27 +2306,27 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.create_version_tag(version_hash='versionHash', id='id', tag='tag', )
+            await client.datasets.create_version_tag(id='id', version_hash='versionHash', tag='tag', )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_version_tag(
-            version_hash, id, tag=tag, request_options=request_options
+            id, version_hash, tag=tag, request_options=request_options
         )
         return _response.data
 
     async def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, tag: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
 
         Parameters
         ----------
+        id : str
+
         version_hash : str
 
         tag : str
-
-        id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2341,10 +2341,10 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
+            await client.datasets.delete_version_tag(id='id', version_hash='versionHash', tag='tag', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
+        _response = await self._raw_client.delete_version_tag(id, version_hash, tag, request_options=request_options)
         return _response.data
 
     async def list_dataset_versions(
@@ -2425,8 +2425,8 @@ class AsyncDatasetsClient:
 
     async def update_dataset_version(
         self,
-        version_hash: str,
         id: str,
+        version_hash: str,
         *,
         change_description: typing.Optional[str] = OMIT,
         tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -2437,9 +2437,9 @@ class AsyncDatasetsClient:
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         change_description : typing.Optional[str]
             Optional description of changes in this version
@@ -2461,12 +2461,12 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.update_dataset_version(version_hash='versionHash', id='id', )
+            await client.datasets.update_dataset_version(id='id', version_hash='versionHash', )
         asyncio.run(main())
         """
         _response = await self._raw_client.update_dataset_version(
-            version_hash,
             id,
+            version_hash,
             change_description=change_description,
             tags_to_add=tags_to_add,
             request_options=request_options,

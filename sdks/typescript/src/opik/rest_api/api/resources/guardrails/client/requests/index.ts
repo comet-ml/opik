@@ -1,1 +1,1 @@
-export { type GuardrailBatchWrite } from "./GuardrailBatchWrite";
+export type { GuardrailBatchWrite } from "./GuardrailBatchWrite.js";

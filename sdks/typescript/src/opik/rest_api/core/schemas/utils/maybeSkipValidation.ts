@@ -1,4 +1,4 @@
-import { BaseSchema, MaybeValid, SchemaOptions } from "../Schema";
+import type { BaseSchema, MaybeValid, SchemaOptions } from "../Schema.js";
 
 export function maybeSkipValidation<S extends BaseSchema<Raw, Parsed>, Raw, Parsed>(schema: S): S {
     return {
@@ -15,7 +15,7 @@ function transformAndMaybeSkipValidation<T>(
         const transformed = transform(value, opts);
         const { skipValidation = false } = opts ?? {};
         if (!transformed.ok && skipValidation) {
-            // eslint-disable-next-line no-console
+            // biome-ignore lint/suspicious/noConsole: allow console
             console.warn(
                 [
                     "Failed to validate.",

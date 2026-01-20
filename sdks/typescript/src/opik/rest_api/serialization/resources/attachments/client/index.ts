@@ -1,2 +1,2 @@
-export * as uploadAttachment from "./uploadAttachment";
-export * from "./requests";
+export * from "./requests/index.js";
+export * as uploadAttachment from "./uploadAttachment.js";

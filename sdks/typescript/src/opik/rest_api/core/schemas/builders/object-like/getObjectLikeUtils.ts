@@ -1,9 +1,9 @@
-import { BaseSchema } from "../../Schema";
-import { filterObject } from "../../utils/filterObject";
-import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType";
-import { isPlainObject } from "../../utils/isPlainObject";
-import { getSchemaUtils } from "../schema-utils";
-import { ObjectLikeSchema, ObjectLikeUtils } from "./types";
+import type { BaseSchema } from "../../Schema.js";
+import { filterObject } from "../../utils/filterObject.js";
+import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType.js";
+import { isPlainObject } from "../../utils/isPlainObject.js";
+import { getSchemaUtils } from "../schema-utils/index.js";
+import type { ObjectLikeSchema, ObjectLikeUtils } from "./types.js";
 
 export function getObjectLikeUtils<Raw, Parsed>(schema: BaseSchema<Raw, Parsed>): ObjectLikeUtils<Raw, Parsed> {
     return {

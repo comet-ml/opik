@@ -1082,7 +1082,7 @@ class RawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def find_feedback_score_names_2(
+    def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[typing.List[str]]:
         """
@@ -1225,16 +1225,16 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_thread_comment(
-        self, comment_id: str, thread_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, thread_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[Comment]:
         """
         Get thread comment
 
         Parameters
         ----------
-        comment_id : str
-
         thread_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1336,16 +1336,16 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_trace_comment(
-        self, comment_id: str, trace_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, trace_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[Comment]:
         """
         Get trace comment
 
         Parameters
         ----------
-        comment_id : str
-
         trace_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3133,7 +3133,7 @@ class AsyncRawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def find_feedback_score_names_2(
+    async def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[typing.List[str]]:
         """
@@ -3276,16 +3276,16 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_thread_comment(
-        self, comment_id: str, thread_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, thread_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[Comment]:
         """
         Get thread comment
 
         Parameters
         ----------
-        comment_id : str
-
         thread_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3387,16 +3387,16 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_trace_comment(
-        self, comment_id: str, trace_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, trace_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[Comment]:
         """
         Get trace comment
 
         Parameters
         ----------
-        comment_id : str
-
         trace_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

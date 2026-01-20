@@ -253,6 +253,12 @@ class AttachmentsClient:
         -------
         typing.Iterator[bytes]
             Attachment Resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.attachments.download_attachment(container_id='container_id', entity_type="trace", entity_id='entity_id', file_name='x', mime_type='x', )
         """
         with self._raw_client.download_attachment(
             container_id=container_id,
@@ -621,6 +627,15 @@ class AsyncAttachmentsClient:
         -------
         typing.AsyncIterator[bytes]
             Attachment Resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.attachments.download_attachment(container_id='container_id', entity_type="trace", entity_id='entity_id', file_name='x', mime_type='x', )
+        asyncio.run(main())
         """
         async with self._raw_client.download_attachment(
             container_id=container_id,

@@ -1,1 +1,1 @@
-export { type ChatCompletionRequest } from "./ChatCompletionRequest";
+export type { ChatCompletionRequest } from "./ChatCompletionRequest.js";

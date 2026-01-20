@@ -1,1 +1,1 @@
-export * from "./ProviderApiKeyWriteProvider";
+export * from "./ProviderApiKeyWriteProvider.js";

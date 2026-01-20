@@ -4,7 +4,7 @@
  */
 
 import type * as OpikApi from "@/rest_api/api";
-import type { Prompts } from "@/rest_api/api/resources/prompts/client/Client";
+import type { PromptsClient } from "@/rest_api/api/resources/prompts/client/Client";
 import type { RequestOptions } from "@/types/request";
 import fastDeepEqual from "fast-deep-equal";
 
@@ -18,7 +18,7 @@ import fastDeepEqual from "fast-deep-equal";
  * @returns Promise resolving to the latest version or null if not found
  */
 export async function fetchLatestPromptVersion(
-  api: Prompts,
+  api: PromptsClient,
   name: string,
   requestOptions?: RequestOptions
 ): Promise<OpikApi.PromptVersionDetail | null> {

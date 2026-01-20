@@ -22,7 +22,7 @@ from ..types.span_write import SpanWrite
 from ..types.span_write_type import SpanWriteType
 from ..types.value_entry import ValueEntry
 from .raw_client import AsyncRawSpansClient, RawSpansClient
-from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNames1RequestType
+from .types.find_feedback_score_names1request_type import FindFeedbackScoreNames1RequestType
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
 from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
@@ -649,7 +649,7 @@ class SpansClient:
         )
         return _response.data
 
-    def find_feedback_score_names_1(
+    def find_feedback_score_names1(
         self,
         *,
         project_id: typing.Optional[str] = None,
@@ -677,24 +677,24 @@ class SpansClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.find_feedback_score_names_1()
+        client.spans.find_feedback_score_names1()
         """
-        _response = self._raw_client.find_feedback_score_names_1(
+        _response = self._raw_client.find_feedback_score_names1(
             project_id=project_id, type=type, request_options=request_options
         )
         return _response.data
 
     def get_span_comment(
-        self, comment_id: str, span_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, span_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> Comment:
         """
         Get span comment
 
         Parameters
         ----------
-        comment_id : str
-
         span_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -708,9 +708,9 @@ class SpansClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.get_span_comment(comment_id='commentId', span_id='spanId', )
+        client.spans.get_span_comment(span_id='spanId', comment_id='commentId', )
         """
-        _response = self._raw_client.get_span_comment(comment_id, span_id, request_options=request_options)
+        _response = self._raw_client.get_span_comment(span_id, comment_id, request_options=request_options)
         return _response.data
 
     def get_span_stats(
@@ -851,6 +851,12 @@ class SpansClient:
         -------
         typing.Iterator[bytes]
             Spans stream or error during process
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.spans.search_spans()
         """
         with self._raw_client.search_spans(
             trace_id=trace_id,
@@ -1575,7 +1581,7 @@ class AsyncSpansClient:
         )
         return _response.data
 
-    async def find_feedback_score_names_1(
+    async def find_feedback_score_names1(
         self,
         *,
         project_id: typing.Optional[str] = None,
@@ -1605,25 +1611,25 @@ class AsyncSpansClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.find_feedback_score_names_1()
+            await client.spans.find_feedback_score_names1()
         asyncio.run(main())
         """
-        _response = await self._raw_client.find_feedback_score_names_1(
+        _response = await self._raw_client.find_feedback_score_names1(
             project_id=project_id, type=type, request_options=request_options
         )
         return _response.data
 
     async def get_span_comment(
-        self, comment_id: str, span_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, span_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> Comment:
         """
         Get span comment
 
         Parameters
         ----------
-        comment_id : str
-
         span_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1639,10 +1645,10 @@ class AsyncSpansClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.get_span_comment(comment_id='commentId', span_id='spanId', )
+            await client.spans.get_span_comment(span_id='spanId', comment_id='commentId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_span_comment(comment_id, span_id, request_options=request_options)
+        _response = await self._raw_client.get_span_comment(span_id, comment_id, request_options=request_options)
         return _response.data
 
     async def get_span_stats(
@@ -1789,6 +1795,15 @@ class AsyncSpansClient:
         -------
         typing.AsyncIterator[bytes]
             Spans stream or error during process
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.spans.search_spans()
+        asyncio.run(main())
         """
         async with self._raw_client.search_spans(
             trace_id=trace_id,

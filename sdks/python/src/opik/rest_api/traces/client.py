@@ -859,7 +859,7 @@ class TracesClient:
         _response = self._raw_client.delete_traces(ids=ids, request_options=request_options)
         return _response.data
 
-    def find_feedback_score_names_2(
+    def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> typing.List[str]:
         """
@@ -881,9 +881,9 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.find_feedback_score_names_2()
+        client.traces.find_feedback_score_names2()
         """
-        _response = self._raw_client.find_feedback_score_names_2(project_id=project_id, request_options=request_options)
+        _response = self._raw_client.find_feedback_score_names2(project_id=project_id, request_options=request_options)
         return _response.data
 
     def find_trace_threads_feedback_score_names(
@@ -965,16 +965,16 @@ class TracesClient:
         return _response.data
 
     def get_thread_comment(
-        self, comment_id: str, thread_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, thread_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> Comment:
         """
         Get thread comment
 
         Parameters
         ----------
-        comment_id : str
-
         thread_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -988,9 +988,9 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.get_thread_comment(comment_id='commentId', thread_id='threadId', )
+        client.traces.get_thread_comment(thread_id='threadId', comment_id='commentId', )
         """
-        _response = self._raw_client.get_thread_comment(comment_id, thread_id, request_options=request_options)
+        _response = self._raw_client.get_thread_comment(thread_id, comment_id, request_options=request_options)
         return _response.data
 
     def get_trace_thread_stats(
@@ -1043,16 +1043,16 @@ class TracesClient:
         return _response.data
 
     def get_trace_comment(
-        self, comment_id: str, trace_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, trace_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> Comment:
         """
         Get trace comment
 
         Parameters
         ----------
-        comment_id : str
-
         trace_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1066,9 +1066,9 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.get_trace_comment(comment_id='commentId', trace_id='traceId', )
+        client.traces.get_trace_comment(trace_id='traceId', comment_id='commentId', )
         """
-        _response = self._raw_client.get_trace_comment(comment_id, trace_id, request_options=request_options)
+        _response = self._raw_client.get_trace_comment(trace_id, comment_id, request_options=request_options)
         return _response.data
 
     def get_trace_thread(
@@ -1338,6 +1338,12 @@ class TracesClient:
         -------
         typing.Iterator[bytes]
             Trace threads stream or error during process
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.search_trace_threads()
         """
         with self._raw_client.search_trace_threads(
             project_name=project_name,
@@ -1402,6 +1408,12 @@ class TracesClient:
         -------
         typing.Iterator[bytes]
             Traces stream or error during process
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.search_traces()
         """
         with self._raw_client.search_traces(
             project_name=project_name,
@@ -2445,7 +2457,7 @@ class AsyncTracesClient:
         _response = await self._raw_client.delete_traces(ids=ids, request_options=request_options)
         return _response.data
 
-    async def find_feedback_score_names_2(
+    async def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> typing.List[str]:
         """
@@ -2469,10 +2481,10 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.find_feedback_score_names_2()
+            await client.traces.find_feedback_score_names2()
         asyncio.run(main())
         """
-        _response = await self._raw_client.find_feedback_score_names_2(
+        _response = await self._raw_client.find_feedback_score_names2(
             project_id=project_id, request_options=request_options
         )
         return _response.data
@@ -2562,16 +2574,16 @@ class AsyncTracesClient:
         return _response.data
 
     async def get_thread_comment(
-        self, comment_id: str, thread_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, thread_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> Comment:
         """
         Get thread comment
 
         Parameters
         ----------
-        comment_id : str
-
         thread_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2587,10 +2599,10 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.get_thread_comment(comment_id='commentId', thread_id='threadId', )
+            await client.traces.get_thread_comment(thread_id='threadId', comment_id='commentId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_thread_comment(comment_id, thread_id, request_options=request_options)
+        _response = await self._raw_client.get_thread_comment(thread_id, comment_id, request_options=request_options)
         return _response.data
 
     async def get_trace_thread_stats(
@@ -2646,16 +2658,16 @@ class AsyncTracesClient:
         return _response.data
 
     async def get_trace_comment(
-        self, comment_id: str, trace_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, trace_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> Comment:
         """
         Get trace comment
 
         Parameters
         ----------
-        comment_id : str
-
         trace_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2671,10 +2683,10 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.get_trace_comment(comment_id='commentId', trace_id='traceId', )
+            await client.traces.get_trace_comment(trace_id='traceId', comment_id='commentId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_trace_comment(comment_id, trace_id, request_options=request_options)
+        _response = await self._raw_client.get_trace_comment(trace_id, comment_id, request_options=request_options)
         return _response.data
 
     async def get_trace_thread(
@@ -2959,6 +2971,15 @@ class AsyncTracesClient:
         -------
         typing.AsyncIterator[bytes]
             Trace threads stream or error during process
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.search_trace_threads()
+        asyncio.run(main())
         """
         async with self._raw_client.search_trace_threads(
             project_name=project_name,
@@ -3024,6 +3045,15 @@ class AsyncTracesClient:
         -------
         typing.AsyncIterator[bytes]
             Traces stream or error during process
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.search_traces()
+        asyncio.run(main())
         """
         async with self._raw_client.search_traces(
             project_name=project_name,

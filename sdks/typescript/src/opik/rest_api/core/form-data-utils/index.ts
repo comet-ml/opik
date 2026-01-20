@@ -1,2 +1,2 @@
-export { encodeAsFormParameter } from "./encodeAsFormParameter";
-export * from "./FormDataWrapper";
+export { encodeAsFormParameter } from "./encodeAsFormParameter.js";
+export * from "./FormDataWrapper.js";

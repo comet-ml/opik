@@ -35,7 +35,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async updateEntity(id: string, updates: SpanUpdate) {
-    await this.api.spans.updateSpan(id, updates, this.api.requestOptions);
+    await this.api.spans.updateSpan(id, { body: updates }, this.api.requestOptions);
   }
 
   protected async deleteEntities(ids: string[]) {

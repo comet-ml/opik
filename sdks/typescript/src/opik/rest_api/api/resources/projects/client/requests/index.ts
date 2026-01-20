@@ -1,7 +1,9 @@
-export { type FindProjectsRequest } from "./FindProjectsRequest";
-export { type ProjectWrite } from "./ProjectWrite";
-export { type ProjectUpdate } from "./ProjectUpdate";
-export { type FindFeedbackScoreNamesByProjectIdsRequest } from "./FindFeedbackScoreNamesByProjectIdsRequest";
-export { type ProjectMetricRequestPublic } from "./ProjectMetricRequestPublic";
-export { type GetProjectStatsRequest } from "./GetProjectStatsRequest";
-export { type ProjectRetrieveDetailed } from "./ProjectRetrieveDetailed";
+export type { DeleteProjectByIdRequest } from "./DeleteProjectByIdRequest.js";
+export type { FindFeedbackScoreNamesByProjectIdsRequest } from "./FindFeedbackScoreNamesByProjectIdsRequest.js";
+export type { FindProjectsRequest } from "./FindProjectsRequest.js";
+export type { GetProjectByIdRequest } from "./GetProjectByIdRequest.js";
+export type { GetProjectStatsRequest } from "./GetProjectStatsRequest.js";
+export type { ProjectMetricRequestPublic } from "./ProjectMetricRequestPublic.js";
+export type { ProjectRetrieveDetailed } from "./ProjectRetrieveDetailed.js";
+export type { ProjectUpdate } from "./ProjectUpdate.js";
+export type { ProjectWrite } from "./ProjectWrite.js";

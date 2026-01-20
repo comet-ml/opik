@@ -45,7 +45,9 @@ export class SpanFeedbackScoresBatchQueue extends BatchQueue<
       await this.api.spans.deleteSpanFeedbackScore(
         scoreId.id,
         {
-          name: scoreId.name,
+          body: {
+            name: scoreId.name,
+          },
         },
         this.api.requestOptions
       );

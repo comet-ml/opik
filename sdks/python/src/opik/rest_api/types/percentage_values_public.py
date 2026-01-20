@@ -3,15 +3,13 @@
 import typing
 
 import pydantic
-import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from ..core.serialization import FieldMetadata
 
 
 class PercentageValuesPublic(UniversalBaseModel):
-    p_50: typing_extensions.Annotated[typing.Optional[float], FieldMetadata(alias="p50")] = None
-    p_90: typing_extensions.Annotated[typing.Optional[float], FieldMetadata(alias="p90")] = None
-    p_99: typing_extensions.Annotated[typing.Optional[float], FieldMetadata(alias="p99")] = None
+    p50: typing.Optional[float] = None
+    p90: typing.Optional[float] = None
+    p99: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

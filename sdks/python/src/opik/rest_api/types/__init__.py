@@ -50,6 +50,7 @@ from .automation_rule_evaluator import (
     AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluator_UserDefinedMetricPython,
 )
+from .automation_rule_evaluator_action import AutomationRuleEvaluatorAction
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
 from .automation_rule_evaluator_llm_as_judge_public import AutomationRuleEvaluatorLlmAsJudgePublic
 from .automation_rule_evaluator_llm_as_judge_write import AutomationRuleEvaluatorLlmAsJudgeWrite
@@ -62,6 +63,7 @@ from .automation_rule_evaluator_object_object_public import (
     AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
 )
+from .automation_rule_evaluator_object_object_public_action import AutomationRuleEvaluatorObjectObjectPublicAction
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
@@ -72,6 +74,7 @@ from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
 )
+from .automation_rule_evaluator_public_action import AutomationRuleEvaluatorPublicAction
 from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
 from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
 from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
@@ -107,6 +110,7 @@ from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
 )
+from .automation_rule_evaluator_update_action import AutomationRuleEvaluatorUpdateAction
 from .automation_rule_evaluator_update_llm_as_judge import AutomationRuleEvaluatorUpdateLlmAsJudge
 from .automation_rule_evaluator_update_span_llm_as_judge import AutomationRuleEvaluatorUpdateSpanLlmAsJudge
 from .automation_rule_evaluator_update_span_user_defined_metric_python import (
@@ -137,6 +141,7 @@ from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
+from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWriteAction
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
 from .batch_delete_by_project import BatchDeleteByProject
@@ -484,6 +489,8 @@ from .studio_prompt_public import StudioPromptPublic
 from .studio_prompt_write import StudioPromptWrite
 from .tool import Tool
 from .tool_call import ToolCall
+from .tool_call_type import ToolCallType
+from .tool_type import ToolType
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
@@ -590,10 +597,12 @@ __all__ = [
     "AudioUrlWrite",
     "AuthDetailsHolder",
     "AutomationRuleEvaluator",
+    "AutomationRuleEvaluatorAction",
     "AutomationRuleEvaluatorLlmAsJudge",
     "AutomationRuleEvaluatorLlmAsJudgePublic",
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectObjectPublic",
+    "AutomationRuleEvaluatorObjectObjectPublicAction",
     "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython",
@@ -602,6 +611,7 @@ __all__ = [
     "AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
+    "AutomationRuleEvaluatorPublicAction",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython",
@@ -621,6 +631,7 @@ __all__ = [
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorUpdate",
+    "AutomationRuleEvaluatorUpdateAction",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
     "AutomationRuleEvaluatorUpdateSpanLlmAsJudge",
     "AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython",
@@ -637,6 +648,7 @@ __all__ = [
     "AutomationRuleEvaluatorUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
+    "AutomationRuleEvaluatorWriteAction",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython",
@@ -987,6 +999,8 @@ __all__ = [
     "StudioPromptWrite",
     "Tool",
     "ToolCall",
+    "ToolCallType",
+    "ToolType",
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
