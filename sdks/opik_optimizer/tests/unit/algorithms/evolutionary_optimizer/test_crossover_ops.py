@@ -1,9 +1,7 @@
-"""
-Unit tests for opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops module.
+"""Placeholder tests for the evolutionary crossover helpers.
 
-Tests cover:
-- _deap_crossover_chunking_strategy: Chunk-level crossover
-- _deap_crossover_word_level: Word-level crossover
+Split into smaller modules, but this file keeps historical coverage for
+_deap_crossover_chunking_strategy and _deap_crossover_word_level.
 """
 
 import pytest
