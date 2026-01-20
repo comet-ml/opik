@@ -349,46 +349,68 @@ component:
     # Customize these lists to allow additional external services (analytics, CDNs, etc.)
     csp:
       enabled: true
+      # Default source for all directives
+      default-src:
+        - "'self'"
       # Scripts allowed to execute
-      scriptSrc:
+      script-src:
         - "'self'"
         - "'unsafe-inline'"
         - "'unsafe-eval'"
         # Add external services here, e.g.:
         # - "https://cdn.example.com"
       # Styles allowed to load
-      styleSrc:
+      style-src:
         - "'self'"
         - "'unsafe-inline'"
         - "https://fonts.googleapis.com"
       # Images allowed to load
-      imgSrc:
+      img-src:
         - "'self'"
         - "data:"
         - "blob:"
         - "https:"
         - "http:"
       # Media (audio/video) allowed to load
-      mediaSrc:
+      media-src:
         - "'self'"
         - "https:"
         - "http:"
       # Fonts allowed to load
-      fontSrc:
+      font-src:
         - "'self'"
         - "data:"
         - "https://fonts.gstatic.com"
       # XHR/Fetch/WebSocket connections allowed
-      connectSrc:
+      connect-src:
         - "'self'"
         - "ws:"
         - "wss:"
         - "https:"
         # Add external API endpoints here, e.g.:
         # - "https://api.example.com"
-      # Frame ancestors (who can embed this site)
-      frameAncestors:
+      # Objects/plugins (Flash, Java, etc.)
+      object-src:
         - "'none'"
+      # Base URI for relative URLs
+      base-uri:
+        - "'self'"
+      # Frame ancestors (who can embed this site)
+      frame-ancestors:
+        - "'none'"
+      # Child frames/workers
+      child-src:
+        - "'self'"
+      # Form submission targets
+      form-action:
+        - "'self'"
+      # Manifest files
+      manifest-src:
+        - "'self'"
+      # Worker, shared worker, service worker sources
+      worker-src:
+        - "'self'"
+        - "blob:"
     upstreamConfig: {}
       # proxy_read_timeout: 60
       # proxy_connect_timeout: 60
