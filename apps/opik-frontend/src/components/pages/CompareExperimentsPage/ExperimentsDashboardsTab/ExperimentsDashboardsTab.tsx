@@ -8,7 +8,7 @@ import DashboardSaveActions from "@/components/pages-shared/dashboards/Dashboard
 import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardSelectBox from "@/components/pages-shared/dashboards/DashboardSelectBox/DashboardSelectBox";
 import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
-import DashboardProjectSettingsButton from "@/components/pages-shared/dashboards/DashboardProjectSettingsButton/DashboardProjectSettingsButton";
+import DashboardConfigButton from "@/components/pages-shared/dashboards/DashboardConfigButton/DashboardConfigButton";
 import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -22,6 +22,7 @@ import {
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { EXPERIMENTS_TEMPLATE_LIST } from "@/lib/dashboard/templates";
+import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CompareExperimentsButton from "@/components/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import { Separator } from "@/components/ui/separator";
@@ -63,7 +64,10 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
   useEffect(() => {
-    setRuntimeConfig({ experimentIds: experimentsIds });
+    setRuntimeConfig({
+      experimentIds: experimentsIds,
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+    });
 
     return () => {
       setRuntimeConfig({});
@@ -157,7 +161,7 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ShareDashboardButton />
-          <DashboardProjectSettingsButton disableExperimentsSelector />
+          <DashboardConfigButton disableExperimentsSelector />
         </div>
       </PageBodyStickyContainer>
 
