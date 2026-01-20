@@ -7,7 +7,11 @@ import {
   YAxis,
   Cell,
 } from "recharts";
-import { ValueType } from "recharts/types/component/DefaultTooltipContent";
+import {
+  ValueType,
+  NameType,
+} from "recharts/types/component/DefaultTooltipContent";
+import { TooltipProps } from "recharts";
 
 import {
   ChartConfig,
@@ -75,23 +79,23 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
 
     // Create rank keys (rank0, rank1, rank2, etc.)
     const rankKeys = lines.map((_, idx) => `__rank${idx}`);
-    
+
     // Map: for each data point index and rank, which group is at that rank
     const groupAtRank: Record<number, Record<string, string>> = {};
-    
+
     const transformedData = data.map((point, dataIdx) => {
       const time = point[xAxisKey] as string;
       const ranking = perBucketRanking[time] || lines;
-      
+
       groupAtRank[dataIdx] = {};
       const newPoint: ChartDataPoint = { [xAxisKey]: time };
-      
+
       ranking.forEach((groupName, rankIdx) => {
         const rankKey = `__rank${rankIdx}`;
         newPoint[rankKey] = point[groupName];
         groupAtRank[dataIdx][rankKey] = groupName;
       });
-      
+
       return newPoint;
     });
 
@@ -99,11 +103,16 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
   }, [data, perBucketRanking, lines, xAxisKey]);
 
   const values = useMemo(
-    () => extractChartValues(transformedData, perBucketRanking ? 
-      rankKeys.reduce((acc, key, idx) => {
-        acc[key] = config[lines[idx]] || { label: key };
-        return acc;
-      }, {} as ChartConfig) : config),
+    () =>
+      extractChartValues(
+        transformedData,
+        perBucketRanking
+          ? rankKeys.reduce((acc, key, idx) => {
+              acc[key] = config[lines[idx]] || { label: key };
+              return acc;
+            }, {} as ChartConfig)
+          : config,
+      ),
     [transformedData, config, perBucketRanking, rankKeys, lines],
   );
 
@@ -131,7 +140,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
 
   // Custom tooltip content wrapper that translates rank keys to group names
   const renderTooltipContent = useCallback(
-    (props: React.ComponentProps<typeof ChartTooltipContent>) => {
+    (props: TooltipProps<ValueType, NameType>) => {
       // If we have per-bucket ranking, transform the payload to show original group names
       if (perBucketRanking && groupAtRank && props.payload) {
         const dataIndex = props.payload[0]?.payload
@@ -163,7 +172,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
 
           return (
             <ChartTooltipContent
-              {...props}
+              active={props.active}
               payload={transformedPayload}
               renderHeader={tooltipHeader}
               renderValue={renderTooltipValue}
@@ -174,7 +183,8 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
 
       return (
         <ChartTooltipContent
-          {...props}
+          active={props.active}
+          payload={props.payload}
           renderHeader={tooltipHeader}
           renderValue={renderTooltipValue}
         />

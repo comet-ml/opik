@@ -1649,7 +1649,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
      */
     private String getSpanBreakdownExpression(BreakdownConfig breakdown) {
         return switch (breakdown.field()) {
-            case PROJECT_ID -> "project_id";
             case TAGS -> "arrayJoin(if(empty(s.tags), ['Unknown'], s.tags))";
             case METADATA -> "ifNull(JSONExtractString(s.metadata, :metadata_key), 'Unknown')";
             case NAME -> "ifNull(s.name, 'Unknown')";
@@ -1666,7 +1665,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
      */
     private String getTraceOrThreadBreakdownExpression(BreakdownConfig breakdown) {
         return switch (breakdown.field()) {
-            case PROJECT_ID -> "project_id";
             case TAGS -> "arrayJoin(if(empty(t.tags), ['Unknown'], t.tags))";
             case METADATA -> "ifNull(JSONExtractString(t.metadata, :metadata_key), 'Unknown')";
             case NAME -> "ifNull(t.name, 'Unknown')";
