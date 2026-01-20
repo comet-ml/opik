@@ -600,12 +600,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             .flatMap(latestVersion -> {
                                 UUID baseVersionId = latestVersion.id();
                                 UUID newVersionId = idGenerator.generateId();
+                                int baseItemsCount = latestVersion.itemsTotal();
 
-                                return getActualItemCount(latestVersion, datasetId, workspaceId)
-                                        .flatMap(baseItemsCount -> {
+                                return Mono.just(baseItemsCount)
+                                        .flatMap(itemsCount -> {
 
                                             // For ID-based: generate single UUID pool and split it
-                                            int totalPoolSize = baseItemsCount * 2; // Conservative: 2x base count
+                                            int totalPoolSize = itemsCount * 2; // Conservative: 2x base count
                                             List<UUID> allUuids = generateUuidPool(idGenerator, totalPoolSize);
                                             List<UUID> updateUuids = allUuids.subList(0, updateSize);
                                             List<UUID> copyUuids = allUuids.subList(updateSize, allUuids.size());
@@ -671,13 +672,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             .flatMap(latestVersion -> {
                                 UUID baseVersionId = latestVersion.id();
                                 UUID newVersionId = idGenerator.generateId();
+                                int baseItemsCount = latestVersion.itemsTotal();
 
-                                return getActualItemCount(latestVersion, datasetId, workspaceId)
-                                        .flatMap(baseItemsCount -> {
+                                return Mono.just(baseItemsCount)
+                                        .flatMap(itemsCount -> {
 
                                             // For filter-based: generate 2 separate UUID pools
-                                            List<UUID> updateUuids = generateUuidPool(idGenerator, baseItemsCount * 2);
-                                            List<UUID> copyUuids = generateUuidPool(idGenerator, baseItemsCount * 2);
+                                            List<UUID> updateUuids = generateUuidPool(idGenerator, itemsCount * 2);
+                                            List<UUID> copyUuids = generateUuidPool(idGenerator, itemsCount * 2);
 
                                             log.debug(
                                                     "Generated separate UUID pools for filter-based update: updateSize='{}', copySize='{}'",
@@ -2367,26 +2369,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         log.debug("Lazy migration is enabled, ensuring dataset '{}' is migrated", datasetId);
         return migrationService.ensureDatasetMigrated(datasetId, workspaceId, userName);
-    }
-
-    /**
-     * Gets the actual item count for a version, handling both migrated and non-migrated versions.
-     * For migrated versions (where version_id = dataset_id), queries ClickHouse for the actual count.
-     * For regular versions, returns the items_total from the version metadata.
-     *
-     * @param version the dataset version
-     * @param datasetId the dataset ID
-     * @param workspaceId the workspace ID
-     * @return a Mono emitting the actual item count
-     */
-    private Mono<Integer> getActualItemCount(DatasetVersion version, UUID datasetId, String workspaceId) {
-        if (version.id().equals(version.datasetId())) {
-            // Migrated version (version_id = dataset_id) - query ClickHouse for actual count
-            log.info("Detected migrated version for dataset '{}', querying actual item count", datasetId);
-            return versionDao.getActualItemCount(datasetId, version.id(), workspaceId);
-        } else {
-            return Mono.just(version.itemsTotal());
-        }
     }
 
 }

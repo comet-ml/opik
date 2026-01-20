@@ -75,17 +75,6 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
     /**
-     * Gets the actual count of items in a specific version from ClickHouse.
-     * This is used as a fallback for migrated versions where items_total was set to 0.
-     *
-     * @param datasetId the dataset ID
-     * @param versionId the version ID
-     * @param workspaceId the workspace ID
-     * @return the actual count of items in the version
-     */
-    Mono<Integer> getActualItemCount(UUID datasetId, UUID versionId, String workspaceId);
-
-    /**
      * Copies items from a source version to a new target version directly within dataset_item_versions.
      * Each copied item gets a new UUIDv7 but retains the same dataset_item_id.
      * <p>
@@ -2739,32 +2728,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FilterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
-    }
-
-    /**
-     * Gets the actual count of items in a specific version from ClickHouse.
-     * This is used as a fallback for migrated versions where items_total was set to 0.
-     *
-     * @param datasetId the dataset ID
-     * @param versionId the version ID
-     * @param workspaceId the workspace ID
-     * @return the actual count of items in the version
-     */
-    @Override
-    public Mono<Integer> getActualItemCount(UUID datasetId, UUID versionId, String workspaceId) {
-        // Use the existing template with null filters (no filtering)
-        ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_COUNT);
-        template.add("dataset_item_filters", null);
-        String query = template.render();
-
-        return asyncTemplate.nonTransaction(connection -> Mono.from(connection.createStatement(query)
-                .bind("datasetId", datasetId)
-                .bind("versionId", versionId.toString())
-                .bind("workspace_id", workspaceId)
-                .execute())
-                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("count", Long.class))))
-                .map(Long::intValue)
-                .defaultIfEmpty(0));
     }
 
     @Override
