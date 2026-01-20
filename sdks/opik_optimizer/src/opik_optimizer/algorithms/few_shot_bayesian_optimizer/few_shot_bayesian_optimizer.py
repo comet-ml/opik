@@ -270,7 +270,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         split_idx = int(len(dataset_copy) * train_ratio)
         return dataset_copy[:split_idx], dataset_copy[split_idx:]
 
-    def _create_fewshot_prompt_template(
+    def _create_few_shot_prompt_template(
         self,
         model: str,
         prompts: dict[str, chat_prompt.ChatPrompt],
@@ -316,7 +316,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompt_names=list(prompts.keys())
         )
 
-        logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
+        logger.debug(f"few_shot_prompt_template - Calling LLM with: {messages}")
         # Few-shot prompt synthesis expects a single structured response.
         model_parameters = dict(self.model_parameters)
         model_parameters.pop("n", None)
@@ -355,7 +355,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
         if isinstance(response_content, list):
             response_content = response_content[0]
-        logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
+        logger.debug(f"few_shot_prompt_template - LLM response: {response_content}")
 
         new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
         for prompt_name in prompts.keys():
@@ -458,7 +458,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         original_prompts: dict[str, chat_prompt.ChatPrompt],
-        fewshot_prompt_template: str,
+        few_shot_prompt_template: str,
         agent: OptimizableAgent | None,
         dataset: Dataset,
         validation_dataset: Dataset | None,
@@ -576,7 +576,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             few_shot_examples, processed_demo_examples = (
                 self._build_few_shot_examples_string(
                     demo_examples=demo_examples,
-                    fewshot_prompt_template=fewshot_prompt_template,
+                    few_shot_prompt_template=few_shot_prompt_template,
                 )
             )
 
@@ -584,7 +584,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompts_with_examples = self._reconstruct_prompts_with_examples(
                 prompts_with_placeholder=prompts,
                 demo_examples=demo_examples,
-                fewshot_prompt_template=fewshot_prompt_template,
+                few_shot_prompt_template=few_shot_prompt_template,
             )
 
             llm_task = self._build_task_from_messages(
@@ -720,7 +720,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             best_prompts = self._reconstruct_prompts_with_examples(
                 prompts_with_placeholder=prompts,
                 demo_examples=best_demo_examples,
-                fewshot_prompt_template=fewshot_prompt_template,
+                few_shot_prompt_template=few_shot_prompt_template,
             )
 
         # finish_reason, stopped_early, stop_reason are handled by base class
@@ -760,7 +760,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         context.current_best_prompt = optimizable_prompts
 
         prompts_with_placeholder, fewshot_template = (
-            self._create_fewshot_prompt_template(
+            self._create_few_shot_prompt_template(
                 model=self.model,
                 prompts=optimizable_prompts,
                 few_shot_examples=[
@@ -779,7 +779,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             context=context,
             prompts=prompts_with_placeholder,
             original_prompts=optimizable_prompts,
-            fewshot_prompt_template=fewshot_template,
+            few_shot_prompt_template=fewshot_template,
             agent=agent,
             dataset=dataset,
             validation_dataset=validation_dataset,
@@ -841,14 +841,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _build_few_shot_examples_string(
         self,
         demo_examples: list[dict[str, Any]],
-        fewshot_prompt_template: str,
+        few_shot_prompt_template: str,
     ) -> tuple[str, list[str]]:
         """
         Build the few-shot examples string from demo examples.
 
         Args:
             demo_examples: List of example dictionaries from the dataset
-            fewshot_prompt_template: The template string for formatting each example
+            few_shot_prompt_template: The template string for formatting each example
 
         Returns:
             Tuple of (few_shot_examples_string, list_of_processed_examples)
@@ -859,7 +859,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             for key, value in example.items():
                 processed_example[key] = str(value)
 
-            processed_demo_example = fewshot_prompt_template
+            processed_demo_example = few_shot_prompt_template
             for key, value in processed_example.items():
                 try:
                     processed_demo_example = processed_demo_example.replace(
@@ -867,7 +867,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
                 except Exception:
                     logger.error(
-                        f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} "
+                        f"Failed to format few_shot prompt template {few_shot_prompt_template} with example: {processed_example} "
                     )
                     raise
             processed_demo_examples.append(processed_demo_example)
@@ -879,7 +879,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         prompts_with_placeholder: dict[str, chat_prompt.ChatPrompt],
         demo_examples: list[dict[str, Any]] | None = None,
-        fewshot_prompt_template: str | None = None,
+        few_shot_prompt_template: str | None = None,
         few_shot_examples: str | None = None,
     ) -> dict[str, chat_prompt.ChatPrompt]:
         """
@@ -888,19 +888,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Args:
             prompts_with_placeholder: The template prompts with the few-shot placeholder
             demo_examples: List of example dictionaries from the dataset
-            fewshot_prompt_template: The template string for formatting each example
+            few_shot_prompt_template: The template string for formatting each example
             few_shot_examples: Preformatted few-shot string to insert directly
 
         Returns:
             Dictionary of ChatPrompt objects with examples filled in
         """
         if few_shot_examples is None:
-            if demo_examples is None or fewshot_prompt_template is None:
+            if demo_examples is None or few_shot_prompt_template is None:
                 raise ValueError(
-                    "demo_examples and fewshot_prompt_template are required when few_shot_examples is None."
+                    "demo_examples and few_shot_prompt_template are required when few_shot_examples is None."
                 )
             few_shot_examples, _ = self._build_few_shot_examples_string(
-                demo_examples, fewshot_prompt_template
+                demo_examples, few_shot_prompt_template
             )
 
         # Fill in the placeholder in each prompt

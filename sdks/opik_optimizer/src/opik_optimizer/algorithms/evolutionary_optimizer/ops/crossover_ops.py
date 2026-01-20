@@ -152,32 +152,33 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
     return child1, child2
 
 
-def _llm_crossover_messages(
+def _call_llm_for_crossover(
     messages_1: list[dict[str, Any]],
     messages_2: list[dict[str, Any]],
     output_style_guidance: str,
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
+    system_template_key: str,
+    user_template_key: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Apply LLM-based crossover to a single prompt's messages."""
-    user_prompt_for_llm_crossover = prompts.get(
-        "llm_crossover_user_prompt_template",
+    """Call the LLM for crossover and return the laddered child prompts."""
+    user_prompt = prompts.get(
+        user_template_key,
         parent1_messages=messages_1,
         parent2_messages=messages_2,
         style=output_style_guidance,
     )
-
     response = _llm_calls.call_model(
         messages=[
             {
                 "role": "system",
                 "content": prompts.get(
-                    "llm_crossover_system_prompt_template",
+                    system_template_key,
                     style=output_style_guidance,
                 ),
             },
-            {"role": "user", "content": user_prompt_for_llm_crossover},
+            {"role": "user", "content": user_prompt},
         ],
         model=model,
         model_parameters=model_parameters,
@@ -187,12 +188,30 @@ def _llm_crossover_messages(
     )
 
     response_item = response[0] if isinstance(response, list) else response
-
-    # Convert Pydantic models to dicts
     first_child_messages = [msg.model_dump() for msg in response_item.child_1]
     second_child_messages = [msg.model_dump() for msg in response_item.child_2]
-
     return first_child_messages, second_child_messages
+
+
+def _llm_crossover_messages(
+    messages_1: list[dict[str, Any]],
+    messages_2: list[dict[str, Any]],
+    output_style_guidance: str,
+    model: str,
+    model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply LLM-based crossover to a single prompt's messages."""
+    return _call_llm_for_crossover(
+        messages_1=messages_1,
+        messages_2=messages_2,
+        output_style_guidance=output_style_guidance,
+        model=model,
+        model_parameters=model_parameters,
+        prompts=prompts,
+        system_template_key="llm_crossover_system_prompt_template",
+        user_template_key="llm_crossover_user_prompt_template",
+    )
 
 
 def _semantic_crossover_messages(
@@ -204,37 +223,16 @@ def _semantic_crossover_messages(
     prompts: PromptLibrary,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply semantic LLM-based crossover to a single prompt's messages."""
-    user_prompt_for_semantic_crossover = prompts.get(
-        "semantic_crossover_user_prompt_template",
-        parent1_messages=messages_1,
-        parent2_messages=messages_2,
-        style=output_style_guidance,
-    )
-
-    response = _llm_calls.call_model(
-        messages=[
-            {
-                "role": "system",
-                "content": prompts.get(
-                    "semantic_crossover_system_prompt_template",
-                    style=output_style_guidance,
-                ),
-            },
-            {"role": "user", "content": user_prompt_for_semantic_crossover},
-        ],
+    return _call_llm_for_crossover(
+        messages_1=messages_1,
+        messages_2=messages_2,
+        output_style_guidance=output_style_guidance,
         model=model,
         model_parameters=model_parameters,
-        response_model=CrossoverResponse,
-        is_reasoning=True,
-        return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+        prompts=prompts,
+        system_template_key="semantic_crossover_system_prompt_template",
+        user_template_key="semantic_crossover_user_prompt_template",
     )
-
-    response_item = response[0] if isinstance(response, list) else response
-
-    first_child_messages = [msg.model_dump() for msg in response_item.child_1]
-    second_child_messages = [msg.model_dump() for msg in response_item.child_2]
-
-    return first_child_messages, second_child_messages
 
 
 def llm_deap_crossover(
