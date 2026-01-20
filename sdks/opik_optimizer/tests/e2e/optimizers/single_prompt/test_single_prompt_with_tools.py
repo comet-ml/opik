@@ -14,11 +14,8 @@ import copy
 import pytest
 from typing import Any
 
-import opik
-from opik.evaluation.metrics import LevenshteinRatio
-from opik.evaluation.metrics.score_result import ScoreResult
+from opik import Dataset
 
-import opik_optimizer
 from opik_optimizer import (
     ChatPrompt,
     EvolutionaryOptimizer,
@@ -28,100 +25,19 @@ from opik_optimizer import (
     HierarchicalReflectiveOptimizer,
     ParameterOptimizer,
 )
-from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
-    ParameterSearchSpace,
-)
 
 from ..utils import (
     mock_calculator,
     mock_search,
     CALCULATOR_TOOL,
     SEARCH_TOOL,
+    create_optimizer_config,
+    get_parameter_space,
+    levenshtein_metric,
 )
 
 
 pytestmark = pytest.mark.integration
-
-
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
-
-
-def levenshtein_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    """Standard Levenshtein ratio metric for testing with reason for HierarchicalReflective."""
-    metric = LevenshteinRatio()
-    result = metric.score(reference=dataset_item["label"], output=llm_output)
-    return ScoreResult(
-        name=result.name,
-        value=result.value,
-        reason=f"Similarity: {result.value:.2f}",
-    )
-
-
-def get_tiny_dataset() -> opik.Dataset:
-    """Get the tiny test dataset for fast testing."""
-    return opik_optimizer.datasets.tiny_test()
-
-
-def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
-    """
-    Create minimal optimizer configuration for fast testing.
-    """
-    base_config = {
-        "model": "openai/gpt-4o-mini",
-        "model_parameters": {
-            "temperature": 0.7,
-            "max_tokens": 500,
-        },
-        "verbose": 0,
-        "seed": 42,
-        "name": f"e2e-single-prompt-{optimizer_class.__name__}",
-    }
-
-    optimizer_specific: dict[type, dict[str, Any]] = {
-        EvolutionaryOptimizer: {
-            "population_size": 2,
-            "num_generations": 1,
-            "n_threads": 2,
-            "enable_llm_crossover": False,
-            "enable_moo": False,
-            "elitism_size": 1,
-        },
-        MetaPromptOptimizer: {
-            "n_threads": 2,
-            "prompts_per_round": 1,
-        },
-        FewShotBayesianOptimizer: {
-            "min_examples": 1,
-            "max_examples": 2,
-        },
-        GepaOptimizer: {
-            "n_threads": 2,
-        },
-        HierarchicalReflectiveOptimizer: {
-            "n_threads": 2,
-            "max_parallel_batches": 2,
-            "batch_size": 2,
-            "convergence_threshold": 0.01,
-        },
-        ParameterOptimizer: {
-            "n_threads": 2,
-            "default_n_trials": 1,
-            "local_search_ratio": 0.0,
-        },
-    }
-
-    return {**base_config, **optimizer_specific.get(optimizer_class, {})}
-
-
-def get_parameter_space() -> ParameterSearchSpace:
-    """Create a simple parameter space for testing."""
-    return ParameterSearchSpace.model_validate(
-        {
-            "temperature": {"type": "float", "min": 0.1, "max": 1.0},
-        }
-    )
 
 
 # -----------------------------------------------------------------------------
@@ -140,7 +56,10 @@ def get_parameter_space() -> ParameterSearchSpace:
         ParameterOptimizer,
     ],
 )
-def test_single_prompt_with_tools(optimizer_class: type) -> None:
+def test_single_prompt_with_tools(
+    optimizer_class: type,
+    tiny_dataset: Dataset,
+) -> None:
     """
     Test that optimizers preserve tools and function_map while optimizing prompts.
 
@@ -181,11 +100,14 @@ def test_single_prompt_with_tools(optimizer_class: type) -> None:
     original_tools = copy.deepcopy(original_prompt.tools)
     original_function_map_keys = set(original_prompt.function_map.keys())
 
-    # Get dataset
-    dataset = get_tiny_dataset()
+    dataset = tiny_dataset
 
     # Create optimizer with minimal config
-    config = create_optimizer_config(optimizer_class)
+    config = create_optimizer_config(
+        optimizer_class,
+        max_tokens=500,
+        verbose=0,
+    )
     optimizer = optimizer_class(**config)
 
     gepa_kwargs: dict[str, Any] = {}

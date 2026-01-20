@@ -15,11 +15,6 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
     FailureMode,
     HierarchicalRootCauseAnalysis,
 )
-from tests.unit.test_helpers import (
-    make_mock_dataset,
-    make_simple_metric,
-    STANDARD_DATASET_ITEMS,
-)
 
 
 def _mock_experiment_result(score: float) -> MagicMock:
@@ -100,16 +95,17 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         self,
         mock_optimization_context,
         monkeypatch,
+        default_prompt,
+        default_dataset,
+        simple_metric_fn,
     ) -> None:
         mock_optimization_context()
 
         optimizer = HierarchicalReflectiveOptimizer(
             model="gpt-4o-mini", verbose=0, seed=42
         )
-        prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
+        prompt = default_prompt
+        dataset = default_dataset
 
         eval_scores = iter([0.5, 0.6, 0.7, 0.85])
 
@@ -149,7 +145,7 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=make_simple_metric(),
+            metric=simple_metric_fn,
             max_trials=2,
             n_samples=2,
         )
@@ -161,6 +157,8 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         self,
         mock_optimization_context,
         monkeypatch,
+        default_dataset,
+        simple_metric_fn,
     ) -> None:
         mock_optimization_context()
 
@@ -173,9 +171,7 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
                 name="secondary", system="Secondary", user="{input}"
             ),
         }
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
+        dataset = default_dataset
 
         eval_scores = iter([0.5, 0.6, 0.7, 0.85])
 
@@ -215,7 +211,7 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=make_simple_metric(),
+            metric=simple_metric_fn,
             max_trials=2,
             n_samples=2,
         )
@@ -226,20 +222,20 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
     def test_invalid_prompt_raises_error(
         self,
         mock_optimization_context,
+        default_dataset,
+        simple_metric_fn,
     ) -> None:
         mock_optimization_context()
         optimizer = HierarchicalReflectiveOptimizer(
             model="gpt-4o-mini", verbose=0, seed=42
         )
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
+        dataset = default_dataset
 
         with pytest.raises((ValueError, TypeError)):
             optimizer.optimize_prompt(
                 prompt="invalid string",  # type: ignore[arg-type]
                 dataset=dataset,
-                metric=make_simple_metric(),
+                metric=simple_metric_fn,
                 max_trials=1,
             )
 
@@ -249,11 +245,11 @@ class TestHierarchicalReflectiveOptimizerEarlyStop:
         self,
         mock_opik_client: Callable[..., MagicMock],
         monkeypatch: pytest.MonkeyPatch,
+        default_dataset,
+        simple_metric_fn,
     ) -> None:
         mock_opik_client()
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
+        dataset = default_dataset
         optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o", perfect_score=0.95)
 
         # Mock the base class's evaluate_prompt for baseline computation (returns float)
@@ -263,7 +259,7 @@ class TestHierarchicalReflectiveOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=make_simple_metric(),
+            metric=simple_metric_fn,
             max_trials=1,
         )
 
@@ -278,13 +274,14 @@ class TestHierarchicalReflectiveOptimizerCounters:
         self,
         mock_optimization_context,
         monkeypatch: pytest.MonkeyPatch,
+        default_prompt,
+        default_dataset,
+        simple_metric_fn,
     ) -> None:
         mock_optimization_context()
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
+        dataset = default_dataset
         optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0)
-        prompt = ChatPrompt(system="Test", user="{question}")
+        prompt = default_prompt
 
         monkeypatch.setattr(
             optimizer,
@@ -329,7 +326,7 @@ class TestHierarchicalReflectiveOptimizerCounters:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=make_simple_metric(),
+            metric=simple_metric_fn,
             max_trials=1,
         )
 

@@ -26,6 +26,8 @@ from opik_optimizer.constants import OPIK_OPTIMIZER_NO_BANNER_ENV
 os.environ.setdefault(OPIK_OPTIMIZER_NO_BANNER_ENV, "1")
 
 from opik_optimizer import ChatPrompt
+from tests.unit.fixtures.builders import make_mock_dataset
+from tests.unit.fixtures.builders import STANDARD_DATASET_ITEMS, make_simple_metric
 
 
 @pytest.fixture(autouse=True)
@@ -299,18 +301,7 @@ def mock_dataset():
         name: str = "test-dataset",
         dataset_id: str = "dataset-123",
     ):
-        mock = MagicMock(spec=Dataset)
-        mock.name = name
-        mock.id = dataset_id
-
-        # Handle both get_items() and get_items(nb_samples=N)
-        def get_items_impl(nb_samples: int | None = None):
-            if nb_samples is not None:
-                return items[:nb_samples]
-            return items
-
-        mock.get_items = MagicMock(side_effect=get_items_impl)
-        return mock
+        return make_mock_dataset(items, name=name, dataset_id=dataset_id)
 
     return _create
 
@@ -974,3 +965,26 @@ def optimizer_test_params() -> dict[str, Any]:
         "n_samples": 2,
         "verbose": 0,
     }
+
+
+# ============================================================
+# Compatibility fixtures (previously under tests/unit/optimizers/conftest.py)
+# ============================================================
+
+
+@pytest.fixture
+def default_prompt() -> ChatPrompt:
+    """Reusable single prompt fixture for optimizer tests (compat alias)."""
+    return ChatPrompt(system="baseline system", user="{question}")
+
+
+@pytest.fixture
+def default_dataset() -> MagicMock:
+    """Common dataset fixture used by optimizer tests (compat alias)."""
+    return make_mock_dataset(STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123")
+
+
+@pytest.fixture
+def simple_metric_fn():
+    """Simple metric fixture to avoid rewriting the same builder (compat alias)."""
+    return make_simple_metric()
