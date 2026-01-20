@@ -6,12 +6,17 @@ import { TraceAnalyzerLLMMessage, MESSAGE_TYPE } from "@/types/ai-assistant";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
+import { parseEntityReferences } from "@/lib/entityReferences";
 
 type TraceChatMessageProps = {
   message: TraceAnalyzerLLMMessage;
+  entityMap: Map<string, string>;
 };
 
-const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
+const TraceChatMessage: React.FC<TraceChatMessageProps> = ({
+  message,
+  entityMap,
+}) => {
   const isUser = message.role === LLM_MESSAGE_ROLE.user;
   const isToolCall = message.messageType === MESSAGE_TYPE.tool_call;
 
@@ -21,19 +26,27 @@ const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
       <div className="mb-2 flex justify-start">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-muted/30 px-4 py-2">
           <div className="flex flex-col gap-1.5">
-            {message.toolCalls.map((toolCall) => (
-              <div
-                key={toolCall.id}
-                className="flex items-center gap-2 text-muted-foreground"
-              >
-                {toolCall.completed ? (
-                  <CheckCircle2 className="size-3 text-green-600" />
-                ) : (
-                  <Loader2 className="size-3 animate-spin" />
-                )}
-                <span className="comet-body-xs">{toolCall.display_name}</span>
-              </div>
-            ))}
+            {message.toolCalls.map((toolCall) => {
+              // Parse entity references in the display name
+              const displayName = parseEntityReferences(
+                toolCall.display_name,
+                entityMap,
+              );
+
+              return (
+                <div
+                  key={toolCall.id}
+                  className="flex items-center gap-2 text-muted-foreground"
+                >
+                  {toolCall.completed ? (
+                    <CheckCircle2 className="size-3 text-green-600" />
+                  ) : (
+                    <Loader2 className="size-3 animate-spin" />
+                  )}
+                  <span className="comet-body-xs">{displayName}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
