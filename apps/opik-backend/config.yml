@@ -643,7 +643,7 @@ serviceToggles:
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
+  datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
