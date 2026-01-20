@@ -2,9 +2,11 @@
 
 import inspect
 import logging
+import os
 import uuid
+from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeoutError
 from types import ModuleType, FunctionType
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Optional
 
 from opik.evaluation.metrics import (
     BaseMetric,
@@ -18,6 +20,9 @@ from .config import DEFAULT_REFERENCE_KEY, DEFAULT_CASE_SENSITIVE
 from .exceptions import InvalidMetricError
 
 logger = logging.getLogger(__name__)
+
+# Timeout for code metric execution (seconds)
+CODE_METRIC_TIMEOUT = int(os.getenv("OPIK_CODE_METRIC_TIMEOUT_SECS", "30"))
 
 
 class MetricFactory:
@@ -219,12 +224,145 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     return metric_fn
 
 
+def _execute_code_metric_in_process(
+    code: str, 
+    dataset_item: Dict[str, Any], 
+    llm_output: str
+) -> Dict[str, Any]:
+    """Execute user code metric in an isolated process.
+    
+    This function runs in a separate process via ProcessPoolExecutor.
+    It follows the same pattern as the automations evaluator for security isolation.
+    
+    Args:
+        code: The user's Python code containing the metric
+        dataset_item: The dataset item dict
+        llm_output: The LLM output string
+        
+    Returns:
+        Dict with either:
+        - {"score": {"name": str, "value": float, "reason": str}} on success
+        - {"error": str} on failure
+    """
+    import traceback
+    from types import ModuleType, FunctionType
+    import inspect
+    import uuid
+    
+    from opik.evaluation.metrics import BaseMetric
+    from opik.evaluation.metrics.score_result import ScoreResult
+    
+    # Well-known metric function names
+    PREFERRED_METRIC_NAMES = ['evaluation_metric', 'score', 'metric', 'evaluate']
+    
+    try:
+        # Create isolated module for code execution
+        module = ModuleType(str(uuid.uuid4()))
+        
+        # Pre-import commonly used modules
+        module.__dict__["json"] = __import__("json")
+        module.__dict__["re"] = __import__("re")
+        module.__dict__["math"] = __import__("math")
+        module.__dict__["ScoreResult"] = ScoreResult
+        module.__dict__["BaseMetric"] = BaseMetric
+        
+        pre_exec_names = set(module.__dict__.keys())
+        
+        # Execute user code
+        exec(code, module.__dict__)
+        
+        # Find metric (class or function)
+        new_names = [n for n in module.__dict__.keys() if n not in pre_exec_names]
+        
+        metric_class = None
+        metric_fn_candidates = []
+        
+        for name in new_names:
+            obj = module.__dict__[name]
+            
+            if inspect.isclass(obj) and issubclass(obj, BaseMetric) and obj is not BaseMetric:
+                metric_class = obj
+                break
+            
+            if isinstance(obj, FunctionType) and not name.startswith("_"):
+                try:
+                    sig = inspect.signature(obj)
+                    if len(list(sig.parameters.keys())) >= 2:
+                        metric_fn_candidates.append((name, obj))
+                except (ValueError, TypeError):
+                    continue
+        
+        # Execute the metric
+        result = None
+        
+        if metric_class is not None:
+            metric_instance = metric_class()
+            result = metric_instance.score(output=llm_output, **dataset_item)
+        elif metric_fn_candidates:
+            # Select function deterministically
+            selected_fn = None
+            for preferred_name in PREFERRED_METRIC_NAMES:
+                for name, fn in metric_fn_candidates:
+                    if name == preferred_name:
+                        selected_fn = fn
+                        break
+                if selected_fn:
+                    break
+            
+            if selected_fn is None:
+                if len(metric_fn_candidates) == 1:
+                    selected_fn = metric_fn_candidates[0][1]
+                else:
+                    return {"error": f"Multiple metric functions found: {[n for n, _ in metric_fn_candidates]}"}
+            
+            result = selected_fn(dataset_item, llm_output)
+        else:
+            return {"error": "No metric function or BaseMetric class found in code"}
+        
+        # Coerce result to ScoreResult format
+        if isinstance(result, ScoreResult):
+            return {"score": {"name": result.name, "value": result.value, "reason": result.reason or ""}}
+        elif isinstance(result, (int, float)):
+            value = max(0.0, min(1.0, float(result)))
+            return {"score": {"name": "code", "value": value, "reason": ""}}
+        elif isinstance(result, dict) and "value" in result:
+            value = max(0.0, min(1.0, float(result["value"])))
+            return {"score": {"name": result.get("name", "code"), "value": value, "reason": result.get("reason", "")}}
+        else:
+            return {"error": f"Metric returned unsupported type: {type(result).__name__}"}
+            
+    except Exception as e:
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[-5:])
+        return {"error": f"Code metric execution failed: {e}\n{stacktrace}"}
+
+
+# Singleton process pool for code metric execution
+_code_metric_executor: Optional[ProcessPoolExecutor] = None
+
+
+def _get_code_metric_executor() -> ProcessPoolExecutor:
+    """Get or create the process pool executor for code metrics.
+    
+    Uses a singleton pattern to reuse the pool across metric evaluations.
+    """
+    global _code_metric_executor
+    if _code_metric_executor is None:
+        # Use 1 worker - metrics are called sequentially by the optimizer
+        # This provides isolation without excessive process overhead
+        _code_metric_executor = ProcessPoolExecutor(max_workers=1)
+        logger.info("Created ProcessPoolExecutor for code metric isolation")
+    return _code_metric_executor
+
+
 @MetricFactory.register("code")
 def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
-    """Build a custom code metric function.
+    """Build a custom code metric function with process isolation.
     
-    NOTE: User code execution follows the same pattern as automations (evaluation metrics).
-    Code is executed in a subprocess with process isolation.
+    User code is executed in an isolated subprocess for security, following
+    the same pattern as the automations evaluator. This provides:
+    - Memory isolation (separate address space)
+    - Crash isolation (subprocess failure doesn't affect optimizer)
+    - Resource limits via timeout
     
     Supports two patterns:
     
@@ -252,167 +390,59 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     if not code:
         raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
     
-    logger.info(f"Building code metric (code length: {len(code)} chars)")
+    logger.info(f"Building code metric with process isolation (code length: {len(code)} chars)")
     
-    # Create a module to execute the code (same pattern as automations)
-    module = ModuleType(str(uuid.uuid4()))
-    
-    # Pre-import commonly used modules in the metric code's namespace
-    module.__dict__["json"] = __import__("json")
-    module.__dict__["re"] = __import__("re")
-    module.__dict__["math"] = __import__("math")
-    module.__dict__["ScoreResult"] = ScoreResult
-    module.__dict__["BaseMetric"] = BaseMetric
-    
-    # Track what was in the namespace before exec
-    pre_exec_names = set(module.__dict__.keys())
-    
+    # Validate code can be parsed (fast fail before running optimization)
     try:
-        exec(code, module.__dict__)
-        logger.info("Code metric compiled successfully")
-    except Exception as e:
-        logger.warning(f"Code metric compilation failed: {e}")
+        compile(code, "<code_metric>", "exec")
+        logger.info("Code metric syntax validated successfully")
+    except SyntaxError as e:
         raise InvalidMetricError("code", f"Invalid Python code: {e}")
     
-    # Find the metric - look for either a function or a BaseMetric class
-    # Use a list to preserve definition order (deterministic iteration)
-    new_names = [n for n in module.__dict__.keys() if n not in pre_exec_names]
-    
-    metric_class = None
-    metric_fn_candidates = []
-    
-    # Well-known metric function names (checked in priority order)
-    PREFERRED_METRIC_NAMES = ['evaluation_metric', 'score', 'metric', 'evaluate']
-    
-    for name in new_names:
-        obj = module.__dict__[name]
+    def isolated_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        """Execute the metric in an isolated subprocess."""
+        executor = _get_code_metric_executor()
         
-        # Check for BaseMetric subclass (class pattern - same as automations)
-        if inspect.isclass(obj) and issubclass(obj, BaseMetric) and obj is not BaseMetric:
-            metric_class = obj
-            break
-        
-        # Check for function pattern
-        if isinstance(obj, FunctionType) and not name.startswith("_"):
-            # Check function signature - should accept at least 2 arguments
-            try:
-                sig = inspect.signature(obj)
-                params_list = list(sig.parameters.keys())
-                if len(params_list) >= 2:
-                    metric_fn_candidates.append((name, obj))
-            except (ValueError, TypeError):
-                # Can't inspect signature, skip this function
-                continue
-    
-    # Helper to coerce metric return values into ScoreResult
-    def _coerce_to_score_result(value):
-        """Coerce metric return value to ScoreResult.
-        
-        Args:
-            value: The return value from the user's metric function
-            
-        Returns:
-            ScoreResult instance
-            
-        Raises:
-            InvalidMetricError: If value cannot be coerced to ScoreResult
-        """
-        # Already a ScoreResult - return as-is
-        if isinstance(value, ScoreResult):
-            return value
-        
-        # Numeric value - wrap with default name, clamped to [0.0, 1.0]
-        if isinstance(value, (int, float)):
-            original_value = float(value)
-            clamped_value = max(0.0, min(1.0, original_value))
-            if clamped_value != original_value:
-                logger.warning(
-                    f"Code metric returned value {original_value} outside [0.0, 1.0] range, "
-                    f"clamped to {clamped_value}"
-                )
-            else:
-                logger.debug(f"Coercing numeric metric result {original_value} to ScoreResult")
-            return ScoreResult(name="code", value=clamped_value, reason="")
-        
-        # Dict with expected keys - construct ScoreResult, clamped to [0.0, 1.0]
-        if isinstance(value, dict) and "value" in value:
-            original_value = float(value["value"])
-            clamped_value = max(0.0, min(1.0, original_value))
-            if clamped_value != original_value:
-                logger.warning(
-                    f"Code metric dict returned value {original_value} outside [0.0, 1.0] range, "
-                    f"clamped to {clamped_value}"
-                )
-            else:
-                logger.debug(f"Coercing dict metric result to ScoreResult: {value}")
-            return ScoreResult(
-                name=value.get("name", "code"),
-                value=clamped_value,
-                reason=value.get("reason", "")
+        try:
+            # Submit to process pool and wait with timeout
+            future = executor.submit(
+                _execute_code_metric_in_process,
+                code,
+                dataset_item,
+                llm_output
             )
-        
-        # Unsupported type
-        logger.warning(f"Code metric returned unsupported type: {type(value).__name__}")
-        raise InvalidMetricError(
-            "code",
-            f"Metric must return a ScoreResult, numeric value (int/float), or dict with 'value' key. "
-            f"Got: {type(value).__name__}"
-        )
-    
-    # If we found a BaseMetric class, wrap it to match the optimizer signature
-    if metric_class is not None:
-        metric_instance = metric_class()
-        logger.info(f"Created code metric from BaseMetric class: {metric_class.__name__}")
-        
-        def wrapped_class_metric(dataset_item, llm_output):
-            # BaseMetric.score expects output as first arg and kwargs for the rest
-            result = metric_instance.score(output=llm_output, **dataset_item)
-            return _coerce_to_score_result(result)
-        
-        wrapped_class_metric.__name__ = "code"
-        return wrapped_class_metric
-    
-    # If we found function candidates, select deterministically
-    if metric_fn_candidates:
-        # First, check for well-known metric function names
-        selected_fn = None
-        for preferred_name in PREFERRED_METRIC_NAMES:
-            for name, fn in metric_fn_candidates:
-                if name == preferred_name:
-                    selected_fn = fn
-                    logger.info(f"Selected metric function by preferred name: {name}")
-                    break
-            if selected_fn:
-                break
-        
-        # If no preferred name found, check if there's only one candidate
-        if selected_fn is None:
-            if len(metric_fn_candidates) == 1:
-                selected_fn = metric_fn_candidates[0][1]
-                logger.info(f"Selected single metric function: {metric_fn_candidates[0][0]}")
-            else:
-                # Multiple candidates - ambiguous, raise error
-                candidate_names = [name for name, _ in metric_fn_candidates]
-                raise InvalidMetricError(
-                    "code",
-                    f"Multiple metric function candidates found: {candidate_names}. "
-                    f"Please name your metric function one of: {PREFERRED_METRIC_NAMES}, "
-                    f"or ensure only one function with 2+ parameters is defined."
+            result = future.result(timeout=CODE_METRIC_TIMEOUT)
+            
+            if "error" in result:
+                logger.warning(f"Code metric error: {result['error']}")
+                # Return zero score on error rather than crashing the optimization
+                return ScoreResult(
+                    name="code",
+                    value=0.0,
+                    reason=f"Metric error: {result['error'][:200]}"
                 )
-        
-        original_fn = selected_fn
-        
-        def wrapped_fn_metric(dataset_item, llm_output):
-            result = original_fn(dataset_item, llm_output)
-            return _coerce_to_score_result(result)
-        
-        wrapped_fn_metric.__name__ = "code"
-        return wrapped_fn_metric
+            
+            score_data = result["score"]
+            return ScoreResult(
+                name=score_data["name"],
+                value=score_data["value"],
+                reason=score_data["reason"]
+            )
+            
+        except FuturesTimeoutError:
+            logger.error(f"Code metric timed out after {CODE_METRIC_TIMEOUT}s")
+            return ScoreResult(
+                name="code",
+                value=0.0,
+                reason=f"Metric execution timed out after {CODE_METRIC_TIMEOUT}s"
+            )
+        except Exception as e:
+            logger.error(f"Code metric execution failed: {e}")
+            return ScoreResult(
+                name="code",
+                value=0.0,
+                reason=f"Metric execution failed: {str(e)[:200]}"
+            )
     
-    raise InvalidMetricError(
-        "code", 
-        "Code must define either:\n"
-        f"1. A function named one of {PREFERRED_METRIC_NAMES}: def evaluation_metric(dataset_item, llm_output) -> ScoreResult\n"
-        "2. A class: class MyMetric(BaseMetric) with a score() method"
-    )
-
+    isolated_metric.__name__ = "code"
+    return isolated_metric

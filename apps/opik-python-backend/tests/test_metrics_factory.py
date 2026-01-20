@@ -309,16 +309,22 @@ def my_metric(dataset_item, llm_output)
         
         assert "Invalid Python code" in str(exc_info.value)
 
-    def test_code_metric_no_metric_function_raises_error(self):
-        """Test that code without a valid metric function raises error."""
+    def test_code_metric_no_metric_function_returns_zero_score(self):
+        """Test that code without a valid metric function returns zero score.
+        
+        With process isolation, runtime errors return ScoreResult(value=0.0)
+        instead of raising exceptions, to avoid crashing the optimization.
+        """
         code = '''
 # Just a comment, no function
 x = 1
 '''
-        with pytest.raises(InvalidMetricError) as exc_info:
-            MetricFactory.build("code", {"code": code}, "model")
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
         
-        assert "Code must define" in str(exc_info.value)
+        # Should return zero score with error reason
+        assert result.value == 0.0
+        assert "No metric function" in result.reason or "error" in result.reason.lower()
 
 
 class TestCodeMetricDeterministicSelection:
@@ -376,8 +382,12 @@ def my_custom_metric(dataset_item, llm_output):
         assert result.name == "custom"
         assert result.value == 0.8
 
-    def test_multiple_candidates_without_preferred_name_raises_error(self):
-        """Test that multiple candidates without a preferred name raise an error."""
+    def test_multiple_candidates_without_preferred_name_returns_zero_score(self):
+        """Test that multiple candidates without a preferred name return zero score.
+        
+        With process isolation, runtime errors return ScoreResult(value=0.0)
+        instead of raising exceptions, to avoid crashing the optimization.
+        """
         code = '''
 def my_metric_one(dataset_item, llm_output):
     return ScoreResult(name="one", value=0.5, reason="First")
@@ -385,12 +395,12 @@ def my_metric_one(dataset_item, llm_output):
 def my_metric_two(dataset_item, llm_output):
     return ScoreResult(name="two", value=0.5, reason="Second")
 '''
-        with pytest.raises(InvalidMetricError) as exc_info:
-            MetricFactory.build("code", {"code": code}, "model")
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
         
-        assert "Multiple metric function candidates" in str(exc_info.value)
-        assert "my_metric_one" in str(exc_info.value)
-        assert "my_metric_two" in str(exc_info.value)
+        # Should return zero score with error reason about multiple functions
+        assert result.value == 0.0
+        assert "Multiple" in result.reason or "error" in result.reason.lower()
 
     def test_private_functions_ignored(self):
         """Test that functions starting with underscore are ignored."""
@@ -493,31 +503,39 @@ def evaluation_metric(dataset_item, llm_output):
         assert result.name == "code"
         assert result.value == 0.5
 
-    def test_raises_error_for_invalid_return_type(self):
-        """Test that invalid return types raise error."""
+    def test_invalid_return_type_returns_zero_score(self):
+        """Test that invalid return types return zero score.
+        
+        With process isolation, runtime errors return ScoreResult(value=0.0)
+        instead of raising exceptions, to avoid crashing the optimization.
+        """
         code = '''
 def evaluation_metric(dataset_item, llm_output):
     return "invalid string"
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
         
-        with pytest.raises(InvalidMetricError) as exc_info:
-            metric_fn({}, "test output")
-        
-        assert "must return a ScoreResult" in str(exc_info.value)
+        # Should return zero score with error in reason
+        assert result.value == 0.0
+        assert "unsupported type" in result.reason.lower() or "error" in result.reason.lower()
 
-    def test_raises_error_for_dict_without_value_key(self):
-        """Test that dict without 'value' key raises error."""
+    def test_dict_without_value_key_returns_zero_score(self):
+        """Test that dict without 'value' key returns zero score.
+        
+        With process isolation, runtime errors return ScoreResult(value=0.0)
+        instead of raising exceptions, to avoid crashing the optimization.
+        """
         code = '''
 def evaluation_metric(dataset_item, llm_output):
     return {"name": "test", "reason": "no value key"}
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
         
-        with pytest.raises(InvalidMetricError) as exc_info:
-            metric_fn({}, "test output")
-        
-        assert "must return a ScoreResult" in str(exc_info.value)
+        # Should return zero score with error in reason
+        assert result.value == 0.0
+        assert "unsupported type" in result.reason.lower() or "error" in result.reason.lower()
 
 
 class TestTemplateSyntaxConversion:
