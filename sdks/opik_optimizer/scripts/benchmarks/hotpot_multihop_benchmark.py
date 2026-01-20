@@ -234,6 +234,10 @@ class SummaryObject(BaseModel):
     gaps: list[str]
 
 
+class SummaryUpdate(BaseModel):
+    summary: str
+
+
 def _parse_summary_response(content: str) -> SummaryObject:
     """Parse the structured summary response, falling back to JSON extraction."""
     try:
@@ -244,6 +248,17 @@ def _parse_summary_response(content: str) -> SummaryObject:
             raise
         data = json.loads(match.group(0))
     return SummaryObject(**data)
+
+
+def _parse_summary_update(content: str) -> SummaryUpdate:
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", content, re.DOTALL)
+        if not match:
+            raise
+        data = json.loads(match.group(0))
+    return SummaryUpdate(**data)
 
 
 class HotpotMultiHopAgent(OptimizableAgent):
@@ -300,7 +315,7 @@ class HotpotMultiHopAgent(OptimizableAgent):
             },
             **self.model_parameters,
         )
-        search_query_1 = search_query_1.choices[0].message.content
+        search_query_1 = str(search_query_1.choices[0].message.content or "").strip()
 
         # Do the first external search
         search_query_1_result = self.search_fn(search_query_1, self.num_passages)
@@ -352,7 +367,9 @@ class HotpotMultiHopAgent(OptimizableAgent):
             },
             **self.model_parameters,
         )
-        search_query_prompt = search_query_2.choices[0].message.content
+        search_query_prompt = str(
+            search_query_2.choices[0].message.content or ""
+        ).strip()
         search_query_2_result = self.search_fn(search_query_prompt, self.num_passages)
 
         # Do the second summarization
@@ -366,6 +383,7 @@ class HotpotMultiHopAgent(OptimizableAgent):
         search_query_2_summary = tracked_completion(
             model=self.model,
             messages=messages,
+            response_format=SummaryUpdate,
             metadata={
                 "opik": {
                     "current_span_data": opik_context.get_current_span_data(),
@@ -374,7 +392,11 @@ class HotpotMultiHopAgent(OptimizableAgent):
             },
             **self.model_parameters,
         )
-        search_query_2_summary = search_query_2_summary.choices[0].message.content
+        response_msg = search_query_2_summary.choices[0].message
+        parsed = getattr(response_msg, "parsed", None)
+        if parsed is None:
+            parsed = _parse_summary_update(response_msg.content)
+        search_query_2_summary = parsed.summary
 
         # Do the final answer
         messages = prompts["final_answer"].get_messages(
@@ -447,6 +469,7 @@ opt_result = optimizer.optimize_prompt(
     metric=hotpot_multihop_metric,
     agent=agent,
     max_trials=50,
+    n_samples=10,
 )
 print(f"Optimization best score: {opt_result.score:.4f}")
 
