@@ -171,15 +171,17 @@ const MetricContainerChart = ({
     if (breakdown && chartType === CHART_TYPE.bar && linesList.length > 1) {
       // Create per-bucket ranking: for each time bucket, store the sorted order of groups
       const ranking: Record<string, string[]> = {};
-      
+
       transformedData.forEach((dataPoint) => {
         const time = dataPoint.time as string;
         // Get all groups with their values for this time bucket
         const groupValues = linesList.map((groupName) => ({
           name: groupName,
-          value: isNumber(dataPoint[groupName]) ? (dataPoint[groupName] as number) : 0,
+          value: isNumber(dataPoint[groupName])
+            ? (dataPoint[groupName] as number)
+            : 0,
         }));
-        
+
         // Sort by value descending
         groupValues.sort((a, b) => b.value - a.value);
         ranking[time] = groupValues.map((g) => g.name);
@@ -187,7 +189,7 @@ const MetricContainerChart = ({
 
       // Sort linesList by total for legend ordering (highest total first)
       linesList.sort((a, b) => (lineTotals[b] || 0) - (lineTotals[a] || 0));
-      
+
       return [transformedData, linesList, ranking];
     }
 
@@ -205,7 +207,11 @@ const MetricContainerChart = ({
     // Use distinct colors for breakdown groups to ensure visual distinction
     if (breakdown) {
       const breakdownColorMap = generateBreakdownColorMap(lines);
-      return getDefaultHashedColorsChartConfig(lines, labelsMap, breakdownColorMap);
+      return getDefaultHashedColorsChartConfig(
+        lines,
+        labelsMap,
+        breakdownColorMap,
+      );
     }
     // Use predefined colors for non-breakdown charts (legacy behavior)
     return getDefaultHashedColorsChartConfig(

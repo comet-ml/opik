@@ -155,11 +155,10 @@ class ProjectMetricsWithBreakdownResourceTest {
     // ==================== BREAKDOWN FIELD PROVIDERS ====================
 
     /**
-     * Valid breakdown fields for Trace metrics: PROJECT_ID, TAGS, METADATA, NAME, ERROR_INFO
+     * Valid breakdown fields for Trace metrics: TAGS, METADATA, NAME, ERROR_INFO
      */
     static Stream<Arguments> traceValidBreakdownFields() {
         return Stream.of(
-                Arguments.of(BreakdownField.PROJECT_ID),
                 Arguments.of(BreakdownField.TAGS),
                 Arguments.of(BreakdownField.METADATA),
                 Arguments.of(BreakdownField.NAME),
@@ -177,11 +176,10 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     /**
-     * Valid breakdown fields for Thread metrics: PROJECT_ID, TAGS
+     * Valid breakdown fields for Thread metrics: TAGS
      */
     static Stream<Arguments> threadValidBreakdownFields() {
         return Stream.of(
-                Arguments.of(BreakdownField.PROJECT_ID),
                 Arguments.of(BreakdownField.TAGS));
     }
 
@@ -199,11 +197,10 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     /**
-     * Valid breakdown fields for Span metrics: all fields
+     * Valid breakdown fields for Span metrics: TAGS, METADATA, NAME, ERROR_INFO, MODEL, PROVIDER, TYPE
      */
     static Stream<Arguments> spanValidBreakdownFields() {
         return Stream.of(
-                Arguments.of(BreakdownField.PROJECT_ID),
                 Arguments.of(BreakdownField.TAGS),
                 Arguments.of(BreakdownField.METADATA),
                 Arguments.of(BreakdownField.NAME),
@@ -1377,8 +1374,6 @@ class ProjectMetricsWithBreakdownResourceTest {
     private void applyBreakdownFieldToTrace(Trace.TraceBuilder builder, BreakdownField breakdownField,
             String groupValue) {
         switch (breakdownField) {
-            case PROJECT_ID -> {
-            } // No special handling needed
             case TAGS -> builder.tags(Set.of(groupValue));
             case METADATA -> builder.metadata(JsonUtils.getJsonNodeFromString(
                     JsonUtils.writeValueAsString(Map.of("env", groupValue))));
@@ -1482,10 +1477,8 @@ class ProjectMetricsWithBreakdownResourceTest {
 
     private void applyBreakdownFieldToThread(Trace.TraceBuilder builder, BreakdownField breakdownField,
             String groupValue) {
-        // Thread metrics only support PROJECT_ID and TAGS
+        // Thread metrics only support TAGS
         switch (breakdownField) {
-            case PROJECT_ID -> {
-            } // No special handling needed
             case TAGS -> builder.tags(Set.of(groupValue));
             default -> {
             }
@@ -1573,8 +1566,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
     private void applyBreakdownFieldToSpan(Span.SpanBuilder builder, BreakdownField breakdownField, String groupValue) {
         switch (breakdownField) {
-            case PROJECT_ID -> {
-            } // No special handling needed
             case TAGS -> builder.tags(Set.of(groupValue));
             case METADATA -> builder.metadata(JsonUtils.getJsonNodeFromString(
                     JsonUtils.writeValueAsString(Map.of("env", groupValue))));

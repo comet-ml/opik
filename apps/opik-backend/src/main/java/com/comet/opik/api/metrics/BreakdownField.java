@@ -20,7 +20,6 @@ import java.util.Set;
 public enum BreakdownField {
 
     NONE("none", "No Grouping", false),
-    PROJECT_ID("project_id", "Project", false),
     TAGS("tags", "Tags", false),
     METADATA("metadata", "Metadata", true),
     NAME("name", "Name", false),
@@ -59,7 +58,6 @@ public enum BreakdownField {
     /**
      * Check if this group by field is compatible with the given metric type.
      * Based on the Jira ticket OPIK-3790 "Supported Breakdown Fields" table:
-     * - PROJECT_ID: Trace, Span, Thread
      * - TAGS: Trace, Span, Thread
      * - METADATA: Trace, Span (not Thread)
      * - NAME: Trace, Span (not Thread)
@@ -74,7 +72,7 @@ public enum BreakdownField {
         }
 
         return switch (this) {
-            case PROJECT_ID, TAGS -> TRACE_METRICS.contains(metricType)
+            case TAGS -> TRACE_METRICS.contains(metricType)
                     || SPAN_METRICS.contains(metricType)
                     || THREAD_METRICS.contains(metricType);
             case METADATA, NAME, ERROR_INFO -> TRACE_METRICS.contains(metricType)
@@ -90,7 +88,7 @@ public enum BreakdownField {
     public String getCompatibleMetricTypesDescription() {
         return switch (this) {
             case NONE -> "all metrics";
-            case PROJECT_ID, TAGS -> "Trace, Span, and Thread metrics";
+            case TAGS -> "Trace, Span, and Thread metrics";
             case METADATA, NAME, ERROR_INFO -> "Trace and Span metrics";
             case MODEL, PROVIDER, TYPE -> "Span metrics only";
         };
