@@ -17,6 +17,7 @@ from .. import prompts as meta_prompts
 from ..types import HallOfFameEntry
 from ....utils.prompt_library import PromptLibrary
 from ....utils.display import format as display_format
+from ....utils.logging import debug_log
 
 logger = logging.getLogger(__name__)
 
@@ -68,17 +69,23 @@ class PromptHallOfFame:
         if len(self.entries) < self.max_size:
             self.entries.append(entry)
             self.entries.sort(key=lambda e: e.score, reverse=True)
-            logger.debug(
-                f"Added to hall of fame: score={entry.score:.3f}, trial={entry.trial_number}"
+            debug_log(
+                "hall_of_fame_add",
+                score=entry.score,
+                trial=entry.trial_number,
+                action="append",
             )
             return True
         elif entry.score > self.entries[-1].score:
             removed = self.entries[-1]
             self.entries[-1] = entry
             self.entries.sort(key=lambda e: e.score, reverse=True)
-            logger.debug(
-                f"Added to hall of fame (replaced score={removed.score:.3f}): "
-                f"score={entry.score:.3f}, trial={entry.trial_number}"
+            debug_log(
+                "hall_of_fame_add",
+                score=entry.score,
+                trial=entry.trial_number,
+                action="replace",
+                replaced_score=removed.score,
             )
             return True
         return False

@@ -162,6 +162,8 @@ def _format_debug_value(value: Any) -> str:
             return json.dumps(value, ensure_ascii=True, sort_keys=True)
         except Exception:
             return f"dict({len(value)})"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=True)
     if isinstance(value, (list, tuple, set)):
         return f"{type(value).__name__}({len(value)})"
     return str(value)

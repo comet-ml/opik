@@ -20,6 +20,135 @@ from .. import prompts as meta_prompts
 logger = logging.getLogger(__name__)
 
 
+def _sample_dataset_items(
+    dataset: opik.Dataset, num_examples: int
+) -> Sequence[dict[str, object]]:
+    try:
+        items = dataset.get_items()
+        num_to_sample = min(num_examples, len(items))
+        return random.sample(items, num_to_sample) if len(items) > 0 else []
+    except Exception as exc:
+        logger.warning("Could not get samples from dataset: %s", exc)
+        return []
+
+
+def _resolve_input_fields(
+    sample: dict[str, object], columns: list[str] | None
+) -> list[str]:
+    excluded_keys = {
+        "id",
+        "answer",
+        "label",
+        "output",
+        "expected_output",
+        "ground_truth",
+        "target",
+        "metadata",
+        "response",
+        "supporting_facts",
+    }
+    all_input_fields = [k for k in sample.keys() if k not in excluded_keys]
+    if columns is None:
+        return all_input_fields
+    input_fields = [f for f in columns if f in all_input_fields]
+    if not input_fields:
+        logger.warning(
+            "None of specified columns %s found in dataset. Using all input fields.",
+            columns,
+        )
+        return all_input_fields
+    return input_fields
+
+
+def _build_metric_context(
+    metric: MetricFunction, extract_metric_understanding: bool
+) -> str:
+    context = ""
+    if extract_metric_understanding:
+        metric_name = metric.__name__
+        metric_doc = getattr(metric, "__doc__", None)
+        metric_direction = getattr(metric, "direction", None)
+
+        context += "Evaluation Metric:\n"
+        context += f"- Name: {metric_name}\n"
+
+        if metric_direction:
+            goal = "Maximize" if metric_direction == "maximize" else "Minimize"
+            context += f"- Goal: {goal} this metric\n"
+
+        if metric_doc and metric_doc.strip():
+            doc_lines = metric_doc.strip().split("\n")
+            description = next(
+                (line.strip() for line in doc_lines if line.strip()), None
+            )
+            if description:
+                context += f"- Description: {description}\n"
+
+        context += "\nFocus on producing clear, correct responses that optimize for this metric.\n\n"
+    else:
+        context += (
+            "Evaluation: Your output will be evaluated for accuracy and quality.\n"
+        )
+        context += "Focus on producing clear, correct responses based on the input.\n\n"
+    return context
+
+
+def _normalize_value(value: object, max_value_length: int) -> str:
+    value_str = str(value).replace("\n", " ").replace("\r", " ")
+    value_str = re.sub(r"\s+", " ", value_str).strip()
+    if len(value_str) > max_value_length:
+        value_str = value_str[:max_value_length] + "..."
+    return value_str
+
+
+def _build_examples_context(
+    samples: Sequence[dict[str, object]],
+    input_fields: list[str],
+    current_num_examples: int,
+    max_value_length: int,
+) -> str:
+    context = f"Example inputs from dataset ({current_num_examples} samples):\n\n"
+    for idx, sample_item in enumerate(samples[:current_num_examples], 1):
+        context += f"Example {idx}:\n```\n"
+        for key in input_fields:
+            value_str = _normalize_value(sample_item.get(key, ""), max_value_length)
+            context += (
+                f"{meta_prompts.START_DELIM}{key}{meta_prompts.END_DELIM}: "
+                f"{value_str}\n"
+            )
+        context += "```\n\n"
+    return context
+
+
+def _build_context(
+    *,
+    input_fields: list[str],
+    metric: MetricFunction,
+    samples: Sequence[dict[str, object]],
+    current_num_examples: int,
+    max_value_length: int,
+    extract_metric_understanding: bool,
+) -> str:
+    context = "Task Context: "
+    context += (
+        "Available input variables (use "
+        f"{meta_prompts.START_DELIM}variable_name{meta_prompts.END_DELIM}"
+        " syntax): "
+    )
+    context += ", ".join(
+        [
+            f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}"
+            for field in input_fields
+        ]
+    )
+    context += "\n\n"
+    context += _build_metric_context(metric, extract_metric_understanding)
+    context += _build_examples_context(
+        samples, input_fields, current_num_examples, max_value_length
+    )
+    return context
+
+
 def get_task_context(
     dataset: opik.Dataset | None,
     metric: MetricFunction,
@@ -36,107 +165,24 @@ def get_task_context(
     if dataset is None:
         return "", 0
 
-    samples: Sequence[dict[str, object]] = []
-    try:
-        items = dataset.get_items()
-        num_to_sample = min(num_examples, len(items))
-        samples = random.sample(items, num_to_sample) if len(items) > 0 else []
-    except Exception as exc:
-        logger.warning("Could not get samples from dataset: %s", exc)
-        return "", 0
-
+    samples = _sample_dataset_items(dataset, num_examples)
     if not samples:
         return "", 0
 
-    sample = samples[0]
-
-    excluded_keys = {
-        "id",
-        "answer",
-        "label",
-        "output",
-        "expected_output",
-        "ground_truth",
-        "target",
-        "metadata",
-        "response",
-        "supporting_facts",
-    }
-
-    all_input_fields = [k for k in sample.keys() if k not in excluded_keys]
-
-    if columns is not None:
-        input_fields = [f for f in columns if f in all_input_fields]
-        if not input_fields:
-            logger.warning(
-                "None of specified columns %s found in dataset. Using all input fields.",
-                columns,
-            )
-            input_fields = all_input_fields
-    else:
-        input_fields = all_input_fields
+    input_fields = _resolve_input_fields(samples[0], columns)
 
     max_value_length = constants.META_PROMPT_DEFAULT_MAX_VALUE_LENGTH
     current_num_examples = len(samples)
 
     while current_num_examples > 0:
-        context = "Task Context: "
-        context += (
-            "Available input variables (use "
-            f"{meta_prompts.START_DELIM}variable_name{meta_prompts.END_DELIM}"
-            " syntax): "
+        context = _build_context(
+            input_fields=input_fields,
+            metric=metric,
+            samples=samples,
+            current_num_examples=current_num_examples,
+            max_value_length=max_value_length,
+            extract_metric_understanding=extract_metric_understanding,
         )
-        context += ", ".join(
-            [
-                f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}"
-                for field in input_fields
-            ]
-        )
-        context += "\n\n"
-
-        if extract_metric_understanding:
-            metric_name = metric.__name__
-            metric_doc = getattr(metric, "__doc__", None)
-            metric_direction = getattr(metric, "direction", None)
-
-            context += "Evaluation Metric:\n"
-            context += f"- Name: {metric_name}\n"
-
-            if metric_direction:
-                goal = "Maximize" if metric_direction == "maximize" else "Minimize"
-                context += f"- Goal: {goal} this metric\n"
-
-            if metric_doc and metric_doc.strip():
-                doc_lines = metric_doc.strip().split("\n")
-                description = next(
-                    (line.strip() for line in doc_lines if line.strip()), None
-                )
-                if description:
-                    context += f"- Description: {description}\n"
-
-            context += "\nFocus on producing clear, correct responses that optimize for this metric.\n\n"
-        else:
-            context += (
-                "Evaluation: Your output will be evaluated for accuracy and quality.\n"
-            )
-            context += (
-                "Focus on producing clear, correct responses based on the input.\n\n"
-            )
-
-        context += f"Example inputs from dataset ({current_num_examples} samples):\n\n"
-        for idx, sample_item in enumerate(samples[:current_num_examples], 1):
-            context += f"Example {idx}:\n```\n"
-            for key in input_fields:
-                value = sample_item.get(key, "")
-                value_str = str(value).replace("\n", " ").replace("\r", " ")
-                value_str = re.sub(r"\s+", " ", value_str).strip()
-                if len(value_str) > max_value_length:
-                    value_str = value_str[:max_value_length] + "..."
-                context += (
-                    f"{meta_prompts.START_DELIM}{key}{meta_prompts.END_DELIM}: "
-                    f"{value_str}\n"
-                )
-            context += "```\n\n"
 
         token_count = token_utils.count_tokens(context, model)
 

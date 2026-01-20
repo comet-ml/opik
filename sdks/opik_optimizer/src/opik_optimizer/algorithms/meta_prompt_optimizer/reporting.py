@@ -179,18 +179,7 @@ def log_generation_start(
     source: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
 ) -> None:
     """Log a standardized start message for candidate generation."""
-    logger.debug("Generating candidate prompts for round %s", round_num + 1)
-    if isinstance(source, dict):
-        logger.debug("Generating from agents: %s", list(source.keys()))
-    else:
-        prompt_text = display_format.format_prompt_messages(
-            source.get_messages(), pretty=True
-        )
-        logger.debug(
-            "Generating from prompt: %s",
-            compact_debug_text(prompt_text, limit=240),
-        )
-    logger.debug("Current best score: %.4f", best_score)
+    debug_log("generation_start", round_index=round_num + 1, best_score=best_score)
 
 
 def log_pattern_injection(patterns: list[str] | None) -> None:
@@ -217,16 +206,21 @@ def log_bundle_candidates_summary(candidates: list[Any]) -> None:
 
 def log_candidate_generated(
     *,
-    round_num: int,
+    round_num: int | None,
+    candidate_id: str | None,
     prompt_messages: list[dict[str, Any]],
     improvement_focus: str | None,
     reasoning: str | None,
 ) -> None:
     """Log a concise candidate generation event with clipped previews."""
-    prompt_preview = compact_debug_text(
-        display_format.format_prompt_messages(prompt_messages, pretty=True),
-        limit=240,
+    combined = " | ".join(
+        display_format.format_prompt_snippet(msg.get("content", ""), max_length=120)
+        if isinstance(msg.get("content", ""), str)
+        else "[multimodal content]"
+        for msg in prompt_messages
+        if msg.get("content", "") is not None
     )
+    prompt_preview = compact_debug_text(combined, limit=240)
     focus_preview = (
         compact_debug_text(improvement_focus, limit=120)
         if isinstance(improvement_focus, str)
@@ -237,7 +231,8 @@ def log_candidate_generated(
     )
     debug_log(
         "candidate_generated",
-        round_index=round_num + 1,
+        round_index=(round_num + 1) if round_num is not None else None,
+        candidate_id=candidate_id,
         prompt_preview=prompt_preview,
         improvement_focus=focus_preview,
         reasoning_preview=reasoning_preview,

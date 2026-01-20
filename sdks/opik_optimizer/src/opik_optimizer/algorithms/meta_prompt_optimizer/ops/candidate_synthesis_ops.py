@@ -5,6 +5,7 @@ Synthesis candidate generation for the Meta-Prompt Optimizer.
 import ast
 import json
 import logging
+import re
 from typing import Any
 from collections.abc import Callable, Sequence
 
@@ -23,6 +24,168 @@ from .. import reporting
 logger = logging.getLogger(__name__)
 
 
+def _collect_hof_prompts(
+    optimizer: Any,
+) -> list[tuple[list[dict[str, str]], float, str]]:
+    top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
+    if not optimizer.hall_of_fame or not hasattr(optimizer.hall_of_fame, "entries"):
+        return top_prompts_with_scores
+    for entry in optimizer.hall_of_fame.entries[:5]:
+        prompt_messages = entry.prompt_messages
+        score = entry.score
+
+        reasoning_parts = []
+        reasoning_parts.append(f"Trial #{entry.trial_number}")
+        reasoning_parts.append(
+            f"Improvement: {entry.improvement_over_baseline * 100:+.1f}% over baseline"
+        )
+
+        if entry.extracted_patterns:
+            reasoning_parts.append(
+                f"Winning patterns: {' | '.join(entry.extracted_patterns)}"
+            )
+
+        if entry.metadata:
+            for key, value in entry.metadata.items():
+                if value and key not in ["prompt_messages", "score"]:
+                    reasoning_parts.append(f"{key}: {value}")
+
+        reasoning = " | ".join(reasoning_parts)
+        top_prompts_with_scores.append((prompt_messages, score, reasoning))
+    return top_prompts_with_scores
+
+
+def _collect_recent_round_prompts(
+    previous_rounds: Sequence[OptimizationRound],
+) -> list[tuple[list[dict[str, str]], float, str]]:
+    top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
+    for round_data in reversed(list(previous_rounds)[-5:]):
+        generated = round_payload(round_data).get("generated_prompts", [])
+        sorted_generated = sorted(
+            generated,
+            key=lambda p: p.get("score", -float("inf")),
+            reverse=True,
+        )
+        if not sorted_generated:
+            continue
+        best = sorted_generated[0]
+        prompt_payload = best.get("candidate") or best.get("prompt", "")
+        score = best.get("score", 0.0)
+        reasoning = best.get("notes") or best.get("reasoning", "")
+        messages: list[Any] | None = None
+        try:
+            if isinstance(prompt_payload, list):
+                messages = prompt_payload
+            elif isinstance(prompt_payload, str) and prompt_payload:
+                try:
+                    messages = json.loads(normalize_llm_text(prompt_payload))
+                except json.JSONDecodeError:
+                    messages = ast.literal_eval(normalize_llm_text(prompt_payload))
+            if isinstance(messages, list):
+                top_prompts_with_scores.append((messages, score, reasoning))
+        except Exception:
+            continue
+    return top_prompts_with_scores
+
+
+def _parse_synthesis_json(content_item: str) -> dict[str, Any]:
+    try:
+        return json.loads(normalize_llm_text(content_item))
+    except json.JSONDecodeError:
+        json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
+        if not json_match:
+            raise ValueError(
+                f"No JSON object found in synthesis response: {content_item}"
+            )
+        try:
+            return json.loads(normalize_llm_text(json_match.group()))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Could not parse synthesis JSON: {exc} - received: {json_match.group()}"
+            )
+
+
+def _normalize_synthesis_json(json_result: Any) -> dict[str, Any]:
+    if isinstance(json_result, list):
+        if (
+            len(json_result) == 1
+            and isinstance(json_result[0], dict)
+            and "prompts" in json_result[0]
+        ):
+            json_result = json_result[0]
+        elif all(isinstance(item, dict) and "prompt" in item for item in json_result):
+            json_result = {"prompts": json_result}
+    if not isinstance(json_result, dict) or "prompts" not in json_result:
+        raise ValueError(f"Invalid synthesis JSON structure - received: {json_result}")
+    if not isinstance(json_result["prompts"], list):
+        raise ValueError("'prompts' key does not contain a list in synthesis response")
+    return json_result
+
+
+def _parse_synthesis_prompt_items(contents: list[Any]) -> list[dict[str, Any]]:
+    prompt_items: list[dict[str, Any]] = []
+    for content_item in contents:
+        if not isinstance(content_item, str):
+            raise ValueError(
+                "Synthesis response must be a string; received %s"
+                % type(content_item).__name__
+            )
+        json_result = _normalize_synthesis_json(_parse_synthesis_json(content_item))
+        prompt_items.extend(json_result["prompts"])
+    return prompt_items
+
+
+def _build_synthesis_prompts(
+    *,
+    optimizer: Any,
+    current_prompt: chat_prompt.ChatPrompt,
+    round_num: int | None,
+    prompt_items: list[dict[str, Any]],
+) -> list[chat_prompt.ChatPrompt]:
+    valid_prompts: list[chat_prompt.ChatPrompt] = []
+    for idx, item in enumerate(prompt_items, start=1):
+        if (
+            isinstance(item, dict)
+            and "prompt" in item
+            and isinstance(item["prompt"], list)
+        ):
+            if current_prompt.user:
+                user_text = current_prompt.user
+            elif current_prompt.messages is not None:
+                user_text = current_prompt.messages[-1]["content"]
+            else:
+                raise Exception("User content not found in chat-prompt!")
+
+            valid_prompts.append(
+                chat_prompt.ChatPrompt(
+                    name=current_prompt.name,
+                    system=item["prompt"][0]["content"],
+                    user=user_text,
+                    tools=current_prompt.tools,
+                    function_map=current_prompt.function_map,
+                    model=current_prompt.model,
+                    model_parameters=current_prompt.model_kwargs,
+                )
+            )
+            prompt_ref = valid_prompts[-1]
+            optimizer._candidate_metadata_by_prompt_id[id(prompt_ref)] = {
+                "improvement_focus": item.get("improvement_focus"),
+                "reasoning": item.get("reasoning"),
+            }
+            reporting.log_candidate_generated(
+                round_num=round_num,
+                candidate_id=(
+                    f"round{round_num}_cand{idx}" if round_num is not None else None
+                ),
+                prompt_messages=prompt_ref.get_messages(),
+                improvement_focus=item.get("improvement_focus"),
+                reasoning=item.get("reasoning"),
+            )
+        else:
+            logger.warning("Skipping invalid synthesis prompt item structure: %s", item)
+    return valid_prompts
+
+
 def generate_synthesis_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
@@ -32,6 +195,7 @@ def generate_synthesis_prompts(
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
     project_name: str | None = None,
+    round_num: int | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """
     Generate synthesis prompts that combine top performers into comprehensive prompts.
@@ -41,69 +205,22 @@ def generate_synthesis_prompts(
     """
     num_synthesis_prompts = getattr(optimizer, "synthesis_prompts_per_round", 2)
     previous_rounds_list = list(previous_rounds)
+    optimizer._candidate_metadata_by_prompt_id = getattr(
+        optimizer, "_candidate_metadata_by_prompt_id", {}
+    )
 
     with reporting.display_candidate_generation_report(
         num_synthesis_prompts,
         verbose=optimizer.verbose,
         selection_summary=display_utils.summarize_selection_policy(current_prompt),
     ) as candidate_generation_report:
-        top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
-
-        if optimizer.hall_of_fame and hasattr(optimizer.hall_of_fame, "entries"):
-            for entry in optimizer.hall_of_fame.entries[:5]:
-                prompt_messages = entry.prompt_messages
-                score = entry.score
-
-                reasoning_parts = []
-                reasoning_parts.append(f"Trial #{entry.trial_number}")
-                reasoning_parts.append(
-                    f"Improvement: {entry.improvement_over_baseline * 100:+.1f}% over baseline"
-                )
-
-                if entry.extracted_patterns:
-                    reasoning_parts.append(
-                        f"Winning patterns: {' | '.join(entry.extracted_patterns)}"
-                    )
-
-                if entry.metadata:
-                    for key, value in entry.metadata.items():
-                        if value and key not in ["prompt_messages", "score"]:
-                            reasoning_parts.append(f"{key}: {value}")
-
-                reasoning = " | ".join(reasoning_parts)
-                top_prompts_with_scores.append((prompt_messages, score, reasoning))
+        top_prompts_with_scores = _collect_hof_prompts(optimizer)
 
         if not top_prompts_with_scores:
             logger.warning("Hall of Fame empty - using recent rounds for synthesis")
-            for round_data in reversed(previous_rounds_list[-5:]):
-                generated = round_payload(round_data).get("generated_prompts", [])
-                sorted_generated = sorted(
-                    generated,
-                    key=lambda p: p.get("score", -float("inf")),
-                    reverse=True,
-                )
-                if sorted_generated:
-                    best = sorted_generated[0]
-                    prompt_payload = best.get("candidate") or best.get("prompt", "")
-                    score = best.get("score", 0.0)
-                    reasoning = best.get("notes") or best.get("reasoning", "")
-                    messages: list[Any] | None = None
-                    try:
-                        if isinstance(prompt_payload, list):
-                            messages = prompt_payload
-                        elif isinstance(prompt_payload, str) and prompt_payload:
-                            try:
-                                messages = json.loads(
-                                    normalize_llm_text(prompt_payload)
-                                )
-                            except json.JSONDecodeError:
-                                messages = ast.literal_eval(
-                                    normalize_llm_text(prompt_payload)
-                                )
-                        if isinstance(messages, list):
-                            top_prompts_with_scores.append((messages, score, reasoning))
-                    except Exception:
-                        continue
+            top_prompts_with_scores = _collect_recent_round_prompts(
+                previous_rounds_list
+            )
 
         if not top_prompts_with_scores:
             raise ValueError(
@@ -155,87 +272,13 @@ def generate_synthesis_prompts(
             )
 
             contents = content if isinstance(content, list) else [content]
-            valid_prompts: list[chat_prompt.ChatPrompt] = []
-
-            for content_item in contents:
-                json_result = None
-                try:
-                    json_result = json.loads(normalize_llm_text(content_item))
-                except json.JSONDecodeError:
-                    import re
-
-                    json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
-                    if json_match:
-                        try:
-                            json_result = json.loads(
-                                normalize_llm_text(json_match.group())
-                            )
-                        except json.JSONDecodeError as exc:
-                            raise ValueError(
-                                f"Could not parse synthesis JSON: {exc} - received: {json_match.group()}"
-                            )
-                    else:
-                        raise ValueError(
-                            f"No JSON object found in synthesis response: {content_item}"
-                        )
-
-                if isinstance(json_result, list):
-                    if (
-                        len(json_result) == 1
-                        and isinstance(json_result[0], dict)
-                        and "prompts" in json_result[0]
-                    ):
-                        json_result = json_result[0]
-                    elif all(
-                        isinstance(item, dict) and "prompt" in item
-                        for item in json_result
-                    ):
-                        json_result = {"prompts": json_result}
-
-                if not isinstance(json_result, dict) or "prompts" not in json_result:
-                    raise ValueError(
-                        f"Invalid synthesis JSON structure - received: {json_result}"
-                    )
-
-                if not isinstance(json_result["prompts"], list):
-                    raise ValueError(
-                        "'prompts' key does not contain a list in synthesis response"
-                    )
-
-                for item in json_result["prompts"]:
-                    if (
-                        isinstance(item, dict)
-                        and "prompt" in item
-                        and isinstance(item["prompt"], list)
-                    ):
-                        if current_prompt.user:
-                            user_text = current_prompt.user
-                        else:
-                            if current_prompt.messages is not None:
-                                user_text = current_prompt.messages[-1]["content"]
-                            else:
-                                raise Exception(
-                                    "User content not found in chat-prompt!"
-                                )
-
-                        valid_prompts.append(
-                            chat_prompt.ChatPrompt(
-                                name=current_prompt.name,
-                                system=item["prompt"][0]["content"],
-                                user=user_text,
-                                tools=current_prompt.tools,
-                                function_map=current_prompt.function_map,
-                                model=current_prompt.model,
-                                model_parameters=current_prompt.model_kwargs,
-                            )
-                        )
-
-                        focus = item.get("improvement_focus", "N/A")
-                        reasoning = item.get("reasoning", "N/A")
-                        logger.info("Generated synthesis prompt:")
-                        logger.info("  Improvement focus: %s", focus)
-                        logger.info("  Reasoning: %s", reasoning)
-                        logger.debug("  Full prompt: %s", item["prompt"])
+            prompt_items = _parse_synthesis_prompt_items(contents)
+            valid_prompts = _build_synthesis_prompts(
+                optimizer=optimizer,
+                current_prompt=current_prompt,
+                round_num=round_num,
+                prompt_items=prompt_items,
+            )
 
             if not valid_prompts:
                 raise ValueError("No valid synthesis prompts generated")

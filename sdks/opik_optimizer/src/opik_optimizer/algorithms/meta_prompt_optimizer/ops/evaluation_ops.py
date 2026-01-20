@@ -6,6 +6,8 @@ from typing import Any
 from collections.abc import Sequence
 
 from ....api_objects import chat_prompt
+from ....utils import display as display_utils
+from .. import reporting
 from . import result_ops
 
 
@@ -41,13 +43,23 @@ def score_candidate_prompts(
     prompt_scores: list[tuple[Any, float]] = []
     current_round_best_score = best_score
     optimizer._total_candidates_in_round = len(candidate_prompts)
+    dataset_name = getattr(getattr(context, "evaluation_dataset", None), "name", None)
 
     for candidate_count, candidate in enumerate(candidate_prompts):
         if optimizer._should_stop_context(context):
             break
 
         optimizer._current_candidate = candidate_count
-        prompt_score = optimizer.evaluate(context, candidate)
+        selection_summary = display_utils.summarize_selection_policy(candidate)
+        with reporting.display_prompt_candidate_scoring_report(
+            verbose=optimizer.verbose,
+            dataset_name=dataset_name,
+            is_validation=False,
+            selection_summary=selection_summary,
+        ) as reporter:
+            reporter.set_generated_prompts(candidate_count, candidate)
+            prompt_score = optimizer.evaluate(context, candidate)
+            reporter.set_final_score(current_round_best_score, prompt_score)
 
         if prompt_score > current_round_best_score:
             current_round_best_score = prompt_score
