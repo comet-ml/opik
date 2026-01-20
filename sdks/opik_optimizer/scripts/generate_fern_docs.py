@@ -277,6 +277,9 @@ class ClassInspector:
         )
 
     def format_param_field(self, param: ParameterInfo) -> str:
+        def _escape_mdx_text(text: str) -> str:
+            return text.replace("{", "&#123;").replace("}", "&#125;")
+
         field = f'<ParamField path="{param.path}" type="{param.type or "Any"}"'
         if not param.required:
             field += " optional={true}"
@@ -284,7 +287,7 @@ class ClassInspector:
             field += f' default="{param.default}"'
 
         if param.description:
-            field += f">{param.description}</ParamField>"
+            field += f">{_escape_mdx_text(param.description)}</ParamField>"
         else:
             field += " />"
 
