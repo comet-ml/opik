@@ -45,7 +45,6 @@ def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
                 "and identify the main topic from the input."
             ),
             user="{text}",
-            assistant="Summarize the key points and produce a short analysis for '{text}'.",
             model="openai/gpt-4o-mini",
         ),
         "respond": ChatPrompt(
@@ -55,7 +54,6 @@ def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
                 "based on the analysis provided."
             ),
             user="Analysis: {analysis}\n\nOriginal question: {text}",
-            assistant="Provide a concise, final answer referencing the analysis.",
             model="openai/gpt-4o-mini",
         ),
     }

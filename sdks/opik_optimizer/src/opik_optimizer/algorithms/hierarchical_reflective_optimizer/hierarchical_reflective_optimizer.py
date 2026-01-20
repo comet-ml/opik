@@ -10,6 +10,7 @@ from ...base_optimizer import BaseOptimizer
 from ...core.state import OptimizationContext, AlgorithmResult
 from ... import constants
 from ...api_objects import chat_prompt
+from ...api_objects.types import Content
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
@@ -30,7 +31,10 @@ logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 def _message_has_content(message: dict[str, Any]) -> bool:
     """Return True if the message carries non-empty content."""
-    return chat_prompt.ChatPrompt._has_non_empty_content(message.get("content"))
+    content: Content | None = message.get("content")
+    if content is None:
+        return False
+    return chat_prompt.ChatPrompt._has_non_empty_content(content)
 
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
