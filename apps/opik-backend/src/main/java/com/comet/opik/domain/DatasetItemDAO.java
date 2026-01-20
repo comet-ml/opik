@@ -144,7 +144,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
-            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+            ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
@@ -175,12 +175,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 created_by,
                 last_updated_by,
                 null AS experiment_items_array
-            FROM dataset_items
+            FROM dataset_items FINAL
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT :limit OFFSET :offset
             SETTINGS log_comment = '<log_comment>'
             ;
