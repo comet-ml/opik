@@ -284,8 +284,6 @@ class GepaOptimizer(BaseOptimizer):
                 "logger": logger_instance,
             }
 
-            kwargs_gepa["max_metric_calls"] = max_metric_calls
-
             gepa_result: Any = gepa.optimize(**kwargs_gepa)
 
         candidates: list[dict[str, str]] = getattr(gepa_result, "candidates", []) or []
