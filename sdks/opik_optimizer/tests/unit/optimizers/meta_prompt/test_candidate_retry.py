@@ -79,6 +79,37 @@ def test_candidate_single_retries_with_strict_json(mock_llm_call: Any) -> None:
     assert "Return ONLY valid JSON" in calls[1]["messages"][1]["content"]
 
 
+def test_candidate_single_raises_when_all_rejected(
+    monkeypatch: pytest.MonkeyPatch, mock_llm_call: Any
+) -> None:
+    optimizer = _make_optimizer()
+    current_prompt = _make_prompt()
+
+    mock_llm_call(_build_prompt_candidate())
+
+    def reject_all(prompt_json: dict[str, Any], metric_name: str) -> dict[str, Any]:
+        _ = metric_name
+        return {"prompts": []}
+
+    monkeypatch.setattr(
+        candidate_single_ops,
+        "sanitize_generated_prompts",
+        reject_all,
+    )
+
+    with pytest.raises(ValueError, match="No valid prompts found"):
+        candidate_single_ops.generate_candidate_prompts(
+            optimizer=optimizer,
+            current_prompt=current_prompt,
+            best_score=0.5,
+            round_num=0,
+            previous_rounds=[],
+            metric=lambda item, output: 0.5,
+            build_history_context_fn=lambda _: "",
+            get_task_context_fn=lambda **_: ("", "", ""),
+        )
+
+
 def test_candidate_synthesis_retries_with_strict_json(mock_llm_call: Any) -> None:
     optimizer = _make_optimizer()
     current_prompt = _make_prompt()

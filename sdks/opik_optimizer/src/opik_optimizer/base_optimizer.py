@@ -8,7 +8,7 @@ from abc import ABC
 import random
 import importlib.metadata
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 import litellm
 from opik.rest_api.core import ApiError
@@ -19,6 +19,7 @@ from opik.evaluation.evaluation_result import EvaluationResult
 from .core import evaluation as task_evaluator
 from .core import runtime
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
+from .utils.reporting import convert_tqdm_to_rich
 from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
@@ -523,17 +524,26 @@ class BaseOptimizer(ABC):
         """
         self.pre_trial(context, prompts)
         try:
-            score = self.evaluate_prompt(
-                prompt=prompts,
-                dataset=context.evaluation_dataset,
-                metric=context.metric,
-                agent=context.agent,
-                experiment_config=experiment_config,
-                n_samples=context.n_samples,
-                n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
-                verbose=self.verbose,
-                allow_tool_use=context.allow_tool_use,
+            suppress_progress = bool(
+                (context.extra_params or {}).get("suppress_evaluation_progress", False)
             )
+            progress_ctx = (
+                nullcontext()
+                if suppress_progress
+                else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
+            )
+            with progress_ctx:
+                score = self.evaluate_prompt(
+                    prompt=prompts,
+                    dataset=context.evaluation_dataset,
+                    metric=context.metric,
+                    agent=context.agent,
+                    experiment_config=experiment_config,
+                    n_samples=context.n_samples,
+                    n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
+                    verbose=self.verbose,
+                    allow_tool_use=context.allow_tool_use,
+                )
         except Exception:
             context.finish_reason = "error"
             context.should_stop = True

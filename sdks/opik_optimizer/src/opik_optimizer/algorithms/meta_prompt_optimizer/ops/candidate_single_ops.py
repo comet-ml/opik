@@ -446,9 +446,5 @@ def generate_candidate_prompts(
 
             return valid_prompts
 
-        except Exception as e:
-            if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
-                raise
-            raise ValueError(
-                f"Unexpected error during candidate prompt generation: {e}"
-            )
+        except (BadRequestError, StructuredOutputParsingError):
+            raise

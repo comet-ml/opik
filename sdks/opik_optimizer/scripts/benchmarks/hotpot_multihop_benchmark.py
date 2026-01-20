@@ -79,7 +79,11 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
         logger.exception("BM25 search failed, falling back to Wikipedia API")
         results = search_wikipedia(query, search_type="api", k=n)
 
-    return results[:n] if len(results) >= n else results + ["" for _ in range(n)]
+    return (
+        results[:n]
+        if len(results) >= n
+        else results + ["" for _ in range(n - len(results))]
+    )
 
 
 def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:

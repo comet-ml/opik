@@ -322,18 +322,11 @@ def _parse_response(
     # When using structured outputs with Pydantic models, LiteLLM automatically
     # parses the response. Parse the JSON string into the Pydantic model
     if response_model is not None:
-        parsed_obj = getattr(first_message, "parsed", None)
+        parsed_obj = _coerce_parsed(
+            response_model, getattr(first_message, "parsed", None)
+        )
         if parsed_obj is not None:
-            try:
-                if isinstance(parsed_obj, response_model):
-                    return parsed_obj
-                return response_model.model_validate(parsed_obj)
-            except PydanticValidationError as exc:
-                logger.debug(
-                    "Structured output parsed object validation failed for %s: %s",
-                    getattr(response_model, "__name__", "unknown"),
-                    exc,
-                )
+            return parsed_obj
         try:
             return response_model.model_validate_json(content)
         except PydanticValidationError as exc:
@@ -361,6 +354,20 @@ def _parse_response(
             raise StructuredOutputParsingError(content=content, error=exc) from exc
 
     return content
+
+
+def _coerce_parsed(
+    response_model: type[BaseModel],
+    parsed_obj: Any | None,
+) -> BaseModel | None:
+    if parsed_obj is None:
+        return None
+    try:
+        if isinstance(parsed_obj, response_model):
+            return parsed_obj
+        return response_model.model_validate(parsed_obj)
+    except PydanticValidationError:
+        return None
 
 
 def _parse_response_list(
@@ -391,16 +398,10 @@ def _parse_response_list(
     parsed: list[BaseModel] = []
     for idx, content in enumerate(contents):
         if parsed_objects is not None:
-            candidate = parsed_objects[idx]
+            candidate = _coerce_parsed(response_model, parsed_objects[idx])
             if candidate is not None:
-                try:
-                    if isinstance(candidate, response_model):
-                        parsed.append(candidate)
-                        continue
-                    parsed.append(response_model.model_validate(candidate))
-                    continue
-                except PydanticValidationError:
-                    pass
+                parsed.append(candidate)
+                continue
         try:
             parsed.append(response_model.model_validate_json(content))
         except PydanticValidationError as exc:

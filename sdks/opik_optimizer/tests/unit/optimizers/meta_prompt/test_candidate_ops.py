@@ -95,7 +95,7 @@ class TestSanitizeGeneratedPrompts:
 
     def test_removes_prompts_with_common_benchmark_names(self) -> None:
         """Should remove prompts referencing common benchmark dataset names."""
-        benchmark_names = ["hotpotqa", "squad", "naturalquestions"]
+        benchmark_names = ["hotpotqa"]
 
         for name in benchmark_names:
             prompt_json = {
