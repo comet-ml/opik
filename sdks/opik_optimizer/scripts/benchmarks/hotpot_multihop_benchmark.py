@@ -15,6 +15,7 @@ import random
 import logging
 from pydantic import BaseModel
 import json
+import re
 
 import opik
 from opik import opik_context
@@ -233,6 +234,18 @@ class SummaryObject(BaseModel):
     gaps: list[str]
 
 
+def _parse_summary_response(content: str) -> SummaryObject:
+    """Parse the structured summary response, falling back to JSON extraction."""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", content, re.DOTALL)
+        if not match:
+            raise
+        data = json.loads(match.group(0))
+    return SummaryObject(**data)
+
+
 class HotpotMultiHopAgent(OptimizableAgent):
     def __init__(
         self,
@@ -311,9 +324,14 @@ class HotpotMultiHopAgent(OptimizableAgent):
             },
             **self.model_parameters,
         )
-        response_content = json.loads(response.choices[0].message.content)
-        search_query_1_summary = response_content["summary"]
-        gaps_1 = response_content["gaps"]
+
+        # Parse the response
+        response_msg = response.choices[0].message
+        parsed = getattr(response_msg, "parsed", None)
+        if parsed is None:
+            parsed = _parse_summary_response(response_msg.content)
+        search_query_1_summary = parsed.summary
+        gaps_1 = parsed.gaps
 
         # Do the second search query
         messages = prompts["create_query_2"].get_messages(

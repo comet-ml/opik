@@ -264,7 +264,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 self._current_round = round_num
                 debug_log(
-                    "round_start",
+                    "round_loop_start",
                     round_index=round_num + 1,
                     trials_completed=context.trials_completed,
                     max_trials=max_trials,
@@ -353,7 +353,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 # Log round completion before increment to keep indices consistent.
                 debug_log(
-                    "round_end",
+                    "round_loop_end",
                     round_index=round_num + 1,
                     best_score=best_score,
                     trials_completed=context.trials_completed,

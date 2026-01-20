@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, cast
+import math
 import json
 
 from ...api_objects import chat_prompt
@@ -113,6 +114,35 @@ def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool
     if baseline == 0:
         return 0.0, False
     return ((current - baseline) / baseline), True
+
+
+def format_score_progress(score: float, best_score: float | None) -> tuple[str, str]:
+    """Return a formatted score string and a suggested style."""
+    if not math.isfinite(score):
+        return "non-finite score", "yellow"
+
+    if isinstance(best_score, (int, float)) and math.isfinite(best_score):
+        delta = score - best_score
+        if abs(delta) < 1e-12:
+            return f"{score:.4f} (no improvement)", "yellow"
+
+        perc_change, has_percentage = safe_percentage_change(score, best_score)
+        if delta > 0:
+            if has_percentage:
+                return (
+                    f"{score:.4f} (improved {delta:+.4f}, {perc_change:+.2%} vs best)",
+                    "green",
+                )
+            return f"{score:.4f} (improved {delta:+.4f} vs best)", "green"
+
+        if has_percentage:
+            return (
+                f"{score:.4f} (worse {delta:.4f}, {perc_change:.2%} vs best)",
+                "red",
+            )
+        return f"{score:.4f} (worse {delta:.4f} vs best)", "red"
+
+    return f"{score:.4f}", "green"
 
 
 def summarize_selection_policy(

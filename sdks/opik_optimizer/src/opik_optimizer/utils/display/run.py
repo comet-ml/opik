@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any, ContextManager, Protocol, TYPE_CHECKING
 
 from ...api_objects import chat_prompt
 
 if TYPE_CHECKING:
     from ...core.state import OptimizationContext
-from .format import summarize_selection_policy
+from .format import format_score_progress, summarize_selection_policy
 from . import terminal as display_terminal
 
 
@@ -122,34 +121,13 @@ class OptimizationRunDisplay:
             prefix = f"Trial {context.trials_completed}/{max_trials}"
         else:
             prefix = f"Trial {context.trials_completed}"
-        score_label = ""
         compare_score = prev_best if isinstance(prev_best, (int, float)) else best_score
-        if not math.isfinite(coerced_score):
-            style = "yellow"
-        elif isinstance(compare_score, (int, float)):
-            delta = coerced_score - compare_score
-            if abs(delta) < 1e-12:
-                style = "yellow"
-                score_label = " (no improvement)"
-            elif delta > 0:
-                style = "green"
-                score_label = f" (improved +{delta:.4f} vs best)"
-            else:
-                style = "red"
-                score_label = f" (worse {delta:.4f} vs best)"
-        elif best_score is None:
-            style = "green"
-        else:
-            style = "yellow"
+        score_text, style = format_score_progress(coerced_score, compare_score)
 
         info = display_info or self._build_evaluation_display_info(context)
         display_terminal.display_evaluation_progress(
             prefix=prefix,
-            score_text=(
-                f"{coerced_score:.4f}{score_label}"
-                if math.isfinite(coerced_score)
-                else "non-finite score"
-            ),
+            score_text=score_text,
             style=style,
             prompts=prompts,
             verbose=self._verbose,

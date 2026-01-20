@@ -522,12 +522,13 @@ class ParameterOptimizer(BaseOptimizer):
                 )
 
                 # Check if this is a new best
+                prev_best_score = current_best_score
                 is_best = score > current_best_score
                 if is_best:
                     current_best_score = score
                     best_tuned_prompts = copy.deepcopy(tuned_prompts)
 
-                trial_reporter.set_score(score, is_best=is_best)
+                trial_reporter.set_score(score, prev_best_score)
                 self._clear_reporter()
                 debug_log(
                     "trial_end",

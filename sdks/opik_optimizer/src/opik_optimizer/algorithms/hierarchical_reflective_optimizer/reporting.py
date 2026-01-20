@@ -10,8 +10,9 @@ from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import (
     display_messages,
     display_text_block,
-    display_renderable,
+    display_renderable_with_prefix,
 )
+from ...utils.display.format import format_score_progress
 from .display_utils import (
     compute_message_diff_order,  # noqa: F401
     display_optimized_prompt_diff as _display_optimized_prompt_diff,
@@ -235,32 +236,11 @@ def display_prompt_candidate_scoring_report(
 
         def set_final_score(self, best_score: float, score: float) -> None:
             if verbose >= 1:
-                if best_score == 0 and score > 0:
-                    display_text_block(
-                        f"│             Evaluation score: {score:.4f}", "green"
-                    )
-                elif best_score == 0 and score == 0:
-                    display_text_block(
-                        f"│            Evaluation score: {score:.4f}",
-                        "dim yellow",
-                    )
-                elif score > best_score:
-                    perc_change = (score - best_score) / best_score
-                    display_text_block(
-                        f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
-                        "green",
-                    )
-                elif score < best_score:
-                    perc_change = (score - best_score) / best_score
-                    display_text_block(
-                        f"│             Evaluation score: {score:.4f} ({perc_change:.2%})",
-                        "red",
-                    )
-                else:
-                    display_text_block(
-                        f"│            Evaluation score: {score:.4f}",
-                        "dim yellow",
-                    )
+                score_text, style = format_score_progress(score, best_score)
+                display_text_block(
+                    f"│             Evaluation score: {score_text}",
+                    style,
+                )
 
                 display_text_block("│   ")
                 display_text_block("│   ")
@@ -368,7 +348,7 @@ def display_hierarchical_synthesis(
     )
 
     # Capture the panel as rendered text with ANSI styles and prefix each line
-    display_renderable(panel)
+    display_renderable_with_prefix(panel, prefix="│ ")
     display_text_block("│")
 
 
@@ -390,7 +370,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
     )
 
     display_text_block("│")
-    display_renderable(header_panel)
+    display_renderable_with_prefix(header_panel, prefix="│ ")
     display_text_block("│")
 
     for idx, failure_mode in enumerate(failure_modes, 1):
@@ -410,7 +390,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
             width=PANEL_WIDTH,
         )
 
-        display_renderable(panel)
+        display_renderable_with_prefix(panel, prefix="│ ")
 
         if idx < len(failure_modes):
             display_text_block("│")
@@ -445,7 +425,7 @@ def display_prompt_improvement(
                     padding=(0, 1),
                 )
 
-                display_renderable(panel)
+                display_renderable_with_prefix(panel, prefix="│ ")
                 display_text_block("│   ")
 
     try:

@@ -234,6 +234,8 @@ def evaluation_progress(
     score: float,
     prev_best_score: float | None,
 ) -> None:
+    if context.extra_params.get("suppress_evaluation_progress"):
+        return
     optimizer._display.evaluation_progress(
         context=context,
         prompts=prompts,

@@ -306,6 +306,7 @@ def display_configuration(
     console = get_console()
     display_text_block("> Let's optimize the prompt:\n")
 
+    has_prompt_tools = False
     if messages is None:
         pass
     elif isinstance(messages, dict):
@@ -315,17 +316,25 @@ def display_configuration(
             prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=None)
             for item in prompt_items:
                 console.print(item)
+            has_prompt_tools = bool(chat_p.tools)
         else:
             for key, chat_p in messages_dict.items():
                 prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
                 for item in prompt_items:
                     console.print(item)
+                if chat_p.tools:
+                    has_prompt_tools = True
     elif isinstance(messages, chat_prompt.ChatPrompt):
         prompt_items = _display_chat_prompt_messages_and_tools(messages, key=None)
         for item in prompt_items:
             console.print(item)
+        has_prompt_tools = bool(messages.tools)
     elif isinstance(messages, list):
         display_messages(messages)
+        _display_tools(tools)
+        tools = None
+
+    if tools and not has_prompt_tools:
         _display_tools(tools)
 
     selection_summary = None

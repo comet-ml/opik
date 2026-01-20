@@ -12,6 +12,7 @@ from ...utils.display import (
     display_messages,
     display_text_block,
 )
+from ...utils.display.format import format_score_progress
 from ...utils.reporting import get_console
 
 
@@ -93,23 +94,8 @@ def display_trial_score(
     if verbose < 1:
         return
 
-    if baseline_score == 0:
-        display_text_block(
-            f"│    Trial {trial_number + 1} - score was: {score:.4f}\n│",
-            style="green",
-        )
-    elif score is not None and score > baseline_score:
-        display_text_block(
-            f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
-            style="green",
-        )
-    elif score is not None and score <= baseline_score:
-        display_text_block(
-            f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│",
-            style="red",
-        )
-    else:
-        display_text_block(
-            f"│    Trial {trial_number + 1} - score was not set.\n│",
-            style="dim yellow",
-        )
+    score_text, style = format_score_progress(score, baseline_score)
+    display_text_block(
+        f"│    Trial {trial_number + 1} - score was: {score_text}\n│",
+        style=style,
+    )

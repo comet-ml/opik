@@ -13,6 +13,7 @@ from ...utils.display import (
     display_text_block,
     display_key_value_block,
 )
+from ...utils.display.format import format_score_progress
 
 
 @contextmanager
@@ -78,15 +79,10 @@ def display_trial_evaluation(
             )
 
     class Reporter:
-        def set_score(self, s: float, is_best: bool = False) -> None:
+        def set_score(self, s: float, best_score: float) -> None:
             if verbose >= 1:
-                if is_best:
-                    display_text_block(
-                        f"│ Score: {s:.4f} (new best)",
-                        style="green bold",
-                    )
-                else:
-                    display_text_block(f"│ Score: {s:.4f}", style="dim")
+                score_text, style = format_score_progress(s, best_score)
+                display_text_block(f"│ Score: {score_text}", style=style)
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich("│   Evaluation", verbose=verbose):

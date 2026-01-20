@@ -58,7 +58,11 @@ def score_candidate_prompts(
             selection_summary=selection_summary,
         ) as reporter:
             reporter.set_generated_prompts(candidate_count, candidate)
-            prompt_score = optimizer.evaluate(context, candidate)
+            context.extra_params["suppress_evaluation_progress"] = True
+            try:
+                prompt_score = optimizer.evaluate(context, candidate)
+            finally:
+                context.extra_params.pop("suppress_evaluation_progress", None)
             reporter.set_final_score(current_round_best_score, prompt_score)
 
         if prompt_score > current_round_best_score:

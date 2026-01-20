@@ -531,7 +531,7 @@ class BaseOptimizer(ABC):
                 experiment_config=experiment_config,
                 n_samples=context.n_samples,
                 n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
-                verbose=0,
+                verbose=self.verbose,
                 allow_tool_use=context.allow_tool_use,
             )
         except Exception:

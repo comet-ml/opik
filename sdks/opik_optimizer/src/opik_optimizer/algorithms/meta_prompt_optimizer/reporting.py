@@ -146,8 +146,11 @@ class CandidateGenerationReporter:
 
     def set_generated_prompts(self, generated_count: int) -> None:
         summary = f" ({self.selection_summary})" if self.selection_summary else ""
+        cap_text = (
+            f" (cap {self.num_prompts})" if generated_count > self.num_prompts else ""
+        )
         display_text_block(
-            f"│      Successfully generated {generated_count} of {self.num_prompts} candidate prompt{'' if self.num_prompts == 1 else 's'}{summary}",
+            f"│      Successfully generated {generated_count} candidate prompt{'' if generated_count == 1 else 's'}{cap_text}{summary}",
             style="dim",
         )
         display_text_block("│")
@@ -275,32 +278,13 @@ def display_prompt_candidate_scoring_report(
 
         def set_final_score(self, best_score: float, score: float) -> None:
             if verbose >= 1:
-                if best_score == 0 and score > 0:
-                    display_text_block(
-                        f"│          Evaluation score: {score:.4f}", "green"
-                    )
-                elif best_score == 0 and score == 0:
-                    display_text_block(
-                        f"│         Evaluation score: {score:.4f}",
-                        "dim yellow",
-                    )
-                elif score > best_score:
-                    perc_change = (score - best_score) / best_score
-                    display_text_block(
-                        f"│          Evaluation score: {score:.4f} ({perc_change:.2%})",
-                        "green",
-                    )
-                elif score < best_score:
-                    perc_change = (score - best_score) / best_score
-                    display_text_block(
-                        f"│          Evaluation score: {score:.4f} ({perc_change:.2%})",
-                        "red",
-                    )
-                else:
-                    display_text_block(
-                        f"│         Evaluation score: {score:.4f}",
-                        "dim yellow",
-                    )
+                score_text, style = display_format.format_score_progress(
+                    score, best_score
+                )
+                display_text_block(
+                    f"│          Evaluation score: {score_text}",
+                    style,
+                )
 
                 display_text_block("│")
                 display_text_block("│")

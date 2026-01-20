@@ -4,6 +4,7 @@ from typing import Any
 from ...api_objects import chat_prompt
 from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import display_text_block, display_tool_description
+from ...utils.display.format import format_score_progress
 
 
 # FIXME: Move to new reporting utils module.
@@ -141,16 +142,11 @@ def evaluate_initial_population(verbose: int = 1) -> Any:
     class Reporter:
         def set_score(self, index: int, score: float, baseline_score: float) -> None:
             if verbose >= 1:
-                if score >= baseline_score:
-                    display_text_block(
-                        f"\r  Prompt {index + 1} score was: {score}.",
-                        style="green",
-                    )
-                else:
-                    display_text_block(
-                        f"\r  Prompt {index + 1} score was: {score}.",
-                        style="dim",
-                    )
+                score_text, style = format_score_progress(score, baseline_score)
+                display_text_block(
+                    f"\r  Prompt {index + 1} score was: {score_text}.",
+                    style=style,
+                )
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -201,9 +197,10 @@ def start_evolutionary_algo(verbose: int = 1) -> Any:
 
         def performed_evaluation(self, prompt_idx: int, score: float) -> None:
             if verbose >= 1:
+                score_text, style = format_score_progress(score, None)
                 display_text_block(
-                    f"│      Performed evaluation for prompt {prompt_idx} - Score: {score:.4f}.",
-                    style="dim",
+                    f"│      Performed evaluation for prompt {prompt_idx} - Score: {score_text}.",
+                    style=style,
                 )
 
     # Use our log suppression context manager and yield the reporter
