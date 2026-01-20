@@ -426,6 +426,21 @@ class TestStructuredOutputModels:
         role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
         assert role == "system"
 
+    def test_mutation_response_accepts_messages_dict(self) -> None:
+        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
+            MutationResponse,
+        )
+
+        payload = {
+            "messages": [
+                {"role": "system", "content": "s"},
+                {"role": "user", "content": "u"},
+            ]
+        }
+        parsed = MutationResponse.model_validate(payload)
+
+        assert len(parsed.messages) == 2
+
     def test_mutation_response_wraps_single_message_dict(self) -> None:
         from opik_optimizer.algorithms.evolutionary_optimizer.types import (
             MutationResponse,
@@ -455,7 +470,44 @@ class TestStructuredOutputModels:
         parsed = PromptCandidatesResponse.model_validate(payload)
 
         assert len(parsed.prompts) == 1
-        assert parsed.prompts[0].prompt[0]["role"] == "system"
+        first = parsed.prompts[0].prompt[0]
+        role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
+        assert role == "system"
+
+    def test_prompt_candidates_response_accepts_dict(self) -> None:
+        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
+            PromptCandidatesResponse,
+        )
+
+        payload = {
+            "prompts": [
+                {
+                    "prompt": [
+                        {"role": "system", "content": "s"},
+                        {"role": "user", "content": "u"},
+                    ]
+                }
+            ]
+        }
+        parsed = PromptCandidatesResponse.model_validate(payload)
+
+        assert len(parsed.prompts) == 1
+
+    def test_pattern_extraction_response_accepts_objects(self) -> None:
+        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
+            PatternExtractionResponse,
+        )
+
+        payload = [
+            {"pattern": "Be concise", "example": "Short answers"},
+            {"pattern": "Use citations"},
+        ]
+        parsed = PatternExtractionResponse.model_validate(payload)
+
+        assert len(parsed.patterns) == 2
+        first = parsed.patterns[0]
+        pattern_text = first.pattern if hasattr(first, "pattern") else first
+        assert pattern_text == "Be concise"
 
     def test_pattern_extraction_response_wraps_list(self) -> None:
         from opik_optimizer.algorithms.meta_prompt_optimizer.types import (

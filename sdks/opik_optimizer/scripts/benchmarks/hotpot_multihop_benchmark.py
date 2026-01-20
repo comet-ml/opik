@@ -38,7 +38,7 @@ NUM_PASSAGES = 5
 # Disable tqdm progress bars (used by bm25s)
 os.environ["TQDM_DISABLE"] = "1"
 
-# Configure logging and enviroment
+# Configure logging and environment
 setup_logging()
 logger = logging.getLogger(__name__)
 tracked_completion = track_completion()(litellm.completion)
