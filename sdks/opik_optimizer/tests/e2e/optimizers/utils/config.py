@@ -18,7 +18,9 @@ from opik_optimizer import (
     MetaPromptOptimizer,
     ParameterOptimizer,
 )
-from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import ParameterSearchSpace
+from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
+    ParameterSearchSpace,
+)
 
 
 def levenshtein_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -97,4 +99,3 @@ def get_parameter_space() -> ParameterSearchSpace:
             "temperature": {"type": "float", "min": 0.1, "max": 1.0},
         }
     )
-

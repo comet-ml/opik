@@ -21,7 +21,11 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 # Standard dataset items used across multiple unit tests
-STANDARD_DATASET_ITEMS: list[dict[str, Any]] = [{"id": "1", "question": "Q1", "answer": "A1"}]
+STANDARD_DATASET_ITEMS: list[dict[str, Any]] = [
+    {"id": "1", "question": "Q1", "answer": "A1"}
+]
+
+DatasetItem = dict[str, Any]
 
 
 def make_mock_dataset(
@@ -42,7 +46,7 @@ def make_mock_dataset(
     mock.name = name
     mock.id = dataset_id
 
-    def get_items_impl(nb_samples: int | None = None):
+    def get_items_impl(nb_samples: int | None = None) -> list[DatasetItem]:
         if nb_samples is not None:
             return items[:nb_samples]
         return items
@@ -51,7 +55,7 @@ def make_mock_dataset(
     return mock
 
 
-def make_simple_metric() -> "MetricFunction":
+def make_simple_metric() -> MetricFunction:
     """Create a trivial metric that always returns 1.0 (with a stable __name__)."""
 
     def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
@@ -96,22 +100,31 @@ def make_candidate_agent(
     This intentionally avoids patching LiteLLM/global call sites: pass the returned
     object via `agent=` to keep tests deterministic and fast.
     """
-    if candidates is None:
-        candidates = ["bad", "good"]
+    candidates_list: list[str] = (
+        candidates if candidates is not None else ["bad", "good"]
+    )
 
     class CandidateAgent:
         _last_candidate_logprobs: list[float] | None = None
 
         def invoke_agent_candidates(
-            self, prompts, dataset_item, allow_tool_use: bool = False, seed: int | None = None
-        ):
+            self,
+            prompts: Any,
+            dataset_item: DatasetItem,
+            allow_tool_use: bool = False,
+            seed: int | None = None,
+        ) -> list[str]:
             _ = prompts, dataset_item, allow_tool_use, seed
             if logprobs is not None:
                 self._last_candidate_logprobs = logprobs
-            return candidates
+            return candidates_list
 
         def invoke_agent(
-            self, prompts, dataset_item, allow_tool_use: bool = False, seed: int | None = None
+            self,
+            prompts: Any,
+            dataset_item: DatasetItem,
+            allow_tool_use: bool = False,
+            seed: int | None = None,
         ) -> str:
             _ = prompts, dataset_item, allow_tool_use, seed
             return single_output
@@ -133,19 +146,19 @@ def make_fake_evaluator(
     """
 
     def fake_evaluate(
-        dataset,
-        evaluated_task,
-        metric,
-        num_threads,
-        optimization_id=None,
-        dataset_item_ids=None,
-        project_name=None,
-        n_samples=None,
-        experiment_config=None,
-        verbose=1,
-        return_evaluation_result=False,
-        **kwargs,
-    ):
+        dataset: Any,
+        evaluated_task: Callable[[DatasetItem], dict[str, Any]],
+        metric: Any,
+        num_threads: int,
+        optimization_id: str | None = None,
+        dataset_item_ids: list[str] | None = None,
+        project_name: str | None = None,
+        n_samples: int | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        verbose: int = 1,
+        return_evaluation_result: bool = False,
+        **kwargs: Any,
+    ) -> float:
         _ = (
             dataset,
             metric,
@@ -270,4 +283,3 @@ def make_optimization_context(
         **extra_params,
     )
     return ctx
-

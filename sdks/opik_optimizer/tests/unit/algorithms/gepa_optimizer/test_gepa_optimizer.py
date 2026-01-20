@@ -40,15 +40,18 @@ class TestGepaOptimizerOptimizePrompt:
         self,
         mock_optimization_context,
         monkeypatch,
-        default_prompt,
-        default_dataset,
-        simple_metric_fn,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_optimization_context()
 
         optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompt = default_prompt
-        dataset = default_dataset
+        prompt = simple_chat_prompt
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
@@ -64,7 +67,7 @@ class TestGepaOptimizerOptimizePrompt:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=2,
             n_samples=2,
         )
@@ -76,8 +79,9 @@ class TestGepaOptimizerOptimizePrompt:
         self,
         mock_optimization_context,
         monkeypatch,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_optimization_context()
 
@@ -88,7 +92,9 @@ class TestGepaOptimizerOptimizePrompt:
                 name="secondary", system="Secondary", user="{input}"
             ),
         }
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
@@ -104,7 +110,7 @@ class TestGepaOptimizerOptimizePrompt:
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=2,
             n_samples=2,
         )
@@ -115,18 +121,21 @@ class TestGepaOptimizerOptimizePrompt:
     def test_invalid_prompt_raises_error(
         self,
         mock_optimization_context,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_optimization_context()
         optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         with pytest.raises((ValueError, TypeError)):
             optimizer.optimize_prompt(
                 prompt="invalid string",  # type: ignore[arg-type]
                 dataset=dataset,
-                metric=simple_metric_fn,
+                metric=sample_metric,
                 max_trials=1,
             )
 
@@ -136,11 +145,14 @@ class TestGepaOptimizerEarlyStop:
         self,
         mock_opik_client: Callable[..., MagicMock],
         monkeypatch: pytest.MonkeyPatch,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_opik_client()
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -149,7 +161,7 @@ class TestGepaOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
         )
 
@@ -165,12 +177,15 @@ class TestGepaOptimizerEarlyStop:
         self,
         mock_opik_client: Callable[..., MagicMock],
         monkeypatch: pytest.MonkeyPatch,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         """Verify GepaOptimizer early stop reports at least 1 trial."""
         mock_opik_client()
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -179,7 +194,7 @@ class TestGepaOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
         )
 

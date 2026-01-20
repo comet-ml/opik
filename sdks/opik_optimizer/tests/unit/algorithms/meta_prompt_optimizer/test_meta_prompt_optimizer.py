@@ -34,8 +34,9 @@ class TestMetaPromptOptimizerOptimizePrompt:
     def test_single_prompt_returns_chat_prompt(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_full_optimization_flow(
             llm_response="Improved prompt",
@@ -44,12 +45,14 @@ class TestMetaPromptOptimizerOptimizePrompt:
 
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -61,8 +64,9 @@ class TestMetaPromptOptimizerOptimizePrompt:
     def test_dict_prompt_returns_dict(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_full_optimization_flow(
             llm_response="Improved prompt",
@@ -76,12 +80,14 @@ class TestMetaPromptOptimizerOptimizePrompt:
                 name="secondary", system="Secondary", user="{input}"
             ),
         }
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -93,8 +99,9 @@ class TestMetaPromptOptimizerOptimizePrompt:
         self,
         mock_full_optimization_flow,
         monkeypatch: pytest.MonkeyPatch,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_full_optimization_flow(
             llm_response="Improved prompt",
@@ -103,7 +110,9 @@ class TestMetaPromptOptimizerOptimizePrompt:
 
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         events: list[str] = []
 
@@ -124,7 +133,7 @@ class TestMetaPromptOptimizerOptimizePrompt:
         optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -135,26 +144,30 @@ class TestMetaPromptOptimizerOptimizePrompt:
     def test_invalid_prompt_raises_error(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_full_optimization_flow()
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         with pytest.raises((ValueError, TypeError)):
             optimizer.optimize_prompt(
                 prompt="invalid string",  # type: ignore[arg-type]
                 dataset=dataset,
-                metric=simple_metric_fn,
+                metric=sample_metric,
                 max_trials=1,
             )
 
     def test_result_contains_required_fields(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_full_optimization_flow(
             llm_response="Improved prompt",
@@ -163,12 +176,14 @@ class TestMetaPromptOptimizerOptimizePrompt:
 
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -187,8 +202,9 @@ class TestMetaPromptOptimizerMultiPrompt:
     def test_dict_prompt_preserves_all_keys(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         """Verify multi-prompt optimization preserves all prompt keys in result."""
         mock_full_optimization_flow(
@@ -208,12 +224,14 @@ class TestMetaPromptOptimizerMultiPrompt:
                 name="reviewer_prompt", system="Reviewer", user="{text}"
             ),
         }
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -227,8 +245,9 @@ class TestMetaPromptOptimizerMultiPrompt:
     def test_dict_prompt_each_value_is_chat_prompt(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         """Verify each prompt in multi-prompt result is a ChatPrompt."""
         mock_full_optimization_flow(
@@ -241,12 +260,14 @@ class TestMetaPromptOptimizerMultiPrompt:
             "main": ChatPrompt(name="main", system="Main", user="{question}"),
             "helper": ChatPrompt(name="helper", system="Helper", user="{context}"),
         }
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -264,8 +285,9 @@ class TestMetaPromptOptimizerMultiPrompt:
     def test_dict_prompt_result_has_score(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         """Verify multi-prompt optimization returns proper score."""
         mock_full_optimization_flow(
@@ -280,12 +302,14 @@ class TestMetaPromptOptimizerMultiPrompt:
                 name="secondary", system="Secondary", user="{input}"
             ),
         }
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -298,8 +322,9 @@ class TestMetaPromptOptimizerMultiPrompt:
     def test_dict_prompt_result_has_details(
         self,
         mock_full_optimization_flow,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         """Verify multi-prompt optimization result contains proper details."""
         mock_full_optimization_flow(
@@ -312,12 +337,14 @@ class TestMetaPromptOptimizerMultiPrompt:
             "agent1": ChatPrompt(name="agent1", system="Agent 1", user="{question}"),
             "agent2": ChatPrompt(name="agent2", system="Agent 2", user="{input}"),
         }
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
 
         result = optimizer.optimize_prompt(
             prompt=prompts,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
             n_samples=2,
         )
@@ -333,11 +360,14 @@ class TestMetaPromptOptimizerEarlyStop:
         self,
         mock_opik_client: Callable[..., MagicMock],
         monkeypatch: pytest.MonkeyPatch,
-        default_dataset,
-        simple_metric_fn,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
     ) -> None:
         mock_opik_client()
-        dataset = default_dataset
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
         optimizer = MetaPromptOptimizer(model="gpt-4o", perfect_score=0.95)
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
@@ -351,7 +381,7 @@ class TestMetaPromptOptimizerEarlyStop:
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
-            metric=simple_metric_fn,
+            metric=sample_metric,
             max_trials=1,
         )
 

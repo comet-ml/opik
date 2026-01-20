@@ -24,7 +24,12 @@ from opik_optimizer import (
     ParameterOptimizer,
 )
 
-from ..utils import MultiPromptTestAgent, create_optimizer_config, get_parameter_space, levenshtein_metric
+from ..utils import (
+    MultiPromptTestAgent,
+    create_optimizer_config,
+    get_parameter_space,
+    levenshtein_metric,
+)
 
 
 pytestmark = pytest.mark.integration
