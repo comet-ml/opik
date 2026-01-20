@@ -5,8 +5,10 @@ import useAppStore from "@/store/AppStore";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import { DropdownOption } from "@/types/shared";
+import { Sorting } from "@/types/sorting";
 
 const DEFAULT_LOADED_EXPERIMENT_ITEMS = 1000;
+const DEFAULT_EXPERIMENTS_SORTING: Sorting = [{ id: "name", desc: false }];
 
 type ExperimentSelectBoxProps = {
   value: string;
@@ -28,6 +30,7 @@ const ExperimentSelectBox: React.FC<ExperimentSelectBoxProps> = ({
       workspaceName,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_EXPERIMENT_ITEMS,
+      sorting: DEFAULT_EXPERIMENTS_SORTING,
     },
     {
       placeholderData: keepPreviousData,
