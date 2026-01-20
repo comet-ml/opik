@@ -87,7 +87,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             }, "Examples:\n{examples}"
 
         monkeypatch.setattr(
-            optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template
+            optimizer, "_create_few_shot_prompt_template", mock_create_fewshot_template
         )
 
         def mock_run_optimization(context):
@@ -150,7 +150,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             }, "Examples:\n{examples}"
 
         monkeypatch.setattr(
-            optimizer, "_create_fewshot_prompt_template", mock_create_fewshot_template
+            optimizer, "_create_few_shot_prompt_template", mock_create_fewshot_template
         )
 
         def mock_run_optimization(context):
