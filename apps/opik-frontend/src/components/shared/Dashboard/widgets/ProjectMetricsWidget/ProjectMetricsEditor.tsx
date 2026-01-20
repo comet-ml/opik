@@ -524,11 +524,9 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                                 <FormItem className="min-w-32 max-w-[30vw] flex-1">
                                   <FormControl>
                                     <TracesOrSpansPathsAutocomplete
-                                      className={cn("w-full", {
-                                        "border-destructive": Boolean(
-                                          validationErrors?.message,
-                                        ),
-                                      })}
+                                      hasError={Boolean(
+                                        validationErrors?.message,
+                                      )}
                                       rootKeys={["metadata"]}
                                       projectId={projectId}
                                       type={

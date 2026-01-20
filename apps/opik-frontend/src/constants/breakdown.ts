@@ -12,7 +12,6 @@
  */
 export enum BREAKDOWN_FIELD {
   NONE = "none",
-  PROJECT_ID = "project_id",
   TAGS = "tags",
   METADATA = "metadata",
   NAME = "name",
@@ -27,7 +26,6 @@ export enum BREAKDOWN_FIELD {
  */
 export const BREAKDOWN_FIELD_LABELS: Record<BREAKDOWN_FIELD, string> = {
   [BREAKDOWN_FIELD.NONE]: "No grouping",
-  [BREAKDOWN_FIELD.PROJECT_ID]: "Project",
   [BREAKDOWN_FIELD.TAGS]: "Tags",
   [BREAKDOWN_FIELD.METADATA]: "Configuration",
   [BREAKDOWN_FIELD.NAME]: "Name",
@@ -98,7 +96,6 @@ const ALL_METRIC_TYPES = [...TRACE_METRICS, ...THREAD_METRICS, ...SPAN_METRICS];
  * Compatibility matrix: which group by fields are compatible with which metric types.
  * Based on the Jira ticket OPIK-3790 "Supported Breakdown Fields" table:
  * - NONE: All metrics
- * - PROJECT_ID: Trace, Span, Thread
  * - TAGS: Trace, Span, Thread
  * - METADATA: Trace, Span (not Thread)
  * - NAME: Trace, Span (not Thread)
@@ -106,11 +103,12 @@ const ALL_METRIC_TYPES = [...TRACE_METRICS, ...THREAD_METRICS, ...SPAN_METRICS];
  * - MODEL: Spans only
  * - PROVIDER: Spans only
  * - TYPE: Spans only
+ *
+ * Note: PROJECT_ID is not supported as metrics are already project-scoped.
  */
 export const BREAKDOWN_FIELD_COMPATIBILITY: Record<BREAKDOWN_FIELD, string[]> =
   {
     [BREAKDOWN_FIELD.NONE]: ALL_METRIC_TYPES,
-    [BREAKDOWN_FIELD.PROJECT_ID]: ALL_METRIC_TYPES,
     [BREAKDOWN_FIELD.TAGS]: ALL_METRIC_TYPES,
     [BREAKDOWN_FIELD.METADATA]: [...TRACE_METRICS, ...SPAN_METRICS],
     [BREAKDOWN_FIELD.NAME]: [...TRACE_METRICS, ...SPAN_METRICS],
