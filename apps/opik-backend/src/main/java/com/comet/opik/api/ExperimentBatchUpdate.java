@@ -18,7 +18,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Schema(description = "Request to batch update multiple experiments")
 public record ExperimentBatchUpdate(
-        @NotNull @NotEmpty @Size(min = 1, max = 1000) @Schema(description = "List of experiment IDs to update (max 1000)") Set<UUID> ids,
+        @NotEmpty @Size(min = 1, max = 1000) @Schema(description = "List of experiment IDs to update (max 1000)") Set<@NotNull UUID> ids,
         @NotNull @Valid @Schema(description = "Update to apply to all experiments") ExperimentUpdate update,
         @Schema(description = "If true, merge tags with existing tags instead of replacing them. Default: false") Boolean mergeTags) {
 }
