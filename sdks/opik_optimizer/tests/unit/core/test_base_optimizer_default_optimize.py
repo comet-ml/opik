@@ -1,8 +1,9 @@
 """Unit tests for BaseOptimizer default optimize_prompt flow."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -233,4 +234,3 @@ class TestDefaultOptimizePrompt:
         )
 
         assert result.history
-

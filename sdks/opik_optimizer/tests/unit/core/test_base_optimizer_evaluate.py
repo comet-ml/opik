@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer evaluation-related behaviors."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -11,13 +13,16 @@ import pytest
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.constants import MAX_EVAL_THREADS, MIN_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
-from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer, _DisplaySpy
+from tests.unit.fixtures.base_optimizer_test_helpers import (
+    ConcreteOptimizer,
+    _DisplaySpy,
+)
 from tests.unit.test_helpers import (
     make_candidate_agent,
     make_fake_evaluator,
     make_mock_dataset,
     make_optimization_context,
- )
+)
 from collections.abc import Callable
 
 
@@ -108,7 +113,16 @@ def test_evaluate_forwards_configured_n_threads(
         n_threads=None,
         **kwargs,
     ):
-        _ = prompt, dataset, metric, agent, experiment_config, n_samples, verbose, kwargs
+        _ = (
+            prompt,
+            dataset,
+            metric,
+            agent,
+            experiment_config,
+            n_samples,
+            verbose,
+            kwargs,
+        )
         captured_call["n_threads"] = n_threads
         return 0.5
 
@@ -267,4 +281,3 @@ def test_optimize_prompt_uses_injected_display(
     )
 
     assert spy.header_calls, "Injected display handler should be used"
-
