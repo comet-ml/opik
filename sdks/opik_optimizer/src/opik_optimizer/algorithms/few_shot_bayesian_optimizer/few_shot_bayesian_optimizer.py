@@ -14,6 +14,7 @@ from opik import Dataset, opik_context
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
+from ...core.llm_calls import StructuredOutputParsingError, BadRequestError
 from ...utils.optuna_runtime import (
     configure_optuna_logging,
     extract_optuna_metadata,
@@ -295,13 +296,39 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Few-shot prompt synthesis expects a single structured response.
         model_parameters = dict(self.model_parameters)
         model_parameters.pop("n", None)
-        response_content = _llm_calls.call_model(
-            messages=messages,
-            model=model,
-            seed=self.seed,
-            model_parameters=model_parameters,
-            response_model=DynamicFewShotPromptMessages,
+
+        strict_suffix = (
+            "\n\nReturn ONLY valid JSON. Do not include commentary or markdown."
         )
+        attempt_messages = messages
+        response_content = None
+        for attempt in range(2):
+            try:
+                response_content = _llm_calls.call_model(
+                    messages=attempt_messages,
+                    model=model,
+                    seed=self.seed,
+                    model_parameters=model_parameters,
+                    response_model=DynamicFewShotPromptMessages,
+                )
+                break
+            except (StructuredOutputParsingError, BadRequestError):
+                if attempt == 0:
+                    attempt_messages = [
+                        {**msg, "content": f"{msg['content']}{strict_suffix}"}
+                        if msg.get("role") == "user"
+                        else msg
+                        for msg in messages
+                    ]
+                    continue
+                raise
+        if response_content is None:
+            raise StructuredOutputParsingError(
+                content="",
+                error=ValueError(
+                    "Few-shot prompt synthesis failed after retrying structured output parsing."
+                ),
+            )
         if isinstance(response_content, list):
             response_content = response_content[0]
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
@@ -711,6 +738,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         baseline_score = cast(float, context.baseline_score)
         n_samples = context.n_samples
         is_single_prompt_optimization = context.is_single_prompt_optimization
+        context.current_best_score = baseline_score
+        context.current_best_prompt = optimizable_prompts
 
         prompts_with_placeholder, fewshot_template = (
             self._create_fewshot_prompt_template(

@@ -20,6 +20,7 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import display as display_utils
 from ...utils.optuna_runtime import configure_optuna_logging
+from ...utils.logging import debug_log
 from .types import ParameterType
 from .ops.optuna_ops import (
     build_optuna_objective,
@@ -748,7 +749,7 @@ class ParameterOptimizer(BaseOptimizer):
             is_single_prompt_optimization=is_single_prompt_optimization,
         )
 
-        return OptimizationResult(
+        result = OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=result_prompt,
             initial_prompt=initial_prompt_result,
@@ -762,3 +763,12 @@ class ParameterOptimizer(BaseOptimizer):
             optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
         )
+        debug_log(
+            "optimize_end",
+            optimizer=self.__class__.__name__,
+            best_score=best_score,
+            trials_completed=len(completed_trials),
+            stop_reason=None,
+        )
+        runtime.log_final_state(optimizer=self, result=result)
+        return result

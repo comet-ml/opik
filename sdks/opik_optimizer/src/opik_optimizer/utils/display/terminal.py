@@ -436,6 +436,17 @@ def display_evaluation_progress(
 def _format_model_name(result: Any) -> str:
     model_name = result.details.get("model", "[dim]N/A[/dim]")
     model_params = result.details.get("model_parameters") or {}
+    optimized_model_kwargs = result.details.get("optimized_model_kwargs") or {}
+    if isinstance(model_name, dict):
+        if len(model_name) == 1:
+            prompt_name, prompt_model = next(iter(model_name.items()))
+            model_name = prompt_model
+            if isinstance(optimized_model_kwargs, dict):
+                model_params = optimized_model_kwargs.get(prompt_name, model_params)
+        else:
+            model_name = ", ".join(
+                f"{name}: {value}" for name, value in model_name.items()
+            )
     params_parts: list[str] = []
     if isinstance(model_params, dict):
         for key in (
@@ -537,6 +548,7 @@ def _build_prompt_panel(result: Any) -> rich.panel.Panel:
 
 def _build_parameter_summary_table(
     *,
+    param_names: list[str],
     optimized_params: dict[str, Any],
     parameter_importance: dict[str, Any],
     search_ranges: dict[str, dict[str, Any]],
@@ -573,8 +585,11 @@ def _build_parameter_summary_table(
             return ",".join(map(str, desc["choices"]))
         return str(desc)
 
-    for name in sorted(optimized_params):
-        value_str = format_float(optimized_params[name], precision)
+    for name in param_names:
+        value = optimized_params.get(name)
+        value_str = (
+            format_float(value, precision) if value is not None else "[dim]N/A[/dim]"
+        )
         contrib_val = parameter_importance.get(name)
         if contrib_val is not None:
             contrib_str = f"{contrib_val:.1%}"
@@ -688,12 +703,30 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
     parameter_importance = result.details.get("parameter_importance") or {}
     search_ranges = result.details.get("search_ranges") or {}
     precision = result.details.get("parameter_precision", 6)
+    parameter_space = result.details.get("parameter_space") or {}
 
     prompt_panel = _build_prompt_panel(result)
 
     renderables: list[rich.console.RenderableType] = [table, "\n"]
 
+    param_names: list[str] = []
     if optimized_params:
+        param_names = sorted(optimized_params)
+    if not param_names and isinstance(parameter_space, dict):
+        for spec in parameter_space.get("parameters", []) or []:
+            if isinstance(spec, dict) and isinstance(spec.get("name"), str):
+                param_names.append(spec["name"])
+    if not param_names and search_ranges:
+        seen: set[str] = set()
+        for stage_params in search_ranges.values():
+            if not isinstance(stage_params, dict):
+                continue
+            for key in stage_params:
+                if isinstance(key, str) and key not in seen:
+                    seen.add(key)
+                    param_names.append(key)
+
+    if param_names:
         total_improvement = None
         if isinstance(result.initial_score, (int, float)) and isinstance(
             result.score, (int, float)
@@ -706,6 +739,7 @@ def render_rich_result(result: Any) -> rich.panel.Panel:
                 total_improvement = result.score
 
         summary_table = _build_parameter_summary_table(
+            param_names=param_names,
             optimized_params=optimized_params,
             parameter_importance=parameter_importance,
             search_ranges=search_ranges,

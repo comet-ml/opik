@@ -11,10 +11,11 @@ from utils.metrics import answer_correctness_score
 dataset = hotpot(count=300)
 
 # Define initial prompt
-system_prompt = """Answer the question with a direct, accurate response.
-You have access to a Wikipedia search tool - use it to find relevant information before answering.
-Provide concise answers based on the search results."""
-
+system_prompt = (
+    "Answer the question with a direct, accurate response."
+    + " You have access to a Wikipedia search tool, use it to find relevant information before answering."
+    + " Provide concise answers based on the search results."
+)
 
 prompt = ChatPrompt(
     system=system_prompt,

@@ -98,6 +98,31 @@ def format_prompt_messages(
     return json.dumps(messages, indent=2)
 
 
+def redact_prompt_payload(prompt_or_payload: Any) -> Any:
+    """Summarize prompt payloads for safe display/history."""
+    if isinstance(prompt_or_payload, dict):
+        summary: dict[str, Any] = {}
+        for name, prompt in prompt_or_payload.items():
+            if hasattr(prompt, "get_messages"):
+                messages = prompt.get_messages()
+                summary[name] = {
+                    "message_roles": [msg.get("role") for msg in messages],
+                    "message_count": len(messages),
+                    "has_tools": bool(getattr(prompt, "tools", None)),
+                }
+            else:
+                summary[name] = {"type": type(prompt).__name__}
+        return summary
+    if hasattr(prompt_or_payload, "get_messages"):
+        messages = prompt_or_payload.get_messages()
+        return {
+            "message_roles": [msg.get("role") for msg in messages],
+            "message_count": len(messages),
+            "has_tools": bool(getattr(prompt_or_payload, "tools", None)),
+        }
+    return {"type": type(prompt_or_payload).__name__}
+
+
 def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
     """
     Calculate percentage change safely, handling division by zero.

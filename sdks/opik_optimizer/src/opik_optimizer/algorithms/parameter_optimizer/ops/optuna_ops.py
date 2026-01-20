@@ -20,7 +20,7 @@ from ....agents import OptimizableAgent
 from ....core import runtime
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
-from ....utils.logging import debug_log
+from ....utils.logging import debug_log, _sanitize_debug_value
 from .search_ops import ParameterSearchSpace
 from .sensitivity_ops import sensitivity_analysis
 from .. import reporting
@@ -29,6 +29,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..parameter_optimizer import ParameterOptimizer
 
 logger = logging.getLogger(__name__)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def build_optuna_objective(
@@ -110,10 +114,14 @@ def build_optuna_objective(
             )
 
         trial.set_user_attr("parameters", sampled_values)
-        model_kwargs_for_trial = {
-            name: copy.deepcopy(p.model_kwargs or {})
-            for name, p in tuned_prompts.items()
+        raw_model_kwargs = {
+            name: copy.deepcopy(prompt.model_kwargs or {})
+            for name, prompt in tuned_prompts.items()
         }
+        model_kwargs_for_trial = {}
+        for name, kwargs in raw_model_kwargs.items():
+            sanitized = _sanitize_debug_value(kwargs)
+            model_kwargs_for_trial[name] = _as_dict(sanitized)
         trial.set_user_attr("model_kwargs", model_kwargs_for_trial)
         trial.set_user_attr(
             "model", {name: p.model for name, p in tuned_prompts.items()}
@@ -130,6 +138,7 @@ def build_optuna_objective(
         if stage_ref.get("global_trials") is not None:
             trial.set_user_attr("global_trials", stage_ref.get("global_trials"))
 
+        parameters_for_history = _as_dict(_sanitize_debug_value(sampled_values))
         runtime.record_and_post_trial(
             optimizer=optimizer,
             context=context,
@@ -137,7 +146,7 @@ def build_optuna_objective(
             score=score,
             candidate_id=f"trial{trial.number}",
             extra={
-                "parameters": sampled_values,
+                "parameters": parameters_for_history,
                 "model": trial.user_attrs.get("model"),
                 "stage": stage,
                 "type": stage_ref.get("type"),
@@ -145,7 +154,7 @@ def build_optuna_objective(
             round_handle=round_handle,
             timestamp=datetime.now(timezone.utc).isoformat(),
             post_extras={
-                "parameters": sampled_values,
+                "parameters": parameters_for_history,
                 "model": trial.user_attrs.get("model"),
                 "stage": stage,
                 "type": stage_ref.get("type"),
@@ -240,11 +249,17 @@ def select_best_trial(
     if not completed_trials:
         return best_score, best_parameters, best_model_kwargs, best_model
     best_trial = max(completed_trials, key=lambda t: t.value)  # type: ignore[arg-type]
-    if best_trial.value is not None and best_trial.value > best_score:
-        best_score = float(best_trial.value)
-        best_parameters = best_trial.user_attrs.get("parameters", {})
-        best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
-        best_model = best_trial.user_attrs.get("model", best_model)
+    if best_trial.value is not None:
+        best_value = float(best_trial.value)
+        if best_value > best_score:
+            best_score = best_value
+            best_parameters = best_trial.user_attrs.get("parameters", {})
+            best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
+            best_model = best_trial.user_attrs.get("model", best_model)
+        elif best_value == best_score and not best_parameters:
+            best_parameters = best_trial.user_attrs.get("parameters", {})
+            best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
+            best_model = best_trial.user_attrs.get("model", best_model)
     return best_score, best_parameters, best_model_kwargs, best_model
 
 

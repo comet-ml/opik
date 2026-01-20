@@ -409,12 +409,24 @@ def log_final_state(*, optimizer: BaseOptimizer, result: OptimizationResult) -> 
     if not debug_logger.isEnabledFor(logging.DEBUG):
         return
     try:
-        details_text = json.dumps(result.details, default=str, indent=2, sort_keys=True)
+        from ..utils.display import format as display_format
+
+        def _redact_payload(value: Any) -> Any:
+            if hasattr(value, "get_messages"):
+                return display_format.redact_prompt_payload(value)
+            if isinstance(value, dict):
+                return {key: _redact_payload(val) for key, val in value.items()}
+            if isinstance(value, list):
+                return [_redact_payload(item) for item in value]
+            return value
+
+        redacted_details = _redact_payload(result.details)
+        redacted_history = _redact_payload(optimizer._history_builder.get_entries())
+        details_text = json.dumps(
+            redacted_details, default=str, indent=2, sort_keys=True
+        )
         history_text = json.dumps(
-            optimizer._history_builder.get_entries(),
-            default=str,
-            indent=2,
-            sort_keys=True,
+            redacted_history, default=str, indent=2, sort_keys=True
         )
         debug_logger.debug("final_state details=\n%s", details_text)
         debug_logger.debug("final_state history=\n%s", history_text)
