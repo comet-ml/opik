@@ -167,7 +167,6 @@ class ExperimentDAO {
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
                 ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), experiment_items_final AS (
                 SELECT
                     id, experiment_id, trace_id
