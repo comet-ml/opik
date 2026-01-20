@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import copy
 import random
-from typing import Any, Callable, TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING, cast
+from collections.abc import Callable
 import json
 import logging
 
 try:
     from deap import tools
+
     _DEAP_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
     tools = None
@@ -17,6 +19,7 @@ from ....core.state import OptimizationContext
 from ....utils import display as display_utils
 from .. import reporting
 from . import crossover_ops, mutation_ops, pareto_ops, population_ops, style_ops
+
 if TYPE_CHECKING:  # pragma: no cover
     from ...evolutionary_optimizer import EvolutionaryOptimizer
 
@@ -32,7 +35,7 @@ def _require_deap() -> None:
 
 
 def build_deap_evaluator(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     context: OptimizationContext,
     experiment_config: dict[str, Any] | None,
 ) -> Callable[[Any], tuple[float, ...]]:
@@ -68,7 +71,7 @@ def build_deap_evaluator(
 
 
 def resolve_output_style_guidance(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     dataset: Any,
 ) -> str:
@@ -98,7 +101,7 @@ def resolve_output_style_guidance(
 
 
 def initialize_population(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     optimizable_prompts: dict[str, Any],
     output_style_guidance: str,
@@ -130,7 +133,7 @@ def initialize_population(
 
 
 def evaluate_initial_population(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     context: OptimizationContext,
     deap_population: list[Any],
@@ -173,7 +176,7 @@ def evaluate_initial_population(
 
 
 def post_population_round(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     context: OptimizationContext,
     population: list[Any],
@@ -210,7 +213,9 @@ def post_population_round(
         context=context,
         best_score=best_primary_score_overall,
         best_prompt=best_prompts_overall,
-        dataset_split=context.dataset_split if hasattr(context, "dataset_split") else None,
+        dataset_split=context.dataset_split
+        if hasattr(context, "dataset_split")
+        else None,
         stop_reason=context.finish_reason,
         extras={
             "stopped": context.should_stop,
@@ -223,7 +228,7 @@ def post_population_round(
 
 
 def run_generation(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     generation_idx: int,
     population: list[Any],
@@ -311,7 +316,7 @@ def run_generation(
 
 
 def run_generations(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     context: OptimizationContext,
     deap_population: list[Any],
@@ -446,7 +451,12 @@ def run_generations(
                 )
             optimizer._clear_reporter()
 
-    return deap_population, best_primary_score_overall, best_prompts_overall, generation_idx
+    return (
+        deap_population,
+        best_primary_score_overall,
+        best_prompts_overall,
+        generation_idx,
+    )
 
 
 def _calculate_improvement(best_score: float, initial_score: float) -> float:

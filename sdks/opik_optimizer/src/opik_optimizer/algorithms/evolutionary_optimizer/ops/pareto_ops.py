@@ -11,6 +11,7 @@ import logging
 
 try:
     from deap import tools
+
     _DEAP_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
     tools = None
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: Move into a shared optimizer-agnostic Pareto helper module.
 
+
 def _require_deap() -> None:
     if tools is None:
         raise RuntimeError(
@@ -30,6 +32,7 @@ def _require_deap() -> None:
 
 
 # TODO: Decide whether selection policies should be centralized for all optimizers.
+
 
 def select_population(
     *,
@@ -53,7 +56,10 @@ def select_population(
 
 # TODO: Use a shared candidate schema once history standardization is complete.
 
-def build_pareto_front(hof: tools.HallOfFame | tools.ParetoFront, generation_idx: int) -> list[dict[str, Any]]:
+
+def build_pareto_front(
+    hof: tools.HallOfFame | tools.ParetoFront, generation_idx: int
+) -> list[dict[str, Any]]:
     _require_deap()
     if not hof:
         return []
@@ -82,6 +88,7 @@ def selection_meta(
 
 # TODO: Support configurable tiebreakers when multiple solutions share the same score.
 
+
 def choose_best_from_front(
     *,
     hof: tools.HallOfFame | tools.ParetoFront,
@@ -93,3 +100,33 @@ def choose_best_from_front(
     if enable_moo:
         return max(hof, key=lambda ind: ind.fitness.values[0])
     return hof[0]
+
+
+def serialize_pareto_solutions(
+    hof: tools.HallOfFame | tools.ParetoFront,
+) -> list[dict[str, Any]]:
+    _require_deap()
+    if not hof:
+        return []
+    return [
+        {
+            "prompt": str(dict(ind)),
+            "score": ind.fitness.values[0],
+            "length": ind.fitness.values[1],
+        }
+        for ind in hof
+    ]
+
+
+def format_pareto_log(hof: tools.HallOfFame | tools.ParetoFront) -> str:
+    _require_deap()
+    if not hof:
+        return "Pareto Front Solutions: <empty>"
+    sorted_hof = sorted(hof, key=lambda ind: ind.fitness.values[0], reverse=True)
+    lines = ["Pareto Front Solutions:"]
+    for i, sol in enumerate(sorted_hof):
+        lines.append(
+            f"  Solution {i + 1}: Primary Score={sol.fitness.values[0]:.4f}, "
+            f"Length={sol.fitness.values[1]:.0f}, Prompts={len(sol)}"
+        )
+    return "\n".join(lines)

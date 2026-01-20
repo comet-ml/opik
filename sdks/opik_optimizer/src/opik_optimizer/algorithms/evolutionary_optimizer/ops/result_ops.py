@@ -6,6 +6,7 @@ import logging
 
 try:
     from deap import tools
+
     _DEAP_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
     tools = None
@@ -15,6 +16,7 @@ from ....core import runtime
 from . import pareto_ops
 from ....core.state import AlgorithmResult, OptimizationContext
 from ....utils.logging import debug_log
+
 if TYPE_CHECKING:  # pragma: no cover
     from ...evolutionary_optimizer import EvolutionaryOptimizer
 
@@ -30,7 +32,7 @@ def _require_deap() -> None:
 
 
 def build_algorithm_result(
-    optimizer: "EvolutionaryOptimizer",
+    optimizer: EvolutionaryOptimizer,
     *,
     context: OptimizationContext,
     optimizable_prompts: dict[str, Any],
@@ -47,19 +49,15 @@ def build_algorithm_result(
     final_details: dict[str, Any] = {}
 
     if optimizer.enable_moo:
-        final_results_log = "Pareto Front Solutions:\n"
+        final_results_log = pareto_ops.format_pareto_log(hof)
         if hof and len(hof) > 0:
-            sorted_hof = sorted(hof, key=lambda ind: ind.fitness.values[0], reverse=True)
-            for i, sol in enumerate(sorted_hof):
-                final_results_log += (
-                    f"  Solution {i + 1}: Primary Score={sol.fitness.values[0]:.4f}, "
-                    f"Length={sol.fitness.values[1]:.0f}, Prompts={len(sol)}\n"
-                )
             best_overall_solution = pareto_ops.choose_best_from_front(
                 hof=hof, enable_moo=True
             )
             if best_overall_solution is None:
-                best_overall_solution = sorted_hof[0]
+                best_overall_solution = sorted(
+                    hof, key=lambda ind: ind.fitness.values[0], reverse=True
+                )[0]
             final_best_prompts = optimizer._individual_to_prompts(best_overall_solution)
             final_primary_score = best_overall_solution.fitness.values[0]
             final_length = best_overall_solution.fitness.values[1]
@@ -79,18 +77,8 @@ def build_algorithm_result(
                     "final_prompts": final_best_prompts,
                     "final_primary_score_representative": final_primary_score,
                     "final_length_representative": final_length,
-                    # TODO: Move Pareto solution serialization into pareto_ops.
-                    "pareto_front_solutions": (
-                        [
-                            {
-                                "prompt": str(dict(ind)),
-                                "score": ind.fitness.values[0],
-                                "length": ind.fitness.values[1],
-                            }
-                            for ind in hof
-                        ]
-                        if hof
-                        else []
+                    "pareto_front_solutions": pareto_ops.serialize_pareto_solutions(
+                        hof
                     ),
                 }
             )
@@ -109,7 +97,9 @@ def build_algorithm_result(
                     "final_prompts": final_best_prompts,
                     "final_primary_score_representative": final_primary_score,
                     "final_length_representative": final_length,
-                    "pareto_front_solutions": [],
+                    "pareto_front_solutions": pareto_ops.serialize_pareto_solutions(
+                        hof
+                    ),
                 }
             )
     else:
@@ -119,9 +109,7 @@ def build_algorithm_result(
             "Final best prompts from Hall of Fame: %d prompts",
             len(final_best_prompts),
         )
-        logger.info(
-            "Final best score (%s): %.4f", metric.__name__, final_primary_score
-        )
+        logger.info("Final best score (%s): %.4f", metric.__name__, final_primary_score)
         initial_messages = {
             name: p.get_messages() for name, p in optimizable_prompts.items()
         }
