@@ -2,17 +2,25 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import relativeTime from "dayjs/plugin/relativeTime";
 import duration from "dayjs/plugin/duration";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
 
+import {
+  TIMEZONE_TO_LOCALE,
+  LOCALE_TO_PARSE_FORMATS,
+  LOCALE_TO_PLACEHOLDER,
+  DEFAULT_LOCALE,
+  DEFAULT_DATE_PLACEHOLDER,
+  FALLBACK_DATE_FORMATS,
+} from "@/constants/dateLocale";
+
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
 dayjs.extend(duration);
-
-const FORMATTED_DATE_STRING_REGEXP =
-  /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
+dayjs.extend(customParseFormat);
 
 type FormatDateConfig = {
   utc?: boolean;
@@ -20,18 +28,39 @@ type FormatDateConfig = {
 };
 
 /**
- * Get the user's browser locale, with fallback to 'en-US'
+ * Get locale based on the user's timezone.
+ * Falls back to en-US if timezone cannot be determined or is not mapped.
  */
-const getBrowserLocale = (): string => {
-  if (typeof navigator !== "undefined" && navigator.language) {
-    return navigator.language;
+const getLocaleFromTimezone = (): string => {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // Direct match
+    if (timezone && TIMEZONE_TO_LOCALE[timezone]) {
+      return TIMEZONE_TO_LOCALE[timezone];
+    }
+
+    // Try to match by region prefix (e.g., "Europe/" -> use first European locale as hint)
+    if (timezone) {
+      const region = timezone.split("/")[0];
+      // Find any timezone in the same region
+      const regionMatch = Object.entries(TIMEZONE_TO_LOCALE).find(([tz]) =>
+        tz.startsWith(region + "/"),
+      );
+      if (regionMatch) {
+        return regionMatch[1];
+      }
+    }
+
+    return DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
   }
-  return "en-US";
 };
 
 /**
- * Format a date string according to the user's browser locale.
- * Uses Intl.DateTimeFormat for locale-aware formatting.
+ * Format a date string according to the user's geographic locale.
+ * Uses timezone detection to infer the user's likely locale preference.
  *
  * @param value - ISO date string to format
  * @param config - Configuration options
@@ -40,10 +69,10 @@ const getBrowserLocale = (): string => {
  * @returns Formatted date string in the user's locale, or empty string if invalid
  *
  * @example
- * // User with en-GB locale sees: "11/01/2026, 14:30"
- * // User with en-US locale sees: "1/11/2026, 2:30 PM"
- * // User with de-DE locale sees: "11.01.2026, 14:30"
- * // User with ja-JP locale sees: "2026/01/11 14:30"
+ * // User in Europe/Warsaw sees: "11.01.2026, 14:30" (Polish format)
+ * // User in America/New_York sees: "1/11/2026, 2:30 PM" (US format)
+ * // User in Europe/London sees: "11/01/2026, 14:30" (UK format)
+ * // User in Asia/Tokyo sees: "2026/01/11 14:30" (Japanese format)
  */
 export const formatDate = (
   value: string,
@@ -54,7 +83,7 @@ export const formatDate = (
   }
 
   const date = utc ? dayjs(value).utc().toDate() : dayjs(value).toDate();
-  const locale = getBrowserLocale();
+  const locale = getLocaleFromTimezone();
 
   const options: Intl.DateTimeFormatOptions = {
     year: "numeric",
@@ -71,16 +100,122 @@ export const formatDate = (
   } catch {
     // Fallback to unambiguous format if locale is not supported
     const fallbackFormat = includeSeconds
-      ? "MMM DD, YYYY h:mm:ss A"
-      : "MMM DD, YYYY h:mm A";
+      ? FALLBACK_DATE_FORMATS.withSeconds
+      : FALLBACK_DATE_FORMATS.withoutSeconds;
     return utc
       ? dayjs(value).utc().format(fallbackFormat)
       : dayjs(value).format(fallbackFormat);
   }
 };
 
-export const isStringValidFormattedDate = (value: string) => {
-  return isString(value) && FORMATTED_DATE_STRING_REGEXP.test(value);
+/**
+ * Get the date format placeholder string for the user's locale.
+ * This provides a user-friendly hint for the expected date format.
+ *
+ * @returns Placeholder string showing the expected date format
+ *
+ * @example
+ * // User in Europe/Warsaw sees: "DD.MM.YYYY, HH:mm"
+ * // User in America/New_York sees: "MM/DD/YYYY, hh:mm AM/PM"
+ * // User in Asia/Tokyo sees: "YYYY/MM/DD HH:mm"
+ */
+export const getDateFormatPlaceholder = (): string => {
+  const locale = getLocaleFromTimezone();
+
+  // Try exact match
+  if (LOCALE_TO_PLACEHOLDER[locale]) {
+    return LOCALE_TO_PLACEHOLDER[locale];
+  }
+
+  // Try language-only match (e.g., "en" from "en-SG")
+  const language = locale.split("-")[0];
+  const languageMatch = Object.keys(LOCALE_TO_PLACEHOLDER).find((key) =>
+    key.startsWith(language + "-"),
+  );
+  if (languageMatch) {
+    return LOCALE_TO_PLACEHOLDER[languageMatch];
+  }
+
+  // Default fallback
+  return DEFAULT_DATE_PLACEHOLDER;
+};
+
+/**
+ * Get all supported parse formats derived from TIMEZONE_TO_LOCALE mapping.
+ * This ensures validation supports all locales that formatDate can produce.
+ */
+const getSupportedParseFormats = (): string[] => {
+  // Get unique locales from timezone mapping
+  const uniqueLocales = [...new Set(Object.values(TIMEZONE_TO_LOCALE))];
+
+  // Collect all formats for these locales
+  const formats = new Set<string>();
+
+  // Add formats for each unique locale
+  uniqueLocales.forEach((locale) => {
+    // Try exact match first
+    if (LOCALE_TO_PARSE_FORMATS[locale]) {
+      LOCALE_TO_PARSE_FORMATS[locale].forEach((f) => formats.add(f));
+      return;
+    }
+
+    // Try language-only match (e.g., "en" from "en-SG")
+    const language = locale.split("-")[0];
+    const languageMatch = Object.keys(LOCALE_TO_PARSE_FORMATS).find((key) =>
+      key.startsWith(language + "-"),
+    );
+    if (languageMatch) {
+      LOCALE_TO_PARSE_FORMATS[languageMatch].forEach((f) => formats.add(f));
+    }
+  });
+
+  // Always include fallback formats
+  formats.add(FALLBACK_DATE_FORMATS.withoutSeconds);
+  formats.add(FALLBACK_DATE_FORMATS.withSeconds);
+
+  return [...formats];
+};
+
+// Cache the supported formats
+const SUPPORTED_PARSE_FORMATS = getSupportedParseFormats();
+
+/**
+ * Validates if a string is a valid formatted date.
+ * Supports all locale formats from TIMEZONE_TO_LOCALE mapping.
+ *
+ * @param value - The string to validate
+ * @returns true if the string can be parsed as a valid date
+ */
+export const isStringValidFormattedDate = (value: string): boolean => {
+  if (!isString(value) || value.trim() === "") {
+    return false;
+  }
+
+  return SUPPORTED_PARSE_FORMATS.some((format) =>
+    dayjs(value, format, true).isValid(),
+  );
+};
+
+/**
+ * Parses a formatted date string back to a Date object.
+ * Supports all locale formats from TIMEZONE_TO_LOCALE mapping.
+ *
+ * @param value - The formatted date string to parse
+ * @returns Date object if valid, undefined otherwise
+ */
+export const parseFormattedDate = (value: string): Date | undefined => {
+  if (!isString(value) || value.trim() === "") {
+    return undefined;
+  }
+
+  for (const format of SUPPORTED_PARSE_FORMATS) {
+    const parsed = dayjs(value, format, true);
+    if (parsed.isValid()) {
+      return parsed.toDate();
+    }
+  }
+
+  return undefined;
 };
 
 export const getTimeFromNow = (date: string) => {

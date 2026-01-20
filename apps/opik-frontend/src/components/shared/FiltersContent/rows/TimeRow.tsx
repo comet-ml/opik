@@ -15,7 +15,11 @@ import TimePicker from "@/components/shared/TimePicker/TimePicker";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
 import { Filter } from "@/types/filters";
 import { COLUMN_TYPE } from "@/types/shared";
-import { formatDate, isStringValidFormattedDate } from "@/lib/date";
+import {
+  formatDate,
+  parseFormattedDate,
+  getDateFormatPlaceholder,
+} from "@/lib/date";
 import { cn } from "@/lib/utils";
 
 type TimeRowProps = {
@@ -48,15 +52,11 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const onValueChange = (value: string) => {
     setDateString(value);
 
-    const isValid = isStringValidFormattedDate(value);
+    const parsedDate = parseFormattedDate(value);
+    const isValid = parsedDate !== undefined;
 
-    if (isValid) {
-      const parsedDate = dayjs(
-        value,
-        ["MM/DD/YY HH:mm A", "MM/DD/YYYY HH:mm A"],
-        true,
-      );
-      setDate(parsedDate.toDate());
+    if (isValid && parsedDate) {
+      setDate(parsedDate);
       onChange({
         ...filter,
         value: parsedDate.toISOString(),
@@ -92,7 +92,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
                 "border-destructive focus-visible:border-destructive": error,
               })}
               onValueChange={(value) => onValueChange(value as string)}
-              placeholder="MM/DD/YY HH:mm A"
+              placeholder={getDateFormatPlaceholder()}
               value={dateString}
               delay={500}
             />
