@@ -86,7 +86,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
     );
   }, [activeExperimentsCompare?.experiment_items, experimentsIds]);
 
-  const datasetItemId = experimentItems?.[0]?.dataset_item_id || undefined;
+  const datasetItemId = activeExperimentsCompare?.id;
   const { data: datasetItem } = useDatasetItemById(
     {
       datasetItemId: datasetItemId!,
@@ -141,6 +141,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
             data={data}
             experimentItems={experimentItems}
             openTrace={openTrace}
+            datasetItemId={datasetItemId}
           />
         </div>
       </div>
