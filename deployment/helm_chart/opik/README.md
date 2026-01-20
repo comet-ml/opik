@@ -281,6 +281,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |

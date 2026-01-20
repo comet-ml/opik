@@ -65,8 +65,19 @@ export class Experiments {
         request: OpikApi.FindExperimentsRequest = {},
         requestOptions?: Experiments.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentPagePublic>> {
-        const { page, size, datasetId, optimizationId, types, name, datasetDeleted, promptId, sorting, filters } =
-            request;
+        const {
+            page,
+            size,
+            datasetId,
+            optimizationId,
+            types,
+            name,
+            datasetDeleted,
+            promptId,
+            sorting,
+            filters,
+            experimentIds,
+        } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -106,6 +117,10 @@ export class Experiments {
 
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (experimentIds != null) {
+            _queryParams["experiment_ids"] = experimentIds;
         }
 
         const _response = await core.fetcher({
