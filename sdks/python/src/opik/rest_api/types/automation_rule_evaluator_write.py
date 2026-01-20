@@ -6,6 +6,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWriteAction
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 from .span_filter_write import SpanFilterWrite
 from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
@@ -31,7 +32,7 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
-    action: typing.Literal["evaluator"] = "evaluator"
+    action: AutomationRuleEvaluatorWriteAction
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

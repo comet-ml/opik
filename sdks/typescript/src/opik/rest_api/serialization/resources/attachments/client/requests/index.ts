@@ -1,1 +1,1 @@
-export { StartMultipartUploadRequest } from "./StartMultipartUploadRequest";
+export { StartMultipartUploadRequest } from "./StartMultipartUploadRequest.js";
