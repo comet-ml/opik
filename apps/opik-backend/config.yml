@@ -423,7 +423,7 @@ onlineScoring:
 datasetExport:
   # Default: false
   # Description: Whether dataset export feature is enabled
-  enabled: ${DATASET_EXPORT_ENABLED:-true}
+  enabled: ${DATASET_EXPORT_ENABLED:-false}
   # Default: dataset-export
   # Description: Redis stream name for dataset export jobs
   streamName: ${DATASET_EXPORT_STREAM_NAME:-'dataset-export'}
@@ -646,7 +646,7 @@ serviceToggles:
   datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
-  datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"true"}
+  datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
