@@ -350,18 +350,27 @@ class ClassInspector:
         return "\n".join(output)
 
 
-classes_to_document = [
-    opik_optimizer.ParameterOptimizer,
-    opik_optimizer.FewShotBayesianOptimizer,
-    opik_optimizer.MetaPromptOptimizer,
-    opik_optimizer.EvolutionaryOptimizer,
-    opik_optimizer.GepaOptimizer,
-    opik_optimizer.HRPO,
-    opik_optimizer.ChatPrompt,
-    opik_optimizer.OptimizationResult,
-    opik_optimizer.OptimizableAgent,
-    # opik_optimizer.datasets
-]
+def collect_public_classes() -> list[type]:
+    public_names = getattr(opik_optimizer, "__all__", [])
+    classes: list[type] = []
+    seen: set[int] = set()
+
+    for name in public_names:
+        obj = getattr(opik_optimizer, name, None)
+        if inspect.isclass(obj) and id(obj) not in seen:
+            classes.append(obj)
+            seen.add(id(obj))
+
+    # PromptLibrary is a public customization surface but not re-exported at top-level.
+    from opik_optimizer.utils.prompt_library import PromptLibrary
+
+    if id(PromptLibrary) not in seen:
+        classes.append(PromptLibrary)
+
+    return classes
+
+
+classes_to_document = collect_public_classes()
 
 
 res = """---
@@ -373,8 +382,8 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 ## Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
-- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, and GEPA
 - **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
@@ -400,34 +409,18 @@ All optimizers implement these core methods with identical signatures:
 ```python
 def optimize_prompt(
     self,
-    prompt: ChatPrompt,
+    prompt: ChatPrompt | dict[str, ChatPrompt],
     dataset: Dataset,
-    metric: Callable,
+    metric: MetricFunction,
+    agent: OptimizableAgent | None = None,
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     auto_continue: bool = False,
-    agent_class: type[OptimizableAgent] | None = None,
-    **kwargs: Any,
-) -> OptimizationResult
-```
-
-### optimize_mcp()
-```python
-def optimize_mcp(
-    self,
-    prompt: ChatPrompt,
-    dataset: Dataset,
-    metric: Callable,
-    *,
-    tool_name: str,
-    second_pass: Any,
-    experiment_config: dict | None = None,
-    n_samples: int | None = None,
-    auto_continue: bool = False,
-    agent_class: type[OptimizableAgent] | None = None,
-    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
-    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
-    allow_tool_use_on_second_pass: bool = False,
+    project_name: str | None = None,
+    optimization_id: str | None = None,
+    validation_dataset: Dataset | None = None,
+    max_trials: int = 10,
+    allow_tool_use: bool = True,
     **kwargs: Any,
 ) -> OptimizationResult
 ```
@@ -438,7 +431,6 @@ The following parameters are deprecated and will be removed in future versions:
 
 ### Constructor Parameters
 
-- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
 - **`num_threads`** in optimizer constructors: Use `n_threads` instead
 
 ### Example Migration
@@ -447,19 +439,13 @@ The following parameters are deprecated and will be removed in future versions:
 # ❌ Deprecated
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
-    project_name="my-project",  # Deprecated
-    num_threads=16,             # Deprecated
+    num_threads=16,  # Deprecated
 )
 
 # ✅ Correct
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
     n_threads=16,  # Use n_threads instead
-)
-
-prompt = ChatPrompt(
-    project_name="my-project",  # Set here instead
-    messages=[...]
 )
 ```
 

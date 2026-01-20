@@ -7,8 +7,8 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 ## Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
-- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, and GEPA
 - **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
@@ -34,34 +34,18 @@ All optimizers implement these core methods with identical signatures:
 ```python
 def optimize_prompt(
     self,
-    prompt: ChatPrompt,
+    prompt: ChatPrompt | dict[str, ChatPrompt],
     dataset: Dataset,
-    metric: Callable,
+    metric: MetricFunction,
+    agent: OptimizableAgent | None = None,
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     auto_continue: bool = False,
-    agent_class: type[OptimizableAgent] | None = None,
-    **kwargs: Any,
-) -> OptimizationResult
-```
-
-### optimize_mcp()
-```python
-def optimize_mcp(
-    self,
-    prompt: ChatPrompt,
-    dataset: Dataset,
-    metric: Callable,
-    *,
-    tool_name: str,
-    second_pass: Any,
-    experiment_config: dict | None = None,
-    n_samples: int | None = None,
-    auto_continue: bool = False,
-    agent_class: type[OptimizableAgent] | None = None,
-    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
-    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
-    allow_tool_use_on_second_pass: bool = False,
+    project_name: str | None = None,
+    optimization_id: str | None = None,
+    validation_dataset: Dataset | None = None,
+    max_trials: int = 10,
+    allow_tool_use: bool = True,
     **kwargs: Any,
 ) -> OptimizationResult
 ```
@@ -72,7 +56,6 @@ The following parameters are deprecated and will be removed in future versions:
 
 ### Constructor Parameters
 
-- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
 - **`num_threads`** in optimizer constructors: Use `n_threads` instead
 
 ### Example Migration
@@ -81,8 +64,7 @@ The following parameters are deprecated and will be removed in future versions:
 # ❌ Deprecated
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
-    project_name="my-project",  # Deprecated
-    num_threads=16,             # Deprecated
+    num_threads=16,  # Deprecated
 )
 
 # ✅ Correct
@@ -90,170 +72,7 @@ optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
     n_threads=16,  # Use n_threads instead
 )
-
-prompt = ChatPrompt(
-    project_name="my-project",  # Set here instead
-    messages=[...]
-)
 ```
-
-## ParameterOptimizer
-
-```python
-ParameterOptimizer(
-    model: str = 'gpt-4o',
-    model_parameters: dict[str, typing.Any] | None = None,
-    default_n_trials: int = 20,
-    local_search_ratio: float = 0.3,
-    local_search_scale: float = 0.2,
-    n_threads: int = 4,
-    verbose: int = 1,
-    seed: int = 42,
-    name: str | None = None,
-    skip_perfect_score: bool = True,
-    perfect_score: float = 0.95
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name (used for metadata, not for optimization calls)</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="default_n_trials" type="int" optional={true} default="20">Default number of optimization trials to run</ParamField>
-<ParamField path="local_search_ratio" type="float" optional={true} default="0.3">Ratio of trials to dedicate to local search refinement (0.0-1.0)</ParamField>
-<ParamField path="local_search_scale" type="float" optional={true} default="0.2">Scale factor for narrowing search space during local search</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="4">Number of parallel threads for evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
-<ParamField path="name" type="str | None" optional={true} />
-<ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
-<ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-
-### Methods
-#### cleanup
-```python
-cleanup()
-```
-
-
-#### evaluate_prompt
-```python
-evaluate_prompt(
-    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
-    dataset: Dataset,
-    metric: MetricFunction,
-    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
-    n_threads: int | None = None,
-    verbose: int = 1,
-    dataset_item_ids: list[str] | None = None,
-    experiment_config: dict | None = None,
-    n_samples: int | None = None,
-    seed: int | None = None,
-    return_evaluation_result: bool = False
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]" />
-<ParamField path="dataset" type="Dataset" />
-<ParamField path="metric" type="MetricFunction" />
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
-<ParamField path="n_threads" type="int | None" optional={true} />
-<ParamField path="verbose" type="int" optional={true} default="1" />
-<ParamField path="dataset_item_ids" type="list[str] | None" optional={true} />
-<ParamField path="experiment_config" type="dict | None" optional={true} />
-<ParamField path="n_samples" type="int | None" optional={true} />
-<ParamField path="seed" type="int | None" optional={true} />
-<ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
-
-#### get_default_prompt
-```python
-get_default_prompt(
-    key: str
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
-
-#### get_history
-```python
-get_history()
-```
-
-
-#### get_optimizer_metadata
-```python
-get_optimizer_metadata()
-```
-
-
-#### get_prompt
-```python
-get_prompt(
-    key: str,
-    fmt: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
-<ParamField path="fmt" type="Any" />
-
-#### list_prompts
-```python
-list_prompts()
-```
-
-
-#### optimize_parameter
-```python
-optimize_parameter(
-    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
-    dataset: Dataset,
-    metric: MetricFunction,
-    parameter_space: opik_optimizer.algorithms.parameter_optimizer.parameter_search_space.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any],
-    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
-    experiment_config: dict | None = None,
-    max_trials: int | None = None,
-    n_samples: int | None = None,
-    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
-    project_name: str = 'Optimization',
-    sampler: optuna.samplers._base.BaseSampler | None = None,
-    callbacks: list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None = None,
-    timeout: float | None = None,
-    local_trials: int | None = None,
-    local_search_scale: float | None = None,
-    optimization_id: str | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt or dict of prompts to evaluate with tuned parameters. When a dict is provided, parameters are optimized independently for each prompt.</ParamField>
-<ParamField path="dataset" type="Dataset">Dataset providing evaluation examples</ParamField>
-<ParamField path="metric" type="MetricFunction">Objective function to maximize</ParamField>
-<ParamField path="parameter_space" type="opik_optimizer.algorithms.parameter_optimizer.parameter_search_space.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any]">Definition of the search space for tunable parameters. For multi-prompt, params without a prefix are expanded per prompt. Params already prefixed (e.g., 'analyze.temperature') are kept as-is.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset. Note: Due to the internal implementation of ParameterOptimizer, this parameter is currently not fully utilized and we recommend not using it for this optimizer.</ParamField>
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment metadata</ParamField>
-<ParamField path="max_trials" type="int | None" optional={true}>Total number of trials (if None, uses default_n_trials)</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional custom agent instance to execute evaluations</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
-<ParamField path="sampler" type="optuna.samplers._base.BaseSampler | None" optional={true}>Optuna sampler to use (default: TPESampler with seed)</ParamField>
-<ParamField path="callbacks" type="list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None" optional={true}>List of callback functions for Optuna study</ParamField>
-<ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
-<ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
-<ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 
 ## FewShotBayesianOptimizer
 
@@ -263,7 +82,7 @@ FewShotBayesianOptimizer(
     model_parameters: dict[str, typing.Any] | None = None,
     min_examples: int = 2,
     max_examples: int = 8,
-    n_threads: int = 8,
+    n_threads: int = 12,
     verbose: int = 1,
     seed: int = 42,
     name: str | None = None,
@@ -284,7 +103,7 @@ FewShotBayesianOptimizer(
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="min_examples" type="int" optional={true} default="2">Minimum number of examples to include in the prompt</ParamField>
 <ParamField path="max_examples" type="int" optional={true} default="8">Maximum number of examples to include in the prompt</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="8">Number of threads for parallel evaluation</ParamField>
+<ParamField path="n_threads" type="int" optional={true} default="12">Number of threads for parallel evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
 <ParamField path="name" type="str | None" optional={true} />
@@ -297,11 +116,41 @@ FewShotBayesianOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
 #### cleanup
 ```python
 cleanup()
 ```
 
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
 
 #### evaluate_prompt
 ```python
@@ -316,7 +165,8 @@ evaluate_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     seed: int | None = None,
-    return_evaluation_result: bool = False
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool = False
 )
 ```
 
@@ -334,6 +184,103 @@ evaluate_prompt(
 <ParamField path="n_samples" type="int | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool" optional={true} default="False" />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
 ```python
@@ -347,11 +294,29 @@ get_default_prompt(
 
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
-#### get_history
+#### get_history_entries
 ```python
-get_history()
+get_history_entries()
 ```
 
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
 ```python
@@ -379,6 +344,24 @@ list_prompts()
 ```
 
 
+#### on_trial
+```python
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -389,10 +372,11 @@ optimize_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     auto_continue: bool = False,
-    project_name: str = 'Optimization',
+    project_name: str | None = None,
     optimization_id: str | None = None,
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
+    allow_tool_use: bool = True,
     args: Any,
     kwargs: Any
 )
@@ -401,19 +385,826 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize</ParamField>
-<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
-<ParamField path="metric" type="MetricFunction">Metric function to evaluate on</ParamField>
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment, useful to log additional metadata</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Optional number of items to test in the dataset</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset (not yet supported by this optimizer).</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of prompts)</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset (training set - used for feedback/context) TODO/FIXME: This parameter will be deprecated in favor of dataset_training. For now, it serves as the training dataset parameter.</ParamField>
+<ParamField path="metric" type="MetricFunction">A metric function with signature (dataset_item, llm_output) -> float</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent for prompt execution (defaults to LiteLLMAgent)</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of samples to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### run_optimization
+```python
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+## GepaOptimizer
+
+```python
+GepaOptimizer(
+    model: str = 'gpt-4o',
+    model_parameters: dict[str, typing.Any] | None = None,
+    n_threads: int = 12,
+    verbose: int = 1,
+    seed: int = 42,
+    name: str | None = None,
+    skip_perfect_score: bool = True,
+    perfect_score: float = 0.95,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for the optimization algorithm</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
+<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
+<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
+<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
+<ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
+<ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Accepted for API parity, but ignored (GEPA does not expose prompt hooks).</ParamField>
+
+### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
+
+#### evaluate_prompt
+```python
+evaluate_prompt(
+    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
+    n_threads: int | None = None,
+    verbose: int = 1,
+    dataset_item_ids: list[str] | None = None,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    seed: int | None = None,
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="MetricFunction" />
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
+<ParamField path="n_threads" type="int | None" optional={true} />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="dataset_item_ids" type="list[str] | None" optional={true} />
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="seed" type="int | None" optional={true} />
+<ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### get_default_prompt
+```python
+get_default_prompt(
+    key: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+
+#### get_history_entries
+```python
+get_history_entries()
+```
+
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### get_optimizer_metadata
+```python
+get_optimizer_metadata()
+```
+
+
+#### get_prompt
+```python
+get_prompt(
+    key: str,
+    fmt: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+<ParamField path="fmt" type="Any" />
+
+#### list_prompts
+```python
+list_prompts()
+```
+
+
+#### on_trial
+```python
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
+
+#### optimize_prompt
+```python
+optimize_prompt(
+    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    project_name: str | None = None,
+    optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
+    max_trials: int = 10,
+    allow_tool_use: bool = True,
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of prompts)</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset (training set - used for feedback/context) TODO/FIXME: This parameter will be deprecated in favor of dataset_training. For now, it serves as the training dataset parameter.</ParamField>
+<ParamField path="metric" type="MetricFunction">A metric function with signature (dataset_item, llm_output) -> float</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent for prompt execution (defaults to LiteLLMAgent)</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of samples to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### run_optimization
+```python
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
 
 ## MetaPromptOptimizer
 
@@ -430,7 +1221,6 @@ MetaPromptOptimizer(
     seed: int = 42,
     name: str | None = None,
     use_hall_of_fame: bool = True,
-    prettymode_prompt_history: bool = True,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95
@@ -443,7 +1233,7 @@ MetaPromptOptimizer(
 <ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="prompts_per_round" type="int" optional={true} default="4">Number of candidate prompts to generate per optimization round</ParamField>
-<ParamField path="enable_context" type="bool" optional={true} default="True">Whether to include task-specific context when reasoning about improvements</ParamField>
+<ParamField path="enable_context" type="bool" optional={true} default="True">Whether to include task-specific context learning when reasoning</ParamField>
 <ParamField path="num_task_examples" type="int" optional={true} default="5">Number of dataset examples to show in task context (default: 10)</ParamField>
 <ParamField path="task_context_columns" type="list[str] | None" optional={true}>Specific dataset columns to include in context (None = all input columns)</ParamField>
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for prompt evaluation</ParamField>
@@ -451,17 +1241,46 @@ MetaPromptOptimizer(
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
 <ParamField path="name" type="str | None" optional={true} />
 <ParamField path="use_hall_of_fame" type="bool" optional={true} default="True">Enable Hall of Fame pattern extraction and re-injection</ParamField>
-<ParamField path="prettymode_prompt_history" type="bool" optional={true} default="True">Display prompt history in pretty format (True) or JSON (False)</ParamField>
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
 #### cleanup
 ```python
 cleanup()
 ```
 
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
 
 #### evaluate_prompt
 ```python
@@ -476,7 +1295,8 @@ evaluate_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     seed: int | None = None,
-    return_evaluation_result: bool = False
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool | None = None
 )
 ```
 
@@ -494,6 +1314,103 @@ evaluate_prompt(
 <ParamField path="n_samples" type="int | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
 ```python
@@ -507,11 +1424,29 @@ get_default_prompt(
 
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
-#### get_history
+#### get_history_entries
 ```python
-get_history()
+get_history_entries()
 ```
 
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
 ```python
@@ -539,6 +1474,24 @@ list_prompts()
 ```
 
 
+#### on_trial
+```python
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -549,10 +1502,11 @@ optimize_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     auto_continue: bool = False,
-    project_name: str = 'Optimization',
+    project_name: str | None = None,
     optimization_id: str | None = None,
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
+    allow_tool_use: bool = True,
     args: Any,
     kwargs: Any
 )
@@ -561,19 +1515,266 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The ChatPrompt to optimize. Can include system/user/assistant messages, tools, and model configuration.</ParamField>
-<ParamField path="dataset" type="Dataset">Opik Dataset containing evaluation examples. Each item is passed to the prompt during evaluation.</ParamField>
-<ParamField path="metric" type="MetricFunction">Evaluation function that takes (dataset_item, llm_output) and returns a score (float). Higher scores indicate better performance.</ParamField>
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional metadata dictionary to log with Opik experiments. Useful for tracking experiment parameters and context.</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Number of dataset items to use per evaluation. If None, uses full dataset. Lower values speed up optimization but may be less reliable.</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">If True, optimizer may continue beyond max_trials if improvements are still being found.</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces and experiments. Default: "Optimization"</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for evaluating candidates. When provided, the optimizer uses the training dataset for understanding failure modes and generating improvements, then evaluates candidates on the validation dataset to prevent overfitting.</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10">Maximum total number of prompts to evaluate across all rounds. Optimizer stops when this limit is reached.</ParamField>
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of prompts)</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset (training set - used for feedback/context) TODO/FIXME: This parameter will be deprecated in favor of dataset_training. For now, it serves as the training dataset parameter.</ParamField>
+<ParamField path="metric" type="MetricFunction">A metric function with signature (dataset_item, llm_output) -> float</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent for prompt execution (defaults to LiteLLMAgent)</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of samples to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### run_optimization
+```python
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
 
 ## EvolutionaryOptimizer
 
@@ -590,6 +1791,7 @@ EvolutionaryOptimizer(
     adaptive_mutation: bool = True,
     enable_moo: bool = True,
     enable_llm_crossover: bool = True,
+    enable_semantic_crossover: bool = False,
     output_style_guidance: str | None = None,
     infer_output_style: bool = False,
     n_threads: int = 12,
@@ -616,6 +1818,7 @@ EvolutionaryOptimizer(
 <ParamField path="adaptive_mutation" type="bool" optional={true} default="True">Whether to use adaptive mutation that adjusts based on population diversity</ParamField>
 <ParamField path="enable_moo" type="bool" optional={true} default="True">Whether to enable multi-objective optimization (optimizes metric and prompt length)</ParamField>
 <ParamField path="enable_llm_crossover" type="bool" optional={true} default="True">Whether to enable LLM-based crossover operations</ParamField>
+<ParamField path="enable_semantic_crossover" type="bool" optional={true} default="False">Whether to use semantic crossover before standard LLM crossover</ParamField>
 <ParamField path="output_style_guidance" type="str | None" optional={true}>Optional guidance for output style in generated prompts</ParamField>
 <ParamField path="infer_output_style" type="bool" optional={true} default="False">Whether to automatically infer output style from the dataset</ParamField>
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of threads for parallel evaluation</ParamField>
@@ -627,11 +1830,41 @@ EvolutionaryOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
 #### cleanup
 ```python
 cleanup()
 ```
 
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
 
 #### evaluate_prompt
 ```python
@@ -646,7 +1879,8 @@ evaluate_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     seed: int | None = None,
-    return_evaluation_result: bool = False
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool | None = None
 )
 ```
 
@@ -664,6 +1898,103 @@ evaluate_prompt(
 <ParamField path="n_samples" type="int | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
 ```python
@@ -677,11 +2008,29 @@ get_default_prompt(
 
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
-#### get_history
+#### get_history_entries
 ```python
-get_history()
+get_history_entries()
 ```
 
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
 ```python
@@ -709,153 +2058,23 @@ list_prompts()
 ```
 
 
-#### optimize_prompt
+#### on_trial
 ```python
-optimize_prompt(
-    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
-    dataset: Dataset,
-    metric: MetricFunction,
-    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
-    experiment_config: dict | None = None,
-    n_samples: int | None = None,
-    auto_continue: bool = False,
-    project_name: str = 'Optimization',
-    optimization_id: str | None = None,
-    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
-    max_trials: int = 10,
-    args: Any,
-    kwargs: Any
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
 )
 ```
 
 
 **Parameters:**
 
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of ChatPrompts).</ParamField>
-<ParamField path="dataset" type="Dataset">Dataset used to evaluate each candidate prompt.</ParamField>
-<ParamField path="metric" type="MetricFunction">Objective function receiving `(dataset_item, llm_output)`.</ParamField>
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent instance for executing prompts. If None, uses LiteLLMAgent.</ParamField>
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment configuration metadata.</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Optional number of dataset items to evaluate per prompt.</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue automatically after each generation.</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization").</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset (not yet supported by this optimizer).</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of prompt evaluations allowed.</ParamField>
-<ParamField path="args" type="Any" />
-<ParamField path="kwargs" type="Any" />
-
-## GepaOptimizer
-
-```python
-GepaOptimizer(
-    model: str = 'gpt-4o',
-    model_parameters: dict[str, typing.Any] | None = None,
-    n_threads: int = 6,
-    verbose: int = 1,
-    seed: int = 42,
-    name: str | None = None,
-    skip_perfect_score: bool = True,
-    perfect_score: float = 0.95,
-    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for the optimization algorithm</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="6">Number of parallel threads for evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
-<ParamField path="name" type="str | None" optional={true} />
-<ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
-<ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Accepted for API parity, but ignored (GEPA does not expose prompt hooks).</ParamField>
-
-### Methods
-#### cleanup
-```python
-cleanup()
-```
-
-
-#### evaluate_prompt
-```python
-evaluate_prompt(
-    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
-    dataset: Dataset,
-    metric: MetricFunction,
-    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
-    n_threads: int | None = None,
-    verbose: int = 1,
-    dataset_item_ids: list[str] | None = None,
-    experiment_config: dict | None = None,
-    n_samples: int | None = None,
-    seed: int | None = None,
-    return_evaluation_result: bool = False
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]" />
-<ParamField path="dataset" type="Dataset" />
-<ParamField path="metric" type="MetricFunction" />
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
-<ParamField path="n_threads" type="int | None" optional={true} />
-<ParamField path="verbose" type="int" optional={true} default="1" />
-<ParamField path="dataset_item_ids" type="list[str] | None" optional={true} />
-<ParamField path="experiment_config" type="dict | None" optional={true} />
-<ParamField path="n_samples" type="int | None" optional={true} />
-<ParamField path="seed" type="int | None" optional={true} />
-<ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
-
-#### get_default_prompt
-```python
-get_default_prompt(
-    key: str
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
-
-#### get_history
-```python
-get_history()
-```
-
-
-#### get_optimizer_metadata
-```python
-get_optimizer_metadata()
-```
-
-
-#### get_prompt
-```python
-get_prompt(
-    key: str,
-    fmt: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
-<ParamField path="fmt" type="Any" />
-
-#### list_prompts
-```python
-list_prompts()
-```
-
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_prompt
 ```python
@@ -867,21 +2086,11 @@ optimize_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     auto_continue: bool = False,
-    project_name: str = 'Optimization',
+    project_name: str | None = None,
     optimization_id: str | None = None,
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
-    reflection_minibatch_size: int = 3,
-    candidate_selection_strategy: str = 'pareto',
-    skip_perfect_score: bool = True,
-    perfect_score: float = 0.95,
-    use_merge: bool = False,
-    max_merge_invocations: int = 5,
-    run_dir: str | None = None,
-    track_best_outputs: bool = False,
-    display_progress_bar: bool = False,
-    seed: int = 42,
-    raise_on_exception: bool = True,
+    allow_tool_use: bool = True,
     args: Any,
     kwargs: Any
 )
@@ -890,30 +2099,266 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt(s) to optimize. Can be a single ChatPrompt or a dict of ChatPrompts. All message types (system, user, assistant) will be optimized.</ParamField>
-<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
-<ParamField path="metric" type="MetricFunction">Metric function to evaluate on</ParamField>
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent instance to use for evaluation. If None, uses LiteLLMAgent.</ParamField>
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of prompts)</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset (training set - used for feedback/context) TODO/FIXME: This parameter will be deprecated in favor of dataset_training. For now, it serves as the training dataset parameter.</ParamField>
+<ParamField path="metric" type="MetricFunction">A metric function with signature (dataset_item, llm_output) -> float</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent for prompt execution (defaults to LiteLLMAgent)</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Optional number of items to test in the dataset</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization" />
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset used for Pareto tracking. When provided, helps prevent overfitting by evaluating candidates on unseen data. Falls back to the training dataset when not provided.</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
-<ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
-<ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (default: "pareto")</ParamField>
-<ParamField path="skip_perfect_score" type="bool" optional={true} default="True">Skip candidates with perfect scores (default: True)</ParamField>
-<ParamField path="perfect_score" type="float" optional={true} default="0.95">Score considered perfect (default: 1.0)</ParamField>
-<ParamField path="use_merge" type="bool" optional={true} default="False">Enable merge operations (default: False)</ParamField>
-<ParamField path="max_merge_invocations" type="int" optional={true} default="5">Maximum merge invocations (default: 5)</ParamField>
-<ParamField path="run_dir" type="str | None" optional={true}>Directory for run outputs (default: None)</ParamField>
-<ParamField path="track_best_outputs" type="bool" optional={true} default="False">Track best outputs during optimization (default: False)</ParamField>
-<ParamField path="display_progress_bar" type="bool" optional={true} default="False">Display progress bar (default: False)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility (default: 42)</ParamField>
-<ParamField path="raise_on_exception" type="bool" optional={true} default="True">Raise exceptions instead of continuing (default: True)</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of samples to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### run_optimization
+```python
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
 
 ## HierarchicalReflectiveOptimizer
 
@@ -955,11 +2400,41 @@ HierarchicalReflectiveOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
 #### cleanup
 ```python
 cleanup()
 ```
 
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
 
 #### evaluate_prompt
 ```python
@@ -974,7 +2449,8 @@ evaluate_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     seed: int | None = None,
-    return_evaluation_result: bool = False
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool | None = None
 )
 ```
 
@@ -992,6 +2468,103 @@ evaluate_prompt(
 <ParamField path="n_samples" type="int | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
 ```python
@@ -1005,11 +2578,29 @@ get_default_prompt(
 
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
-#### get_history
+#### get_history_entries
 ```python
-get_history()
+get_history_entries()
 ```
 
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
 ```python
@@ -1037,6 +2628,24 @@ list_prompts()
 ```
 
 
+#### on_trial
+```python
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -1047,11 +2656,11 @@ optimize_prompt(
     experiment_config: dict | None = None,
     n_samples: int | None = None,
     auto_continue: bool = False,
-    project_name: str = 'Optimization',
+    project_name: str | None = None,
     optimization_id: str | None = None,
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
-    max_trials: int = 5,
-    max_retries: int = 2,
+    max_trials: int = 10,
+    allow_tool_use: bool = True,
     args: Any,
     kwargs: Any
 )
@@ -1060,20 +2669,1439 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The chat prompt(s) to optimize. Can be a single ChatPrompt or a dict of ChatPrompts.</ParamField>
-<ParamField path="dataset" type="Dataset">Dataset containing evaluation examples.</ParamField>
-<ParamField path="metric" type="MetricFunction">Callable that scores `(dataset_item, llm_output)`. Optional Arguments:</ParamField>
-<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
-<ParamField path="experiment_config" type="dict | None" optional={true}>Additional configuration for experiment logging.</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per prompt (None for all).</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically after each round.</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for trace logging (default: "Optimization").</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for evaluating candidates. When provided, the optimizer uses the training dataset for understanding failure modes and generating improvements, then evaluates candidates on the validation dataset to prevent overfitting.</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="5">Maximum number of optimization iterations to run.</ParamField>
-<ParamField path="max_retries" type="int" optional={true} default="2">Maximum retries allowed for addressing a failure mode.</ParamField>
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of prompts)</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset (training set - used for feedback/context) TODO/FIXME: This parameter will be deprecated in favor of dataset_training. For now, it serves as the training dataset parameter.</ParamField>
+<ParamField path="metric" type="MetricFunction">A metric function with signature (dataset_item, llm_output) -> float</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent for prompt execution (defaults to LiteLLMAgent)</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of samples to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### run_optimization
+```python
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+## ParameterOptimizer
+
+```python
+ParameterOptimizer(
+    model: str = 'gpt-4o',
+    model_parameters: dict[str, typing.Any] | None = None,
+    default_n_trials: int = 20,
+    local_search_ratio: float = 0.3,
+    local_search_scale: float = 0.2,
+    n_threads: int = 12,
+    verbose: int = 1,
+    seed: int = 42,
+    name: str | None = None,
+    skip_perfect_score: bool = True,
+    perfect_score: float = 0.95
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name (used for metadata, not for optimization calls)</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
+<ParamField path="default_n_trials" type="int" optional={true} default="20">Default number of optimization trials to run</ParamField>
+<ParamField path="local_search_ratio" type="float" optional={true} default="0.3">Ratio of trials to dedicate to local search refinement (0.0-1.0)</ParamField>
+<ParamField path="local_search_scale" type="float" optional={true} default="0.2">Scale factor for narrowing search space during local search</ParamField>
+<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
+<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
+<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
+<ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
+<ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+
+### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
+
+#### evaluate_prompt
+```python
+evaluate_prompt(
+    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
+    n_threads: int | None = None,
+    verbose: int = 1,
+    dataset_item_ids: list[str] | None = None,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    seed: int | None = None,
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="MetricFunction" />
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
+<ParamField path="n_threads" type="int | None" optional={true} />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="dataset_item_ids" type="list[str] | None" optional={true} />
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="seed" type="int | None" optional={true} />
+<ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### get_default_prompt
+```python
+get_default_prompt(
+    key: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+
+#### get_history_entries
+```python
+get_history_entries()
+```
+
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### get_optimizer_metadata
+```python
+get_optimizer_metadata()
+```
+
+
+#### get_prompt
+```python
+get_prompt(
+    key: str,
+    fmt: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+<ParamField path="fmt" type="Any" />
+
+#### list_prompts
+```python
+list_prompts()
+```
+
+
+#### on_trial
+```python
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
+
+#### optimize_parameter
+```python
+optimize_parameter(
+    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    parameter_space: opik_optimizer.algorithms.parameter_optimizer.ops.search_ops.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any],
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
+    experiment_config: dict | None = None,
+    max_trials: int | None = None,
+    n_samples: int | None = None,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
+    project_name: str = 'Optimization',
+    sampler: optuna.samplers._base.BaseSampler | None = None,
+    callbacks: list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None = None,
+    timeout: float | None = None,
+    local_trials: int | None = None,
+    local_search_scale: float | None = None,
+    optimization_id: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt or dict of prompts to evaluate with tuned parameters. When a dict is provided, parameters are optimized independently for each prompt.</ParamField>
+<ParamField path="dataset" type="Dataset">Dataset providing evaluation examples</ParamField>
+<ParamField path="metric" type="MetricFunction">Objective function to maximize</ParamField>
+<ParamField path="parameter_space" type="opik_optimizer.algorithms.parameter_optimizer.ops.search_ops.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any]">Definition of the search space for tunable parameters. For multi-prompt, params without a prefix are expanded per prompt. Params already prefixed (e.g., 'analyze.temperature') are kept as-is.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset. Note: Due to the internal implementation of ParameterOptimizer, this parameter is currently not fully utilized and we recommend not using it for this optimizer.</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment metadata</ParamField>
+<ParamField path="max_trials" type="int | None" optional={true}>Total number of trials (if None, uses default_n_trials)</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional custom agent instance to execute evaluations</ParamField>
+<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
+<ParamField path="sampler" type="optuna.samplers._base.BaseSampler | None" optional={true}>Optuna sampler to use (default: TPESampler with seed)</ParamField>
+<ParamField path="callbacks" type="list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None" optional={true}>List of callback functions for Optuna study</ParamField>
+<ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
+<ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
+<ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+## ParameterSearchSpace
+
+```python
+ParameterSearchSpace(
+    parameters: list[opik_optimizer.algorithms.parameter_optimizer.ops.search_ops.ParameterSpec] = PydanticUndefined
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="parameters" type="list[opik_optimizer.algorithms.parameter_optimizer.ops.search_ops.ParameterSpec]" optional={true} default="PydanticUndefined" />
+
+## ParameterSpec
+
+```python
+ParameterSpec(
+    name: <class 'str'>,
+    description: str | None = None,
+    distribution: <enum 'ParameterType'>,
+    low: float | None = None,
+    high: float | None = None,
+    step: float | None = None,
+    scale: Literal['linear', 'log'] = 'linear',
+    choices: list[Any] | None = None,
+    target: str | collections.abc.Sequence[str] | None = None,
+    default: Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="name" type="<class 'str'>" default="PydanticUndefined" />
+<ParamField path="description" type="str | None" optional={true} />
+<ParamField path="distribution" type="<enum 'ParameterType'>" default="PydanticUndefined" />
+<ParamField path="low" type="float | None" optional={true} />
+<ParamField path="high" type="float | None" optional={true} />
+<ParamField path="step" type="float | None" optional={true} />
+<ParamField path="scale" type="Literal['linear', 'log']" optional={true} default="linear" />
+<ParamField path="choices" type="list[Any] | None" optional={true} />
+<ParamField path="target" type="str | collections.abc.Sequence[str] | None" optional={true} />
+<ParamField path="default" type="Any | None" optional={true} />
+
+## ParameterType
+
+```python
+ParameterType(
+    args: Any,
+    kwds: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwds" type="Any" />
+
+## BaseOptimizer
+
+```python
+BaseOptimizer(
+    model: str,
+    verbose: int = 1,
+    seed: int = 42,
+    model_parameters: dict[str, typing.Any] | None = None,
+    reasoning_model: str | None = None,
+    reasoning_model_parameters: dict[str, typing.Any] | None = None,
+    name: str | None = None,
+    skip_perfect_score: bool = True,
+    perfect_score: float = 0.95,
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
+    display: opik_optimizer.utils.display.run.RunDisplay | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="model" type="str" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="reasoning_model" type="str | None" optional={true} />
+<ParamField path="reasoning_model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="name" type="str | None" optional={true} />
+<ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
+<ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
+<ParamField path="display" type="opik_optimizer.utils.display.run.RunDisplay | None" optional={true} />
+
+### Methods
+#### begin_round
+```python
+begin_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### evaluate
+```python
+evaluate(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
+<ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}). Single-prompt optimizations use a dict with one entry.</ParamField>
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
+
+#### evaluate_prompt
+```python
+evaluate_prompt(
+    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
+    n_threads: int | None = None,
+    verbose: int = 1,
+    dataset_item_ids: list[str] | None = None,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    seed: int | None = None,
+    return_evaluation_result: bool = False,
+    allow_tool_use: bool | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="MetricFunction" />
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true} />
+<ParamField path="n_threads" type="int | None" optional={true} />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="dataset_item_ids" type="list[str] | None" optional={true} />
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="seed" type="int | None" optional={true} />
+<ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
+
+#### evaluate_with_result
+```python
+evaluate_with_result(
+    context: OptimizationContext,
+    prompts: dict,
+    experiment_config: dict[str, typing.Any] | None = None,
+    empty_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="empty_score" type="float | None" optional={true} />
+
+#### finish_candidate
+```python
+finish_candidate(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### finish_round
+```python
+finish_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### get_config
+```python
+get_config(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### get_default_prompt
+```python
+get_default_prompt(
+    key: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+
+#### get_history_entries
+```python
+get_history_entries()
+```
+
+
+#### get_history_rounds
+```python
+get_history_rounds()
+```
+
+
+#### get_metadata
+```python
+get_metadata(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### get_prompt
+```python
+get_prompt(
+    key: str,
+    fmt: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+<ParamField path="fmt" type="Any" />
+
+#### list_prompts
+```python
+list_prompts()
+```
+
+
+#### on_trial
+```python
+on_trial(
+    context: OptimizationContext,
+    prompts: dict,
+    score: float,
+    prev_best_score: float | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="prompts" type="dict" />
+<ParamField path="score" type="float" />
+<ParamField path="prev_best_score" type="float | None" optional={true} />
+
+#### optimize_prompt
+```python
+optimize_prompt(
+    prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
+    dataset: Dataset,
+    metric: MetricFunction,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None = None,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    project_name: str | None = None,
+    optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
+    max_trials: int = 10,
+    allow_tool_use: bool = True,
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]">The prompt to optimize (single ChatPrompt or dict of prompts)</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset (training set - used for feedback/context) TODO/FIXME: This parameter will be deprecated in favor of dataset_training. For now, it serves as the training dataset parameter.</ParamField>
+<ParamField path="metric" type="MetricFunction">A metric function with signature (dataset_item, llm_output) -> float</ParamField>
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" optional={true}>Optional agent for prompt execution (defaults to LiteLLMAgent)</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Number of samples to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
+#### post_baseline
+```python
+post_baseline(
+    context: OptimizationContext,
+    score: float
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="score" type="float" />
+
+#### post_optimize
+```python
+post_optimize(
+    context: OptimizationContext,
+    result: OptimizationResult
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="result" type="OptimizationResult" />
+
+#### post_round
+```python
+post_round(
+    round_handle: Any,
+    context: opik_optimizer.core.state.OptimizationContext | None = None,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    dataset_split: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+
+#### post_trial
+```python
+post_trial(
+    context: OptimizationContext,
+    candidate_handle: Any,
+    score: float | None,
+    metrics: dict[str, typing.Any] | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    trial_index: int | None = None,
+    timestamp: str | None = None,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### pre_baseline
+```python
+pre_baseline(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+
+#### pre_optimize
+```python
+pre_optimize(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
+
+#### pre_round
+```python
+pre_round(
+    context: OptimizationContext,
+    extras: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="extras" type="Any" />
+
+#### pre_trial
+```python
+pre_trial(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### record_candidate_entry
+```python
+record_candidate_entry(
+    prompt_or_payload: Any,
+    score: float | None = None,
+    id: str | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    notes: str | None = None,
+    extra: dict[str, typing.Any] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt_or_payload" type="Any" />
+<ParamField path="score" type="float | None" optional={true} />
+<ParamField path="id" type="str | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="notes" type="str | None" optional={true} />
+<ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
+
+#### run_optimization
+```python
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_candidate
+```python
+start_candidate(
+    context: OptimizationContext,
+    candidate: Any,
+    round_handle: typing.Any | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="round_handle" type="typing.Any | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
 
 ## ChatPrompt
 
@@ -1159,10 +4187,31 @@ to_dict()
 ```
 
 
+## AlgorithmResult
+
+```python
+AlgorithmResult(
+    best_prompts: dict,
+    best_score: float,
+    history: Sequence = <factory>,
+    metadata: dict = <factory>
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="best_prompts" type="dict" />
+<ParamField path="best_score" type="float" />
+<ParamField path="history" type="Sequence" optional={true} default="<factory>" />
+<ParamField path="metadata" type="dict" optional={true} default="<factory>" />
+
 ## OptimizationResult
 
 ```python
 OptimizationResult(
+    schema_version: <class 'str'> = 'v1',
+    details_version: <class 'str'> = 'v1',
     optimizer: <class 'str'> = 'Optimizer',
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     score: <class 'float'>,
@@ -1183,6 +4232,8 @@ OptimizationResult(
 
 **Parameters:**
 
+<ParamField path="schema_version" type="<class 'str'>" optional={true} default="v1" />
+<ParamField path="details_version" type="<class 'str'>" optional={true} default="v1" />
 <ParamField path="optimizer" type="<class 'str'>" optional={true} default="Optimizer" />
 <ParamField path="prompt" type="opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt]" default="PydanticUndefined" />
 <ParamField path="score" type="<class 'float'>" default="PydanticUndefined" />
@@ -1198,10 +4249,335 @@ OptimizationResult(
 <ParamField path="llm_cost_total" type="float | None" optional={true} />
 <ParamField path="llm_token_usage_total" type="dict[str, int] | None" optional={true} />
 
+## OptimizationContext
+
+```python
+OptimizationContext(
+    prompts: dict,
+    initial_prompts: dict,
+    is_single_prompt_optimization: bool,
+    dataset: Dataset,
+    evaluation_dataset: Dataset,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None,
+    metric: MetricFunction,
+    agent: opik_optimizer.agents.optimizable_agent.OptimizableAgent | None,
+    optimization: opik.api_objects.optimization.optimization.Optimization | None,
+    optimization_id: str | None,
+    experiment_config: dict[str, typing.Any] | None,
+    n_samples: int | None,
+    max_trials: int,
+    project_name: str,
+    allow_tool_use: bool = True,
+    baseline_score: float | None = None,
+    extra_params: dict = <factory>,
+    trials_completed: int = 0,
+    should_stop: bool = False,
+    finish_reason: Optional = None,
+    current_best_score: float | None = None,
+    current_best_prompt: dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt] | None = None,
+    dataset_split: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompts" type="dict" />
+<ParamField path="initial_prompts" type="dict" />
+<ParamField path="is_single_prompt_optimization" type="bool" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="evaluation_dataset" type="Dataset" />
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" />
+<ParamField path="metric" type="MetricFunction" />
+<ParamField path="agent" type="opik_optimizer.agents.optimizable_agent.OptimizableAgent | None" />
+<ParamField path="optimization" type="opik.api_objects.optimization.optimization.Optimization | None" />
+<ParamField path="optimization_id" type="str | None" />
+<ParamField path="experiment_config" type="dict[str, typing.Any] | None" />
+<ParamField path="n_samples" type="int | None" />
+<ParamField path="max_trials" type="int" />
+<ParamField path="project_name" type="str" />
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True" />
+<ParamField path="baseline_score" type="float | None" optional={true} />
+<ParamField path="extra_params" type="dict" optional={true} default="<factory>" />
+<ParamField path="trials_completed" type="int" optional={true} default="0" />
+<ParamField path="should_stop" type="bool" optional={true} default="False" />
+<ParamField path="finish_reason" type="Optional" optional={true} />
+<ParamField path="current_best_score" type="float | None" optional={true} />
+<ParamField path="current_best_prompt" type="dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt] | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+
+## OptimizationHistoryState
+
+```python
+OptimizationHistoryState(
+    context: Any = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="Any" optional={true} />
+
+### Methods
+#### clear
+```python
+clear()
+```
+
+
+#### end_round
+```python
+end_round(
+    round_handle: Any,
+    best_score: float | None = None,
+    best_candidate: typing.Any | None = None,
+    best_prompt: typing.Any | None = None,
+    stop_reason: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    pareto_front: list[dict[str, typing.Any]] | None = None,
+    selection_meta: dict[str, typing.Any] | None = None,
+    dataset_split: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+
+#### finalize_stop
+```python
+finalize_stop(
+    stop_reason: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="stop_reason" type="str | None" optional={true} />
+
+#### get_entries
+```python
+get_entries()
+```
+
+
+#### get_rounds
+```python
+get_rounds()
+```
+
+
+#### record_trial
+```python
+record_trial(
+    round_handle: Any,
+    score: float | None,
+    candidate: typing.Any | None = None,
+    trial_index: int | None = None,
+    metrics: dict[str, typing.Any] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    timestamp: str | None = None,
+    stop_reason: str | None = None,
+    candidate_id_prefix: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_handle" type="Any" />
+<ParamField path="score" type="float | None" />
+<ParamField path="candidate" type="typing.Any | None" optional={true} />
+<ParamField path="trial_index" type="int | None" optional={true} />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="candidate_id_prefix" type="str | None" optional={true} />
+
+#### set_context
+```python
+set_context(
+    context: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="Any" />
+
+#### set_default_dataset_split
+```python
+set_default_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+#### set_pareto_front
+```python
+set_pareto_front(
+    pareto_front: list[dict[str, typing.Any]] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
+
+#### set_selection_meta
+```python
+set_selection_meta(
+    selection_meta: dict[str, typing.Any] | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
+
+#### start_round
+```python
+start_round(
+    round_index: int | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    timestamp: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_index" type="int | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="timestamp" type="str | None" optional={true} />
+
+#### with_dataset_split
+```python
+with_dataset_split(
+    dataset_split: str | None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_split" type="str | None" />
+
+## OptimizationRound
+
+```python
+OptimizationRound(
+    round_index: int,
+    trials: list = <factory>,
+    best_score: float | None = None,
+    best_so_far: float | None = None,
+    best_prompt: typing.Any | None = None,
+    best_candidate: typing.Any | None = None,
+    candidates: list[dict[str, typing.Any]] | None = None,
+    generated_prompts: list[dict[str, typing.Any]] | None = None,
+    stop_reason: str | None = None,
+    stopped: bool | None = None,
+    dataset_split: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    timestamp: str = <factory>
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="round_index" type="int" />
+<ParamField path="trials" type="list" optional={true} default="<factory>" />
+<ParamField path="best_score" type="float | None" optional={true} />
+<ParamField path="best_so_far" type="float | None" optional={true} />
+<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
+<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
+<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="generated_prompts" type="list[dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="stop_reason" type="str | None" optional={true} />
+<ParamField path="stopped" type="bool | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="timestamp" type="str" optional={true} default="<factory>" />
+
+### Methods
+#### to_dict
+```python
+to_dict()
+```
+
+
+## OptimizationTrial
+
+```python
+OptimizationTrial(
+    trial_index: int | None,
+    score: float | None,
+    candidate: Any,
+    metrics: dict[str, typing.Any] | None = None,
+    dataset: str | None = None,
+    dataset_split: str | None = None,
+    candidate_id: str | None = None,
+    extras: dict[str, typing.Any] | None = None,
+    timestamp: str = <factory>
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="trial_index" type="int | None" />
+<ParamField path="score" type="float | None" />
+<ParamField path="candidate" type="Any" />
+<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="dataset" type="str | None" optional={true} />
+<ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="candidate_id" type="str | None" optional={true} />
+<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="timestamp" type="str" optional={true} default="<factory>" />
+
+### Methods
+#### to_dict
+```python
+to_dict()
+```
+
+
 ## OptimizableAgent
 
 ```python
 OptimizableAgent(
+    prompt: Any = None,
+    project_name: Any = None,
     kwargs: Any
 )
 ```
@@ -1209,9 +4585,43 @@ OptimizableAgent(
 
 **Parameters:**
 
+<ParamField path="prompt" type="Any" optional={true} />
+<ParamField path="project_name" type="Any" optional={true} />
 <ParamField path="kwargs" type="Any" />
 
 ### Methods
+#### init_agent
+```python
+init_agent(
+    prompt: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="Any" />
+
+#### init_llm
+```python
+init_llm()
+```
+
+
+#### invoke
+```python
+invoke(
+    messages: list,
+    seed: int | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="messages" type="list">List of message dictionaries</ParamField>
+<ParamField path="seed" type="int | None" optional={true}>Optional seed for reproducibility</ParamField>
+
 #### invoke_agent
 ```python
 invoke_agent(
@@ -1247,4 +4657,147 @@ invoke_agent_candidates(
 <ParamField path="dataset_item" type="Any">Dataset row used to render the prompt messages.</ParamField>
 <ParamField path="allow_tool_use" type="Any" optional={true} default="False">Whether tool execution is allowed in this invocation.</ParamField>
 <ParamField path="seed" type="Any" optional={true}>Optional seed for reproducibility.</ParamField>
+
+#### invoke_dataset_item
+```python
+invoke_dataset_item(
+    dataset_item: dict
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_item" type="dict" />
+
+#### invoke_prompt
+```python
+invoke_prompt(
+    prompt: Any,
+    dataset_item: Any,
+    allow_tool_use: Any = False,
+    seed: Any = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="Any" />
+<ParamField path="dataset_item" type="Any" />
+<ParamField path="allow_tool_use" type="Any" optional={true} default="False" />
+<ParamField path="seed" type="Any" optional={true} />
+
+#### llm_invoke
+```python
+llm_invoke(
+    query: str | None = None,
+    messages: list[dict[str, str]] | None = None,
+    seed: int | None = None,
+    allow_tool_use: bool | None = False
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="query" type="str | None" optional={true} />
+<ParamField path="messages" type="list[dict[str, str]] | None" optional={true} />
+<ParamField path="seed" type="int | None" optional={true} />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} default="False" />
+
+## MultiMetricObjective
+
+```python
+MultiMetricObjective(
+    metrics: list,
+    weights: list[float] | None = None,
+    name: str = 'multi_metric_objective',
+    reason: str | None = None,
+    reason_builder: collections.abc.Callable[[list[opik.evaluation.metrics.score_result.ScoreResult], list[float], float], str | None] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="metrics" type="list" />
+<ParamField path="weights" type="list[float] | None" optional={true} />
+<ParamField path="name" type="str" optional={true} default="multi_metric_objective" />
+<ParamField path="reason" type="str | None" optional={true} />
+<ParamField path="reason_builder" type="collections.abc.Callable[[list[opik.evaluation.metrics.score_result.ScoreResult], list[float], float], str | None] | None" optional={true} />
+
+## PromptLibrary
+
+```python
+PromptLibrary(
+    defaults: dict,
+    overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="defaults" type="dict">Dictionary of default prompt templates</ParamField>
+<ParamField path="overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to customize prompts</ParamField>
+
+### Methods
+#### get
+```python
+get(
+    key: str,
+    fmt: object
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+<ParamField path="fmt" type="object" />
+
+#### get_default
+```python
+get_default(
+    key: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to retrieve</ParamField>
+
+#### keys
+```python
+keys()
+```
+
+
+#### set
+```python
+set(
+    key: str,
+    value: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="key" type="str">The prompt key to set</ParamField>
+<ParamField path="value" type="str">The new prompt template</ParamField>
+
+#### update
+```python
+update(
+    overrides: dict
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="overrides" type="dict">Dictionary of key-value pairs to update</ParamField>
 
