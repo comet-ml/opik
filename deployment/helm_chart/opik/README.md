@@ -183,6 +183,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
+| clickhouse.namespaceDomainPattern | string | `""` |  |
 | clickhouse.readinessProbe.failureThreshold | int | `30` |  |
 | clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.readinessProbe.httpGet.port | int | `8123` |  |
