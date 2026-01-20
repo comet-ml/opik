@@ -16,4 +16,3 @@ def make_two_prompt_bundle() -> dict[str, ChatPrompt]:
         "main": ChatPrompt(name="main", system="Main", user="{question}"),
         "secondary": ChatPrompt(name="secondary", system="Secondary", user="{input}"),
     }
-

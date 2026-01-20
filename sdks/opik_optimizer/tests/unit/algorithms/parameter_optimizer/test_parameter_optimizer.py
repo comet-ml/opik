@@ -211,9 +211,7 @@ class TestExpandForPrompts:
 
     def test_categorical_param_expansion(self) -> None:
         """Should expand categorical parameters correctly."""
-        space = _space(
-            _categorical_param("model", choices=["gpt-4o", "gpt-4o-mini"])
-        )
+        space = _space(_categorical_param("model", choices=["gpt-4o", "gpt-4o-mini"]))
 
         expanded = space.expand_for_prompts(["p1", "p2"])
 

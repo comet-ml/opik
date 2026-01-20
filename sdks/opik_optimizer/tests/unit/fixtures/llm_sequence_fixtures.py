@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
 
 @pytest.fixture
-def mock_llm_sequence(monkeypatch: pytest.MonkeyPatch):
+def mock_llm_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[list[Any]], dict[str, Any]]:
     """
     Mock LLM to return different responses on successive calls.
 
     Intercepts `opik_optimizer.core.llm_calls.call_model`.
     """
 
-    def _configure(responses: list[Any]):
+    def _configure(responses: list[Any]) -> dict[str, Any]:
         call_count: dict[str, Any] = {"n": 0}
         captured_calls: list[dict[str, Any]] = []
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: Any) -> Any:
             captured_calls.append(kwargs)
             idx = min(call_count["n"], len(responses) - 1)
             call_count["n"] += 1
@@ -36,14 +39,16 @@ def mock_llm_sequence(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def mock_llm_sequence_async(monkeypatch: pytest.MonkeyPatch):
+def mock_llm_sequence_async(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[list[Any]], dict[str, Any]]:
     """Async version of mock_llm_sequence (for call_model_async)."""
 
-    def _configure(responses: list[Any]):
+    def _configure(responses: list[Any]) -> dict[str, Any]:
         call_count: dict[str, Any] = {"n": 0}
         captured_calls: list[dict[str, Any]] = []
 
-        async def fake_call_model_async(**kwargs):
+        async def fake_call_model_async(**kwargs: Any) -> Any:
             captured_calls.append(kwargs)
             idx = min(call_count["n"], len(responses) - 1)
             call_count["n"] += 1
@@ -59,4 +64,3 @@ def mock_llm_sequence_async(monkeypatch: pytest.MonkeyPatch):
         return call_count
 
     return _configure
-

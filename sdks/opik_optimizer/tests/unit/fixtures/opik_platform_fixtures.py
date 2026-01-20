@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -11,7 +12,7 @@ from tests.unit.fixtures.builders import make_mock_dataset
 
 
 @pytest.fixture
-def mock_opik_client(monkeypatch: pytest.MonkeyPatch):
+def mock_opik_client(monkeypatch: pytest.MonkeyPatch) -> Callable[..., MagicMock]:
     """
     Mock Opik client to avoid network calls during tests.
     """
@@ -20,7 +21,7 @@ def mock_opik_client(monkeypatch: pytest.MonkeyPatch):
         *,
         optimization_id: str = "opt-123",
         dataset_id: str = "ds-123",
-    ):
+    ) -> MagicMock:
         mock_client = MagicMock()
 
         # Create optimization mock
@@ -35,7 +36,7 @@ def mock_opik_client(monkeypatch: pytest.MonkeyPatch):
         mock_client.get_dataset_by_name.return_value = mock_dataset
 
         # Patch the Opik class
-        monkeypatch.setattr("opik.Opik", lambda **kw: mock_client)
+        monkeypatch.setattr("opik.Opik", lambda **_kw: mock_client)
 
         return mock_client
 
@@ -43,7 +44,7 @@ def mock_opik_client(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def mock_dataset():
+def mock_dataset() -> Callable[..., MagicMock]:
     """
     Factory for creating mock Dataset objects.
     """
@@ -53,8 +54,7 @@ def mock_dataset():
         *,
         name: str = "test-dataset",
         dataset_id: str = "dataset-123",
-    ):
+    ) -> MagicMock:
         return make_mock_dataset(items, name=name, dataset_id=dataset_id)
 
     return _create
-

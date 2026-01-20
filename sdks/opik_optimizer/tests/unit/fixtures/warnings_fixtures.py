@@ -17,4 +17,3 @@ def suppress_expected_optimizer_warnings(caplog: pytest.LogCaptureFixture) -> No
     ]
     for name in loggers:
         caplog.set_level(logging.ERROR, logger=name)
-

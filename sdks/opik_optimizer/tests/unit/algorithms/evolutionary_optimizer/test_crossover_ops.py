@@ -15,7 +15,8 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
     _deap_crossover_word_level,
 )
 
-def _make_deap_individual(data: dict[str, Any]):
+
+def _make_deap_individual(data: dict[str, Any]) -> Any:
     """
     Build a DEAP Individual(dict) for crossover tests.
 
@@ -385,10 +386,14 @@ class TestDeapCrossover:
 
         random.seed(42)
 
-        ind1 = _make_deap_individual({"main": [{"role": "system", "content": "Content. More."}]})
+        ind1 = _make_deap_individual(
+            {"main": [{"role": "system", "content": "Content. More."}]}
+        )
         setattr(ind1, "prompts_metadata", {"main": {"name": "main_prompt"}})
 
-        ind2 = _make_deap_individual({"main": [{"role": "system", "content": "Alpha. Beta."}]})
+        ind2 = _make_deap_individual(
+            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
+        )
         setattr(ind2, "prompts_metadata", {"main": {"name": "main_prompt_v2"}})
 
         child1, child2 = deap_crossover(ind1, ind2, verbose=0)

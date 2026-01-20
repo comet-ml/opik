@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from opik_optimizer.utils import tool_helpers as tool_utils
 
 
@@ -68,7 +70,7 @@ class TestDeepMergeDicts:
 class TestSerializeTools:
     """Tests for utils.tool_helpers.serialize_tools."""
 
-    def test_serializes_tools_list(self, chat_prompt_with_tools) -> None:
+    def test_serializes_tools_list(self, chat_prompt_with_tools: Any) -> None:
         """Should return deep copy of tools list."""
         result = tool_utils.serialize_tools(chat_prompt_with_tools)
 
@@ -76,13 +78,13 @@ class TestSerializeTools:
         assert len(result) == 2
         assert result[0]["function"]["name"] == "search"
 
-    def test_returns_empty_list_when_no_tools(self, simple_chat_prompt) -> None:
+    def test_returns_empty_list_when_no_tools(self, simple_chat_prompt: Any) -> None:
         """Should return empty list when prompt has no tools."""
         result = tool_utils.serialize_tools(simple_chat_prompt)
 
         assert result == []
 
-    def test_returns_deep_copy(self, chat_prompt_with_tools) -> None:
+    def test_returns_deep_copy(self, chat_prompt_with_tools: Any) -> None:
         """Should return a deep copy, not reference original."""
         result = tool_utils.serialize_tools(chat_prompt_with_tools)
 
@@ -91,4 +93,3 @@ class TestSerializeTools:
 
         # Original should be unchanged
         assert chat_prompt_with_tools.tools[0]["function"]["name"] == "search"
-

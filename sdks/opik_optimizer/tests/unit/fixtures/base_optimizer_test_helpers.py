@@ -145,4 +145,3 @@ class _DisplaySpy:
         self, *, initial_score: float, best_score: float, prompt: Any
     ) -> None:
         _ = initial_score, best_score, prompt
-

@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer._setup_optimization."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -187,4 +189,3 @@ class TestSetupOptimization:
 
         assert context.extra_params["custom_param"] == "custom_value"
         assert context.extra_params["another_param"] == 42
-

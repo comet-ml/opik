@@ -53,4 +53,3 @@ def assert_invalid_prompt_raises(
             metric=metric,
             max_trials=max_trials,
         )
-

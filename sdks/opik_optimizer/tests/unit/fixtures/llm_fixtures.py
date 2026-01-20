@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import pytest
 
 
+MockedCallModel = Callable[..., Any]
+MockedAsyncCallModel = Callable[..., Awaitable[Any]]
+
+
 @pytest.fixture
-def mock_llm_call(monkeypatch: pytest.MonkeyPatch):
+def mock_llm_call(monkeypatch: pytest.MonkeyPatch) -> Callable[..., MockedCallModel]:
     """
     Factory fixture for mocking synchronous LLM calls.
 
@@ -20,11 +25,11 @@ def mock_llm_call(monkeypatch: pytest.MonkeyPatch):
         response: Any = None,
         *,
         raises: Exception | None = None,
-        side_effect: Any | None = None,
-    ):
+        side_effect: Callable[..., Any] | None = None,
+    ) -> MockedCallModel:
         captured_calls: list[dict[str, Any]] = []
 
-        def fake_call_model(**kwargs):
+        def fake_call_model(**kwargs: Any) -> Any:
             captured_calls.append(kwargs)
             if raises:
                 raise raises
@@ -40,7 +45,9 @@ def mock_llm_call(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def mock_llm_call_async(monkeypatch: pytest.MonkeyPatch):
+def mock_llm_call_async(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., MockedAsyncCallModel]:
     """
     Factory fixture for mocking asynchronous LLM calls.
 
@@ -51,11 +58,11 @@ def mock_llm_call_async(monkeypatch: pytest.MonkeyPatch):
         response: Any = None,
         *,
         raises: Exception | None = None,
-        side_effect: Any | None = None,
-    ):
+        side_effect: Callable[..., Any] | None = None,
+    ) -> MockedAsyncCallModel:
         captured_calls: list[dict[str, Any]] = []
 
-        async def fake_call_model_async(**kwargs):
+        async def fake_call_model_async(**kwargs: Any) -> Any:
             captured_calls.append(kwargs)
             if raises:
                 raise raises
@@ -76,4 +83,3 @@ def mock_llm_call_async(monkeypatch: pytest.MonkeyPatch):
         return fake_call_model_async
 
     return _configure
-

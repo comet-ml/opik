@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer metadata/config helpers."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from typing import Any
@@ -148,4 +150,3 @@ class TestBuildOptimizationMetadata:
         )
 
         assert metadata["agent_class"] == "CustomAgent"
-

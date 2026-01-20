@@ -1,10 +1,10 @@
 """Unit tests for BaseOptimizer validation and small helper behaviors."""
 
+# mypy: disable-error-code=no-untyped-def
 from __future__ import annotations
 
 import pytest
 
-from opik_optimizer import ChatPrompt
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
 from tests.unit.test_helpers import make_mock_dataset
 
@@ -35,7 +35,9 @@ class TestValidateOptimizationInputs:
         """Should accept a valid ChatPrompt, Dataset, and metric."""
         mock_ds = make_mock_dataset()
 
-        optimizer._validate_optimization_inputs(simple_chat_prompt, mock_ds, mock_metric)
+        optimizer._validate_optimization_inputs(
+            simple_chat_prompt, mock_ds, mock_metric
+        )
 
     def test_accepts_valid_prompt_dict(
         self, optimizer, simple_chat_prompt, mock_metric
@@ -134,7 +136,9 @@ class TestSkipAndResultHelpers:
 
     def test_should_skip_optimization_overrides(self, optimizer) -> None:
         assert optimizer._should_skip_optimization(0.5, perfect_score=0.5) is True
-        assert optimizer._should_skip_optimization(0.99, skip_perfect_score=False) is False
+        assert (
+            optimizer._should_skip_optimization(0.99, skip_perfect_score=False) is False
+        )
 
     def test_select_result_prompts_single(self, optimizer, simple_chat_prompt) -> None:
         best_prompts = {"main": simple_chat_prompt}
@@ -174,4 +178,3 @@ class TestSkipAndResultHelpers:
         assert result.initial_score == 0.75
         assert result.history == []
         assert result.details["stopped_early"] is True
-

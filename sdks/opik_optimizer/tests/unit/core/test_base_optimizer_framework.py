@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer framework behaviors (counters, history, helpers)."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from typing import Any, cast
@@ -7,12 +9,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik_optimizer import ChatPrompt
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.core.state import OptimizationContext
 from opik_optimizer.utils import tool_helpers as tool_utils
-from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer, _ToolFlagAgent
-from tests.unit.test_helpers import make_fake_evaluator, make_mock_dataset, make_optimization_context
+from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
+from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
 
 
 class TestCounterManagement:
@@ -487,4 +488,3 @@ class TestSelectEvaluationDataset:
         # When warn_unsupported=True, the warning says validation is ignored,
         # so training dataset should be returned
         assert result is training_ds
-

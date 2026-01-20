@@ -11,4 +11,3 @@ pytest_plugins = [
     "tests.unit.fixtures.opik_platform_fixtures",
     "tests.unit.fixtures.warnings_fixtures",
 ]
-

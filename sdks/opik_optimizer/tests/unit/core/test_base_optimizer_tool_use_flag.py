@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer allow_tool_use plumbing."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,7 +9,10 @@ from typing import Any
 import pytest
 
 from opik_optimizer import ChatPrompt
-from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer, _ToolFlagAgent
+from tests.unit.fixtures.base_optimizer_test_helpers import (
+    ConcreteOptimizer,
+    _ToolFlagAgent,
+)
 from tests.unit.test_helpers import make_fake_evaluator, make_mock_dataset
 
 
@@ -70,4 +75,3 @@ class TestToolUseFlag:
             allow_tool_use=False,
         )
         assert context.allow_tool_use is False
-
