@@ -1,12 +1,12 @@
-# Send Code Review Slack Message
+# Generate Code Review Slack Command
 
-**Command**: `cursor send-code-review-slack`
+**Command**: `cursor generate-code-review-slack-command`
 
 ## Overview
 
-Send a formatted Slack message to the #opik-code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch.
+Generate a formatted, copiable Slack command for the #opik-code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
 
-- **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and sends it via Slack MCP.
+- **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and outputs a copiable Slack command (does NOT send automatically).
 
 This workflow will:
 
@@ -17,8 +17,8 @@ This workflow will:
 - Prompt only for missing information
 - Allow user to customize the message slightly
 - Format the message according to the code review template
-- Send the message to #opik-code-review channel via Slack MCP (`ghcr.io/korotovsky/slack-mcp-server`)
-- Verify successful delivery
+- Generate a copiable Slack command that can be edited before sending
+- Display the command for easy copying
 
 ---
 
@@ -36,10 +36,8 @@ This workflow will:
 - **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
-- **Slack MCP**: Required - uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`)
-  - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
-  - See `.cursor/SLACK_MCP_SETUP.md` for complete setup instructions
-  - Requires Docker to be installed and running
+- **No Slack MCP required**: This command does not send messages, so Slack MCP configuration is not needed
+- **GitHub MCP**: Required for extracting PR information
 
 ---
 
@@ -52,15 +50,6 @@ This workflow will:
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Get current branch name
-- **Check Slack MCP availability**: 
-  - Use Slack MCP tool `channels_list` to test availability (from `ghcr.io/korotovsky/slack-mcp-server`)
-  - Call with minimal parameters (for example: `limit: 1`) so that both public and private channels can be returned
-  - This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
-  - The server must be configured with `mcp-server --transport stdio` in the Docker args and have the `conversations_add_message` tool enabled (e.g., via `SLACK_MCP_ADD_MESSAGE_TOOL=true`) so the final send step can succeed
-  - If Slack MCP tool is available and callable: Proceed with message sending via MCP (messages will post as user)
-  - If Slack MCP is not available or tool call fails: 
-    > "Slack MCP is not available. Please configure Slack MCP according to `.cursor/SLACK_MCP_SETUP.md` and restart Cursor IDE."
-    > Stop here.
 
 ---
 
@@ -93,7 +82,7 @@ This workflow will:
   - Try to fetch PR status checks using GitHub MCP
   - Look for status checks or CI checks that might indicate "Baz approved" or similar approval status
   - If found, store the status (e.g., "Baz approved: ✅" or "Baz status: pending")
-  - If not found or unavailable, skip this field (it\'s optional)
+  - If not found or unavailable, skip this field (it's optional)
 
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
@@ -145,12 +134,12 @@ This workflow will:
 
   Please review the following PR:
   
-  \{\{user_customization_text_if_provided\}\}
+  {{user_customization_text_if_provided}}
   
-  :jira_epic: jira link: \{\{Jira_URL\}\}
+  :jira_epic: jira link: {{Jira_URL}}
   :github: pr link: {{PR_link}}
-  :test_tube: test env link: \{\{test_env\}\}
-  \{\{baz_approved_status_if_available\}\}
+  :test_tube: test env link: {{test_env}}
+  {{baz_approved_status_if_available}}
   :react: fe summary (optional): {{description_in_one_line}}
   :java: be summary (optional): {{description_in_one_line}}
   :python: python summary (optional): {{description_in_one_line}}
@@ -165,7 +154,6 @@ This workflow will:
   - **Baz approved status**: Only include if extracted from PR status checks (optional field)
   - **Component summaries**: Only include optional fields that were provided (skip empty ones)
 
-- **Only include optional fields** that were provided (skip empty ones)
 - **Format example**:
   ```
   Hi team,
@@ -174,80 +162,36 @@ This workflow will:
   
   :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
   :github: pr link: https://github.com/comet-ml/opik/pull/1234
-  :test_tube: test env link https://test.opik.com
+  :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
   ```
 
-- **Note about videos**: Slack has limitations on sending videos directly. Videos should be added to the PR description, and the link can be shared in Slack. For easier communication with the product team, consider using the `cursor generate-code-review-slack-command` command to generate a copiable Slack command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing).
+---
+
+### 6. Generate Copiable Slack Command
+
+- **Format as Slack command**: Generate a copiable command that can be pasted directly into Slack
+- **Command format**: The output should be formatted as a code block that can be easily copied
+- **Display instructions**: Show clear instructions on how to use the generated command:
+  > "📋 **Copiable Slack Command Generated**\n\nCopy the command below and paste it into the #opik-code-review channel in Slack.\n\nYou can edit it before sending to:\n- Add @ mentions for specific reviewers\n- Add media links or video links\n- Make final proof edits\n- Add any additional context\n\n```\n[FORMATTED_MESSAGE]\n```\n\n**To send in Slack:**\n1. Open Slack and navigate to #opik-code-review channel\n2. Paste the command above\n3. Edit as needed (add @ mentions, media links, etc.)\n4. Send the message"
+
+- **Alternative format (if using Slack CLI)**: If the user prefers, also provide a Slack CLI command format:
+  ```
+  slack chat send --channel "#opik-code-review" --text "[FORMATTED_MESSAGE]"
+  ```
 
 ---
 
-### 6. Send Slack Message
+### 7. Display & Summary
 
-- **Use Slack MCP tool `conversations_add_message`** from `ghcr.io/korotovsky/slack-mcp-server`
-- This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) configured according to `.cursor/SLACK_MCP_SETUP.md`
-- The server must be configured with:
-  - `mcp-server --transport stdio` in the Docker args (required for MCP protocol)
-  - `SLACK_MCP_ADD_MESSAGE_TOOL=true` environment variable (required to enable the tool - disabled by default for safety)
-- Call the tool with the following parameters:
-  - `channel_id`: `#opik-code-review` (channel name starting with # or channel ID)
-  - `payload`: The formatted message text (the complete message with all fields)
-  - `content_type`: `text/markdown` (optional, defaults to text/markdown)
-- **Important**: Messages will be posted as your authenticated user account (not as a bot)
-- Handle MCP response:
-  - If successful: Show success message with message timestamp/ID if provided
-  - If failed: Show error message and stop
-  - Common errors:
-    - **Tool disabled error**: The `conversations_add_message` tool is disabled by default. Add `SLACK_MCP_ADD_MESSAGE_TOOL=true` to Docker args and restart Cursor (see `.cursor/SLACK_MCP_SETUP.md`)
-    - Authentication errors: Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-`) - see `.cursor/SLACK_MCP_SETUP.md`
-    - Channel not found: Verify channel name `#opik-code-review` exists and you have access
-    - Permission errors: Verify `chat:write` scope is configured in User Token Scopes (see `.cursor/SLACK_MCP_SETUP.md`)
-    - Docker errors: Ensure Docker is running and can pull the image `ghcr.io/korotovsky/slack-mcp-server:latest`
-    - MCP not configured: Verify Slack MCP is properly configured according to `.cursor/SLACK_MCP_SETUP.md` and Cursor IDE has been restarted
-
----
-
-### 7. Verification & Summary
-
-- **Display confirmation**: 
-  > "✅ Slack message sent successfully to #opik-code-review channel"
-  
-- **Show message preview**: Display the formatted message that was sent
-- **Provide next steps**: Remind user to check Slack channel for delivery
+- **Display the generated command**: Show the formatted message in a code block for easy copying
+- **Provide usage instructions**: Remind user how to use the command
+- **Note about editing**: Emphasize that the command can be edited before sending to add @ mentions, media links, or make final edits
 
 ---
 
 ## Error Handling
-
-### **Slack MCP Errors**
-
-- **Slack MCP unavailable**: 
-  - Check if Slack MCP server is properly configured according to `.cursor/SLACK_MCP_SETUP.md`
-  - Verify Docker is installed and running (`docker --version`)
-  - Verify the Docker image can be pulled: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
-  - Restart Cursor IDE after configuring MCP
-- **Slack MCP tool not found**: 
-  - Verify `conversations_add_message` tool is available from `ghcr.io/korotovsky/slack-mcp-server`
-  - Ensure `mcp-server --transport stdio` is included in Docker args (see `.cursor/SLACK_MCP_SETUP.md`)
-  - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.cursor/SLACK_MCP_SETUP.md`)
-  - Check Cursor Settings > Features > MCP for error messages
-  - Ensure MCP server is running and properly configured
-  - Check Docker logs if the container fails to start
-- **MCP authentication errors**: 
-  - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.cursor/SLACK_MCP_SETUP.md`
-  - Verify token is not expired
-  - Reinstall Slack app to workspace if needed
-  - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.cursor/SLACK_MCP_SETUP.md`
-- **Docker errors**: 
-  - Ensure Docker is running: `docker ps`
-  - Check if Docker can pull the image: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
-  - Verify Docker has network access to reach Slack API
-- **Channel access errors**: 
-  - Verify channel name `#opik-code-review` exists
-  - Ensure you have `chat:write` scope in User Token Scopes (see `.cursor/SLACK_MCP_SETUP.md`)
-  - Check that you are a member of the channel (join it if needed)
-  - Try using channel ID instead of name if issues persist
 
 ### **GitHub MCP Errors**
 
@@ -267,7 +211,6 @@ This workflow will:
 - **Invalid PR URL**: Show expected format and re-prompt
 - **Invalid test env URL**: Show expected format and re-prompt
 
-
 ---
 
 ## Success Criteria
@@ -276,37 +219,32 @@ The command is successful when:
 
 1. ✅ GitHub MCP is available and accessible
 2. ✅ PR is found for current branch (or manually provided)
-3. ✅ Slack MCP is available and configured with `SLACK_MCP_XOXP_TOKEN` (User OAuth Token)
-4. ✅ Jira ticket is extracted from PR or provided manually
-5. ✅ Test environment link is extracted from PR or provided manually
-6. ✅ Component summaries are extracted from PR or provided manually (optional)
-7. ✅ Message is formatted according to template (with greeting and Jira link)
-8. ✅ Slack message is sent successfully via `conversations_add_message` MCP tool (posts as user account)
-9. ✅ User receives confirmation of successful delivery
+3. ✅ Jira ticket is extracted from PR or provided manually
+4. ✅ Test environment link is extracted from PR or provided manually
+5. ✅ Component summaries are extracted from PR or provided manually (optional)
+6. ✅ Message is formatted according to template (with greeting and Jira link)
+7. ✅ Copiable Slack command is generated and displayed
+8. ✅ User receives clear instructions on how to use the command
 
 ---
 
 ## Notes
 
 - **GitHub MCP Required**: Uses GitHub MCP to fetch PR information automatically
-- **Slack MCP Required**: Uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`) for sending messages
-  - Configure according to `.cursor/SLACK_MCP_SETUP.md`
-  - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) - messages are posted as your authenticated user account
-  - Uses `conversations_add_message` tool with `channel_id` and `payload` parameters
-  - Uses `channels_list` tool to verify MCP availability
-  - Requires `mcp-server --transport stdio` in Docker args for proper MCP protocol communication
-  - Requires `SLACK_MCP_ADD_MESSAGE_TOOL=true` to enable the tool
-  - Requires Docker to be installed and running
-  - Token starts with `xoxp-` and requires `chat:write` scope in User Token Scopes
+- **No Slack MCP Required**: This command does not send messages, so Slack MCP configuration is not needed
 - **Message format**: Follows the exact template provided with emoji prefixes, includes greeting and Jira link
 - **Automatic extraction**: Extracts information from PR title and description to minimize manual input
 - **Fallback to prompts**: Only prompts for information that cannot be extracted from PR
 - **Optional fields**: Only included in message if extracted from PR or provided by user
-- **Channel**: Message is always sent to `#opik-code-review` channel
+- **Channel**: Message is intended for `#opik-code-review` channel
 - **PR detection**: Automatically finds PR for current branch, falls back to manual input if needed
 - **Smart extraction**: Uses heuristics to find test environment links and component summaries in PR description
-- **MCP Configuration**: Slack MCP must be configured before using this command (see `.cursor/SLACK_MCP_SETUP.md` for detailed setup)
-- **Video limitations**: Slack cannot send videos directly. Use `cursor generate-code-review-slack-command` to generate a copiable command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing)
+- **Editing before sending**: The generated command can be edited to add @ mentions, media links, video links, or make final proof edits before sending in Slack
+- **Use case**: This command is particularly useful when you want to:
+  - Add @ mentions for specific reviewers
+  - Include video links or media that Slack MCP cannot send directly
+  - Make final proof edits before sending
+  - Have more control over the final message format
 
 ---
 
@@ -315,18 +253,11 @@ The command is successful when:
 ### Setup and Usage
 
 ```bash
-# 1. Configure Slack MCP according to .cursor/SLACK_MCP_SETUP.md
-#    - Follow the complete setup guide for configuring the Slack MCP server
-#    - Add your User OAuth Token (xoxp-...) to the Docker args
-#    - Ensure 'mcp-server --transport stdio' is included in Docker args
-#    - Ensure 'SLACK_MCP_ADD_MESSAGE_TOOL=true' is set to enable the tool
+# 1. Ensure GitHub MCP is configured (no Slack MCP needed)
 
-# 2. Restart Cursor IDE to load the MCP configuration
-
-# 3. Run command (on a branch with an open PR)
-cursor send-code-review-slack
+# 2. Run command (on a branch with an open PR)
+cursor generate-code-review-slack-command
 ```
-
 
 # Command execution flow:
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234
@@ -338,25 +269,43 @@ cursor send-code-review-slack
 #    - Python: (not found, prompts user)
 # 5. Prompt for message customization (optional)
 # 6. Format message according to template (with greeting and Jira link)
-# 7. Send formatted message to Slack via conversations_add_message MCP tool (posts as user account)
+# 7. Generate and display copiable Slack command
 
 # Output:
-# ✅ Slack message sent successfully to #opik-code-review channel
+# 📋 **Copiable Slack Command Generated**
 # 
-# Message sent:
+# Copy the command below and paste it into the #opik-code-review channel in Slack.
+# 
+# You can edit it before sending to:
+# - Add @ mentions for specific reviewers
+# - Add media links or video links
+# - Make final proof edits
+# - Add any additional context
+# 
+# ```
+# Hi team,
+# 
+# Please review the following PR:
+# 
 # :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
 # :github: pr link: https://github.com/comet-ml/opik/pull/1234
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
 # :java: be summary (optional): Implemented metrics aggregation endpoint
-```
+# ```
+# 
+# **To send in Slack:**
+# 1. Open Slack and navigate to #opik-code-review channel
+# 2. Paste the command above
+# 3. Edit as needed (add @ mentions, media links, etc.)
+# 4. Send the message
 
 ### Example with Missing Information
 
 If some information cannot be extracted from PR, the command will prompt:
 
 ```bash
-cursor send-code-review-slack
+cursor generate-code-review-slack-command
 
 # Found PR: https://github.com/comet-ml/opik/pull/1234
 # Extracted Jira ticket: OPIK-1234
@@ -367,7 +316,25 @@ cursor send-code-review-slack
 # Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): [Enter pressed - using default]
 ```
 
+### Example with Customization
+
+```bash
+cursor generate-code-review-slack-command
+
+# ... extraction steps ...
+# Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): This PR includes important security updates, please review carefully.
+# 
+# Generated command includes the customization:
+# Hi team,
+# 
+# Please review the following PR:
+# 
+# This PR includes important security updates, please review carefully.
+# 
+# :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
+# ...
+```
+
 ---
 
 **End Command**
-
