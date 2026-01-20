@@ -22,6 +22,8 @@ interface UseAudioPlayerReturn {
   currentTime: number;
   isPlaying: boolean;
   isLoading: boolean;
+  hasError: boolean;
+  errorMessage: string | null;
   audioRef: RefObject<AudioPlayer>;
   handleLoadedMetaData: (e: Event) => void;
   handleListen: (e: Event) => void;
@@ -30,6 +32,7 @@ interface UseAudioPlayerReturn {
   handleCanPlay: () => void;
   handleWaiting: () => void;
   handleLoadStart: () => void;
+  handleError: (e: Event) => void;
   formatTime: (seconds: number) => string;
 }
 
@@ -45,6 +48,8 @@ export const useAudioPlayer = (
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(autoPlay);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasError, setHasError] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const audioRef = useRef<AudioPlayer>(null);
 
   // Pause this audio if another audio starts playing
@@ -99,6 +104,37 @@ export const useAudioPlayer = (
 
   const handleLoadStart = useCallback(() => {
     setIsLoading(true);
+    setHasError(false);
+    setErrorMessage(null);
+  }, []);
+
+  const handleError = useCallback((e: Event) => {
+    const audio = e.target as HTMLAudioElement;
+    const error = audio.error;
+
+    setIsLoading(false);
+    setHasError(true);
+
+    if (error) {
+      switch (error.code) {
+        case 1: // MEDIA_ERR_ABORTED
+          setErrorMessage("Audio loading was cancelled");
+          break;
+        case 2: // MEDIA_ERR_NETWORK
+          setErrorMessage("Network error loading audio");
+          break;
+        case 3: // MEDIA_ERR_DECODE
+          setErrorMessage("Audio format error");
+          break;
+        case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+          setErrorMessage("Audio file not available or format not supported");
+          break;
+        default:
+          setErrorMessage("Unable to load audio file");
+      }
+    } else {
+      setErrorMessage("Audio playback error");
+    }
   }, []);
 
   return {
@@ -106,6 +142,8 @@ export const useAudioPlayer = (
     currentTime,
     isPlaying,
     isLoading,
+    hasError,
+    errorMessage,
     audioRef,
     handleLoadedMetaData,
     handleListen,
@@ -114,6 +152,7 @@ export const useAudioPlayer = (
     handleCanPlay,
     handleWaiting,
     handleLoadStart,
+    handleError,
     formatTime,
   };
 };

@@ -2,7 +2,7 @@ import React from "react";
 import AudioPlayerLib from "react-h5-audio-player";
 import "react-h5-audio-player/lib/styles.css";
 import { cn } from "@/lib/utils";
-import { Play, Pause, Loader2 } from "lucide-react";
+import { Play, Pause, Loader2, AlertCircle } from "lucide-react";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 
 export interface AudioPlayerProps {
@@ -17,6 +17,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
     currentTime,
     isPlaying,
     isLoading,
+    hasError,
+    errorMessage,
     audioRef,
     handleLoadedMetaData,
     handleListen,
@@ -25,6 +27,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
     handleCanPlay,
     handleWaiting,
     handleLoadStart,
+    handleError,
     formatTime,
   } = useAudioPlayer({ url });
 
@@ -35,17 +38,28 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
         <span className="truncate text-xs" style={{ color: "#45575F" }}>
           {name || "Audio"}
         </span>
-        <span className="ml-2 shrink-0 text-xs text-light-slate">
-          {formatTime(currentTime)} /{" "}
-          {duration > 0 ? formatTime(duration) : "--:--"}
-        </span>
+        {hasError ? (
+          <span className="ml-2 shrink-0 text-xs text-slate-500">
+            {errorMessage}
+          </span>
+        ) : (
+          <span className="ml-2 shrink-0 text-xs text-light-slate">
+            {formatTime(currentTime)} /{" "}
+            {duration > 0 ? formatTime(duration) : "--:--"}
+          </span>
+        )}
       </div>
 
       {/* Custom Audio Player */}
       <div className="flex items-center gap-1">
-        {/* Play/Pause/Loading Icon */}
+        {/* Play/Pause/Loading/Error Icon */}
         <div className="flex size-8 shrink-0 items-center justify-center">
-          {isLoading ? (
+          {hasError ? (
+            <AlertCircle
+              className="size-3.5 text-slate-400"
+              aria-label="Audio error"
+            />
+          ) : isLoading ? (
             <Loader2 className="size-3.5 animate-spin text-light-slate" />
           ) : isPlaying ? (
             <button
@@ -78,6 +92,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
             onCanPlay={handleCanPlay}
             onLoadStart={handleLoadStart}
             onWaiting={handleWaiting}
+            onError={handleError}
             showJumpControls={false}
             customAdditionalControls={[]}
             customVolumeControls={[]}
@@ -87,7 +102,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
 
         {/* Progress Bar */}
         <div className="relative flex-1">
-          <div className="h-[6px] w-full overflow-hidden rounded-full bg-gray-200">
+          <div
+            className={cn(
+              "h-[6px] w-full overflow-hidden rounded-full",
+              hasError ? "bg-gray-100" : "bg-gray-200",
+            )}
+          >
             <div
               className="h-full rounded-full bg-indigo-600 transition-all"
               style={{
@@ -110,6 +130,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
             }}
             className="absolute inset-0 size-full cursor-pointer opacity-0"
             aria-label="Seek"
+            disabled={hasError}
           />
         </div>
       </div>

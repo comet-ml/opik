@@ -581,3 +581,232 @@ describe("Duplicate media detection", () => {
     expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
   });
 });
+
+describe("Audio content extraction", () => {
+  it("should extract audio from input_audio content type", () => {
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "I'm sending you an audio sample.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_0]",
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+    expect(result.media[0].url).toContain("data:audio/wav;base64,");
+  });
+
+  it("should extract multiple audio samples from input_audio", () => {
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "I'm sending you two identical audio samples.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_0]",
+                format: "wav",
+              },
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_1]",
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(
+      result.media.filter((m) => m.type === ATTACHMENT_TYPE.AUDIO),
+    ).toHaveLength(2);
+  });
+
+  it("should extract audio from message-level audio field", () => {
+    const input = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          audio: {
+            id: "audio_123",
+            data: "[output-audio.wav]",
+            expires_at: 1768566966,
+            transcript: "This is the transcript.",
+          },
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+    expect(result.media[0].url).toContain("data:audio/");
+  });
+
+  it("should handle audio_url content type", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "audio_url",
+              audio_url: {
+                url: "https://example.com/audio.mp3",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe("https://example.com/audio.mp3");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+  });
+
+  it("should extract base64 audio from data URI", () => {
+    const base64Audio = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAA";
+    const input = { text: `Listen to this: ${base64Audio}` };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(base64Audio);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+  });
+
+  it("should handle audio file content type", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "file",
+              file: {
+                file_id: "file_123",
+                format: "audio/mpeg",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+  });
+
+  it("should not misidentify audio placeholders as images", () => {
+    // This is the key test case from the bug report
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "I'm sending you two identical audio samples. Please confirm you received them.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_0]",
+                format: "wav",
+              },
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_1]",
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Should have 2 audio items, not images
+    const audioItems = result.media.filter(
+      (m) => m.type === ATTACHMENT_TYPE.AUDIO,
+    );
+    const imageItems = result.media.filter(
+      (m) => m.type === ATTACHMENT_TYPE.IMAGE,
+    );
+
+    expect(audioItems).toHaveLength(2);
+    expect(imageItems).toHaveLength(0);
+  });
+
+  it("should not misidentify WAV audio base64 as WebP images", () => {
+    // WAV files start with RIFF (UklGR in base64) just like WebP
+    // But WAV has "WAVE" at bytes 8-11, WebP has "WEBP"
+    const wavBase64 = "UklGRqxYAQBXQVZFZm10IBAAAA"; // Real WAV file header
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: {
+                data: wavBase64,
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Should detect as audio, not image
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+    expect(result.media[0].url).toContain("data:audio/wav");
+  });
+
+  it("should still detect WebP images correctly", () => {
+    // WebP files also start with RIFF but have "WEBP" at bytes 8-11
+    const webpBase64 = "UklGRgAAAABXRUJQVlA4"; // WebP header
+    const input = {
+      text: `Image: ${webpBase64}`,
+    };
+
+    const result = processInputData(input);
+
+    // Should detect as image
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+    expect(result.media[0].url).toContain("data:image/webp");
+  });
+});

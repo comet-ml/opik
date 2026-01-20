@@ -1,4 +1,11 @@
-import { Settings, User, Bot, Wrench, LucideIcon } from "lucide-react";
+import {
+  Settings,
+  User,
+  Bot,
+  Wrench,
+  LucideIcon,
+  CodeIcon,
+} from "lucide-react";
 
 export type RoleConfig = {
   icon: LucideIcon;
@@ -8,7 +15,7 @@ export type RoleConfig = {
 };
 
 export const ROLE_CONFIG: Record<
-  "system" | "user" | "assistant" | "tool",
+  "system" | "user" | "assistant" | "tool" | "function",
   RoleConfig
 > = {
   system: {
@@ -34,5 +41,11 @@ export const ROLE_CONFIG: Record<
     label: "Tool",
     iconColor: "text-[var(--tag-purple-text)]",
     iconBgColor: "bg-[var(--tag-purple-bg)]",
+  },
+  function: {
+    icon: CodeIcon,
+    label: "Function",
+    iconColor: "text-[var(--tag-green-text)]",
+    iconBgColor: "bg-[var(--tag-green-bg)]",
   },
 };

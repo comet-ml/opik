@@ -350,11 +350,20 @@ type AudioUrlValue = {
   url?: string;
 };
 
+type InputAudioValue = {
+  data?: string;
+  format?: string;
+};
+
 export type AudioContent =
   | {
       type: "audio_url";
       audio_url?: AudioUrlValue | string;
       file?: FileValue;
+    }
+  | {
+      type: "input_audio";
+      input_audio?: InputAudioValue;
     }
   | {
       type: "file";
@@ -371,6 +380,10 @@ export const isAudioContent = (content?: Partial<AudioContent>) => {
       return true;
     }
     return isString(content.audio_url?.url);
+  }
+
+  if (content.type === "input_audio") {
+    return Boolean(content.input_audio?.data);
   }
 
   if (content.type === "file") {
@@ -569,6 +582,12 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
       if (content.type === "file" || content.file) {
         const fileValue = content.file ?? {};
         const { file_id, file_data, format } = fileValue;
+
+        // Skip if it's an audio format
+        if (format && format.startsWith("audio/")) {
+          return;
+        }
+
         if (file_id) {
           pushVideo(file_id, format);
         } else if (file_data) {
@@ -620,7 +639,7 @@ const extractOpenAIAudios = (input: object, audios: ParsedAudioData[]) => {
         }
       }
 
-      if (content.type === "file" || content.file) {
+      if (content.type === "file" && "file" in content) {
         const fileValue = content.file ?? {};
         const { file_id, file_data, format } = fileValue;
         if (file_id) {
