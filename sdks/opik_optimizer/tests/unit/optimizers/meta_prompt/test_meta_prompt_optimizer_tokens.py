@@ -6,10 +6,11 @@ from unittest.mock import Mock, patch
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
 )
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops import (
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops import (
     get_task_context,
-    count_tokens,
 )
+from opik_optimizer.utils import token as token_utils
+from opik_optimizer import constants
 
 
 def _metric_with_name(name: str = "mock_metric") -> Mock:
@@ -23,7 +24,9 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_with_known_model(self) -> None:
         """Test token calculation with a known model (gpt-4)."""
-        with patch("litellm.get_max_tokens") as mock_get_max_tokens:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
+        ) as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 128000  # gpt-4 context window
 
             optimizer = MetaPromptOptimizer(model="gpt-4")
@@ -34,7 +37,9 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_with_smaller_model(self) -> None:
         """Test token calculation with a smaller model."""
-        with patch("litellm.get_max_tokens") as mock_get_max_tokens:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
+        ) as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 16000  # gpt-3.5-turbo context
 
             optimizer = MetaPromptOptimizer(model="gpt-3.5-turbo")
@@ -45,7 +50,9 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_custom_model_fallback(self) -> None:
         """Test fallback to absolute max for custom models."""
-        with patch("litellm.get_max_tokens") as mock_get_max_tokens:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
+        ) as mock_get_max_tokens:
             mock_get_max_tokens.side_effect = Exception("Model not found")
 
             optimizer = MetaPromptOptimizer(model="custom-model-xyz")
@@ -55,7 +62,9 @@ class TestTokenCalculation:
 
     def test_calculate_max_context_tokens_applies_absolute_max(self) -> None:
         """Test that absolute max is always applied as safety cap."""
-        with patch("litellm.get_max_tokens") as mock_get_max_tokens:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
+        ) as mock_get_max_tokens:
             # Simulate a model with huge context (e.g., Claude 3.5 with 200k)
             mock_get_max_tokens.return_value = 200000
 
@@ -66,8 +75,8 @@ class TestTokenCalculation:
 
     def test_constants_are_correctly_defined(self) -> None:
         """Test that all token-related constants are properly defined."""
-        assert MetaPromptOptimizer.DEFAULT_DATASET_CONTEXT_MAX_TOKENS == 10000
-        assert MetaPromptOptimizer.DEFAULT_DATASET_CONTEXT_RATIO == 0.25
+        assert constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS == 10000
+        assert constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_RATIO == 0.25
 
 
 class TestContextOpsTokenCounting:
@@ -75,12 +84,10 @@ class TestContextOpsTokenCounting:
 
     def test_count_tokens_with_litellm(self) -> None:
         """Test token counting using litellm."""
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.token_counter"
-        ) as mock_counter:
+        with patch("opik_optimizer.utils.token.token_counter") as mock_counter:
             mock_counter.return_value = 100
 
-            result = count_tokens("This is a test string", model="gpt-4")
+            result = token_utils.count_tokens("This is a test string", model="gpt-4")
 
             assert result == 100
             mock_counter.assert_called_once()
@@ -93,11 +100,11 @@ class TestContextOpsTokenCounting:
     def test_count_tokens_fallback_when_litellm_unavailable(self) -> None:
         """Test fallback token counting when litellm fails."""
         with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.LITELLM_TOKEN_COUNTER_AVAILABLE",
+            "opik_optimizer.utils.token.LITELLM_TOKEN_COUNTER_AVAILABLE",
             False,
         ):
             test_string = "x" * 40  # Exactly 40 characters
-            result = count_tokens(test_string, model="gpt-4")
+            result = token_utils.count_tokens(test_string, model="gpt-4")
 
             # Fallback: ~1 token per 4 chars = 40/4 = 10 tokens
             assert result == 10
@@ -132,9 +139,7 @@ class TestAdaptiveContextFitting:
         mock_dataset = self.create_mock_dataset(num_items=5, long_values=True)
         mock_metric = _metric_with_name()
 
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
-        ) as mock_count:
+        with patch("opik_optimizer.utils.token.count_tokens") as mock_count:
             # First call: too many tokens, second call: fits
             mock_count.side_effect = [3000, 1500]
 
@@ -155,9 +160,7 @@ class TestAdaptiveContextFitting:
         mock_dataset = self.create_mock_dataset(num_items=1, long_values=True)
         mock_metric = _metric_with_name()
 
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
-        ) as mock_count:
+        with patch("opik_optimizer.utils.token.count_tokens") as mock_count:
             # First call: still too big, second call: fits with reduced truncation
             mock_count.side_effect = [2500, 1800]
 
@@ -178,14 +181,12 @@ class TestAdaptiveContextFitting:
         mock_dataset = self.create_mock_dataset(num_items=1, long_values=True)
         mock_metric = _metric_with_name()
 
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
-        ) as mock_count:
+        with patch("opik_optimizer.utils.token.count_tokens") as mock_count:
             # Always return too many tokens
             mock_count.return_value = 5000
 
             with patch(
-                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.logger"
+                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.logger"
             ) as mock_logger:
                 context, token_count = get_task_context(
                     dataset=mock_dataset,
@@ -219,9 +220,7 @@ class TestColumnSelection:
         ]
         mock_metric = _metric_with_name()
 
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
-        ) as mock_count:
+        with patch("opik_optimizer.utils.token.count_tokens") as mock_count:
             mock_count.return_value = 100  # Fits within budget
 
             context, token_count = get_task_context(
@@ -254,13 +253,11 @@ class TestColumnSelection:
         ]
         mock_metric = _metric_with_name()
 
-        with patch(
-            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.count_tokens"
-        ) as mock_count:
+        with patch("opik_optimizer.utils.token.count_tokens") as mock_count:
             mock_count.return_value = 100
 
             with patch(
-                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.history_ops.logger"
+                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.logger"
             ) as mock_logger:
                 context, token_count = get_task_context(
                     dataset=mock_dataset,
@@ -282,7 +279,9 @@ class TestMetadataMapping:
 
     def test_optimizer_metadata_includes_token_budget(self) -> None:
         """Test that optimizer metadata includes max_context_tokens."""
-        with patch("litellm.get_max_tokens") as mock_get_max_tokens:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops.get_max_tokens"
+        ) as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 16000
 
             optimizer = MetaPromptOptimizer(model="gpt-3.5-turbo")

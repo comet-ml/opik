@@ -6,6 +6,7 @@ This module contains extracted operations from the main optimizer:
 - evaluation_ops: Prompt evaluation and selection
 - candidate_ops: Candidate generation and sanitization
 - history_ops: Task context + history recording helpers
+- context_learning_ops: Dataset-example prompt learning helpers
 - result_ops: Result calculation and formatting
 """
 
@@ -18,6 +19,7 @@ from . import (
     candidate_synthesis_ops,
     evaluation_ops,
     history_ops,
+    context_learning_ops,
     result_ops,
     halloffame_ops,
 )
@@ -31,6 +33,7 @@ __all__ = [
     "candidate_synthesis_ops",
     "evaluation_ops",
     "history_ops",
+    "context_learning_ops",
     "result_ops",
     "halloffame_ops",
 ]

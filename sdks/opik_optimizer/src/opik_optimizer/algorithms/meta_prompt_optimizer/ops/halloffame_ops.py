@@ -5,6 +5,8 @@ This module implements meta-learning: discovering what makes prompts successful
 and re-injecting those patterns into future candidate generation.
 """
 
+# TODO: Move into a shared extension module when Hall-of-Fame is reused by other optimizers.
+
 from typing import Any
 import json
 from collections import Counter
@@ -241,6 +243,91 @@ class PromptHallOfFame:
                 matched.append(pattern)
 
         return matched
+
+
+def maybe_extract_hof_patterns(
+    *,
+    optimizer: Any,
+    current_trial: int,
+    metric_name: str,
+) -> list[str]:
+    """
+    Extract Hall-of-Fame patterns when the extraction interval is reached.
+    """
+    if not optimizer.hall_of_fame:
+        return []
+
+    if not optimizer.hall_of_fame.should_extract_patterns(current_trial):
+        return []
+
+    logger.info(
+        "Extracting patterns from hall of fame at trial %s",
+        current_trial,
+    )
+    new_patterns = optimizer.hall_of_fame.extract_patterns(
+        model=optimizer.model,
+        model_parameters=optimizer.model_parameters,
+        metric_name=metric_name,
+    )
+    if new_patterns:
+        logger.info("Extracted %s new patterns", len(new_patterns))
+        for i, pattern in enumerate(new_patterns[:3], 1):
+            logger.debug("  Pattern %s: %s...", i, pattern[:100])
+    return new_patterns
+
+
+def get_patterns_for_injection(optimizer: Any) -> list[str] | None:
+    """
+    Return the current Hall-of-Fame patterns for injection, if enabled.
+    """
+    if optimizer.hall_of_fame:
+        return optimizer.hall_of_fame.get_patterns_for_injection()
+    return None
+
+
+def build_hall_of_fame_context(
+    *,
+    hall_of_fame: Any,
+    pretty_mode: bool,
+    max_entries: int,
+) -> str:
+    """
+    Build history context block from Hall of Fame entries.
+    """
+    if not hasattr(hall_of_fame, "entries") or not hall_of_fame.entries:
+        return ""
+
+    context = "\nHall of Fame: Best Performing Prompts Across All Rounds:\n"
+    context += "=" * 80 + "\n"
+    context += (
+        "Study these top performers carefully - what patterns make them successful?\n\n"
+    )
+
+    for i, entry in enumerate(hall_of_fame.entries[:max_entries], 1):
+        improvement_pct = entry.improvement_over_baseline * 100
+        context += (
+            f"\n#{i} WINNER | Trial {entry.trial_number} | "
+            f"Score: {entry.score:.4f} | Improvement: {improvement_pct:+.1f}%\n"
+        )
+
+        if pretty_mode:
+            context += "Full Prompt Messages:\n"
+            prompt_lines: list[str] = []
+            for msg in entry.prompt_messages:
+                role = msg.get("role", "unknown")
+                msg_content = msg.get("content", "")
+                prompt_lines.append("  [" + role.upper() + "]: " + msg_content)
+            context += "\n".join(prompt_lines) + "\n\n"
+        else:
+            context += "Prompt:\n"
+            context += json.dumps(entry.prompt_messages, indent=2)
+            context += "\n"
+
+        if entry.extracted_patterns:
+            context += f"Why it worked: {', '.join(entry.extracted_patterns)}\n"
+
+    context += "\n" + "=" * 80 + "\n"
+    return context
 
 
 def add_best_candidate_to_hof(

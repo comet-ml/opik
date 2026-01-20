@@ -85,12 +85,8 @@ def generate_agent_bundle_candidates(
 
         if optimizer.enable_context:
             task_context_str, _ = get_task_context_fn(metric=metric)
-            analysis_instruction = (
-                "Analyze the examples/feedback (if any), metric description, and score history."
-            )
-            metric_focus_instruction = (
-                "Focus on improving evaluation scores while keeping each agent's role distinct."
-            )
+            analysis_instruction = "Analyze the examples/feedback (if any), metric description, and score history."
+            metric_focus_instruction = "Focus on improving evaluation scores while keeping each agent's role distinct."
         else:
             analysis_instruction = (
                 "Analyze score history and each agent's role before proposing changes."

@@ -1,0 +1,221 @@
+"""
+Context-learning operations (dataset example stuffing) for Meta-Prompt Optimizer.
+"""
+
+# TODO: Move into a shared extension module when prompt learning is generalized.
+
+from collections.abc import Sequence
+import logging
+import random
+import re
+
+import opik
+
+from ....api_objects.types import MetricFunction
+from ....utils import token as token_utils
+from .... import constants
+from .. import prompts as meta_prompts
+
+logger = logging.getLogger(__name__)
+
+try:
+    from litellm import get_max_tokens as _get_max_tokens
+except Exception:  # pragma: no cover - optional dependency
+    _get_max_tokens = None
+
+
+def get_max_tokens(model: str) -> int:
+    """Wrapper for litellm.get_max_tokens to simplify patching in tests."""
+    if _get_max_tokens is None:
+        raise RuntimeError("litellm.get_max_tokens is unavailable")
+    return _get_max_tokens(model)
+
+
+def get_task_context(
+    dataset: opik.Dataset | None,
+    metric: MetricFunction,
+    num_examples: int = 3,
+    columns: list[str] | None = None,
+    max_tokens: int = 2000,
+    model: str = "gpt-4",
+    extract_metric_understanding: bool = True,
+) -> tuple[str, int]:
+    """
+    Get task-specific context from the dataset and metric configuration.
+    Always sanitizes to prevent data leakage. Token-aware with adaptive fitting.
+    """
+    if dataset is None:
+        return "", 0
+
+    samples: Sequence[dict[str, object]] = []
+    try:
+        items = dataset.get_items()
+        num_to_sample = min(num_examples, len(items))
+        samples = random.sample(items, num_to_sample) if len(items) > 0 else []
+    except Exception as exc:
+        logger.warning("Could not get samples from dataset: %s", exc)
+        return "", 0
+
+    if not samples:
+        return "", 0
+
+    sample = samples[0]
+
+    excluded_keys = {
+        "id",
+        "answer",
+        "label",
+        "output",
+        "expected_output",
+        "ground_truth",
+        "target",
+        "metadata",
+        "response",
+        "supporting_facts",
+    }
+
+    all_input_fields = [k for k in sample.keys() if k not in excluded_keys]
+
+    if columns is not None:
+        input_fields = [f for f in columns if f in all_input_fields]
+        if not input_fields:
+            logger.warning(
+                "None of specified columns %s found in dataset. Using all input fields.",
+                columns,
+            )
+            input_fields = all_input_fields
+    else:
+        input_fields = all_input_fields
+
+    max_value_length = constants.META_PROMPT_DEFAULT_MAX_VALUE_LENGTH
+    current_num_examples = len(samples)
+
+    while current_num_examples > 0:
+        context = "Task Context: "
+        context += (
+            "Available input variables (use "
+            f"{meta_prompts.START_DELIM}variable_name{meta_prompts.END_DELIM}"
+            " syntax): "
+        )
+        context += ", ".join(
+            [
+                f"{meta_prompts.START_DELIM}{field}{meta_prompts.END_DELIM}"
+                for field in input_fields
+            ]
+        )
+        context += "\n\n"
+
+        if extract_metric_understanding:
+            metric_name = metric.__name__
+            metric_doc = getattr(metric, "__doc__", None)
+            metric_direction = getattr(metric, "direction", None)
+
+            context += "Evaluation Metric:\n"
+            context += f"- Name: {metric_name}\n"
+
+            if metric_direction:
+                goal = "Maximize" if metric_direction == "maximize" else "Minimize"
+                context += f"- Goal: {goal} this metric\n"
+
+            if metric_doc and metric_doc.strip():
+                doc_lines = metric_doc.strip().split("\n")
+                description = next(
+                    (line.strip() for line in doc_lines if line.strip()), None
+                )
+                if description:
+                    context += f"- Description: {description}\n"
+
+            context += "\nFocus on producing clear, correct responses that optimize for this metric.\n\n"
+        else:
+            context += (
+                "Evaluation: Your output will be evaluated for accuracy and quality.\n"
+            )
+            context += (
+                "Focus on producing clear, correct responses based on the input.\n\n"
+            )
+
+        context += f"Example inputs from dataset ({current_num_examples} samples):\n\n"
+        for idx, sample_item in enumerate(samples[:current_num_examples], 1):
+            context += f"Example {idx}:\n```\n"
+            for key in input_fields:
+                value = sample_item.get(key, "")
+                value_str = str(value).replace("\n", " ").replace("\r", " ")
+                value_str = re.sub(r"\s+", " ", value_str).strip()
+                if len(value_str) > max_value_length:
+                    value_str = value_str[:max_value_length] + "..."
+                context += (
+                    f"{meta_prompts.START_DELIM}{key}{meta_prompts.END_DELIM}: "
+                    f"{value_str}\n"
+                )
+            context += "```\n\n"
+
+        token_count = token_utils.count_tokens(context, model)
+
+        if token_count <= max_tokens:
+            logger.debug(
+                "Task context: %s tokens, %s examples, %s fields, max_value_length=%s",
+                token_count,
+                current_num_examples,
+                len(input_fields),
+                max_value_length,
+            )
+            return context, token_count
+
+        if current_num_examples > 1:
+            current_num_examples -= 1
+            logger.debug(
+                "Reducing examples to %s (was %s tokens)",
+                current_num_examples,
+                token_count,
+            )
+        elif max_value_length > constants.META_PROMPT_MIN_VALUE_LENGTH:
+            max_value_length = max(
+                constants.META_PROMPT_MIN_VALUE_LENGTH,
+                max_value_length - constants.META_PROMPT_VALUE_LENGTH_REDUCTION_STEP,
+            )
+            logger.debug(
+                "Reducing truncation to %s chars (was %s tokens)",
+                max_value_length,
+                token_count,
+            )
+        else:
+            logger.warning(
+                "Cannot fit task context within %s tokens (currently %s). Returning minimal context.",
+                max_tokens,
+                token_count,
+            )
+            return context, token_count
+
+    return "", 0
+
+
+def calculate_max_context_tokens(model: str) -> int:
+    """
+    Calculate token budget for task context data stuffing (dataset examples ONLY).
+
+    Uses ~25% of model's max tokens, capped at default dataset context max.
+    Falls back to absolute max for custom models where litellm can't determine limits.
+    """
+    try:
+        model_max_tokens: int = get_max_tokens(model)  # type: ignore[assignment]
+        calculated_max = int(
+            model_max_tokens * constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_RATIO
+        )
+        logger.debug(
+            "Model %s max tokens: %s, calculated dataset context budget: %s",
+            model,
+            model_max_tokens,
+            calculated_max,
+        )
+    except Exception as exc:
+        logger.debug(
+            "Could not get max tokens for model %s: %s. Using default max: %s",
+            model,
+            exc,
+            constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS,
+        )
+        calculated_max = constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS
+
+    return min(
+        calculated_max, constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS
+    )

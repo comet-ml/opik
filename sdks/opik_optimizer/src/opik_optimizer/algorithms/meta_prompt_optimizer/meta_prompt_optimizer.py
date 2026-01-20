@@ -5,6 +5,7 @@ from opik import Dataset
 from ...base_optimizer import BaseOptimizer
 from ...core.state import AlgorithmResult, OptimizationContext
 from ...utils.prompt_library import PromptOverrides
+from ... import constants
 from ...api_objects.types import MetricFunction
 from ...utils import throttle as _throttle
 from ...utils.logging import debug_log
@@ -13,7 +14,14 @@ from .ops.halloffame_ops import PromptHallOfFame, add_best_candidate_to_hof
 from ...core.results import OptimizationRound
 
 # Import ops modules
-from .ops import candidate_ops, evaluation_ops, history_ops, result_ops
+from .ops import (
+    candidate_ops,
+    context_learning_ops,
+    evaluation_ops,
+    history_ops,
+    halloffame_ops,
+    result_ops,
+)
 from . import prompts as meta_prompts
 
 # Set up logging
@@ -39,20 +47,23 @@ class MetaPromptOptimizer(BaseOptimizer):
     4. Evaluating candidates and selecting the best
     5. Repeating until max_trials is reached or performance plateaus
 
+    Context learning (dataset example stuffing) and Hall-of-Fame pattern mining are
+    implemented as separate ops modules to enable extraction into extensions later.
+
     Args:
         model: LiteLLM model name for optimizer's internal reasoning/generation calls
         model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
             Common params: temperature, max_tokens, max_completion_tokens, top_p.
             See: https://docs.litellm.ai/docs/completion/input
         prompts_per_round: Number of candidate prompts to generate per optimization round
-        enable_context: Whether to include task-specific context when reasoning about improvements
+        enable_context: Whether to include task-specific context learning when reasoning
         num_task_examples: Number of dataset examples to show in task context (default: 10)
         task_context_columns: Specific dataset columns to include in context (None = all input columns)
         n_threads: Number of parallel threads for prompt evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
-        prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
+        prettymode_prompt_history: (removed) history formatting follows display settings
         prompt_overrides: Optional dict or callable to customize internal prompts.
             Dict: {"prompt_key": "new_template"} to override specific prompts.
             Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
@@ -69,43 +80,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         "synthesis": meta_prompts.SYNTHESIS_PROMPT_TEMPLATE,
     }
 
-    # --- Constants for Default Configuration ---
-    DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
-    DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND = 2
-    DEFAULT_SYNTHESIS_START_ROUND = 3
-    DEFAULT_SYNTHESIS_ROUND_INTERVAL = 3
-    DEFAULT_NUM_THREADS = 12
-    DEFAULT_SEED = 42
-    DEFAULT_NUM_TASK_EXAMPLES = 5
-    DEFAULT_HALL_OF_FAME_SIZE = 10
-    DEFAULT_PATTERN_EXTRACTION_INTERVAL = 5
-    DEFAULT_PATTERN_INJECTION_RATE = 0.6
-    DEFAULT_DATASET_CONTEXT_MAX_TOKENS = 10000
-    DEFAULT_DATASET_CONTEXT_RATIO = 0.25
-    DEFAULT_PRETTYMODE_PROMPT_HISTORY = True
-    DEFAULT_EXTRACT_METRIC_UNDERSTANDING = True
-    # TODO: Refactor and make global - this should be a configuration parameter
-    # Other optimizers only optimize system prompts, not user prompts
-    # Setting this to True allows more flexibility
-    DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION = False
-
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = constants.DEFAULT_MODEL,
         model_parameters: dict[str, Any] | None = None,
-        prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
-        enable_context: bool = True,
-        num_task_examples: int = DEFAULT_NUM_TASK_EXAMPLES,
+        prompts_per_round: int = constants.META_PROMPT_DEFAULT_PROMPTS_PER_ROUND,
+        enable_context: bool = constants.DEFAULT_ENABLE_CONTEXT_LEARNING,
+        num_task_examples: int = constants.META_PROMPT_DEFAULT_NUM_TASK_EXAMPLES,
         task_context_columns: list[str] | None = None,
-        n_threads: int = DEFAULT_NUM_THREADS,
+        n_threads: int = constants.DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = DEFAULT_SEED,
+        seed: int = constants.DEFAULT_SEED,
         name: str | None = None,
         use_hall_of_fame: bool = True,
-        prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
         prompt_overrides: PromptOverrides = None,
-        skip_perfect_score: bool = True,
-        perfect_score: float = 0.95,
+        skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
+        perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
         super().__init__(
             model=model,
@@ -118,9 +108,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt_overrides=prompt_overrides,
         )
         self.prompts_per_round = prompts_per_round
-        self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
-        self.synthesis_start_round = self.DEFAULT_SYNTHESIS_START_ROUND
-        self.synthesis_round_interval = self.DEFAULT_SYNTHESIS_ROUND_INTERVAL
+        self.synthesis_prompts_per_round = (
+            constants.META_PROMPT_DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
+        )
+        self.synthesis_start_round = constants.META_PROMPT_DEFAULT_SYNTHESIS_START_ROUND
+        self.synthesis_round_interval = (
+            constants.META_PROMPT_DEFAULT_SYNTHESIS_ROUND_INTERVAL
+        )
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
@@ -128,20 +122,29 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.task_context_columns = task_context_columns
         self.selection_strategy = "best_by_metric"
 
-        # Calculate token budget for task context data stuffing (dataset examples only)
-        # This is ONLY used for adaptive fitting logic in get_task_context()
-        self.max_context_tokens = self._calculate_max_context_tokens()
-
-        # Hall of Fame for pattern mining
-        self.use_hall_of_fame = use_hall_of_fame
-        self.prettymode_prompt_history = prettymode_prompt_history
-        self.extract_metric_understanding = self.DEFAULT_EXTRACT_METRIC_UNDERSTANDING
-        self.allow_user_prompt_optimization = (
-            self.DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION
+        # TODO: Extract context learning into an extension module shared across optimizers.
+        # Calculate token budget for task context data stuffing (dataset examples only).
+        # This is ONLY used for adaptive fitting logic in get_task_context().
+        self.max_context_tokens = context_learning_ops.calculate_max_context_tokens(
+            self.model
         )
-        self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
-        self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
-        self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
+
+        # TODO: Extract Hall of Fame into an extension module shared across optimizers.
+        # Hall of Fame for pattern mining.
+        self.use_hall_of_fame = use_hall_of_fame
+        self.extract_metric_understanding = (
+            constants.META_PROMPT_DEFAULT_EXTRACT_METRIC_UNDERSTANDING
+        )
+        self.allow_user_prompt_optimization = (
+            constants.META_PROMPT_DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION
+        )
+        self.hall_of_fame_size = constants.META_PROMPT_DEFAULT_HALL_OF_FAME_SIZE
+        self.pattern_extraction_interval = (
+            constants.META_PROMPT_DEFAULT_HALL_OF_FAME_PATTERN_EXTRACTION_INTERVAL
+        )
+        self.pattern_injection_rate = (
+            constants.META_PROMPT_DEFAULT_HALL_OF_FAME_PATTERN_INJECTION_RATE
+        )
 
         self.hall_of_fame: PromptHallOfFame | None = None
         if self.use_hall_of_fame:
@@ -176,38 +179,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             "hall_of_fame_size": self.hall_of_fame_size if self.use_hall_of_fame else 0,
         }
 
-    def _calculate_max_context_tokens(self) -> int:
-        """
-        Calculate token budget for task context data stuffing (dataset examples ONLY).
-
-        This limit is ONLY used in get_task_context() for adaptive fitting of dataset examples.
-        It determines how many examples and how much truncation to use when building task context.
-
-        Uses ~25% of model's max tokens, capped at DEFAULT_MAX_DATASET_CONTEXT_MAX_TOKENS.
-        Falls back to absolute max for custom models where litellm can't determine limits.
-        """
-        try:
-            from litellm import get_max_tokens
-
-            model_max_tokens: int = get_max_tokens(self.model)  # type: ignore[assignment]
-            # Use ~25% of model's context for dataset examples
-            calculated_max = int(model_max_tokens * self.DEFAULT_DATASET_CONTEXT_RATIO)
-            logger.debug(
-                f"Model {self.model} max tokens: {model_max_tokens}, "
-                f"calculated dataset context budget: {calculated_max}"
-            )
-        except Exception as e:
-            logger.debug(
-                f"Could not get max tokens for model {self.model}: {e}. "
-                f"Using default max: {self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS}"
-            )
-            calculated_max = self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS
-
-        # Apply absolute safety limit (for custom models or huge context windows)
-        max_tokens = min(calculated_max, self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS)
-        logger.debug(f"Final dataset context token budget: {max_tokens}")
-        return max_tokens
-
     def get_optimizer_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
             "prompts_per_round": self.prompts_per_round,
@@ -219,10 +190,10 @@ class MetaPromptOptimizer(BaseOptimizer):
             "use_hall_of_fame": self.use_hall_of_fame,
             "hall_of_fame_size": self.hall_of_fame.max_size
             if self.hall_of_fame
-            else self.DEFAULT_HALL_OF_FAME_SIZE,
+            else constants.META_PROMPT_DEFAULT_HALL_OF_FAME_SIZE,
             "pattern_extraction_interval": self.hall_of_fame.pattern_extraction_interval
             if self.hall_of_fame
-            else self.DEFAULT_PATTERN_EXTRACTION_INTERVAL,
+            else constants.META_PROMPT_DEFAULT_HALL_OF_FAME_PATTERN_EXTRACTION_INTERVAL,
             "pattern_injection_rate": self.pattern_injection_rate,
         }
         return metadata
@@ -300,7 +271,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 # Check if we should extract patterns from hall of fame
-                evaluation_ops.maybe_extract_hof_patterns(
+                halloffame_ops.maybe_extract_hof_patterns(
                     optimizer=self,
                     current_trial=context.trials_completed,
                     metric_name=metric.__name__,
@@ -323,7 +294,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     optimization_id=optimization_id,
                     project_name=self.project_name,
                     is_single_prompt_optimization=is_single_prompt_optimization,
-                    winning_patterns=evaluation_ops.get_patterns_for_injection(self),
+                    winning_patterns=halloffame_ops.get_patterns_for_injection(self),
                 )
                 if not candidate_prompts:
                     logger.warning(
@@ -404,7 +375,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _get_task_context(self, metric: MetricFunction) -> tuple[str, int]:
         """Get task-specific context from the dataset and metric (delegates to ops)."""
-        return history_ops.get_task_context(
+        return context_learning_ops.get_task_context(
             dataset=self.dataset,
             metric=metric,
             num_examples=self.num_task_examples,
@@ -424,7 +395,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         return history_ops.build_history_context(
             list(previous_rounds),
             hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
-            pretty_mode=self.prettymode_prompt_history,
+            pretty_mode=bool(self.verbose),
             top_prompts_per_round=top_prompts_to_show,
         )
 

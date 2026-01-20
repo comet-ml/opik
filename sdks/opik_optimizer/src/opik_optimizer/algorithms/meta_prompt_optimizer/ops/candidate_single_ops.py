@@ -158,9 +158,7 @@ def generate_candidate_prompts(
             analysis_instruction = (
                 "Analyze the history of scores and the current prompt's performance."
             )
-            metric_focus_instruction = (
-                "Focus on generating diverse and effective prompt variations based on the history."
-            )
+            metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
 
         candidate_gen_template = optimizer.get_prompt("candidate_generation")
         reasoning_template = optimizer.get_prompt("reasoning_system")

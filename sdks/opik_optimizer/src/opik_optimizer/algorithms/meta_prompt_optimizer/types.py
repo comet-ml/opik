@@ -24,6 +24,8 @@ class HallOfFameEntry:
 class AgentPromptUpdate(BaseModel):
     """Represents an update to a single agent's prompt."""
 
+    # Used by AgentBundleCandidatesResponse (see ops/candidate_bundle_ops.py).
+
     name: str = Field(..., description="The name of the agent to update")
     messages: list[types.Message] = Field(
         ..., description="The updated messages for this agent"
@@ -39,6 +41,8 @@ class AgentPromptUpdate(BaseModel):
 class AgentBundleCandidateResponse(BaseModel):
     """Response model for agent bundle candidate generation."""
 
+    # Returned as part of AgentBundleCandidatesResponse.
+
     agents: list[AgentPromptUpdate] = Field(
         ..., description="List of agent prompt updates"
     )
@@ -50,6 +54,8 @@ class AgentBundleCandidateResponse(BaseModel):
 class AgentBundleCandidatesResponse(BaseModel):
     """Response model for multiple agent bundle candidates."""
 
+    # Passed as response_model to LLM calls in ops/candidate_bundle_ops.py.
+
     candidates: list[AgentBundleCandidateResponse] = Field(
         ..., description="List of candidate bundles"
     )
@@ -58,6 +64,8 @@ class AgentBundleCandidatesResponse(BaseModel):
 @dataclass
 class AgentMetadata:
     """Metadata for a single agent's prompt optimization."""
+
+    # Stored on AgentBundleCandidate entries built in ops/candidate_bundle_ops.py.
 
     improvement_focus: str | None = None
     """What aspect of the agent's performance is being targeted for improvement"""
@@ -69,6 +77,8 @@ class AgentMetadata:
 @dataclass
 class AgentBundleCandidate:
     """Represents a single candidate bundle of agent prompts with metadata."""
+
+    # Constructed in ops/candidate_bundle_ops.py and used by candidate_ops.generate_round_candidates.
 
     prompts: dict[str, chat_prompt.ChatPrompt]
     """Dictionary mapping agent names to their updated ChatPrompt objects"""
