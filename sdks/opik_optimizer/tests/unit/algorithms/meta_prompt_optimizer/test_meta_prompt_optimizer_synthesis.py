@@ -17,6 +17,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops import candidate_ops
 from tests.unit.test_helpers import make_mock_dataset, STANDARD_DATASET_ITEMS
+from tests.unit.fixtures import make_baseline_prompt
 
 
 pytestmark = pytest.mark.usefixtures(
@@ -45,7 +46,7 @@ def test_synthesis_prompts_called_on_schedule(
 
     def fake_generate_candidate_prompts(**kwargs: Any) -> list[ChatPrompt]:
         """Mock for single prompt optimization path."""
-        return [ChatPrompt(system="baseline", user="{question}")]
+        return [make_baseline_prompt()]
 
     def fake_generate_synthesis_prompts(**kwargs: Any) -> list[ChatPrompt]:
         called["synthesis"] += 1
@@ -68,7 +69,7 @@ def test_synthesis_prompts_called_on_schedule(
         lambda **kwargs: 0.1,
     )
 
-    prompt = ChatPrompt(system="baseline", user="{question}")
+    prompt = make_baseline_prompt()
 
     def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
         return 1.0

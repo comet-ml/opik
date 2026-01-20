@@ -19,6 +19,8 @@ from tests.unit.test_helpers import (
     make_simple_metric,
     STANDARD_DATASET_ITEMS,
 )
+from tests.unit.fixtures import assert_baseline_early_stop, assert_invalid_prompt_raises
+from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
 
 
 @pytest.fixture(autouse=True)
@@ -184,12 +186,7 @@ class TestEvolutionaryOptimizerOptimizePrompt:
         )
 
         optimizer = EvolutionaryOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompts = {
-            "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(
-                name="secondary", system="Secondary", user="{input}"
-            ),
-        }
+        prompts = make_two_prompt_bundle()
         dataset = make_mock_dataset(
             STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
         )
@@ -216,13 +213,12 @@ class TestEvolutionaryOptimizerOptimizePrompt:
             STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
         )
 
-        with pytest.raises((ValueError, TypeError)):
-            optimizer.optimize_prompt(
-                prompt="invalid string",  # type: ignore[arg-type]
-                dataset=dataset,
-                metric=make_simple_metric(),
-                max_trials=1,
-            )
+        assert_invalid_prompt_raises(
+            optimizer,
+            dataset=dataset,
+            metric=make_simple_metric(),
+            max_trials=1,
+        )
 
     def test_result_contains_required_fields(
         self,
@@ -277,7 +273,7 @@ class TestEvolutionaryOptimizerEarlyStop:
             lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
         )
 
-        prompt = ChatPrompt(system="baseline", user="{question}")
+        prompt = make_baseline_prompt()
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
@@ -285,10 +281,7 @@ class TestEvolutionaryOptimizerEarlyStop:
             max_trials=1,
         )
 
-        assert result.details["stopped_early"] is True
-        assert result.details["stop_reason"] == "baseline_score_met_threshold"
-        assert result.details["perfect_score"] == 0.95
-        assert result.initial_score == result.score
+        assert_baseline_early_stop(result, perfect_score=0.95)
 
     def test_early_stop_reports_at_least_one_trial(
         self,
@@ -307,7 +300,7 @@ class TestEvolutionaryOptimizerEarlyStop:
         # Mock the base class's evaluate_prompt for baseline computation
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
 
-        prompt = ChatPrompt(system="baseline", user="{question}")
+        prompt = make_baseline_prompt()
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
@@ -315,12 +308,9 @@ class TestEvolutionaryOptimizerEarlyStop:
             max_trials=1,
         )
 
-        assert result.details["stopped_early"] is True
-        # Early stop happens before _run_optimization, so only baseline was evaluated
-        # The optimizer returns 0 from get_metadata (no optimization trials yet)
-        # The base class defaults this to 1 to reflect the baseline evaluation
-        assert result.details["trials_completed"] == 1
-        assert len(result.history) == 1
+        assert_baseline_early_stop(
+            result, perfect_score=0.95, trials_completed=1, history_len=1
+        )
 
     def test_optimization_tracks_trials_and_rounds(
         self,

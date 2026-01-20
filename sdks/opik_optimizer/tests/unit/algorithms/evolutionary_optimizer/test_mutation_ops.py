@@ -8,76 +8,108 @@ from tests.unit.test_helpers import make_fake_llm_call
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
+_MUTATION_OPS_MODULE = (
+    "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops"
+)
+
+
+def _force_random(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    random_value: float,
+    randint_value: int | None = None,
+    sample_value: list[int] | None = None,
+    choice_value: Any | None = None,
+) -> None:
+    monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}.random.random", lambda: random_value)
+    if randint_value is not None:
+        monkeypatch.setattr(
+            f"{_MUTATION_OPS_MODULE}.random.randint",
+            lambda _a, _b: randint_value,
+        )
+    if sample_value is not None:
+        monkeypatch.setattr(
+            f"{_MUTATION_OPS_MODULE}.random.sample",
+            lambda _seq, _k: sample_value,
+        )
+    if choice_value is not None:
+        monkeypatch.setattr(
+            f"{_MUTATION_OPS_MODULE}.random.choice",
+            lambda _seq: choice_value,
+        )
+
+
+def _patch_get_synonym(monkeypatch: pytest.MonkeyPatch, *, return_value: str) -> None:
+    def fake_get_synonym(**_kwargs: Any) -> str:
+        return return_value
+
+    monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}._get_synonym", fake_get_synonym)
+
+
+def _patch_modify_phrase(monkeypatch: pytest.MonkeyPatch, *, return_value: str) -> None:
+    def fake_modify_phrase(**_kwargs: Any) -> str:
+        return return_value
+
+    monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}._modify_phrase", fake_modify_phrase)
+
 
 class TestGetSynonym:
     """Tests for _get_synonym function."""
 
-    def test_returns_synonym_from_llm(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
-    ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.call_model", make_fake_llm_call("quick")
-        )
-
-        result = mutation_ops._get_synonym(
-            word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
-        )
-        assert result == "quick"
-
-    def test_returns_original_word_on_error(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
-    ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.call_model",
-            make_fake_llm_call(raises=Exception("API error")),
-        )
-
-        result = mutation_ops._get_synonym(
-            word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
-        )
-        assert result == "fast"
-
-    def test_strips_whitespace_from_response(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    @pytest.mark.parametrize(
+        "llm_response,raises,expected",
+        [
+            ("quick", None, "quick"),
+            ("  quick  \n", None, "quick"),
+            (None, Exception("API error"), "fast"),
+        ],
+    )
+    def test_get_synonym_outputs_expected_value(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        evo_prompts: Any,
+        llm_response: str | None,
+        raises: Exception | None,
+        expected: str,
     ) -> None:
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
-            make_fake_llm_call("  quick  \n"),
+            make_fake_llm_call(llm_response, raises=raises),
         )
 
         result = mutation_ops._get_synonym(
             word="fast", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
-        assert result == "quick"
+        assert result == expected
 
 
 class TestModifyPhrase:
     """Tests for _modify_phrase function."""
 
-    def test_returns_modified_phrase_from_llm(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
-    ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.call_model", make_fake_llm_call("rapidly")
-        )
-
-        result = mutation_ops._modify_phrase(
-            phrase="quickly", model="gpt-4", model_parameters={}, prompts=evo_prompts
-        )
-        assert result == "rapidly"
-
-    def test_returns_original_phrase_on_error(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+    @pytest.mark.parametrize(
+        "llm_response,raises,expected",
+        [
+            ("rapidly", None, "rapidly"),
+            (None, Exception("API error"), "quickly"),
+        ],
+    )
+    def test_modify_phrase_outputs_expected_value(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        evo_prompts: Any,
+        llm_response: str | None,
+        raises: Exception | None,
+        expected: str,
     ) -> None:
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
-            make_fake_llm_call(raises=Exception("API error")),
+            make_fake_llm_call(llm_response, raises=raises),
         )
 
         result = mutation_ops._modify_phrase(
             phrase="quickly", model="gpt-4", model_parameters={}, prompts=evo_prompts
         )
-        assert result == "quickly"
+        assert result == expected
 
 
 class TestAdaptiveMutationRate:
@@ -146,22 +178,8 @@ class TestWordLevelMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force the synonym mutation path (random < 0.3)
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.1,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.randint",
-            lambda a, b: 0,
-        )
-
-        def fake_get_synonym(**kwargs: Any) -> str:
-            return "great"
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops._get_synonym",
-            fake_get_synonym,
-        )
+        _force_random(monkeypatch, random_value=0.1, randint_value=0)
+        _patch_get_synonym(monkeypatch, return_value="great")
 
         result = mutation_ops._word_level_mutation(
             msg_content="Hello world",
@@ -175,14 +193,7 @@ class TestWordLevelMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force the word swap path (0.3 <= random < 0.6)
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.4,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.sample",
-            lambda seq, k: [0, 2],
-        )
+        _force_random(monkeypatch, random_value=0.4, sample_value=[0, 2])
 
         result = mutation_ops._word_level_mutation(
             msg_content="Hello beautiful world",
@@ -197,22 +208,8 @@ class TestWordLevelMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force the modify phrase path (random >= 0.6)
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.8,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.randint",
-            lambda a, b: 0,
-        )
-
-        def fake_modify_phrase(**kwargs: Any) -> str:
-            return "Hi"
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops._modify_phrase",
-            fake_modify_phrase,
-        )
+        _force_random(monkeypatch, random_value=0.8, randint_value=0)
+        _patch_modify_phrase(monkeypatch, return_value="Hi")
 
         result = mutation_ops._word_level_mutation(
             msg_content="Hello world",
@@ -226,22 +223,8 @@ class TestWordLevelMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force synonym path
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.1,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.randint",
-            lambda a, b: 0,
-        )
-
-        def fake_get_synonym(**kwargs: Any) -> str:
-            return "Greetings"
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops._get_synonym",
-            fake_get_synonym,
-        )
+        _force_random(monkeypatch, random_value=0.1, randint_value=0)
+        _patch_get_synonym(monkeypatch, return_value="Greetings")
 
         content_parts: Content = cast(
             Content,
@@ -270,22 +253,8 @@ class TestWordLevelMutationPrompt:
     def test_mutates_all_messages(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.1,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.randint",
-            lambda a, b: 0,
-        )
-
-        def fake_get_synonym(**kwargs: Any) -> str:
-            return "modified"
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops._get_synonym",
-            fake_get_synonym,
-        )
+        _force_random(monkeypatch, random_value=0.1, randint_value=0)
+        _patch_get_synonym(monkeypatch, return_value="modified")
 
         prompt = ChatPrompt(
             system="You are helpful.",
@@ -310,10 +279,7 @@ class TestStructuralMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force shuffle path (random < 0.3)
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.1,
-        )
+        _force_random(monkeypatch, random_value=0.1)
 
         prompt = ChatPrompt(
             system="First sentence. Second sentence. Third sentence.",
@@ -360,10 +326,7 @@ class TestStructuralMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # Force split path (random >= 0.6)
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.8,
-        )
+        _force_random(monkeypatch, random_value=0.8)
         monkeypatch.setattr(
             "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.randint",
             lambda a, b: a + (b - a) // 2 if b > a else a,
@@ -384,22 +347,8 @@ class TestStructuralMutation:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         # For single sentence, should fall back to word-level mutation
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.1,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.randint",
-            lambda a, b: 0,
-        )
-
-        def fake_get_synonym(**kwargs: Any) -> str:
-            return "modified"
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops._get_synonym",
-            fake_get_synonym,
-        )
+        _force_random(monkeypatch, random_value=0.1, randint_value=0)
+        _patch_get_synonym(monkeypatch, return_value="modified")
 
         prompt = ChatPrompt(
             system="Single sentence here",  # No periods

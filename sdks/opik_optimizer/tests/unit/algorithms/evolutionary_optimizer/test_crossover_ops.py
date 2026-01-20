@@ -15,6 +15,18 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
     _deap_crossover_word_level,
 )
 
+def _make_deap_individual(data: dict[str, Any]):
+    """
+    Build a DEAP Individual(dict) for crossover tests.
+
+    Ensures the creator class exists exactly once.
+    """
+    from deap import creator
+
+    if not hasattr(creator, "Individual"):
+        creator.create("Individual", dict, fitness=None)
+    return creator.Individual(data)
+
 
 class TestDeapCrossoverChunkingStrategy:
     """Tests for _deap_crossover_chunking_strategy function."""
@@ -335,17 +347,13 @@ class TestDeapCrossover:
 
     def test_crossover_dict_individuals(self) -> None:
         """Should perform crossover on dict-based individuals."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             deap_crossover,
         )
 
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
-
         random.seed(42)
 
-        ind1 = creator.Individual(
+        ind1 = _make_deap_individual(
             {
                 "main": [
                     {"role": "system", "content": "First prompt. Second sentence."},
@@ -353,7 +361,7 @@ class TestDeapCrossover:
                 ]
             }
         )
-        ind2 = creator.Individual(
+        ind2 = _make_deap_individual(
             {
                 "main": [
                     {"role": "system", "content": "Alpha prompt. Beta sentence."},
@@ -371,24 +379,16 @@ class TestDeapCrossover:
 
     def test_crossover_preserves_metadata(self) -> None:
         """Should preserve prompts_metadata from parents."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             deap_crossover,
         )
 
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
-
         random.seed(42)
 
-        ind1 = creator.Individual(
-            {"main": [{"role": "system", "content": "Content. More."}]}
-        )
+        ind1 = _make_deap_individual({"main": [{"role": "system", "content": "Content. More."}]})
         setattr(ind1, "prompts_metadata", {"main": {"name": "main_prompt"}})
 
-        ind2 = creator.Individual(
-            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
-        )
+        ind2 = _make_deap_individual({"main": [{"role": "system", "content": "Alpha. Beta."}]})
         setattr(ind2, "prompts_metadata", {"main": {"name": "main_prompt_v2"}})
 
         child1, child2 = deap_crossover(ind1, ind2, verbose=0)
@@ -398,20 +398,16 @@ class TestDeapCrossover:
 
     def test_crossover_handles_disjoint_prompts(self) -> None:
         """Should handle individuals with different prompt keys."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             deap_crossover,
         )
 
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
-
         random.seed(42)
 
-        ind1 = creator.Individual(
+        ind1 = _make_deap_individual(
             {"prompt_a": [{"role": "system", "content": "A content. More A."}]}
         )
-        ind2 = creator.Individual(
+        ind2 = _make_deap_individual(
             {"prompt_b": [{"role": "system", "content": "B content. More B."}]}
         )
 
@@ -482,13 +478,9 @@ class TestLLMDeapCrossover:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should fall back to DEAP crossover on LLM error."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             llm_deap_crossover,
         )
-
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
 
         def fake_call_model(**kwargs: Any) -> None:
             raise Exception("LLM API error")
@@ -505,10 +497,10 @@ class TestLLMDeapCrossover:
 
         random.seed(42)
 
-        ind1 = creator.Individual(
+        ind1 = _make_deap_individual(
             {"main": [{"role": "system", "content": "First. Second."}]}
         )
-        ind2 = creator.Individual(
+        ind2 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Alpha. Beta."}]}
         )
 
@@ -530,14 +522,10 @@ class TestLLMDeapCrossover:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should use LLM crossover when it succeeds."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             llm_deap_crossover,
             CrossoverResponse,
         )
-
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
 
         mock_response = CrossoverResponse(
             child_1=[{"role": "system", "content": "LLM generated 1"}],
@@ -557,10 +545,10 @@ class TestLLMDeapCrossover:
             fake_display_message,
         )
 
-        ind1 = creator.Individual(
+        ind1 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Original 1"}]}
         )
-        ind2 = creator.Individual(
+        ind2 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Original 2"}]}
         )
 
@@ -581,13 +569,9 @@ class TestLLMDeapCrossover:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should use semantic crossover when enabled."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             llm_deap_crossover,
         )
-
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
 
         def fake_semantic(
             *args: Any, **kwargs: Any
@@ -613,10 +597,10 @@ class TestLLMDeapCrossover:
             fake_llm,
         )
 
-        ind1 = creator.Individual(
+        ind1 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Original 1"}]}
         )
-        ind2 = creator.Individual(
+        ind2 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Original 2"}]}
         )
 
@@ -638,13 +622,9 @@ class TestLLMDeapCrossover:
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
         """Should fall back to standard LLM crossover when semantic fails."""
-        from deap import creator
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             llm_deap_crossover,
         )
-
-        if not hasattr(creator, "Individual"):
-            creator.create("Individual", dict, fitness=None)
 
         def fake_semantic(*args: Any, **kwargs: Any) -> None:
             raise Exception("Semantic failed")
@@ -666,10 +646,10 @@ class TestLLMDeapCrossover:
             fake_llm,
         )
 
-        ind1 = creator.Individual(
+        ind1 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Original 1"}]}
         )
-        ind2 = creator.Individual(
+        ind2 = _make_deap_individual(
             {"main": [{"role": "system", "content": "Original 2"}]}
         )
 

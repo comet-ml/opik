@@ -24,6 +24,36 @@ from tests.unit.test_helpers import (
     make_simple_metric,
     STANDARD_DATASET_ITEMS,
 )
+from tests.unit.fixtures import assert_baseline_early_stop
+from tests.unit.fixtures import make_baseline_prompt
+
+
+def _float_param(
+    name: str,
+    *,
+    low: float = 0.0,
+    high: float = 1.0,
+    **kwargs: Any,
+) -> ParameterSpec:
+    return ParameterSpec(
+        name=name,
+        distribution=ParameterType.FLOAT,
+        low=low,
+        high=high,
+        **kwargs,
+    )
+
+
+def _categorical_param(name: str, *, choices: list[str]) -> ParameterSpec:
+    return ParameterSpec(
+        name=name,
+        distribution=ParameterType.CATEGORICAL,
+        choices=choices,
+    )
+
+
+def _space(*parameters: ParameterSpec) -> ParameterSearchSpace:
+    return ParameterSearchSpace(parameters=list(parameters))
 
 
 class TestParameterOptimizerInit:
@@ -85,17 +115,8 @@ class TestParameterOptimizerEarlyStop:
             lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
         )
 
-        prompt = ChatPrompt(system="baseline", user="{question}")
-        parameter_space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                )
-            ]
-        )
+        prompt = make_baseline_prompt()
+        parameter_space = _space(_float_param("temperature"))
         result = optimizer.optimize_parameter(
             prompt=prompt,
             dataset=dataset,
@@ -104,10 +125,7 @@ class TestParameterOptimizerEarlyStop:
             max_trials=1,
         )
 
-        assert result.details["stopped_early"] is True
-        assert result.details["stop_reason"] == "baseline_score_met_threshold"
-        assert result.details["perfect_score"] == 0.95
-        assert result.initial_score == result.score
+        assert_baseline_early_stop(result, perfect_score=0.95)
         assert result.details["n_trials"] == 0
 
 
@@ -116,16 +134,7 @@ class TestExpandForPrompts:
 
     def test_expands_unprefixed_params(self) -> None:
         """Should expand parameters without prefix for each prompt."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-            ]
-        )
+        space = _space(_float_param("temperature"))
 
         expanded = space.expand_for_prompts(["analyze", "respond"])
 
@@ -136,16 +145,7 @@ class TestExpandForPrompts:
 
     def test_preserves_already_prefixed_params(self) -> None:
         """Should keep params that already have a prompt prefix."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="analyze.temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-            ]
-        )
+        space = _space(_float_param("analyze.temperature"))
 
         expanded = space.expand_for_prompts(["analyze", "respond"])
 
@@ -154,21 +154,9 @@ class TestExpandForPrompts:
 
     def test_handles_mixed_prefixed_and_unprefixed(self) -> None:
         """Should handle mix of prefixed and unprefixed parameters."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-                ParameterSpec(
-                    name="analyze.top_p",
-                    distribution=ParameterType.FLOAT,
-                    low=0.1,
-                    high=1.0,
-                ),
-            ]
+        space = _space(
+            _float_param("temperature"),
+            _float_param("analyze.top_p", low=0.1, high=1.0),
         )
 
         expanded = space.expand_for_prompts(["analyze", "respond"])
@@ -182,18 +170,9 @@ class TestExpandForPrompts:
 
     def test_expands_multiple_params(self) -> None:
         """Should expand multiple unprefixed parameters."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-                ParameterSpec(
-                    name="top_p", distribution=ParameterType.FLOAT, low=0.1, high=1.0
-                ),
-            ]
+        space = _space(
+            _float_param("temperature"),
+            _float_param("top_p", low=0.1, high=1.0),
         )
 
         expanded = space.expand_for_prompts(["a", "b"])
@@ -207,16 +186,7 @@ class TestExpandForPrompts:
 
     def test_single_prompt_expansion(self) -> None:
         """Should expand for single prompt (used when single ChatPrompt passed)."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-            ]
-        )
+        space = _space(_float_param("temperature"))
 
         expanded = space.expand_for_prompts(["my_prompt"])
 
@@ -225,17 +195,8 @@ class TestExpandForPrompts:
 
     def test_preserves_spec_properties(self) -> None:
         """Should preserve all spec properties when expanding."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.1,
-                    high=2.0,
-                    step=0.1,
-                    scale="log",
-                ),
-            ]
+        space = _space(
+            _float_param("temperature", low=0.1, high=2.0, step=0.1, scale="log")
         )
 
         expanded = space.expand_for_prompts(["test"])
@@ -250,14 +211,8 @@ class TestExpandForPrompts:
 
     def test_categorical_param_expansion(self) -> None:
         """Should expand categorical parameters correctly."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="model",
-                    distribution=ParameterType.CATEGORICAL,
-                    choices=["gpt-4o", "gpt-4o-mini"],
-                ),
-            ]
+        space = _space(
+            _categorical_param("model", choices=["gpt-4o", "gpt-4o-mini"])
         )
 
         expanded = space.expand_for_prompts(["p1", "p2"])
@@ -273,21 +228,9 @@ class TestApplyToPrompts:
 
     def test_applies_prefixed_values_to_correct_prompts(self) -> None:
         """Should apply values with correct prefix to each prompt."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="analyze.temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-                ParameterSpec(
-                    name="respond.temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-            ]
+        space = _space(
+            _float_param("analyze.temperature"),
+            _float_param("respond.temperature"),
         )
 
         prompts = {
@@ -306,16 +249,7 @@ class TestApplyToPrompts:
 
     def test_does_not_mutate_original_prompts(self) -> None:
         """Should return copies, not mutate originals."""
-        space = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="p.temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-            ]
-        )
+        space = _space(_float_param("p.temperature"))
 
         original = ChatPrompt(name="p", system="Test")
         original.model_kwargs = {"temperature": 0.5}
