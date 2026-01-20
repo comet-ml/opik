@@ -28,6 +28,11 @@ from .ops import iteration_ops
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 
+def _message_has_content(message: dict[str, Any]) -> bool:
+    """Return True if the message carries non-empty content."""
+    return chat_prompt.ChatPrompt._has_non_empty_content(message.get("content"))
+
+
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
     """
     The Hierarchical Reflective Optimizer uses hierarchical root cause analysis to improve prompts
@@ -334,7 +339,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             for prompt_name, improved_prompt in response_item.items():
                 if not response_reasoning:
                     response_reasoning = improved_prompt.reasoning
-                messages_as_dicts = [x.model_dump() for x in improved_prompt.messages]
+                raw_messages = [x.model_dump() for x in improved_prompt.messages]
+                messages_as_dicts = [
+                    message for message in raw_messages if _message_has_content(message)
+                ]
                 original = original_prompts[prompt_name]
 
                 improved_chat_prompts[prompt_name] = chat_prompt.ChatPrompt(
