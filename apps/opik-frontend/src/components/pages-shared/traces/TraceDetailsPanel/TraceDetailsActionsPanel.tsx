@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
+  Play,
   Share,
   Sparkles,
   Trash,
@@ -65,6 +66,8 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import useOpenInPlayground from "@/hooks/useOpenInPlayground";
+import { canOpenInPlayground } from "@/lib/playground/extractPlaygroundData";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -119,8 +122,26 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
+  const { openInPlayground } = useOpenInPlayground();
 
   const hasThread = Boolean(setThreadId && threadId);
+
+  // Get the currently selected item (span or trace)
+  const selectedItem = useMemo(() => {
+    const targetId = spanId || traceId;
+    return treeData.find((item) => item.id === targetId);
+  }, [spanId, traceId, treeData]);
+
+  // Check if the selected item can be opened in playground
+  const canOpenSelectedInPlayground = useMemo(() => {
+    return selectedItem ? canOpenInPlayground(selectedItem) : false;
+  }, [selectedItem]);
+
+  const handleOpenInPlayground = useCallback(() => {
+    if (selectedItem) {
+      openInPlayground(selectedItem, treeData);
+    }
+  }, [selectedItem, treeData, openInPlayground]);
 
   const minPanelWidth = useMemo(() => {
     const elements = [
@@ -511,6 +532,15 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               <Share className="mr-2 size-4" />
               Share
             </DropdownMenuItem>
+            {canOpenSelectedInPlayground && (
+              <>
+                <DropdownMenuItem onClick={handleOpenInPlayground}>
+                  <Play className="mr-2 size-4" />
+                  Open in Playground
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <TooltipWrapper content={traceId} side="left">
               <DropdownMenuItem
                 onClick={() => {
