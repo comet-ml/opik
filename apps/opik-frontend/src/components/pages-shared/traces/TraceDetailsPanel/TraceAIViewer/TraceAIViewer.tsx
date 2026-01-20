@@ -31,17 +31,20 @@ import Loader from "@/components/shared/Loader/Loader";
 import { TraceAnalyzerLLMMessage, MESSAGE_TYPE } from "@/types/ai-assistant";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { Span } from "@/types/traces";
 
 interface TraceAIViewerProps {
   traceId: string;
   activeSection?: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
+  spans?: Span[];
 }
 
 const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   traceId,
   activeSection,
   setActiveSection,
+  spans,
 }) => {
   const [chat, setChat] = useState<{
     value: string;
@@ -484,7 +487,7 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
             ) : (
               <div className="flex w-full flex-col gap-2 py-4">
                 {chat.messages.map((m) => (
-                  <TraceChatMessage key={m.id} message={m} />
+                  <TraceChatMessage key={m.id} message={m} spans={spans} />
                 ))}
                 {isThinking && (
                   <div className="mb-2 flex justify-start">

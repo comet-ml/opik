@@ -6,28 +6,35 @@ import { TraceAnalyzerLLMMessage, MESSAGE_TYPE } from "@/types/ai-assistant";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
-import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import { parseEntityReferences } from "@/lib/entityReferences";
+import { Span } from "@/types/traces";
 
 type TraceChatMessageProps = {
   message: TraceAnalyzerLLMMessage;
+  spans?: Span[];
 };
 
-const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
+const TraceChatMessage: React.FC<TraceChatMessageProps> = ({
+  message,
+  spans,
+}) => {
   const isUser = message.role === LLM_MESSAGE_ROLE.user;
   const isToolCall = message.messageType === MESSAGE_TYPE.tool_call;
-  const { flattenedTree } = useTreeDetailsStore();
 
-  // Build entity map from flattened tree (span ID -> span name)
+  // Build entity map from spans data (span ID -> span name)
+  // This includes ALL spans regardless of filters or collapsed state
   const entityMap = useMemo(() => {
     const map = new Map<string, string>();
-    flattenedTree.forEach((node) => {
-      if (node.data?.id && node.data?.name) {
-        map.set(node.data.id, node.data.name);
+
+    // Add all spans
+    spans?.forEach((span) => {
+      if (span.id && span.name) {
+        map.set(span.id, span.name);
       }
     });
+
     return map;
-  }, [flattenedTree]);
+  }, [spans]);
 
   // Tool call messages have their own rendering
   if (isToolCall && message.toolCalls) {
